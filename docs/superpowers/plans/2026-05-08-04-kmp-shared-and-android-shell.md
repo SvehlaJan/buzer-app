@@ -44,7 +44,7 @@
 
 ## Task 1: Resolve Current KMP Docs And Scaffold Project
 
-- [ ] **Step 1: Fetch docs**
+- [x] **Step 1: Fetch docs**
 
 Run:
 
@@ -57,7 +57,7 @@ npx ctx7@latest docs "/resolved/ktor/id" "Ktor Client Kotlin Multiplatform JSON 
 
 Record resolved IDs and plugin version choices in the handoff.
 
-- [ ] **Step 2: Create Gradle structure**
+- [x] **Step 2: Create Gradle structure**
 
 Create a Compose Multiplatform Android project under `client/` with modules:
 
@@ -68,7 +68,7 @@ client/androidApp
 
 Use current stable Kotlin, Compose Multiplatform, Android Gradle Plugin, Ktor, Kotlinx Serialization, and Kotlinx Datetime versions from the docs and release notes checked in Step 1. Record exact versions in `docs/notes/2026-05-08-kmp-version-selection.md`.
 
-- [ ] **Step 3: Verify project lists tasks**
+- [x] **Step 3: Verify project lists tasks**
 
 Run:
 
@@ -81,7 +81,7 @@ Expected: Gradle lists tasks for `shared` and `androidApp`.
 
 ## Task 2: Implement Shared Models
 
-- [ ] **Step 1: Create `TaskModels.kt`**
+- [x] **Step 1: Create `TaskModels.kt`**
 
 ```kotlin
 package app.buzer.shared.model
@@ -148,7 +148,7 @@ data class RescheduleTaskRequest(
 )
 ```
 
-- [ ] **Step 2: Create `HealthModels.kt`**
+- [x] **Step 2: Create `HealthModels.kt`**
 
 ```kotlin
 package app.buzer.shared.model
@@ -170,7 +170,7 @@ data class HealthStatus(
 )
 ```
 
-- [ ] **Step 3: Run shared compilation**
+- [x] **Step 3: Run shared compilation**
 
 ```bash
 cd client
@@ -181,7 +181,7 @@ Expected: pass.
 
 ## Task 3: Implement Schedule Calculator
 
-- [ ] **Step 1: Write `ScheduleCalculatorTest.kt`**
+- [x] **Step 1: Write `ScheduleCalculatorTest.kt`**
 
 ```kotlin
 package app.buzer.shared.time
@@ -208,7 +208,7 @@ class ScheduleCalculatorTest {
 }
 ```
 
-- [ ] **Step 2: Implement `ScheduleCalculator.kt`**
+- [x] **Step 2: Implement `ScheduleCalculator.kt`**
 
 ```kotlin
 package app.buzer.shared.time
@@ -229,7 +229,7 @@ object ScheduleCalculator {
 }
 ```
 
-- [ ] **Step 3: Run shared test**
+- [x] **Step 3: Run shared test**
 
 ```bash
 cd client
@@ -240,7 +240,7 @@ Expected: pass.
 
 ## Task 4: Implement Shared Validation
 
-- [ ] **Step 1: Write `TaskValidationTest.kt`**
+- [x] **Step 1: Write `TaskValidationTest.kt`**
 
 ```kotlin
 package app.buzer.shared.validation
@@ -277,7 +277,7 @@ class TaskValidationTest {
 }
 ```
 
-- [ ] **Step 2: Implement `TaskValidation.kt`**
+- [x] **Step 2: Implement `TaskValidation.kt`**
 
 ```kotlin
 package app.buzer.shared.validation
@@ -308,7 +308,7 @@ object TaskValidation {
 }
 ```
 
-- [ ] **Step 3: Run validation test**
+- [x] **Step 3: Run validation test**
 
 ```bash
 cd client
@@ -319,7 +319,7 @@ Expected: pass.
 
 ## Task 5: Implement API Client
 
-- [ ] **Step 1: Create `BuzerApiClient.kt`**
+- [x] **Step 1: Create `BuzerApiClient.kt`**
 
 ```kotlin
 package app.buzer.shared.api
@@ -393,7 +393,7 @@ private fun defaultHttpClient(token: String): HttpClient =
     }
 ```
 
-- [ ] **Step 2: Compile shared module**
+- [x] **Step 2: Compile shared module**
 
 ```bash
 cd client
@@ -404,7 +404,7 @@ Expected: pass.
 
 ## Task 6: Build Android Shell Screens
 
-- [ ] **Step 1: Implement `MainActivity.kt`**
+- [x] **Step 1: Implement `MainActivity.kt`**
 
 ```kotlin
 package app.buzer.android
@@ -424,7 +424,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-- [ ] **Step 2: Implement `App.kt`**
+- [x] **Step 2: Implement `App.kt`**
 
 ```kotlin
 package app.buzer.android.ui
@@ -441,7 +441,7 @@ fun BuzerApp() {
 }
 ```
 
-- [ ] **Step 3: Implement first-pass `HomeScreen.kt`**
+- [x] **Step 3: Implement first-pass `HomeScreen.kt`**
 
 ```kotlin
 package app.buzer.android.ui.screens
@@ -466,11 +466,11 @@ fun HomeScreen() {
 }
 ```
 
-- [ ] **Step 4: Create screen stubs**
+- [x] **Step 4: Create screen stubs**
 
 Create `AddTaskScreen.kt`, `MorningReviewScreen.kt`, and `BlockerScreens.kt` with composable functions that compile and contain the button labels from the spec: "I'm starting", "Postpone 5 min", "Done", "Extend 30 min", and "Reschedule".
 
-- [ ] **Step 5: Build Android debug app**
+- [x] **Step 5: Build Android debug app**
 
 ```bash
 cd client
@@ -481,7 +481,7 @@ Expected: pass.
 
 ## Task 7: Final Verification And Handoff
 
-- [ ] **Step 1: Run client verification**
+- [x] **Step 1: Run client verification**
 
 ```bash
 cd client
@@ -490,14 +490,13 @@ cd client
 
 Expected: pass.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add client docs/notes/2026-05-08-kmp-version-selection.md docs/superpowers/plans/2026-05-08-04-kmp-shared-and-android-shell.md
 git commit -m "feat: add KMP Android client shell"
 ```
 
-- [ ] **Step 3: Write handoff**
+- [x] **Step 3: Write handoff**
 
 Create `docs/handoffs/YYYY-MM-DD-kmp-android-shell.md` with exact Gradle/plugin versions, commands run, and UI surfaces created.
-
