@@ -1,6 +1,6 @@
 # Backend Core SQLite State Machine Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build the backend foundation: TypeScript project, SQLite migrations, repositories, validation rules, and commitment lifecycle state machine.
 
@@ -32,7 +32,7 @@
 
 ## Task 1: Create Backend Tooling
 
-- [ ] **Step 1: Use Context7 for library docs**
+- [x] **Step 1: Use Context7 for library docs**
 
 Run:
 
@@ -43,7 +43,7 @@ npx ctx7@latest docs "/resolved/vitest/id" "Vitest TypeScript Node project confi
 
 Replace `/resolved/vitest/id` with the ID returned by the first command. Record the resolved ID in the handoff.
 
-- [ ] **Step 2: Create `backend/package.json`**
+- [x] **Step 2: Create `backend/package.json`**
 
 Use this baseline:
 
@@ -78,7 +78,7 @@ Use this baseline:
 }
 ```
 
-- [ ] **Step 3: Create TypeScript configs**
+- [x] **Step 3: Create TypeScript configs**
 
 `backend/tsconfig.json`:
 
@@ -115,7 +115,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: Create `.env.example`**
+- [x] **Step 4: Create `.env.example`**
 
 ```dotenv
 NODE_ENV=development
@@ -127,7 +127,7 @@ TODOIST_USER_ID=replace-with-current-user-id
 WHATSAPP_RECIPIENT_ID=replace-with-chat-id
 ```
 
-- [ ] **Step 5: Install dependencies**
+- [x] **Step 5: Install dependencies**
 
 Run:
 
@@ -140,7 +140,7 @@ Expected: `package-lock.json` is created and install exits successfully.
 
 ## Task 2: Implement Domain Time Helpers With Tests
 
-- [ ] **Step 1: Write failing test in `backend/test/domain/commitmentState.test.ts`**
+- [x] **Step 1: Write failing test in `backend/test/domain/commitmentState.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -161,7 +161,7 @@ describe("computeStartAt", () => {
 });
 ```
 
-- [ ] **Step 2: Run failing test**
+- [x] **Step 2: Run failing test**
 
 ```bash
 cd backend
@@ -170,7 +170,7 @@ npm test -- test/domain/commitmentState.test.ts
 
 Expected: fails because `src/domain/time.ts` does not exist.
 
-- [ ] **Step 3: Implement `backend/src/domain/time.ts`**
+- [x] **Step 3: Implement `backend/src/domain/time.ts`**
 
 ```ts
 export function parseIsoTimestamp(value: string, fieldName: string): Date {
@@ -200,7 +200,7 @@ export function addMinutes(timestamp: string, minutes: number): string {
 }
 ```
 
-- [ ] **Step 4: Run test**
+- [x] **Step 4: Run test**
 
 ```bash
 cd backend
@@ -211,7 +211,7 @@ Expected: pass.
 
 ## Task 3: Implement Strict Task Validation
 
-- [ ] **Step 1: Write `backend/test/domain/taskValidation.test.ts`**
+- [x] **Step 1: Write `backend/test/domain/taskValidation.test.ts`**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -264,7 +264,7 @@ describe("validateTaskStrictness", () => {
 });
 ```
 
-- [ ] **Step 2: Run failing test**
+- [x] **Step 2: Run failing test**
 
 ```bash
 cd backend
@@ -273,7 +273,7 @@ npm test -- test/domain/taskValidation.test.ts
 
 Expected: fails because module is missing.
 
-- [ ] **Step 3: Implement `backend/src/domain/taskValidation.ts`**
+- [x] **Step 3: Implement `backend/src/domain/taskValidation.ts`**
 
 ```ts
 export interface StrictTaskInput {
@@ -320,7 +320,7 @@ export function validateTaskStrictness(input: StrictTaskInput): ValidationResult
 }
 ```
 
-- [ ] **Step 4: Run test**
+- [x] **Step 4: Run test**
 
 ```bash
 cd backend
@@ -331,7 +331,7 @@ Expected: pass.
 
 ## Task 4: Implement Commitment State Machine
 
-- [ ] **Step 1: Extend `backend/test/domain/commitmentState.test.ts`**
+- [x] **Step 1: Extend `backend/test/domain/commitmentState.test.ts`**
 
 Add:
 
@@ -389,7 +389,7 @@ describe("applyAction", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `backend/src/domain/commitmentState.ts`**
+- [x] **Step 2: Implement `backend/src/domain/commitmentState.ts`**
 
 ```ts
 export type CommitmentState =
@@ -457,7 +457,7 @@ export function applyAction(record: CommitmentRecord, action: CommitmentAction):
 }
 ```
 
-- [ ] **Step 3: Run domain tests**
+- [x] **Step 3: Run domain tests**
 
 ```bash
 cd backend
@@ -468,7 +468,7 @@ Expected: pass.
 
 ## Task 5: Implement SQLite Schema And Migrations
 
-- [ ] **Step 1: Write migration test `backend/test/db/migrations.test.ts`**
+- [x] **Step 1: Write migration test `backend/test/db/migrations.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -493,7 +493,7 @@ describe("migrate", () => {
 });
 ```
 
-- [ ] **Step 2: Create `backend/src/db/schema.sql`**
+- [x] **Step 2: Create `backend/src/db/schema.sql`**
 
 ```sql
 create table if not exists schema_migrations (
@@ -553,7 +553,7 @@ create table if not exists whatsapp_escalations (
 );
 ```
 
-- [ ] **Step 3: Implement `backend/src/db/migrations.ts` and `connection.ts`**
+- [x] **Step 3: Implement `backend/src/db/migrations.ts` and `connection.ts`**
 
 `backend/src/db/migrations.ts`:
 
@@ -593,7 +593,7 @@ export function openDatabase(path: string): Database.Database {
 }
 ```
 
-- [ ] **Step 4: Run migration test**
+- [x] **Step 4: Run migration test**
 
 ```bash
 cd backend
@@ -604,7 +604,7 @@ Expected: pass.
 
 ## Task 6: Implement Task Repository
 
-- [ ] **Step 1: Write repository test `backend/test/repositories/taskRepository.test.ts`**
+- [x] **Step 1: Write repository test `backend/test/repositories/taskRepository.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -641,7 +641,7 @@ describe("TaskRepository", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `backend/src/repositories/taskRepository.ts`**
+- [x] **Step 2: Implement `backend/src/repositories/taskRepository.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -741,7 +741,7 @@ export class TaskRepository {
 }
 ```
 
-- [ ] **Step 3: Run repository test**
+- [x] **Step 3: Run repository test**
 
 ```bash
 cd backend
@@ -752,7 +752,7 @@ Expected: pass.
 
 ## Task 7: Final Verification And Commit
 
-- [ ] **Step 1: Run all backend tests**
+- [x] **Step 1: Run all backend tests**
 
 ```bash
 cd backend
@@ -762,7 +762,7 @@ npm run typecheck
 
 Expected: both pass.
 
-- [ ] **Step 2: Scan for placeholders**
+- [x] **Step 2: Scan for placeholders**
 
 ```bash
 rg -n "\bTBD\b|\bTODO\b|fill in" backend/src backend/test docs/superpowers/plans/2026-05-08-01-backend-core-sqlite-state-machine.md
@@ -770,13 +770,13 @@ rg -n "\bTBD\b|\bTODO\b|fill in" backend/src backend/test docs/superpowers/plans
 
 Expected: no matches that indicate incomplete implementation.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend docs/superpowers/plans/2026-05-08-01-backend-core-sqlite-state-machine.md
 git commit -m "feat: add backend core state foundation"
 ```
 
-- [ ] **Step 4: Write handoff**
+- [x] **Step 4: Write handoff**
 
 Create `docs/handoffs/YYYY-MM-DD-backend-core.md` with completed steps, tests, and next recommendation.
