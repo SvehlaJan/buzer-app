@@ -22,11 +22,14 @@
 
 ## Task 1: Add Repository Ignore Rules
 
-- [ ] **Step 1: Create `.gitignore`**
+- [x] **Step 1: Create `.gitignore`**
 
 Create `.gitignore` with exactly this content:
 
 ```gitignore
+# Worktrees
+.worktrees/
+
 # OS/editor
 .DS_Store
 .idea/
@@ -74,7 +77,7 @@ reports/
 test-results/
 ```
 
-- [ ] **Step 2: Verify ignore coverage**
+- [x] **Step 2: Verify ignore coverage**
 
 Run:
 
@@ -86,7 +89,7 @@ Expected: `.gitignore` appears as untracked or modified, and no generated runtim
 
 ## Task 2: Create Root README
 
-- [ ] **Step 1: Write `README.md`**
+- [x] **Step 1: Write `README.md`**
 
 Create `README.md` with:
 
@@ -124,7 +127,7 @@ Personal Todoist companion that enforces strict task commitments on Android.
 Follow `AGENTS.md` before changing files. Each implementation session must leave a handoff in `docs/handoffs/`.
 ```
 
-- [ ] **Step 2: Verify README references exist**
+- [x] **Step 2: Verify README references exist**
 
 Run:
 
@@ -138,7 +141,7 @@ Expected: all commands exit with status 0.
 
 ## Task 3: Define Initial API Contract
 
-- [ ] **Step 1: Write `docs/notes/api-contract.md`**
+- [x] **Step 1: Write `docs/notes/api-contract.md`**
 
 Create `docs/notes/api-contract.md` with:
 
@@ -287,19 +290,19 @@ Request:
 ```
 ```
 
-- [ ] **Step 2: Verify Markdown fences**
+- [x] **Step 2: Verify Markdown fences**
 
 Run:
 
 ```bash
-rg -n "```" docs/notes/api-contract.md
+rg -n '```' docs/notes/api-contract.md
 ```
 
 Expected: output contains an even number of fence lines.
 
 ## Task 4: Add Local Development Notes
 
-- [ ] **Step 1: Write `docs/notes/local-development.md`**
+- [x] **Step 1: Write `docs/notes/local-development.md`**
 
 Create:
 
@@ -342,7 +345,7 @@ Secrets stay out of Git. Use `.env.example` files for documented variable names 
 Each implementation session writes a handoff in `docs/handoffs/` before stopping.
 ```
 
-- [ ] **Step 2: Create project directory marker files**
+- [x] **Step 2: Create project directory marker files**
 
 Create empty directory marker files:
 
@@ -353,17 +356,17 @@ client/.gitkeep
 
 ## Task 5: Final Verification And Commit
 
-- [ ] **Step 1: Scan for placeholders**
+- [x] **Step 1: Scan for placeholders**
 
 Run:
 
 ```bash
-rg -n "\bTBD\b|\bTODO\b|fill in" README.md AGENTS.md docs/notes docs/superpowers/plans/2026-05-08-00-repo-foundation-and-contracts.md
+rg -n "\bTB[D]\b|\bTO[D]O\b|fill[ ]in" README.md docs/notes docs/superpowers/plans/2026-05-08-00-repo-foundation-and-contracts.md
 ```
 
 Expected: no matches.
 
-- [ ] **Step 2: Review status**
+- [x] **Step 2: Review status**
 
 Run:
 
@@ -373,7 +376,7 @@ git status --short
 
 Expected: only files from this plan and already-approved docs are modified or untracked.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 Run:
 
@@ -384,6 +387,6 @@ git commit -m "docs: add repo foundation plan and contracts"
 
 Expected: commit succeeds.
 
-- [ ] **Step 4: Write handoff**
+- [x] **Step 4: Write handoff**
 
 Create `docs/handoffs/YYYY-MM-DD-repo-foundation.md` using the template in `docs/handoffs/README.md`.

@@ -1,1 +1,48 @@
+# Worktrees
 .worktrees/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Env/secrets
+.env
+.env.*
+!.env.example
+secrets/
+
+# Node/backend
+node_modules/
+dist/
+coverage/
+.nyc_output/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# SQLite/runtime
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# WhatsApp Web auth/session data
+.wwebjs_auth/
+.wwebjs_cache/
+whatsapp-sessions/
+
+# Kotlin/Android
+.gradle/
+build/
+**/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Generated reports
+reports/
+test-results/
