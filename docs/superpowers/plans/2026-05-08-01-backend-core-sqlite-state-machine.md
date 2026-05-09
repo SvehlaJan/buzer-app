@@ -765,7 +765,7 @@ Expected: both pass.
 - [x] **Step 2: Scan for placeholders**
 
 ```bash
-rg -n "\bTBD\b|\bTODO\b|fill in" backend/src backend/test docs/superpowers/plans/2026-05-08-01-backend-core-sqlite-state-machine.md
+rg -n "\bTB[D]\b|\bTO[D]O\b|fill[ ]in" backend/src backend/test docs/superpowers/plans/2026-05-08-01-backend-core-sqlite-state-machine.md
 ```
 
 Expected: no matches that indicate incomplete implementation.
