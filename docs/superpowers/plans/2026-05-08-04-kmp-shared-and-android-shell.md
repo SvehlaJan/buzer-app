@@ -233,7 +233,7 @@ object ScheduleCalculator {
 
 ```bash
 cd client
-./gradlew :shared:allTests --tests app.buzer.shared.time.ScheduleCalculatorTest
+./gradlew :shared:testDebugUnitTest --tests app.buzer.shared.time.ScheduleCalculatorTest
 ```
 
 Expected: pass.
@@ -312,7 +312,7 @@ object TaskValidation {
 
 ```bash
 cd client
-./gradlew :shared:allTests --tests app.buzer.shared.validation.TaskValidationTest
+./gradlew :shared:testDebugUnitTest --tests app.buzer.shared.validation.TaskValidationTest
 ```
 
 Expected: pass.
@@ -485,7 +485,7 @@ Expected: pass.
 
 ```bash
 cd client
-./gradlew :shared:allTests :androidApp:testDebugUnitTest :androidApp:assembleDebug
+./gradlew :shared:testDebugUnitTest :androidApp:testDebugUnitTest :androidApp:assembleDebug
 ```
 
 Expected: pass.
