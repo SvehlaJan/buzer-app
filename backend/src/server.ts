@@ -1,9 +1,12 @@
 import type Database from "better-sqlite3";
 import "dotenv/config";
+import { DryRunSender } from "./accountability/dryRunSender.js";
+import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
+import { EscalationService } from "./services/escalationService.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
 import { TodoistSyncService } from "./services/todoistSyncService.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
@@ -14,6 +17,7 @@ export interface BuildServerOptions {
   currentUserId: string;
   androidApiToken: string;
   todoist: TodoistAdapter;
+  escalationService?: EscalationService | null;
 }
 
 export function buildServer(options: BuildServerOptions) {
@@ -27,22 +31,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const currentUserId = process.env.TODOIST_USER_ID ?? process.env.TODOIST_CURRENT_USER_ID;
   const androidApiToken = process.env.ANDROID_API_TOKEN;
   const todoistApiToken = process.env.TODOIST_API_TOKEN;
+  const whatsappRecipientId = process.env.WHATSAPP_RECIPIENT_ID;
   const port = Number(process.env.PORT ?? 3000);
 
-  if (currentUserId === undefined || androidApiToken === undefined || todoistApiToken === undefined) {
-    throw new Error("TODOIST_USER_ID, ANDROID_API_TOKEN, and TODOIST_API_TOKEN are required");
+  if (currentUserId === undefined || androidApiToken === undefined || todoistApiToken === undefined || whatsappRecipientId === undefined) {
+    throw new Error("TODOIST_USER_ID, ANDROID_API_TOKEN, TODOIST_API_TOKEN, and WHATSAPP_RECIPIENT_ID are required");
   }
 
   const db = openDatabase(dbPath);
+  const tasks = new TaskRepository(db);
   const todoist = new HttpTodoistAdapter(todoistApiToken);
+  const whatsappDryRun = process.env.WHATSAPP_DRY_RUN !== "false";
+  const whatsappSender = whatsappDryRun
+    ? new DryRunSender()
+    : new WhatsAppWebSender({
+      sessionPath: process.env.WHATSAPP_SESSION_PATH ?? "whatsapp-sessions",
+      clientId: process.env.WHATSAPP_CLIENT_ID ?? "buzer"
+    });
+  if (whatsappSender instanceof WhatsAppWebSender) {
+    await whatsappSender.initialize();
+  }
+  const escalationService = new EscalationService(db, tasks, whatsappSender, whatsappRecipientId);
   const app = buildServer({
     db,
     currentUserId,
     androidApiToken,
-    todoist
+    todoist,
+    escalationService
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, new TaskRepository(db), todoist),
+    new TodoistSyncService(db, tasks, todoist),
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")
@@ -50,6 +68,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   );
   app.addHook("onClose", async () => {
     poller.stop();
+    if (whatsappSender instanceof WhatsAppWebSender) {
+      await whatsappSender.destroy();
+    }
   });
 
   poller.start();

@@ -33,7 +33,7 @@
 
 ## Task 1: Resolve Current WhatsApp Docs
 
-- [ ] **Step 1: Fetch `whatsapp-web.js` docs**
+- [x] **Step 1: Fetch `whatsapp-web.js` docs**
 
 Run:
 
@@ -44,7 +44,7 @@ npx ctx7@latest docs "/resolved/wwebjs/id" "LocalAuth Client sendMessage Puppete
 
 Record the resolved ID and the authentication/session notes in the handoff.
 
-- [ ] **Step 2: Add dependency**
+- [x] **Step 2: Add dependency**
 
 Update `backend/package.json` dependencies:
 
@@ -68,7 +68,7 @@ Expected: lockfile updates successfully.
 
 ## Task 2: Create Accountability Interface And Message Builder
 
-- [ ] **Step 1: Write message test**
+- [x] **Step 1: Write message test**
 
 Create `backend/test/accountability/escalationMessage.test.ts`:
 
@@ -87,7 +87,7 @@ describe("buildEscalationMessage", () => {
 });
 ```
 
-- [ ] **Step 2: Implement interface and message builder**
+- [x] **Step 2: Implement interface and message builder**
 
 `backend/src/accountability/accountabilitySender.ts`:
 
@@ -119,7 +119,7 @@ export function buildEscalationMessage(input: EscalationMessageInput): string {
 }
 ```
 
-- [ ] **Step 3: Run message test**
+- [x] **Step 3: Run message test**
 
 ```bash
 cd backend
@@ -130,7 +130,7 @@ Expected: pass.
 
 ## Task 3: Implement Dry-Run Sender
 
-- [ ] **Step 1: Write dry-run test**
+- [x] **Step 1: Write dry-run test**
 
 Create `backend/test/accountability/dryRunSender.test.ts`:
 
@@ -155,7 +155,7 @@ describe("DryRunSender", () => {
 });
 ```
 
-- [ ] **Step 2: Implement dry-run sender**
+- [x] **Step 2: Implement dry-run sender**
 
 Create `backend/src/accountability/dryRunSender.ts`:
 
@@ -186,7 +186,7 @@ export class DryRunSender implements AccountabilitySender {
 }
 ```
 
-- [ ] **Step 3: Run dry-run test**
+- [x] **Step 3: Run dry-run test**
 
 ```bash
 cd backend
@@ -197,7 +197,7 @@ Expected: pass.
 
 ## Task 4: Implement Escalation Service
 
-- [ ] **Step 1: Write service test**
+- [x] **Step 1: Write service test**
 
 Create `backend/test/services/escalationService.test.ts`:
 
@@ -240,7 +240,7 @@ describe("EscalationService", () => {
 });
 ```
 
-- [ ] **Step 2: Implement escalation service**
+- [x] **Step 2: Implement escalation service**
 
 Create `backend/src/services/escalationService.ts`:
 
@@ -299,7 +299,7 @@ export class EscalationService {
 }
 ```
 
-- [ ] **Step 3: Run service test**
+- [x] **Step 3: Run service test**
 
 ```bash
 cd backend
@@ -310,7 +310,7 @@ Expected: pass.
 
 ## Task 5: Implement WhatsApp Web Sender
 
-- [ ] **Step 1: Implement `backend/src/accountability/whatsappWebSender.ts`**
+- [x] **Step 1: Implement `backend/src/accountability/whatsappWebSender.ts`**
 
 ```ts
 import qrcode from "qrcode-terminal";
@@ -378,7 +378,7 @@ export class WhatsAppWebSender implements AccountabilitySender {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 ```bash
 cd backend
@@ -389,7 +389,7 @@ Expected: pass. If package import types differ from current docs, adjust import 
 
 ## Task 6: Wire Second Postpone To Escalation
 
-- [ ] **Step 1: Extend `TaskActionService` constructor**
+- [x] **Step 1: Extend `TaskActionService` constructor**
 
 Update the constructor signature:
 
@@ -431,7 +431,7 @@ async postponeStart(taskId: string, now: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Add test**
+- [x] **Step 2: Add test**
 
 Add this test to `backend/test/services/taskActionService.test.ts`:
 
@@ -467,7 +467,7 @@ it("sends escalation on second start postpone", async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 cd backend
@@ -478,7 +478,7 @@ Expected: pass.
 
 ## Task 7: Final Verification And Handoff
 
-- [ ] **Step 1: Run backend verification**
+- [x] **Step 1: Run backend verification**
 
 ```bash
 cd backend
@@ -488,7 +488,7 @@ npm run typecheck
 
 Expected: pass.
 
-- [ ] **Step 2: Ensure secrets/session data are ignored**
+- [x] **Step 2: Ensure secrets/session data are ignored**
 
 Run:
 
@@ -498,13 +498,13 @@ git check-ignore backend/.wwebjs_auth backend/.wwebjs_cache whatsapp-sessions/se
 
 Expected: each path is printed, confirming it is ignored.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend docs/superpowers/plans/2026-05-08-03-whatsapp-escalation-worker.md
 git commit -m "feat: add WhatsApp escalation provider"
 ```
 
-- [ ] **Step 4: Write handoff**
+- [x] **Step 4: Write handoff**
 
 Create `docs/handoffs/YYYY-MM-DD-whatsapp-escalation.md` with session auth notes, dry-run verification, and whether real QR login was attempted.

@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
+import { DryRunSender } from "../../src/accountability/dryRunSender.js";
+import { EscalationService } from "../../src/services/escalationService.js";
 import { TaskActionService } from "../../src/services/taskActionService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
@@ -139,5 +141,36 @@ describe("TaskActionService", () => {
     });
     expect(created.todoistTaskId).toBe("created-1");
     expect(repo.getByTodoistTaskId("created-1")?.title).toBe("New task");
+  });
+
+  it("sends escalation on second start postpone", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Send invoice",
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const sender = new DryRunSender();
+    const escalation = new EscalationService(db, repo, sender, "wife-chat");
+    const service = new TaskActionService(db, repo, adapter, "", escalation);
+
+    await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
+    await service.postponeStart("task-1", "2026-05-08T15:05:00Z");
+
+    const count = db.prepare("select count(*) as count from whatsapp_escalations").get() as { count: number };
+    expect(count.count).toBe(1);
+    expect(sender.sent).toHaveLength(1);
   });
 });

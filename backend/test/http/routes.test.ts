@@ -1,7 +1,9 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
+import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { migrate } from "../../src/db/migrations.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
+import { EscalationService } from "../../src/services/escalationService.js";
 import { buildServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
@@ -101,5 +103,43 @@ describe("HTTP routes", () => {
       details: { errors: ["due_datetime_required", "duration_required"] }
     });
     expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("sends escalation through postpone route on second start postpone", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Send invoice",
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-05-08T18:00:00Z",
+      durationMinutes: 60,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T10:00:00Z"
+    });
+    const sender = new DryRunSender();
+    const escalationService = new EscalationService(db, repo, sender, "wife-chat");
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: new FakeTodoistAdapter(),
+      escalationService
+    });
+    const auth = { authorization: "Bearer secret" };
+
+    await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
+    const response = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ escalationTriggered: true });
+    expect(sender.sent).toHaveLength(1);
   });
 });

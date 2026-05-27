@@ -4,6 +4,7 @@ import { validateTaskStrictness } from "../domain/taskValidation.js";
 import { addMinutes } from "../domain/time.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
+import type { EscalationService } from "./escalationService.js";
 
 export interface CreateTaskInput {
   title: string;
@@ -26,7 +27,8 @@ export class TaskActionService {
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
     private readonly todoist: TodoistAdapter,
-    private readonly currentUserId = ""
+    private readonly currentUserId = "",
+    private readonly escalationService: EscalationService | null = null
   ) {}
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {
@@ -105,14 +107,17 @@ export class TaskActionService {
   async postponeStart(taskId: string, now: string): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
     const task = this.requireTask(taskId);
     const snoozedUntil = addMinutes(now, 5);
-    const escalationTriggered = task.startDismissCount >= 1;
+    const nextDismissCount = task.startDismissCount + 1;
+    const escalationTriggered = nextDismissCount >= 2;
     this.tasks.updateCommitmentState(taskId, {
       startDismissDelta: 1,
       lastSnoozedAt: snoozedUntil,
-      ...(escalationTriggered && task.escalationSentAt === null ? { escalationSentAt: now } : {}),
       incrementScheduleVersion: true,
       updatedAt: now
     });
+    if (escalationTriggered && task.escalationSentAt === null && this.escalationService !== null) {
+      await this.escalationService.sendForTask(taskId, nextDismissCount);
+    }
     return { snoozedUntil, escalationTriggered };
   }
 

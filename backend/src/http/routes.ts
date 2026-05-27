@@ -81,7 +81,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 
   app.post("/tasks/:id/postpone-start", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist);
+    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist, "", options.escalationService ?? null);
     return service.postponeStart(id, new Date().toISOString());
   });
 
