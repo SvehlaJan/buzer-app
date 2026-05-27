@@ -25,6 +25,31 @@ export interface TaskWithCommitment extends TodoistTaskUpsert {
   scheduleVersion: number;
 }
 
+const taskWithCommitmentSelect = `
+  select
+    t.id,
+    t.todoist_task_id as todoistTaskId,
+    t.title,
+    t.project_id as projectId,
+    t.assignee_id as assigneeId,
+    t.creator_id as creatorId,
+    t.due_datetime as dueDatetime,
+    t.duration_minutes as durationMinutes,
+    t.completed_at as completedAt,
+    t.deleted_at as deletedAt,
+    t.raw_json as rawJson,
+    t.updated_at as updatedAt,
+    c.state,
+    c.started_at as startedAt,
+    c.start_dismiss_count as startDismissCount,
+    c.deadline_extension_count as deadlineExtensionCount,
+    c.last_snoozed_at as lastSnoozedAt,
+    c.escalation_sent_at as escalationSentAt,
+    c.schedule_version as scheduleVersion
+  from todoist_tasks t
+  join commitment_states c on c.task_id = t.id
+`;
+
 export class TaskRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -65,31 +90,89 @@ export class TaskRepository {
 
   getByTodoistTaskId(todoistTaskId: string): TaskWithCommitment | null {
     const row = this.db.prepare(`
-      select
-        t.id,
-        t.todoist_task_id as todoistTaskId,
-        t.title,
-        t.project_id as projectId,
-        t.assignee_id as assigneeId,
-        t.creator_id as creatorId,
-        t.due_datetime as dueDatetime,
-        t.duration_minutes as durationMinutes,
-        t.completed_at as completedAt,
-        t.deleted_at as deletedAt,
-        t.raw_json as rawJson,
-        t.updated_at as updatedAt,
-        c.state,
-        c.started_at as startedAt,
-        c.start_dismiss_count as startDismissCount,
-        c.deadline_extension_count as deadlineExtensionCount,
-        c.last_snoozed_at as lastSnoozedAt,
-        c.escalation_sent_at as escalationSentAt,
-        c.schedule_version as scheduleVersion
-      from todoist_tasks t
-      join commitment_states c on c.task_id = t.id
+      ${taskWithCommitmentSelect}
       where t.todoist_task_id = ?
     `).get(todoistTaskId) as TaskWithCommitment | undefined;
 
     return row ?? null;
+  }
+
+  getById(id: string): TaskWithCommitment | null {
+    const row = this.db.prepare(`
+      ${taskWithCommitmentSelect}
+      where t.id = ?
+    `).get(id) as TaskWithCommitment | undefined;
+
+    return row ?? null;
+  }
+
+  listAll(): TaskWithCommitment[] {
+    return this.db.prepare(`
+      ${taskWithCommitmentSelect}
+      order by coalesce(t.due_datetime, '9999-12-31T23:59:59Z'), t.title
+    `).all() as TaskWithCommitment[];
+  }
+
+  updateCommitmentState(
+    id: string,
+    values: {
+      state?: string;
+      startedAt?: string | null;
+      startDismissDelta?: number;
+      deadlineExtensionDelta?: number;
+      lastSnoozedAt?: string | null;
+      escalationSentAt?: string | null;
+      incrementScheduleVersion?: boolean;
+      updatedAt: string;
+    }
+  ): void {
+    const sets = ["updated_at = @updatedAt"];
+    const params: Record<string, string | number | null> = { id, updatedAt: values.updatedAt };
+
+    if (values.state !== undefined) {
+      sets.push("state = @state");
+      params.state = values.state;
+    }
+    if (values.startedAt !== undefined) {
+      sets.push("started_at = @startedAt");
+      params.startedAt = values.startedAt;
+    }
+    if (values.startDismissDelta !== undefined) {
+      sets.push("start_dismiss_count = start_dismiss_count + @startDismissDelta");
+      params.startDismissDelta = values.startDismissDelta;
+    }
+    if (values.deadlineExtensionDelta !== undefined) {
+      sets.push("deadline_extension_count = deadline_extension_count + @deadlineExtensionDelta");
+      params.deadlineExtensionDelta = values.deadlineExtensionDelta;
+    }
+    if (values.lastSnoozedAt !== undefined) {
+      sets.push("last_snoozed_at = @lastSnoozedAt");
+      params.lastSnoozedAt = values.lastSnoozedAt;
+    }
+    if (values.escalationSentAt !== undefined) {
+      sets.push("escalation_sent_at = @escalationSentAt");
+      params.escalationSentAt = values.escalationSentAt;
+    }
+    if (values.incrementScheduleVersion === true) {
+      sets.push("schedule_version = schedule_version + 1");
+    }
+
+    this.db.prepare(`update commitment_states set ${sets.join(", ")} where task_id = @id`).run(params);
+  }
+
+  updateTaskSchedule(id: string, dueDatetime: string, durationMinutes: number, updatedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set due_datetime = ?, duration_minutes = ?, updated_at = ?
+      where id = ?
+    `).run(dueDatetime, durationMinutes, updatedAt, id);
+  }
+
+  markCompleted(id: string, completedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set completed_at = ?, updated_at = ?
+      where id = ?
+    `).run(completedAt, completedAt, id);
   }
 }

@@ -1,0 +1,13 @@
+export interface TodoistTaskMirror {
+  todoistTaskId: string;
+  title: string;
+  projectId: string | null;
+  assigneeId: string | null;
+  creatorId: string | null;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
+  completedAt: string | null;
+  deletedAt: string | null;
+  rawJson: unknown;
+  updatedAt: string;
+}

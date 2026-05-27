@@ -37,7 +37,7 @@
 
 ## Task 1: Resolve Current Docs
 
-- [ ] **Step 1: Fetch Todoist docs**
+- [x] **Step 1: Fetch Todoist docs**
 
 Run:
 
@@ -48,7 +48,7 @@ npx ctx7@latest docs "/resolved/todoist/id" "Sync API incremental sync task upda
 
 Record the resolved ID and relevant endpoint notes in the handoff.
 
-- [ ] **Step 2: Fetch Fastify docs**
+- [x] **Step 2: Fetch Fastify docs**
 
 Run:
 
@@ -61,7 +61,7 @@ Record the resolved ID in the handoff.
 
 ## Task 2: Define Todoist Adapter Contract
 
-- [ ] **Step 1: Write fake-adapter driven tests**
+- [x] **Step 1: Write fake-adapter driven tests**
 
 Create `backend/test/fakes/fakeTodoistAdapter.ts`:
 
@@ -93,7 +93,7 @@ export class FakeTodoistAdapter implements TodoistAdapter {
 }
 ```
 
-- [ ] **Step 2: Implement `backend/src/todoist/todoistTypes.ts`**
+- [x] **Step 2: Implement `backend/src/todoist/todoistTypes.ts`**
 
 ```ts
 export interface TodoistTaskMirror {
@@ -111,7 +111,7 @@ export interface TodoistTaskMirror {
 }
 ```
 
-- [ ] **Step 3: Implement `backend/src/todoist/todoistAdapter.ts`**
+- [x] **Step 3: Implement `backend/src/todoist/todoistAdapter.ts`**
 
 ```ts
 import type { TodoistTaskMirror } from "./todoistTypes.js";
@@ -145,7 +145,7 @@ export interface TodoistAdapter {
 
 ## Task 3: Implement Sync Service
 
-- [ ] **Step 1: Write `backend/test/services/todoistSyncService.test.ts`**
+- [x] **Step 1: Write `backend/test/services/todoistSyncService.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -188,7 +188,7 @@ describe("TodoistSyncService", () => {
 });
 ```
 
-- [ ] **Step 2: Add repository support for listing snapshots**
+- [x] **Step 2: Add repository support for listing snapshots**
 
 Extend `TaskRepository` with:
 
@@ -222,7 +222,7 @@ listAll(): TaskWithCommitment[] {
 }
 ```
 
-- [ ] **Step 3: Implement `backend/src/services/todoistSyncService.ts`**
+- [x] **Step 3: Implement `backend/src/services/todoistSyncService.ts`**
 
 ```ts
 import type Database from "better-sqlite3";
@@ -272,7 +272,7 @@ export class TodoistSyncService {
 }
 ```
 
-- [ ] **Step 4: Run sync test**
+- [x] **Step 4: Run sync test**
 
 ```bash
 cd backend
@@ -283,7 +283,7 @@ Expected: pass.
 
 ## Task 4: Implement Snapshot Service
 
-- [ ] **Step 1: Write `backend/test/services/taskSnapshotService.test.ts`**
+- [x] **Step 1: Write `backend/test/services/taskSnapshotService.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -321,7 +321,7 @@ describe("TaskSnapshotService", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `backend/src/services/taskSnapshotService.ts`**
+- [x] **Step 2: Implement `backend/src/services/taskSnapshotService.ts`**
 
 ```ts
 import { computeStartAt } from "../domain/time.js";
@@ -381,7 +381,7 @@ export class TaskSnapshotService {
 }
 ```
 
-- [ ] **Step 3: Run snapshot test**
+- [x] **Step 3: Run snapshot test**
 
 ```bash
 cd backend
@@ -392,7 +392,7 @@ Expected: pass.
 
 ## Task 5: Implement Task Actions
 
-- [ ] **Step 1: Write `backend/test/services/taskActionService.test.ts`**
+- [x] **Step 1: Write `backend/test/services/taskActionService.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -435,7 +435,7 @@ describe("TaskActionService", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `backend/src/services/taskActionService.ts`**
+- [x] **Step 2: Implement `backend/src/services/taskActionService.ts`**
 
 ```ts
 import type Database from "better-sqlite3";
@@ -478,7 +478,7 @@ export class TaskActionService {
 }
 ```
 
-- [ ] **Step 3: Add `getById` to repository**
+- [x] **Step 3: Add `getById` to repository**
 
 Add this method to `TaskRepository`:
 
@@ -514,7 +514,7 @@ getById(id: string): TaskWithCommitment | null {
 }
 ```
 
-- [ ] **Step 4: Run action test**
+- [x] **Step 4: Run action test**
 
 ```bash
 cd backend
@@ -525,7 +525,7 @@ Expected: pass.
 
 ## Task 6: Implement HTTP Routes
 
-- [ ] **Step 1: Write route test `backend/test/http/routes.test.ts`**
+- [x] **Step 1: Write route test `backend/test/http/routes.test.ts`**
 
 ```ts
 import Database from "better-sqlite3";
@@ -560,7 +560,7 @@ describe("HTTP routes", () => {
 });
 ```
 
-- [ ] **Step 2: Implement `backend/src/http/auth.ts`**
+- [x] **Step 2: Implement `backend/src/http/auth.ts`**
 
 ```ts
 import type { FastifyRequest } from "fastify";
@@ -573,7 +573,7 @@ export function requireBearerToken(request: FastifyRequest, expectedToken: strin
 }
 ```
 
-- [ ] **Step 3: Implement `backend/src/server.ts` and `routes.ts`**
+- [x] **Step 3: Implement `backend/src/server.ts` and `routes.ts`**
 
 `backend/src/server.ts`:
 
@@ -617,7 +617,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 }
 ```
 
-- [ ] **Step 4: Run route test**
+- [x] **Step 4: Run route test**
 
 ```bash
 cd backend
@@ -628,7 +628,7 @@ Expected: pass.
 
 ## Task 7: Final Verification And Handoff
 
-- [ ] **Step 1: Run backend verification**
+- [x] **Step 1: Run backend verification**
 
 ```bash
 cd backend
@@ -638,17 +638,17 @@ npm run typecheck
 
 Expected: pass.
 
-- [ ] **Step 2: Update API contract**
+- [x] **Step 2: Update API contract**
 
 If implemented endpoint request/response fields differ from `docs/notes/api-contract.md`, update the contract in the same commit.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend docs/notes/api-contract.md docs/superpowers/plans/2026-05-08-02-backend-todoist-sync-and-rest-api.md
 git commit -m "feat: add Todoist sync and Android API"
 ```
 
-- [ ] **Step 4: Write handoff**
+- [x] **Step 4: Write handoff**
 
 Create `docs/handoffs/YYYY-MM-DD-backend-todoist-api.md` with docs IDs used, tests, implemented endpoints, and contract changes made.
