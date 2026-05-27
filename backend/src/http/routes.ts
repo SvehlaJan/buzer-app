@@ -30,7 +30,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     requireBearerToken(request, options.androidApiToken);
   });
 
-  app.setErrorHandler((error: Error & { statusCode?: number; code?: string }, _request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string; details?: Record<string, unknown> }, _request, reply) => {
     if (error instanceof z.ZodError) {
       reply.status(400).send({
         code: "validation_error",
@@ -43,7 +43,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const statusCode = typeof error.statusCode === "number" ? error.statusCode : 500;
     reply.status(statusCode).send({
       code: typeof error.code === "string" ? error.code : "internal_error",
-      message: error.message
+      message: error.message,
+      ...(error.details !== undefined ? { details: error.details } : {})
     });
   });
 
@@ -56,7 +57,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks", async (request) => {
     const body = createTaskBody.parse(request.body);
     const repo = new TaskRepository(options.db);
-    const service = new TaskActionService(options.db, repo, options.todoist);
+    const service = new TaskActionService(options.db, repo, options.todoist, options.currentUserId);
     return service.create({
       ...body,
       creatorId: options.currentUserId,

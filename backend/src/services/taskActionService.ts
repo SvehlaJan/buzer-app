@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { validateTaskStrictness } from "../domain/taskValidation.js";
 import { addMinutes } from "../domain/time.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
@@ -7,7 +8,7 @@ import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 export interface CreateTaskInput {
   title: string;
   projectId: string | null;
-  assigneeId: string;
+  assigneeId: string | null;
   dueDatetime: string | null;
   durationMinutes: number | null;
   creatorId: string;
@@ -24,10 +25,34 @@ export class TaskActionService {
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
-    private readonly todoist: TodoistAdapter
+    private readonly todoist: TodoistAdapter,
+    private readonly currentUserId = ""
   ) {}
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {
+    const validation = validateTaskStrictness({
+      title: input.title,
+      creatorId: input.creatorId,
+      assigneeId: input.assigneeId,
+      dueDatetime: input.dueDatetime,
+      durationMinutes: input.durationMinutes,
+      currentUserId: this.currentUserId
+    });
+    if (!validation.valid) {
+      throw Object.assign(new Error("Task validation failed"), {
+        code: "task_validation_failed",
+        statusCode: 422,
+        details: { errors: validation.errors }
+      });
+    }
+    if (input.assigneeId === null) {
+      throw Object.assign(new Error("Task validation failed"), {
+        code: "task_validation_failed",
+        statusCode: 422,
+        details: { errors: ["assignee_required_for_created_task"] }
+      });
+    }
+
     const created = await this.todoist.createTask({
       title: input.title,
       projectId: input.projectId,

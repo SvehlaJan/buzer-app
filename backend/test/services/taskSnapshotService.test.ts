@@ -57,4 +57,45 @@ describe("TaskSnapshotService", () => {
     expect(snapshot.tasks[0]?.state).toBe("invalid");
     expect(snapshot.tasks[0]?.validationErrors).toEqual(["due_datetime_required", "duration_required"]);
   });
+
+  it("returns completed and deleted terminal states ahead of validation errors", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-completed",
+      todoistTaskId: "todoist-completed",
+      title: "Completed loose task",
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "wife",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: "2026-05-08T11:00:00Z",
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T11:00:00Z"
+    });
+    repo.upsertTodoistTask({
+      id: "task-deleted",
+      todoistTaskId: "todoist-deleted",
+      title: "Deleted loose task",
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "wife",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: "2026-05-08T11:05:00Z",
+      rawJson: "{}",
+      updatedAt: "2026-05-08T11:05:00Z"
+    });
+
+    const service = new TaskSnapshotService(repo, "user-self");
+    const snapshot = service.getSnapshot("2026-05-08T12:00:00Z");
+
+    expect(snapshot.tasks.map((task) => task.state)).toEqual(["completed", "deleted"]);
+    expect(snapshot.tasks.map((task) => task.isCompleted)).toEqual([true, false]);
+    expect(snapshot.tasks.map((task) => task.isDeleted)).toEqual([false, true]);
+  });
 });

@@ -22,6 +22,11 @@ export class TaskSnapshotService {
       const startAt = task.dueDatetime !== null && task.durationMinutes !== null
         ? computeStartAt(task.dueDatetime, task.durationMinutes)
         : null;
+      const terminalState = task.deletedAt !== null
+        ? "deleted"
+        : task.completedAt !== null
+          ? "completed"
+          : null;
 
       return {
         id: task.id,
@@ -33,7 +38,7 @@ export class TaskSnapshotService {
         dueDatetime: task.dueDatetime,
         durationMinutes: task.durationMinutes,
         startAt,
-        state: validation.valid ? task.state : "invalid",
+        state: terminalState ?? (validation.valid ? task.state : "invalid"),
         isAssignedToUser: task.assigneeId === this.currentUserId,
         isCreatedByUser: task.creatorId === this.currentUserId,
         isCompleted: task.completedAt !== null,

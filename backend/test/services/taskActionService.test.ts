@@ -6,6 +6,53 @@ import { TaskActionService } from "../../src/services/taskActionService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("TaskActionService", () => {
+  it("rejects invalid self-assigned created tasks before calling Todoist", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, repo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Loose commitment",
+      projectId: null,
+      assigneeId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      creatorId: "user-self",
+      now: "2026-05-08T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422
+    });
+
+    expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("rejects created tasks without assignment before calling Todoist", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, repo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Unassigned task",
+      projectId: null,
+      assigneeId: null,
+      dueDatetime: "2026-05-08T12:00:00Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-05-08T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["assignee_required_for_created_task"] }
+    });
+
+    expect(adapter.createdTasks).toEqual([]);
+  });
+
   it("extends due datetime by exactly 30 minutes", async () => {
     const db = new Database(":memory:");
     migrate(db);

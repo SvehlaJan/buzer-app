@@ -94,3 +94,80 @@ Files changed:
 ## Next Step
 
 - Execute the WhatsApp escalation/backend worker plan, or add the polling scheduler that calls `TodoistSyncService.syncOnce()` every 5 minutes.
+
+---
+
+## Review Blocker Fixes
+
+Date: 2026-05-27
+Agent: Codex GPT-5
+Plan/task attempted: review blockers for `docs/superpowers/plans/2026-05-08-02-backend-todoist-sync-and-rest-api.md` after initial Tasks 1-7 implementation.
+
+### Scope
+
+- Fixed self-assigned task creation validation before Todoist calls.
+- Fixed Todoist completed/deleted sync to promote local commitment lifecycle state.
+- Fixed snapshot terminal state reporting for completed/deleted tasks.
+- Fixed HTTP Todoist `item_add` payload shape so `temp_id` is a command-object sibling of `type`/`uuid`/`args`.
+- Mapped Todoist `checked`, `is_deleted`, and `completed_at` fields in the HTTP adapter.
+- Added a testable 5-minute Todoist poller and wired it only in runtime startup, not in `buildServer` route-injection tests.
+- Loaded `.env` in runtime startup and aligned server startup to prefer documented `TODOIST_USER_ID`.
+
+### Files Changed
+
+- `backend/src/http/routes.ts`
+- `backend/src/server.ts`
+- `backend/src/services/taskActionService.ts`
+- `backend/src/services/taskSnapshotService.ts`
+- `backend/src/services/todoistPoller.ts`
+- `backend/src/services/todoistSyncService.ts`
+- `backend/src/todoist/httpTodoistAdapter.ts`
+- `backend/test/http/routes.test.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `backend/test/services/taskSnapshotService.test.ts`
+- `backend/test/services/todoistPoller.test.ts`
+- `backend/test/services/todoistSyncService.test.ts`
+- `backend/test/todoist/httpTodoistAdapter.test.ts`
+- `docs/handoffs/2026-05-27-backend-todoist-api.md`
+
+### Commands Run
+
+- Command: `npx ctx7@latest library "Todoist API" "Todoist Sync API item_add temp_id command object checked is_deleted completed_at task fields"`
+- Result: PASS
+- Evidence: resolved `/websites/developer_todoist_api_v1` as the best match.
+
+- Command: `npx ctx7@latest docs "/websites/developer_todoist_api_v1" "Todoist Sync API item_add temp_id command object checked is_deleted completed_at task fields"`
+- Result: PASS
+- Evidence: docs show Sync API command objects with `temp_id` at command-object level and task fields including `checked`, `is_deleted`, and `completed_at`.
+
+- Command: `cd backend && npm test -- test/services/taskActionService.test.ts test/http/routes.test.ts test/services/todoistSyncService.test.ts test/services/taskSnapshotService.test.ts test/todoist/httpTodoistAdapter.test.ts test/services/todoistPoller.test.ts`
+- Result: FAIL then PASS
+- Evidence: initial red run failed on the expected review blockers; after fixes, 6 test files passed with 16 tests.
+
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: 10 test files passed with 28 tests.
+
+- Command: `cd backend && npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited with status 0.
+
+### Manual Verification
+
+- Reviewed `git diff` to confirm changes stayed within backend and approved docs ownership.
+- Confirmed `buildServer` does not start the Todoist poller; the poller is only started in the runtime `server.ts` entrypoint.
+- Confirmed `.env.example` already documents `TODOIST_USER_ID`; runtime now prefers that name and accepts `TODOIST_CURRENT_USER_ID` only as a compatibility fallback.
+
+### Known Failures Or Skipped Checks
+
+- No real Todoist credentials were used.
+- No live Todoist API call was made; HTTP adapter behavior is covered with mocked `fetch`.
+
+### Assumptions
+
+- Deleted Todoist tasks should take precedence over completed state if both terminal markers are present.
+- A Todoist task with `checked: true` but no `completed_at` should use `updated_at` as the local completion timestamp fallback.
+
+### Next Recommended Step
+
+- Run the backend service locally with real Todoist credentials in a non-test environment to verify the first live sync and command execution against a personal Todoist sandbox project.

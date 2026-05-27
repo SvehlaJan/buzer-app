@@ -74,4 +74,32 @@ describe("HTTP routes", () => {
     expect(checkIn.statusCode).toBe(200);
     expect(adapter.reschedules).toHaveLength(1);
   });
+
+  it("rejects invalid self-assigned task creation without calling Todoist", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Loose commitment",
+        projectId: null,
+        assigneeId: "user-self",
+        dueDatetime: null,
+        durationMinutes: null
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      code: "task_validation_failed",
+      details: { errors: ["due_datetime_required", "duration_required"] }
+    });
+    expect(adapter.createdTasks).toEqual([]);
+  });
 });

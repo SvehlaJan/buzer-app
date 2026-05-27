@@ -59,7 +59,6 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     const commandId = randomUUID();
     const tempId = randomUUID();
     const args: Record<string, unknown> = {
-      temp_id: tempId,
       content: input.title,
       responsible_uid: input.assigneeId
     };
@@ -74,12 +73,12 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       args.duration = { amount: input.durationMinutes, unit: "minute" };
     }
 
-    const response = await this.command(commandId, "item_add", args);
+    const response = await this.command(commandId, "item_add", args, tempId);
     return { todoistTaskId: response.temp_id_mapping?.[tempId] ?? tempId };
   }
 
   async completeTask(todoistTaskId: string): Promise<void> {
-    await this.command(randomUUID(), "item_close", { id: todoistTaskId });
+    await this.command(randomUUID(), "item_complete", { id: todoistTaskId });
   }
 
   async rescheduleTask(input: TodoistRescheduleInput): Promise<void> {
@@ -90,11 +89,14 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     });
   }
 
-  private async command(uuid: string, type: string, args: Record<string, unknown>): Promise<SyncResponse> {
+  private async command(uuid: string, type: string, args: Record<string, unknown>, tempId?: string): Promise<SyncResponse> {
+    const command = tempId === undefined
+      ? { type, uuid, args }
+      : { type, uuid, temp_id: tempId, args };
     const response = await this.request<SyncResponse>("/sync", {
       method: "POST",
       body: this.encodeForm({
-        commands: JSON.stringify([{ type, uuid, args }])
+        commands: JSON.stringify([command])
       })
     });
     const status = response.sync_status?.[uuid];
@@ -132,9 +134,10 @@ export class HttpTodoistAdapter implements TodoistAdapter {
   private mapTask(task: TodoistApiTask): TodoistTaskMirror {
     const durationMinutes = typeof task.duration === "number"
       ? task.duration
-      : task.duration?.unit === "minute"
+      : task.duration !== null && task.duration !== undefined && (task.duration.unit ?? task.duration_unit) === "minute"
         ? task.duration.amount ?? null
         : null;
+    const completedAt = task.completed_at ?? (task.checked === true ? task.updated_at ?? new Date().toISOString() : null);
 
     return {
       todoistTaskId: String(task.id),
@@ -144,7 +147,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       creatorId: stringifyNullable(task.added_by_uid ?? task.assigned_by_uid ?? task.user_id ?? null),
       dueDatetime: task.due?.datetime ?? task.due_datetime ?? null,
       durationMinutes,
-      completedAt: task.completed_at ?? null,
+      completedAt,
       deletedAt: task.is_deleted === true ? task.updated_at ?? new Date().toISOString() : null,
       rawJson: task,
       updatedAt: task.updated_at ?? new Date().toISOString()

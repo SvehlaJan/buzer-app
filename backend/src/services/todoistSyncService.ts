@@ -19,8 +19,10 @@ export class TodoistSyncService {
 
     const tx = this.db.transaction(() => {
       for (const task of result.tasks) {
+        const existing = this.tasks.getByTodoistTaskId(task.todoistTaskId);
+        const id = existing?.id ?? randomUUID();
         this.tasks.upsertTodoistTask({
-          id: this.tasks.getByTodoistTaskId(task.todoistTaskId)?.id ?? randomUUID(),
+          id,
           todoistTaskId: task.todoistTaskId,
           title: task.title,
           projectId: task.projectId,
@@ -33,6 +35,19 @@ export class TodoistSyncService {
           rawJson: JSON.stringify(task.rawJson),
           updatedAt: task.updatedAt
         });
+
+        const terminalState = task.deletedAt !== null
+          ? "deleted"
+          : task.completedAt !== null
+            ? "completed"
+            : null;
+        if (terminalState !== null && existing?.state !== terminalState) {
+          this.tasks.updateCommitmentState(id, {
+            state: terminalState,
+            incrementScheduleVersion: true,
+            updatedAt: task.updatedAt
+          });
+        }
       }
 
       this.db.prepare(`
