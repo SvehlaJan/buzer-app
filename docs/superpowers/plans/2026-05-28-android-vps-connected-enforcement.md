@@ -190,7 +190,7 @@ If `.gitignore` was unchanged, omit it from `git add`.
 
 **Goal:** Add Android-free alarm planning from backend snapshots.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt`:
 
@@ -305,7 +305,7 @@ class AlarmPlanCalculatorTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 ```bash
 cd client
@@ -314,7 +314,7 @@ cd client
 
 Expected: FAIL with unresolved `AlarmPlanCalculator`, `DesiredAlarm`, or `DesiredAlarmKind`.
 
-- [ ] **Step 3: Implement alarm planning**
+- [x] **Step 3: Implement alarm planning**
 
 Create `client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt`:
 
@@ -390,7 +390,7 @@ object AlarmPlanCalculator {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pass**
+- [x] **Step 4: Run tests to verify pass**
 
 ```bash
 cd client
@@ -399,7 +399,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt
