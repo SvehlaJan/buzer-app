@@ -1,8 +1,21 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun localProperty(name: String): String {
+    return localProperties.getProperty(name).orEmpty()
 }
 
 android {
@@ -15,6 +28,13 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-dev"
+
+        buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${localProperty("BUZER_BACKEND_BASE_URL")}\"")
+        buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${localProperty("BUZER_BACKEND_TOKEN")}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     testOptions {
@@ -34,6 +54,7 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(compose.foundation)
     implementation(compose.material3)
     implementation(compose.runtime)

@@ -60,7 +60,7 @@ Every worker must read `AGENTS.md`, the product spec, the slice design, this pla
 
 **Goal:** Inject debug backend URL/token from ignored `client/local.properties` into `BuildConfig`.
 
-- [ ] **Step 1: Verify current ignore behavior**
+- [x] **Step 1: Verify current ignore behavior**
 
 Run:
 
@@ -70,7 +70,7 @@ git check-ignore client/local.properties
 
 Expected: `client/local.properties` is printed. If it is not printed, add `client/local.properties` to `.gitignore` and commit that small fix before continuing.
 
-- [ ] **Step 2: Add lifecycle runtime dependency alias**
+- [x] **Step 2: Add lifecycle runtime dependency alias**
 
 Modify `client/gradle/libs.versions.toml`.
 
@@ -86,7 +86,7 @@ Add this library entry under `[libraries]`:
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 ```
 
-- [ ] **Step 3: Modify Android Gradle build config**
+- [x] **Step 3: Modify Android Gradle build config**
 
 Modify `client/androidApp/build.gradle.kts`:
 
@@ -147,7 +147,7 @@ Add the lifecycle dependency to the existing dependencies block:
 implementation(libs.androidx.lifecycle.runtime.ktx)
 ```
 
-- [ ] **Step 4: Document local config keys**
+- [x] **Step 4: Document local config keys**
 
 Modify `docs/notes/local-development.md` and add:
 
@@ -164,7 +164,7 @@ BUZER_BACKEND_TOKEN=your-dev-token
 Do not commit real values. If either value is blank, the Android app shows a local configuration error instead of calling the backend.
 ````
 
-- [ ] **Step 5: Build**
+- [x] **Step 5: Build**
 
 Run:
 
@@ -175,7 +175,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/build.gradle.kts client/gradle/libs.versions.toml docs/notes/local-development.md .gitignore
