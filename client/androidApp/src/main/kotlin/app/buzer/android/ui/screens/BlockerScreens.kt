@@ -13,7 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun StartBlockerScreen(onBack: () -> Unit) {
+fun StartBlockerScreen(
+    onBack: () -> Unit,
+    onStart: () -> Unit = {},
+    onPostpone: () -> Unit = {},
+    showBack: Boolean = true
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -21,20 +26,28 @@ fun StartBlockerScreen(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Start blocker")
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
             Text("I'm starting")
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) {
             Text("Postpone 5 min")
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
+        if (showBack) {
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("Back")
+            }
         }
     }
 }
 
 @Composable
-fun DeadlineBlockerScreen(onBack: () -> Unit) {
+fun DeadlineBlockerScreen(
+    onBack: () -> Unit,
+    onDone: () -> Unit = {},
+    onExtend: () -> Unit = {},
+    onReschedule: () -> Unit = {},
+    showBack: Boolean = true
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -42,17 +55,19 @@ fun DeadlineBlockerScreen(onBack: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Deadline blocker")
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
             Text("Done")
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onExtend, modifier = Modifier.fillMaxWidth()) {
             Text("Extend 30 min")
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onReschedule, modifier = Modifier.fillMaxWidth()) {
             Text("Reschedule")
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
+        if (showBack) {
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("Back")
+            }
         }
     }
 }

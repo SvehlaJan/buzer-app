@@ -13,7 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun MorningReviewScreen(onBack: () -> Unit) {
+fun MorningReviewScreen(
+    onBack: () -> Unit,
+    onResolveSelected: () -> Unit = {},
+    onSnooze: () -> Unit = {},
+    showBack: Boolean = true
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -22,14 +27,16 @@ fun MorningReviewScreen(onBack: () -> Unit) {
     ) {
         Text("Morning review")
         Text("Invalid tasks, overdue tasks, today's starts, and health warnings will appear here.")
-        Button(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onResolveSelected, modifier = Modifier.fillMaxWidth()) {
             Text("Resolve selected")
         }
-        OutlinedButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onSnooze, modifier = Modifier.fillMaxWidth()) {
             Text("Snooze 5 min")
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
+        if (showBack) {
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("Back")
+            }
         }
     }
 }

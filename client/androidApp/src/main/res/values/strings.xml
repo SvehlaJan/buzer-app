@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Buzer</string>
+    <string name="add_task_widget_title">Add strict task</string>
+    <string name="add_task_widget_description">Open the committed task form.</string>
+</resources>

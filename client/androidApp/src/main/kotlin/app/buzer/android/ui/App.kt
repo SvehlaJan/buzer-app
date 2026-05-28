@@ -25,13 +25,24 @@ private enum class AppSection {
 }
 
 @Composable
-fun BuzerApp() {
+fun BuzerApp(
+    openAddTask: Boolean = false,
+    bootRescheduleRequired: Boolean = false
+) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            var section by remember { mutableStateOf(AppSection.Home) }
+            val initialSection = if (openAddTask) AppSection.Add else AppSection.Home
+            var section by remember { mutableStateOf(initialSection) }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                when (section) {
+                if (bootRescheduleRequired) {
+                    HomeScreen(
+                        onAddTask = { section = AppSection.Add },
+                        onMorningReview = { section = AppSection.Review },
+                        onStartBlocker = { section = AppSection.Start },
+                        onDeadlineBlocker = { section = AppSection.Deadline }
+                    )
+                } else when (section) {
                     AppSection.Home -> HomeScreen(
                         onAddTask = { section = AppSection.Add },
                         onMorningReview = { section = AppSection.Review },

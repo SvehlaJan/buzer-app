@@ -36,7 +36,7 @@
 
 ## Task 1: Resolve Android Platform Docs
 
-- [ ] **Step 1: Fetch exact alarm and full-screen docs**
+- [x] **Step 1: Fetch exact alarm and full-screen docs**
 
 Run:
 
@@ -47,7 +47,7 @@ npx ctx7@latest docs "/resolved/android/id" "SCHEDULE_EXACT_ALARM full-screen in
 
 Record resolved ID and exact permission requirements in `docs/notes/YYYY-MM-DD-android-permission-findings.md`.
 
-- [ ] **Step 2: Update Android manifest permissions**
+- [x] **Step 2: Update Android manifest permissions**
 
 Add these permissions to `AndroidManifest.xml`:
 
@@ -63,7 +63,7 @@ The receiver and blocker activity registrations are added in Tasks 3 and 5.
 
 ## Task 2: Define Alarm Model And Intent Factory
 
-- [ ] **Step 1: Write `AlarmIntentFactoryTest.kt`**
+- [x] **Step 1: Write `AlarmIntentFactoryTest.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -89,7 +89,7 @@ class AlarmIntentFactoryTest {
 }
 ```
 
-- [ ] **Step 2: Implement `AlarmIntentFactory.kt`**
+- [x] **Step 2: Implement `AlarmIntentFactory.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -111,7 +111,7 @@ object AlarmIntentFactory {
 }
 ```
 
-- [ ] **Step 3: Run unit test**
+- [x] **Step 3: Run unit test**
 
 ```bash
 cd client
@@ -122,7 +122,7 @@ Expected: pass.
 
 ## Task 3: Implement Alarm Scheduler
 
-- [ ] **Step 1: Create `AlarmScheduler.kt`**
+- [x] **Step 1: Create `AlarmScheduler.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -140,7 +140,7 @@ interface AlarmScheduler {
 }
 ```
 
-- [ ] **Step 2: Implement `AndroidAlarmScheduler.kt`**
+- [x] **Step 2: Implement `AndroidAlarmScheduler.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -185,7 +185,7 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
 }
 ```
 
-- [ ] **Step 3: Register receiver**
+- [x] **Step 3: Register receiver**
 
 Add to manifest:
 
@@ -197,7 +197,7 @@ Add to manifest:
 
 ## Task 4: Implement Notification Channels And Alarm Receiver
 
-- [ ] **Step 1: Implement `NotificationChannels.kt`**
+- [x] **Step 1: Implement `NotificationChannels.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -229,7 +229,7 @@ object NotificationChannels {
 }
 ```
 
-- [ ] **Step 2: Implement `AlarmReceiver.kt`**
+- [x] **Step 2: Implement `AlarmReceiver.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -263,7 +263,7 @@ class AlarmReceiver : BroadcastReceiver() {
 }
 ```
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 ```bash
 cd client
@@ -274,7 +274,7 @@ Expected: pass.
 
 ## Task 5: Implement Full-Screen Blocker Activities
 
-- [ ] **Step 1: Register activities in manifest**
+- [x] **Step 1: Register activities in manifest**
 
 ```xml
 <activity
@@ -348,7 +348,7 @@ Each blocker activity extends `ComponentActivity`, reads the task ID if present,
 // 3. finish()
 ```
 
-- [ ] **Step 3: Add UI tests or manual-test note**
+- [x] **Step 3: Add UI tests or manual-test note**
 
 If Compose activity tests are set up, add tests for button visibility. If not, write `docs/notes/YYYY-MM-DD-blocker-manual-test.md` with the manual launch commands:
 
@@ -360,7 +360,7 @@ adb shell am start -n app.buzer.android/.blockers.MorningReviewActivity
 
 ## Task 6: Implement Boot Rescheduling
 
-- [ ] **Step 1: Implement `BootReceiver.kt`**
+- [x] **Step 1: Implement `BootReceiver.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -404,7 +404,7 @@ object RescheduleAfterBoot {
 
 In `MainActivity`, when `EXTRA_BOOT_RESCHEDULE_REQUIRED` is true, refresh the backend snapshot and reschedule local alarms. This keeps the first MVP implementation deterministic without adding WorkManager. If a later agent chooses WorkManager for background-only boot recovery, that agent must write a decision document in `docs/decisions/`.
 
-- [ ] **Step 3: Register boot receiver**
+- [x] **Step 3: Register boot receiver**
 
 ```xml
 <receiver
@@ -419,7 +419,7 @@ In `MainActivity`, when `EXTRA_BOOT_RESCHEDULE_REQUIRED` is true, refresh the ba
 
 ## Task 7: Implement Permission Health
 
-- [ ] **Step 1: Write `PermissionHealthTest.kt`**
+- [x] **Step 1: Write `PermissionHealthTest.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -441,7 +441,7 @@ class PermissionHealthTest {
 }
 ```
 
-- [ ] **Step 2: Implement `PermissionHealth.kt`**
+- [x] **Step 2: Implement `PermissionHealth.kt`**
 
 ```kotlin
 package app.buzer.android.enforcement
@@ -469,7 +469,7 @@ object PermissionHealth {
 }
 ```
 
-- [ ] **Step 3: Run test**
+- [x] **Step 3: Run test**
 
 ```bash
 cd client
@@ -480,7 +480,7 @@ Expected: pass.
 
 ## Task 8: Implement Add Task Widget
 
-- [ ] **Step 1: Create widget provider**
+- [x] **Step 1: Create widget provider**
 
 Implement `AddTaskWidgetProvider` so tapping the widget opens `MainActivity` or a dedicated add-task activity with an extra:
 
@@ -488,7 +488,7 @@ Implement `AddTaskWidgetProvider` so tapping the widget opens `MainActivity` or 
 const val EXTRA_OPEN_ADD_TASK = "app.buzer.extra.OPEN_ADD_TASK"
 ```
 
-- [ ] **Step 2: Add widget metadata**
+- [x] **Step 2: Add widget metadata**
 
 Create widget XML resources for minimum size and label. The widget does not create tasks directly; it opens the required-field add task UI.
 
