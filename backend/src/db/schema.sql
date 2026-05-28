@@ -53,3 +53,6 @@ create table if not exists whatsapp_escalations (
   created_at text not null,
   sent_at text
 );
+
+create unique index if not exists whatsapp_escalations_one_per_task
+  on whatsapp_escalations(task_id);

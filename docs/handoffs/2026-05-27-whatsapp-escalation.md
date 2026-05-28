@@ -100,11 +100,67 @@ Files changed:
 - The plan snippet replaced the fourth `TaskActionService` constructor argument with `EscalationService`, but this branch already used the fourth argument for `currentUserId`. I preserved that API and added escalation as an optional fifth constructor argument.
 - The plan's final task listed commit before handoff, but repo rules require handoffs to be committed with related work, so this handoff was written before the commit.
 
+---
+
+## Review Blocker Fixes
+
+Date: 2026-05-28
+Agent: Codex GPT-5
+Plan/task attempted: review blockers for `docs/superpowers/plans/2026-05-08-03-whatsapp-escalation-worker.md` after the initial WhatsApp escalation implementation.
+
+### Scope
+
+- Fixed duplicate WhatsApp escalation sends when overlapping second-or-later start-postpone requests race.
+- Fixed live sender failure behavior so `postponeStart` still returns a successful 5-minute snooze result.
+- Prevented repeated failed WhatsApp attempts from creating unbounded failed rows for the same task.
+
+### Files Changed
+
+- `backend/src/db/schema.sql`
+- `backend/src/services/escalationService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/handoffs/2026-05-27-whatsapp-escalation.md`
+
+### Implementation Notes
+
+- Added a unique SQLite index on `whatsapp_escalations(task_id)` so the backend can claim one escalation attempt per task before calling the external sender.
+- `EscalationService.sendForTask()` now inserts the pending escalation row with `insert or ignore` before calling WhatsApp. If another request already claimed the task, it returns `already_claimed` without sending.
+- Sender failures are caught only at the external send boundary, recorded as `failed`, and returned as an escalation result. The action service still completes its snooze update and response.
+- Database/update failures after a successful external send are intentionally not swallowed.
+
+### Verification
+
+- Command: `cd backend && npm test -- test/services/taskActionService.test.ts`
+- Result: FAIL then PASS
+- Evidence: the new concurrency regression initially failed with 2 escalation rows instead of 1, and the sender-failure regression initially rejected with `Error: WhatsApp not ready`. After the fix, 7 tests passed.
+
+- Command: `cd backend && npm test -- test/services/taskActionService.test.ts test/services/escalationService.test.ts`
+- Result: PASS
+- Evidence: 2 test files passed with 8 tests.
+
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: 13 test files passed with 35 tests.
+
+- Command: `cd backend && npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited with status 0.
+
+### Known Failures Or Skipped Checks
+
+- No real WhatsApp message was sent.
+- No real QR login was attempted.
+- Live WhatsApp Web auth/send still needs VPS sandbox verification with `WHATSAPP_DRY_RUN=false`.
+
+### Assumptions
+
+- The MVP should make at most one automatic accountability send attempt per task. If that attempt fails, the failure is logged and the nag loop continues; retry/recovery should be an explicit later feature instead of retry-spamming on every dismiss.
+
 ## Open Issues
 
 - Live WhatsApp Web authentication and real send behavior remain unverified by design.
 - Production needs the correct `WHATSAPP_RECIPIENT_ID` chat ID and an intentional `WHATSAPP_DRY_RUN=false` rollout when ready.
-- There is no retry worker for failed WhatsApp sends yet; failures are logged as `failed` and rethrown.
+- There is no retry worker for failed WhatsApp sends yet; failures are logged as `failed` and skipped on later dismisses.
 
 ## Next Step
 
