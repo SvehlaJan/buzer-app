@@ -8,6 +8,18 @@ import { buildServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("HTTP routes", () => {
+  it("returns health without auth token", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+
+    const response = await app.inject({ method: "GET", url: "/health" });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ ok: true });
+  });
+
   it("rejects missing auth token", async () => {
     const db = new Database(":memory:");
     migrate(db);

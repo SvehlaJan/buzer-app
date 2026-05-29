@@ -26,7 +26,19 @@ const deviceCheckInBody = z.object({
 });
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions): void {
+  app.get("/health", async () => {
+    return {
+      ok: true,
+      service: "buzer-backend",
+      timestamp: new Date().toISOString()
+    };
+  });
+
   app.addHook("preHandler", async (request) => {
+    if (request.url === "/health") {
+      return;
+    }
+
     requireBearerToken(request, options.androidApiToken);
   });
 
