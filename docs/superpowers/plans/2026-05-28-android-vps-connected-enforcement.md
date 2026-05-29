@@ -1257,11 +1257,11 @@ If no code changed in Step 1, only commit the docs note.
 
 **Goal:** Complete documentation, verification, and review readiness for the slice.
 
-- [ ] **Step 1: Update this plan**
+- [x] **Step 1: Update this plan**
 
 Mark completed steps in `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`.
 
-- [ ] **Step 2: Write handoff**
+- [x] **Step 2: Write handoff**
 
 Create `docs/handoffs/2026-05-28-android-vps-connected-enforcement.md` with:
 
@@ -1293,7 +1293,7 @@ Plan: `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`
 ## Next Recommended Step
 ```
 
-- [ ] **Step 3: Run final verification**
+- [x] **Step 3: Run final verification**
 
 ```bash
 cd client
