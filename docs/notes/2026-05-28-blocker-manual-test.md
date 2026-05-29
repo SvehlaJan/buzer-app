@@ -32,8 +32,9 @@ Before running these checks, configure `client/local.properties` with `BUZER_BAC
 ```bash
 adb install -r client/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 adb shell am start -n app.buzer.android/.MainActivity
-adb shell am start -n app.buzer.android/.blockers.StartBlockerActivity --es app.buzer.extra.TASK_ID task-1
-adb shell am start -n app.buzer.android/.blockers.DeadlineBlockerActivity --es app.buzer.extra.TASK_ID task-1
+adb shell am start -n app.buzer.android/.debug.DebugBlockerLauncherActivity --es app.buzer.debug.BLOCKER_KIND start --es app.buzer.extra.TASK_ID task-1
+adb shell am start -n app.buzer.android/.debug.DebugBlockerLauncherActivity --es app.buzer.debug.BLOCKER_KIND deadline --es app.buzer.extra.TASK_ID task-1
+adb shell am start -n app.buzer.android/.debug.DebugBlockerLauncherActivity --es app.buzer.debug.BLOCKER_KIND morning
 ```
 
 Expected:
@@ -42,3 +43,5 @@ Expected:
 - Start blocker buttons call backend and hide.
 - Deadline blocker Done/Extend call backend and hide.
 - With backend stopped, blocker action failure creates a notification and app-private error log.
+
+The production blocker activities remain `exported=false`; use the debug-only launcher above for manual `adb` starts.
