@@ -694,7 +694,7 @@ git commit -m "feat: report blocker action failures"
 
 **Goal:** Fetch snapshots, persist them, reconcile alarms, and define backend action failure behavior.
 
-- [ ] **Step 1: Write coordinator tests**
+- [x] **Step 1: Write coordinator tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt` with fakes instead of Android `AlarmManager`:
 
@@ -864,7 +864,7 @@ class EnforcementCoordinatorTest {
 
 The fake classes are intentionally local to this test file so production code only needs the small interfaces in Step 3.
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 ```bash
 cd client
@@ -873,7 +873,7 @@ cd client
 
 Expected: FAIL with unresolved `EnforcementCoordinator`.
 
-- [ ] **Step 3: Introduce API abstraction and mapper**
+- [x] **Step 3: Introduce API abstraction and mapper**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidEnforcementMapper.kt`:
 
@@ -929,7 +929,7 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
 }
 ```
 
-- [ ] **Step 4: Implement coordinator**
+- [x] **Step 4: Implement coordinator**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`:
 
@@ -1023,7 +1023,7 @@ class EnforcementCoordinator(
 }
 ```
 
-- [ ] **Step 5: Run coordinator tests**
+- [x] **Step 5: Run coordinator tests**
 
 ```bash
 cd client
@@ -1032,7 +1032,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidEnforcementMapper.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementApi.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt
