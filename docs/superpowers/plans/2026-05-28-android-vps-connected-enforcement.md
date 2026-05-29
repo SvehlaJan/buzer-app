@@ -412,7 +412,7 @@ git commit -m "feat: add shared alarm planning"
 
 **Goal:** Persist the latest backend snapshot as app-private JSON.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/sync/SnapshotStoreTest.kt`:
 
@@ -466,7 +466,7 @@ class SnapshotStoreTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 ```bash
 cd client
@@ -475,7 +475,7 @@ cd client
 
 Expected: FAIL with unresolved `SnapshotStore`.
 
-- [ ] **Step 3: Implement snapshot store**
+- [x] **Step 3: Implement snapshot store**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/sync/SnapshotStore.kt`:
 
@@ -513,7 +513,7 @@ class SnapshotStore(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pass**
+- [x] **Step 4: Run tests to verify pass**
 
 ```bash
 cd client
@@ -522,7 +522,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/sync/SnapshotStore.kt client/androidApp/src/test/kotlin/app/buzer/android/sync/SnapshotStoreTest.kt
