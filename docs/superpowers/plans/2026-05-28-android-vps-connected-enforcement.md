@@ -1045,7 +1045,7 @@ git commit -m "feat: coordinate Android enforcement sync"
 
 **Goal:** Create the coordinator from debug config and refresh/reconcile on app open/resume.
 
-- [ ] **Step 1: Add coordinator factory**
+- [x] **Step 1: Add coordinator factory**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt`:
 
@@ -1081,7 +1081,7 @@ object EnforcementDependencies {
 }
 ```
 
-- [ ] **Step 2: Wire MainActivity lifecycle refresh**
+- [x] **Step 2: Wire MainActivity lifecycle refresh**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt` to:
 
@@ -1123,7 +1123,7 @@ private fun refreshEnforcement() {
 }
 ```
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 ```bash
 cd client
@@ -1132,7 +1132,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt
