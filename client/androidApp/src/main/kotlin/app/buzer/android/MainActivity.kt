@@ -8,14 +8,17 @@ import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
+import app.buzer.android.enforcement.EnforcementRefreshRunner
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.enforcement.RescheduleAfterBoot
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.widget.AddTaskWidgetProvider
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
+    private val refreshRunner: EnforcementRefreshRunner by lazy {
+        EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,15 +53,14 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshEnforcement() {
         val coordinator = coordinator ?: return
-        lifecycleScope.launch {
-            runCatching { coordinator.refreshAndReconcile() }
-                .onFailure {
-                    BlockerErrorReporter(applicationContext).report(
-                        action = BlockerAction.REFRESH_SNAPSHOT,
-                        taskId = null,
-                        message = it.message ?: "snapshot refresh failed"
-                    )
-                }
-        }
+        refreshRunner.refresh { coordinator.refreshAndReconcile() }
+    }
+
+    private fun reportRefreshFailure(error: Throwable) {
+        BlockerErrorReporter(applicationContext).report(
+            action = BlockerAction.REFRESH_SNAPSHOT,
+            taskId = null,
+            message = error.message ?: "snapshot refresh failed"
+        )
     }
 }

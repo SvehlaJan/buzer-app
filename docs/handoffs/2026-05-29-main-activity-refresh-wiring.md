@@ -12,6 +12,7 @@ Implemented only Task 6 from the Android VPS-connected enforcement plan:
 - Added `EnforcementDependencies` to build an `EnforcementCoordinator` from debug `BuildConfig` backend settings.
 - Wired `MainActivity` to create notification channels, initialize the coordinator, and call `refreshAndReconcile()` from `onCreate` and `onResume`.
 - Reported coordinator configuration and refresh failures through `BlockerErrorReporter` with `REFRESH_SNAPSHOT`.
+- Addressed code-review findings by adding `EnforcementRefreshRunner`, which skips overlapping refresh launches and rethrows coroutine cancellation instead of reporting it as a backend failure.
 - Marked only Task 6 checkboxes complete in the plan.
 
 No blocker activity backend action wiring or boot/manual-test note work was started.
@@ -27,6 +28,8 @@ No blocker activity backend action wiring or boot/manual-test note work was star
 
 - `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunner.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunnerTest.kt`
 - `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`
 - `docs/handoffs/2026-05-29-main-activity-refresh-wiring.md`
 
@@ -41,10 +44,19 @@ No blocker activity backend action wiring or boot/manual-test note work was star
 - Command: `cd client && ./gradlew :androidApp:assembleDebug`
   - Result: PASS
   - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementRefreshRunnerTest`
+  - Result: FAIL
+  - Evidence: failed before implementation with unresolved `EnforcementRefreshRunner`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementRefreshRunnerTest`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
 
 ## Verification
 
 - Command: `cd client && ./gradlew :androidApp:assembleDebug`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementRefreshRunnerTest`
   - Result: PASS
   - Evidence: `BUILD SUCCESSFUL`.
 
