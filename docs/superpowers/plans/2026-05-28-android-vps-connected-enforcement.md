@@ -1308,7 +1308,7 @@ Expected:
 - `git diff --check`: no output, exit 0
 - `git status --short`: only intended files before commit
 
-- [ ] **Step 4: Commit final docs**
+- [x] **Step 4: Commit final docs**
 
 ```bash
 git add docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md docs/handoffs/2026-05-28-android-vps-connected-enforcement.md
