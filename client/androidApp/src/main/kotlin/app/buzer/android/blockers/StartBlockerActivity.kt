@@ -12,9 +12,11 @@ import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.StartBlockerScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class StartBlockerActivity : ComponentActivity() {
     private lateinit var errorReporter: BlockerErrorReporter
+    private var actionInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,13 +53,32 @@ class StartBlockerActivity : ComponentActivity() {
 
     private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         lifecycleScope.launch {
-            coordinator.loadLatestSnapshot()
+            try {
+                coordinator.loadLatestSnapshot()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                errorReporter.report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = taskId,
+                    message = error.message ?: "local snapshot load failed"
+                )
+            }
 
             try {
-                val refreshedSnapshot = coordinator.refreshAndReconcile()
-                if (BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
+                    coordinator.refreshAndReconcile()
+                }
+                if (refreshedSnapshot != null && BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
                     finish()
                     return@launch
+                }
+                if (refreshedSnapshot == null) {
+                    errorReporter.report(
+                        action = BlockerAction.REFRESH_SNAPSHOT,
+                        taskId = taskId,
+                        message = "snapshot refresh timed out"
+                    )
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -76,26 +97,30 @@ class StartBlockerActivity : ComponentActivity() {
         setContent {
             StartBlockerScreen(
                 onStart = {
-                    lifecycleScope.launch {
-                        try {
-                            coordinator.startTask(taskId)
-                        } finally {
-                            finish()
-                        }
-                    }
+                    runActionOnce { coordinator.startTask(taskId) }
                 },
                 onPostpone = {
-                    lifecycleScope.launch {
-                        try {
-                            coordinator.postponeStart(taskId)
-                        } finally {
-                            finish()
-                        }
-                    }
+                    runActionOnce { coordinator.postponeStart(taskId) }
                 },
                 onBack = { finish() },
                 showBack = false
             )
         }
+    }
+
+    private fun runActionOnce(action: suspend () -> Unit) {
+        if (actionInFlight) return
+        actionInFlight = true
+        lifecycleScope.launch {
+            try {
+                action()
+            } finally {
+                finish()
+            }
+        }
+    }
+
+    private companion object {
+        const val BLOCKER_REFRESH_TIMEOUT_MILLIS = 5_000L
     }
 }

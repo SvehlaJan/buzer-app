@@ -12,9 +12,11 @@ import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DeadlineBlockerActivity : ComponentActivity() {
     private lateinit var errorReporter: BlockerErrorReporter
+    private var actionInFlight = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,13 +53,32 @@ class DeadlineBlockerActivity : ComponentActivity() {
 
     private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         lifecycleScope.launch {
-            coordinator.loadLatestSnapshot()
+            try {
+                coordinator.loadLatestSnapshot()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                errorReporter.report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = taskId,
+                    message = error.message ?: "local snapshot load failed"
+                )
+            }
 
             try {
-                val refreshedSnapshot = coordinator.refreshAndReconcile()
-                if (BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
+                    coordinator.refreshAndReconcile()
+                }
+                if (refreshedSnapshot != null && BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
                     finish()
                     return@launch
+                }
+                if (refreshedSnapshot == null) {
+                    errorReporter.report(
+                        action = BlockerAction.REFRESH_SNAPSHOT,
+                        taskId = taskId,
+                        message = "snapshot refresh timed out"
+                    )
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -76,24 +97,14 @@ class DeadlineBlockerActivity : ComponentActivity() {
         setContent {
             DeadlineBlockerScreen(
                 onDone = {
-                    lifecycleScope.launch {
-                        try {
-                            coordinator.completeTask(taskId)
-                        } finally {
-                            finish()
-                        }
-                    }
+                    runActionOnce { coordinator.completeTask(taskId) }
                 },
                 onExtend = {
-                    lifecycleScope.launch {
-                        try {
-                            coordinator.extendTask(taskId)
-                        } finally {
-                            finish()
-                        }
-                    }
+                    runActionOnce { coordinator.extendTask(taskId) }
                 },
                 onReschedule = {
+                    if (actionInFlight) return@DeadlineBlockerScreen
+                    actionInFlight = true
                     errorReporter.report(
                         action = BlockerAction.RESCHEDULE_TASK,
                         taskId = taskId,
@@ -105,5 +116,21 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 showBack = false
             )
         }
+    }
+
+    private fun runActionOnce(action: suspend () -> Unit) {
+        if (actionInFlight) return
+        actionInFlight = true
+        lifecycleScope.launch {
+            try {
+                action()
+            } finally {
+                finish()
+            }
+        }
+    }
+
+    private companion object {
+        const val BLOCKER_REFRESH_TIMEOUT_MILLIS = 5_000L
     }
 }

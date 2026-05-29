@@ -15,6 +15,7 @@ Implemented only Task 7 from the Android VPS-connected enforcement plan:
 - Removed the old local deadline cancel/extend scheduling from `DeadlineBlockerActivity`; the coordinator now owns backend action and alarm reconciliation behavior.
 - Wired `MorningReviewActivity` to best-effort refresh/reconcile when backend config is present, while preserving the existing local 5-minute morning-review snooze.
 - Addressed spec-review findings by adding a pre-display snapshot gate for start/deadline blockers: both activities now load the latest local snapshot, attempt backend refresh before rendering actions, and finish instead of rendering actions when the refreshed backend snapshot says the task is completed or deleted.
+- Addressed code-review findings by reporting corrupt local snapshot load failures, bounding pre-display backend refresh to 5 seconds before rendering the blocker, and guarding start/deadline action buttons against duplicate in-flight backend calls.
 - Marked Task 7 checkboxes complete in the plan.
 
 No backend, shared, UI screen, or boot receiver work was changed.
@@ -49,6 +50,12 @@ No backend, shared, UI screen, or boot receiver work was changed.
   - Result: FAIL
   - Evidence: failed before implementation with unresolved `BlockerTaskSnapshotGate`.
 - Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.blockers.BlockerTaskSnapshotGateTest`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:assembleDebug`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest`
   - Result: PASS
   - Evidence: `BUILD SUCCESSFUL`.
 - Command: `cd client && ./gradlew :androidApp:assembleDebug`
