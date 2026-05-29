@@ -535,7 +535,7 @@ git commit -m "feat: persist Android task snapshots"
 
 **Goal:** Report failed blocker backend actions through a system notification and local error log.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BlockerErrorReporterTest.kt`:
 
@@ -569,7 +569,7 @@ class BlockerErrorReporterTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 ```bash
 cd client
@@ -578,7 +578,7 @@ cd client
 
 Expected: FAIL with unresolved `BlockerErrorReporter` or `BlockerAction`.
 
-- [ ] **Step 3: Add error channel and reporter**
+- [x] **Step 3: Add error channel and reporter**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/NotificationChannels.kt`:
 
@@ -672,7 +672,7 @@ class BlockerErrorReporter(
 }
 ```
 
-- [ ] **Step 4: Run test to verify pass**
+- [x] **Step 4: Run test to verify pass**
 
 ```bash
 cd client
@@ -681,7 +681,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerAction.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerErrorReporter.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/NotificationChannels.kt client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BlockerErrorReporterTest.kt

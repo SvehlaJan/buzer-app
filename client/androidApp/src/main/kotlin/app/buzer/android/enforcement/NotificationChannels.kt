@@ -8,6 +8,7 @@ import android.os.Build
 object NotificationChannels {
     const val PRE_START = "pre_start"
     const val BLOCKERS = "blockers"
+    const val ERRORS = "errors"
 
     fun ensureCreated(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -24,6 +25,13 @@ object NotificationChannels {
             NotificationChannel(
                 BLOCKERS,
                 "Commitment blockers",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ERRORS,
+                "Backend action failures",
                 NotificationManager.IMPORTANCE_HIGH
             )
         )
