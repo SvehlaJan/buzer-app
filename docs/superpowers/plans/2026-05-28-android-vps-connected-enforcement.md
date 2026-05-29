@@ -1145,7 +1145,7 @@ git commit -m "feat: refresh Android enforcement on app open"
 
 **Goal:** Make blocker buttons call the coordinator and hide after success or failure.
 
-- [ ] **Step 1: Wire StartBlockerActivity**
+- [x] **Step 1: Wire StartBlockerActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`:
 
@@ -1157,7 +1157,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlocke
 
 Use `androidx.lifecycle.lifecycleScope`.
 
-- [ ] **Step 2: Wire DeadlineBlockerActivity**
+- [x] **Step 2: Wire DeadlineBlockerActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`:
 
@@ -1167,7 +1167,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlo
 
 Do not schedule deadline retries on failure; `EnforcementCoordinator` already implements that policy.
 
-- [ ] **Step 3: Wire MorningReviewActivity**
+- [x] **Step 3: Wire MorningReviewActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`:
 
@@ -1175,7 +1175,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningRevi
 - keep resolve-selected as `finish()` for this slice,
 - keep snooze as current local 5-minute morning-review schedule.
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 ```bash
 cd client
@@ -1184,7 +1184,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt
