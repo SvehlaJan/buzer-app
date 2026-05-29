@@ -24,3 +24,21 @@ adb shell am start -n app.buzer.android/.blockers.MorningReviewActivity
 - Deadline blocker shows `Done`, `Extend 30 min`, and `Reschedule`.
 - Morning review shows `Resolve selected` and `Snooze 5 min`.
 - Locked-screen behavior should be checked after granting notification and exact-alarm permissions.
+
+## Backend-Connected Checks
+
+Before running these checks, configure `client/local.properties` with `BUZER_BACKEND_BASE_URL` and `BUZER_BACKEND_TOKEN`.
+
+```bash
+adb install -r client/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb shell am start -n app.buzer.android/.MainActivity
+adb shell am start -n app.buzer.android/.blockers.StartBlockerActivity --es app.buzer.extra.TASK_ID task-1
+adb shell am start -n app.buzer.android/.blockers.DeadlineBlockerActivity --es app.buzer.extra.TASK_ID task-1
+```
+
+Expected:
+
+- MainActivity refreshes backend snapshot and schedules alarms.
+- Start blocker buttons call backend and hide.
+- Deadline blocker Done/Extend call backend and hide.
+- With backend stopped, blocker action failure creates a notification and app-private error log.

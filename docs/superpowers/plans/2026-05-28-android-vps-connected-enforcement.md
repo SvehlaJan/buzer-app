@@ -1197,7 +1197,7 @@ git commit -m "feat: wire blocker actions to backend"
 
 **Goal:** Ensure boot launches the same refresh/reconcile path and update manual verification docs.
 
-- [ ] **Step 1: Verify boot path**
+- [x] **Step 1: Verify boot path**
 
 Inspect `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt` and `MainActivity.kt`.
 
@@ -1209,7 +1209,7 @@ Expected behavior:
 
 If this behavior is not true after Task 6, fix it.
 
-- [ ] **Step 2: Update manual blocker test note**
+- [x] **Step 2: Update manual blocker test note**
 
 Modify `docs/notes/2026-05-28-blocker-manual-test.md` and add:
 
@@ -1233,7 +1233,7 @@ Expected:
 - With backend stopped, blocker action failure creates a notification and app-private error log.
 ````
 
-- [ ] **Step 3: Run full Android verification**
+- [x] **Step 3: Run full Android verification**
 
 ```bash
 cd client
@@ -1242,7 +1242,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt docs/notes/2026-05-28-blocker-manual-test.md
