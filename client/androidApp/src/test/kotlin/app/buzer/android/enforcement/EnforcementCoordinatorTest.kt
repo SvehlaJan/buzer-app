@@ -7,9 +7,11 @@ import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class EnforcementCoordinatorTest {
@@ -62,6 +64,29 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun refreshClearsExistingTaskAlarmsBeforeSchedulingLatestDesiredAlarms() = runBlocking {
+        val scheduler = RecordingAlarmScheduler()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1"))),
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T10:30:00Z" }
+        )
+
+        coordinator.refreshAndReconcile()
+
+        assertEquals(listOf("task-1"), scheduler.cancelledAll)
+        assertEquals(
+            listOf(
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+            ),
+            scheduler.scheduled
+        )
+    }
+
+    @Test
     fun postponeFailureReportsErrorAndSchedulesFiveMinuteStartBlockerRetry() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val reporter = RecordingErrorReporter()
@@ -81,6 +106,26 @@ class EnforcementCoordinatorTest {
             scheduler.scheduled
         )
         assertEquals(listOf(ErrorRecord(BlockerAction.POSTPONE_START, "task-1", "backend unavailable")), reporter.errors)
+    }
+
+    @Test
+    fun actionCancellationPropagatesWithoutReportingOrRetry() = runBlocking {
+        val scheduler = RecordingAlarmScheduler()
+        val reporter = RecordingErrorReporter()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1")), cancelPostpone = true),
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertFailsWith<CancellationException> {
+            coordinator.postponeStart("task-1")
+        }
+
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertTrue(reporter.errors.isEmpty())
     }
 
     @Test
@@ -145,11 +190,13 @@ class EnforcementCoordinatorTest {
     private class FakeBuzerApi(
         private val snapshot: TasksSnapshotResponse,
         private val failPostpone: Boolean = false,
-        private val failComplete: Boolean = false
+        private val failComplete: Boolean = false,
+        private val cancelPostpone: Boolean = false
     ) : EnforcementApi {
         override suspend fun getSnapshot(): TasksSnapshotResponse = snapshot
         override suspend fun startTask(id: String) = Unit
         override suspend fun postponeStart(id: String) {
+            if (cancelPostpone) throw CancellationException("cancelled")
             if (failPostpone) error("backend unavailable")
         }
         override suspend fun completeTask(id: String) {

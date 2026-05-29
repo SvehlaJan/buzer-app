@@ -14,6 +14,7 @@ Implemented only Task 5 from the Android VPS-connected enforcement plan:
 - Added Android alarm mapping from shared desired alarms to Android scheduled alarms.
 - Added a small `EnforcementApi` abstraction and `BuzerEnforcementApi` adapter around `BuzerApiClient`.
 - Added `EnforcementCoordinator` to fetch snapshots, persist snapshots, reconcile alarms, load the latest snapshot, run blocker backend actions, report failures, and apply the start-postpone local retry policy.
+- Addressed code-review findings by clearing existing per-task alarms before scheduling the latest desired alarms, and by rethrowing coroutine cancellation instead of reporting it as a backend action failure.
 - Marked only Task 5 checkboxes complete in the plan.
 
 No MainActivity wiring, blocker activity wiring, boot receiver wiring, or Task 6/7 work was started.
@@ -53,12 +54,18 @@ No MainActivity wiring, blocker activity wiring, boot receiver wiring, or Task 6
 - Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementCoordinatorTest`
   - Result: PASS
   - Evidence: `BUILD SUCCESSFUL`; fresh focused verification remained green.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementCoordinatorTest`
+  - Result: FAIL
+  - Evidence: review regression tests failed before the fix: stale active-task alarm cancellation and cancellation propagation.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementCoordinatorTest`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`; review regression tests passed after the fix.
 
 ## Verification
 
 - Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.enforcement.EnforcementCoordinatorTest`
   - Result: PASS
-  - Evidence: `BUILD SUCCESSFUL`.
+  - Evidence: `BUILD SUCCESSFUL`, including review regression coverage for stale alarm cancellation and cancellation propagation.
 - Command: `git diff --check`
   - Result: PASS
   - Evidence: exited 0 with no whitespace errors.

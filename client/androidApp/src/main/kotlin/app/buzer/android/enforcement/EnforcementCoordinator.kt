@@ -5,6 +5,7 @@ import app.buzer.shared.enforcement.AlarmPlanCalculator
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 
 sealed interface CoordinatorActionResult {
     data object Success : CoordinatorActionResult
@@ -75,7 +76,10 @@ class EnforcementCoordinator(
 
     private fun reconcile(snapshot: TasksSnapshotResponse) {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowProvider())
-        plan.cancelTaskIds.forEach(alarmScheduler::cancelAllForTask)
+        snapshot.tasks
+            .map { it.id }
+            .toSet()
+            .forEach(alarmScheduler::cancelAllForTask)
         plan.alarms
             .map(AndroidEnforcementMapper::toScheduledAlarm)
             .forEach(alarmScheduler::schedule)
@@ -91,6 +95,8 @@ class EnforcementCoordinator(
             call()
             refreshAndReconcile()
             CoordinatorActionResult.Success
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             val message = error.message ?: error::class.simpleName ?: "unknown error"
             errorReporter.report(action, taskId, message)
