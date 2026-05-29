@@ -32,8 +32,47 @@ class StartBlockerActivity : ComponentActivity() {
         }
 
         val coordinator = createCoordinator() ?: return
-        refreshSnapshot(coordinator, taskId)
+        prepareAndShowBlocker(coordinator, taskId)
+    }
 
+    private fun createCoordinator(): EnforcementCoordinator? {
+        return try {
+            EnforcementDependencies.coordinator(applicationContext)
+        } catch (error: Exception) {
+            errorReporter.report(
+                action = BlockerAction.REFRESH_SNAPSHOT,
+                taskId = null,
+                message = error.message ?: "enforcement configuration failed"
+            )
+            finish()
+            null
+        }
+    }
+
+    private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
+        lifecycleScope.launch {
+            coordinator.loadLatestSnapshot()
+
+            try {
+                val refreshedSnapshot = coordinator.refreshAndReconcile()
+                if (BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                    finish()
+                    return@launch
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                errorReporter.report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = taskId,
+                    message = error.message ?: "snapshot refresh failed"
+                )
+            }
+            if (!isFinishing) showBlocker(coordinator, taskId)
+        }
+    }
+
+    private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         setContent {
             StartBlockerScreen(
                 onStart = {
@@ -57,36 +96,6 @@ class StartBlockerActivity : ComponentActivity() {
                 onBack = { finish() },
                 showBack = false
             )
-        }
-    }
-
-    private fun createCoordinator(): EnforcementCoordinator? {
-        return try {
-            EnforcementDependencies.coordinator(applicationContext)
-        } catch (error: Exception) {
-            errorReporter.report(
-                action = BlockerAction.REFRESH_SNAPSHOT,
-                taskId = null,
-                message = error.message ?: "enforcement configuration failed"
-            )
-            finish()
-            null
-        }
-    }
-
-    private fun refreshSnapshot(coordinator: EnforcementCoordinator, taskId: String) {
-        lifecycleScope.launch {
-            try {
-                coordinator.refreshAndReconcile()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                errorReporter.report(
-                    action = BlockerAction.REFRESH_SNAPSHOT,
-                    taskId = taskId,
-                    message = error.message ?: "snapshot refresh failed"
-                )
-            }
         }
     }
 }

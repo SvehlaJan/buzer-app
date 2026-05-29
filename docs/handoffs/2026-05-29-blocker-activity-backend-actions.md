@@ -14,6 +14,7 @@ Implemented only Task 7 from the Android VPS-connected enforcement plan:
 - Wired `DeadlineBlockerActivity` to create an `EnforcementCoordinator`, refresh/reconcile on launch, call `completeTask` and `extendTask`, report unsupported reschedule with the required message, and finish after action result paths.
 - Removed the old local deadline cancel/extend scheduling from `DeadlineBlockerActivity`; the coordinator now owns backend action and alarm reconciliation behavior.
 - Wired `MorningReviewActivity` to best-effort refresh/reconcile when backend config is present, while preserving the existing local 5-minute morning-review snooze.
+- Addressed spec-review findings by adding a pre-display snapshot gate for start/deadline blockers: both activities now load the latest local snapshot, attempt backend refresh before rendering actions, and finish instead of rendering actions when the refreshed backend snapshot says the task is completed or deleted.
 - Marked Task 7 checkboxes complete in the plan.
 
 No backend, shared, UI screen, or boot receiver work was changed.
@@ -31,6 +32,8 @@ No backend, shared, UI screen, or boot receiver work was changed.
 - `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGate.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGateTest.kt`
 - `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`
 - `docs/handoffs/2026-05-29-blocker-activity-backend-actions.md`
 
@@ -42,12 +45,24 @@ No backend, shared, UI screen, or boot receiver work was changed.
 - Command: `cd client && ./gradlew :androidApp:assembleDebug`
   - Result: PASS
   - Evidence: `BUILD SUCCESSFUL in 5s`; 57 actionable tasks, 5 executed and 52 up-to-date.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.blockers.BlockerTaskSnapshotGateTest`
+  - Result: FAIL
+  - Evidence: failed before implementation with unresolved `BlockerTaskSnapshotGate`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.blockers.BlockerTaskSnapshotGateTest`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:assembleDebug`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
 
 ## Verification
 
 - Command: `cd client && ./gradlew :androidApp:assembleDebug`
   - Result: PASS
-  - Evidence: `BUILD SUCCESSFUL in 5s`.
+  - Evidence: `BUILD SUCCESSFUL`.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.blockers.BlockerTaskSnapshotGateTest`
+  - Result: PASS
+  - Evidence: `BUILD SUCCESSFUL`.
 
 ## Manual Verification
 
@@ -58,7 +73,7 @@ No backend, shared, UI screen, or boot receiver work was changed.
 
 - No live backend blocker action was performed.
 - No physical-device alarm reconciliation or full-screen blocker dismissal was verified.
-- No new Activity tests were added because the requested ownership scope was limited to the three blocker activities, the plan, and this handoff.
+- No Activity instrumentation tests were added; the completed/deleted snapshot recognition is covered by a focused JVM test for the blocker snapshot gate.
 - Gradle emitted the existing Kotlin Multiplatform/Android Gradle Plugin compatibility deprecation warning.
 
 ## Assumptions
