@@ -60,7 +60,7 @@ Every worker must read `AGENTS.md`, the product spec, the slice design, this pla
 
 **Goal:** Inject debug backend URL/token from ignored `client/local.properties` into `BuildConfig`.
 
-- [ ] **Step 1: Verify current ignore behavior**
+- [x] **Step 1: Verify current ignore behavior**
 
 Run:
 
@@ -70,7 +70,7 @@ git check-ignore client/local.properties
 
 Expected: `client/local.properties` is printed. If it is not printed, add `client/local.properties` to `.gitignore` and commit that small fix before continuing.
 
-- [ ] **Step 2: Add lifecycle runtime dependency alias**
+- [x] **Step 2: Add lifecycle runtime dependency alias**
 
 Modify `client/gradle/libs.versions.toml`.
 
@@ -86,7 +86,7 @@ Add this library entry under `[libraries]`:
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 ```
 
-- [ ] **Step 3: Modify Android Gradle build config**
+- [x] **Step 3: Modify Android Gradle build config**
 
 Modify `client/androidApp/build.gradle.kts`:
 
@@ -147,7 +147,7 @@ Add the lifecycle dependency to the existing dependencies block:
 implementation(libs.androidx.lifecycle.runtime.ktx)
 ```
 
-- [ ] **Step 4: Document local config keys**
+- [x] **Step 4: Document local config keys**
 
 Modify `docs/notes/local-development.md` and add:
 
@@ -164,7 +164,7 @@ BUZER_BACKEND_TOKEN=your-dev-token
 Do not commit real values. If either value is blank, the Android app shows a local configuration error instead of calling the backend.
 ````
 
-- [ ] **Step 5: Build**
+- [x] **Step 5: Build**
 
 Run:
 
@@ -175,7 +175,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/build.gradle.kts client/gradle/libs.versions.toml docs/notes/local-development.md .gitignore
@@ -190,7 +190,7 @@ If `.gitignore` was unchanged, omit it from `git add`.
 
 **Goal:** Add Android-free alarm planning from backend snapshots.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt`:
 
@@ -305,7 +305,7 @@ class AlarmPlanCalculatorTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 ```bash
 cd client
@@ -314,7 +314,7 @@ cd client
 
 Expected: FAIL with unresolved `AlarmPlanCalculator`, `DesiredAlarm`, or `DesiredAlarmKind`.
 
-- [ ] **Step 3: Implement alarm planning**
+- [x] **Step 3: Implement alarm planning**
 
 Create `client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt`:
 
@@ -390,7 +390,7 @@ object AlarmPlanCalculator {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pass**
+- [x] **Step 4: Run tests to verify pass**
 
 ```bash
 cd client
@@ -399,7 +399,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt
@@ -412,7 +412,7 @@ git commit -m "feat: add shared alarm planning"
 
 **Goal:** Persist the latest backend snapshot as app-private JSON.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/sync/SnapshotStoreTest.kt`:
 
@@ -466,7 +466,7 @@ class SnapshotStoreTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 ```bash
 cd client
@@ -475,7 +475,7 @@ cd client
 
 Expected: FAIL with unresolved `SnapshotStore`.
 
-- [ ] **Step 3: Implement snapshot store**
+- [x] **Step 3: Implement snapshot store**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/sync/SnapshotStore.kt`:
 
@@ -513,7 +513,7 @@ class SnapshotStore(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify pass**
+- [x] **Step 4: Run tests to verify pass**
 
 ```bash
 cd client
@@ -522,7 +522,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/sync/SnapshotStore.kt client/androidApp/src/test/kotlin/app/buzer/android/sync/SnapshotStoreTest.kt
@@ -535,7 +535,7 @@ git commit -m "feat: persist Android task snapshots"
 
 **Goal:** Report failed blocker backend actions through a system notification and local error log.
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BlockerErrorReporterTest.kt`:
 
@@ -569,7 +569,7 @@ class BlockerErrorReporterTest {
 }
 ```
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 ```bash
 cd client
@@ -578,7 +578,7 @@ cd client
 
 Expected: FAIL with unresolved `BlockerErrorReporter` or `BlockerAction`.
 
-- [ ] **Step 3: Add error channel and reporter**
+- [x] **Step 3: Add error channel and reporter**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/NotificationChannels.kt`:
 
@@ -672,7 +672,7 @@ class BlockerErrorReporter(
 }
 ```
 
-- [ ] **Step 4: Run test to verify pass**
+- [x] **Step 4: Run test to verify pass**
 
 ```bash
 cd client
@@ -681,7 +681,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerAction.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerErrorReporter.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/NotificationChannels.kt client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BlockerErrorReporterTest.kt
@@ -694,7 +694,7 @@ git commit -m "feat: report blocker action failures"
 
 **Goal:** Fetch snapshots, persist them, reconcile alarms, and define backend action failure behavior.
 
-- [ ] **Step 1: Write coordinator tests**
+- [x] **Step 1: Write coordinator tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt` with fakes instead of Android `AlarmManager`:
 
@@ -864,7 +864,7 @@ class EnforcementCoordinatorTest {
 
 The fake classes are intentionally local to this test file so production code only needs the small interfaces in Step 3.
 
-- [ ] **Step 2: Run test to verify failure**
+- [x] **Step 2: Run test to verify failure**
 
 ```bash
 cd client
@@ -873,7 +873,7 @@ cd client
 
 Expected: FAIL with unresolved `EnforcementCoordinator`.
 
-- [ ] **Step 3: Introduce API abstraction and mapper**
+- [x] **Step 3: Introduce API abstraction and mapper**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidEnforcementMapper.kt`:
 
@@ -929,7 +929,7 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
 }
 ```
 
-- [ ] **Step 4: Implement coordinator**
+- [x] **Step 4: Implement coordinator**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`:
 
@@ -1023,7 +1023,7 @@ class EnforcementCoordinator(
 }
 ```
 
-- [ ] **Step 5: Run coordinator tests**
+- [x] **Step 5: Run coordinator tests**
 
 ```bash
 cd client
@@ -1032,7 +1032,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidEnforcementMapper.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementApi.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt
@@ -1045,7 +1045,7 @@ git commit -m "feat: coordinate Android enforcement sync"
 
 **Goal:** Create the coordinator from debug config and refresh/reconcile on app open/resume.
 
-- [ ] **Step 1: Add coordinator factory**
+- [x] **Step 1: Add coordinator factory**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt`:
 
@@ -1081,7 +1081,7 @@ object EnforcementDependencies {
 }
 ```
 
-- [ ] **Step 2: Wire MainActivity lifecycle refresh**
+- [x] **Step 2: Wire MainActivity lifecycle refresh**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt` to:
 
@@ -1123,7 +1123,7 @@ private fun refreshEnforcement() {
 }
 ```
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 ```bash
 cd client
@@ -1132,7 +1132,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt
@@ -1145,7 +1145,7 @@ git commit -m "feat: refresh Android enforcement on app open"
 
 **Goal:** Make blocker buttons call the coordinator and hide after success or failure.
 
-- [ ] **Step 1: Wire StartBlockerActivity**
+- [x] **Step 1: Wire StartBlockerActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`:
 
@@ -1157,7 +1157,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlocke
 
 Use `androidx.lifecycle.lifecycleScope`.
 
-- [ ] **Step 2: Wire DeadlineBlockerActivity**
+- [x] **Step 2: Wire DeadlineBlockerActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`:
 
@@ -1167,7 +1167,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlo
 
 Do not schedule deadline retries on failure; `EnforcementCoordinator` already implements that policy.
 
-- [ ] **Step 3: Wire MorningReviewActivity**
+- [x] **Step 3: Wire MorningReviewActivity**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`:
 
@@ -1175,7 +1175,7 @@ Modify `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningRevi
 - keep resolve-selected as `finish()` for this slice,
 - keep snooze as current local 5-minute morning-review schedule.
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 ```bash
 cd client
@@ -1184,7 +1184,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt
@@ -1197,7 +1197,7 @@ git commit -m "feat: wire blocker actions to backend"
 
 **Goal:** Ensure boot launches the same refresh/reconcile path and update manual verification docs.
 
-- [ ] **Step 1: Verify boot path**
+- [x] **Step 1: Verify boot path**
 
 Inspect `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt` and `MainActivity.kt`.
 
@@ -1209,7 +1209,7 @@ Expected behavior:
 
 If this behavior is not true after Task 6, fix it.
 
-- [ ] **Step 2: Update manual blocker test note**
+- [x] **Step 2: Update manual blocker test note**
 
 Modify `docs/notes/2026-05-28-blocker-manual-test.md` and add:
 
@@ -1233,7 +1233,7 @@ Expected:
 - With backend stopped, blocker action failure creates a notification and app-private error log.
 ````
 
-- [ ] **Step 3: Run full Android verification**
+- [x] **Step 3: Run full Android verification**
 
 ```bash
 cd client
@@ -1242,7 +1242,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt docs/notes/2026-05-28-blocker-manual-test.md
@@ -1257,11 +1257,11 @@ If no code changed in Step 1, only commit the docs note.
 
 **Goal:** Complete documentation, verification, and review readiness for the slice.
 
-- [ ] **Step 1: Update this plan**
+- [x] **Step 1: Update this plan**
 
 Mark completed steps in `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`.
 
-- [ ] **Step 2: Write handoff**
+- [x] **Step 2: Write handoff**
 
 Create `docs/handoffs/2026-05-28-android-vps-connected-enforcement.md` with:
 
@@ -1293,7 +1293,7 @@ Plan: `docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md`
 ## Next Recommended Step
 ```
 
-- [ ] **Step 3: Run final verification**
+- [x] **Step 3: Run final verification**
 
 ```bash
 cd client
@@ -1308,7 +1308,7 @@ Expected:
 - `git diff --check`: no output, exit 0
 - `git status --short`: only intended files before commit
 
-- [ ] **Step 4: Commit final docs**
+- [x] **Step 4: Commit final docs**
 
 ```bash
 git add docs/superpowers/plans/2026-05-28-android-vps-connected-enforcement.md docs/handoffs/2026-05-28-android-vps-connected-enforcement.md

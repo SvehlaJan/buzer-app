@@ -27,6 +27,17 @@ cd client
 ./gradlew :androidApp:assembleDebug
 ```
 
+## Android Debug Backend Configuration
+
+The Android debug app reads VPS backend settings from ignored `client/local.properties`:
+
+```properties
+BUZER_BACKEND_BASE_URL=https://your-vps.example
+BUZER_BACKEND_TOKEN=your-dev-token
+```
+
+Do not commit real values. If either value is blank, the Android app shows a local configuration error instead of calling the backend.
+
 ## Secrets
 
 Secrets stay out of Git. Use `.env.example` files for documented variable names only.

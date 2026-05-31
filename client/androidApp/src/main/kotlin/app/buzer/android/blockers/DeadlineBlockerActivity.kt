@@ -3,45 +3,134 @@ package app.buzer.android.blockers
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import app.buzer.android.enforcement.AlarmIntentFactory
-import app.buzer.android.enforcement.AlarmKind
-import app.buzer.android.enforcement.AndroidAlarmScheduler
-import app.buzer.android.enforcement.ScheduledAlarm
+import app.buzer.android.enforcement.BlockerAction
+import app.buzer.android.enforcement.BlockerErrorReporter
+import app.buzer.android.enforcement.EnforcementCoordinator
+import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class DeadlineBlockerActivity : ComponentActivity() {
+    private lateinit var errorReporter: BlockerErrorReporter
+    private var actionInFlight = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureBlockerWindow()
+        errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
-        val scheduler = AndroidAlarmScheduler(applicationContext)
+        if (taskId == null) {
+            errorReporter.report(
+                action = BlockerAction.COMPLETE_TASK,
+                taskId = null,
+                message = "Deadline blocker missing task ID"
+            )
+            finish()
+            return
+        }
 
+        val coordinator = createCoordinator() ?: return
+        prepareAndShowBlocker(coordinator, taskId)
+    }
+
+    private fun createCoordinator(): EnforcementCoordinator? {
+        return try {
+            EnforcementDependencies.coordinator(applicationContext)
+        } catch (error: Exception) {
+            errorReporter.report(
+                action = BlockerAction.REFRESH_SNAPSHOT,
+                taskId = null,
+                message = error.message ?: "enforcement configuration failed"
+            )
+            finish()
+            null
+        }
+    }
+
+    private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
+        lifecycleScope.launch {
+            try {
+                coordinator.loadLatestSnapshot()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                errorReporter.report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = taskId,
+                    message = error.message ?: "local snapshot load failed"
+                )
+            }
+
+            try {
+                val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
+                    coordinator.refreshAndReconcile()
+                }
+                if (refreshedSnapshot != null && BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                    finish()
+                    return@launch
+                }
+                if (refreshedSnapshot == null) {
+                    errorReporter.report(
+                        action = BlockerAction.REFRESH_SNAPSHOT,
+                        taskId = taskId,
+                        message = "snapshot refresh timed out"
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                errorReporter.report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = taskId,
+                    message = error.message ?: "snapshot refresh failed"
+                )
+            }
+            if (!isFinishing) showBlocker(coordinator, taskId)
+        }
+    }
+
+    private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         setContent {
             DeadlineBlockerScreen(
                 onDone = {
-                    if (taskId != null) scheduler.cancelAllForTask(taskId)
-                    finish()
+                    runActionOnce { coordinator.completeTask(taskId) }
                 },
                 onExtend = {
-                    if (taskId != null) {
-                        scheduler.schedule(
-                            ScheduledAlarm(
-                                taskId = taskId,
-                                kind = AlarmKind.DEADLINE_BLOCKER,
-                                triggerAtEpochMillis = System.currentTimeMillis() + THIRTY_MINUTES_MILLIS
-                            )
-                        )
-                    }
+                    runActionOnce { coordinator.extendTask(taskId) }
+                },
+                onReschedule = {
+                    if (actionInFlight) return@DeadlineBlockerScreen
+                    actionInFlight = true
+                    errorReporter.report(
+                        action = BlockerAction.RESCHEDULE_TASK,
+                        taskId = taskId,
+                        message = "Reschedule form is not implemented in this slice"
+                    )
                     finish()
                 },
-                onReschedule = { finish() },
                 onBack = { finish() },
                 showBack = false
             )
         }
     }
 
+    private fun runActionOnce(action: suspend () -> Unit) {
+        if (actionInFlight) return
+        actionInFlight = true
+        lifecycleScope.launch {
+            try {
+                action()
+            } finally {
+                finish()
+            }
+        }
+    }
+
     private companion object {
-        const val THIRTY_MINUTES_MILLIS = 30 * 60 * 1000L
+        const val BLOCKER_REFRESH_TIMEOUT_MILLIS = 5_000L
     }
 }
