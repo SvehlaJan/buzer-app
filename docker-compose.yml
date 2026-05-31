@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: buzer-backend
+    restart: unless-stopped
+    ports:
+      - "18432:18432"
+    volumes:
+      - buzer-data:/app/backend/data
+      - buzer-whatsapp:/app/backend/whatsapp-sessions
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  buzer-data:
+  buzer-whatsapp:
