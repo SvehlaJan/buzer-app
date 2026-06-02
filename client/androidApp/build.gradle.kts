@@ -36,6 +36,8 @@ android {
 
         buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${backendConfigValue("BUZER_BACKEND_BASE_URL")}\"")
         buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${backendConfigValue("BUZER_BACKEND_TOKEN")}\"")
+        buildConfigField("String", "BUZER_ASSIGNEE_ME_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_ME_ID")}\"")
+        buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
     }
 
     buildFeatures {

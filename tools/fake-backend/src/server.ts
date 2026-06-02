@@ -54,6 +54,18 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     return { failActions };
   });
 
+  app.post("/tasks", async (request, reply) => {
+    await maybeDelay();
+    record("POST", request.url, request.body ?? null);
+    if (failActions) {
+      return reply.code(500).send({ error: "forced_failure" });
+    }
+    return reply.code(201).send({
+      id: "created-task",
+      todoistTaskId: "todoist-created-task"
+    });
+  });
+
   for (const action of ["start", "done", "postpone-start", "extend", "reschedule"]) {
     app.post("/tasks/:id/" + action, async (request, reply) => {
       await maybeDelay();

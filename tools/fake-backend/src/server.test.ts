@@ -42,6 +42,58 @@ test("actions are recorded", async (t) => {
   assert.equal(calls.json().calls[0].path, "/tasks/task-start/start");
 });
 
+test("create task is recorded", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/tasks",
+    headers: { authorization: "Bearer test-token" },
+    payload: {
+      title: "Buy milk",
+      projectId: null,
+      assigneeId: "user-me",
+      dueDatetime: "2026-06-02T16:30:00Z",
+      durationMinutes: 45
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(response.json(), {
+    id: "created-task",
+    todoistTaskId: "todoist-created-task"
+  });
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls[0].path, "/tasks");
+  assert.equal(calls.json().calls[0].body.title, "Buy milk");
+});
+
+test("forced action failures also fail task creation and still record call", async (t) => {
+  const app = await buildServer({ failActions: true });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/tasks",
+    headers: { authorization: "Bearer test-token" },
+    payload: {
+      title: "Buy milk",
+      projectId: null,
+      assigneeId: "user-me",
+      dueDatetime: "2026-06-02T16:30:00Z",
+      durationMinutes: 45
+    }
+  });
+
+  assert.equal(response.statusCode, 500);
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls.length, 1);
+  assert.equal(calls.json().calls[0].path, "/tasks");
+});
+
 test("reset clears recorded calls", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
