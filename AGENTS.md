@@ -91,6 +91,8 @@ Do not include secrets in Context7 queries.
 
 Backend agents must run relevant unit/integration tests before handing off. Android agents must run shared JVM tests and, when possible, Android unit/instrumentation tests. If a device/emulator is required and unavailable, document the exact manual check that remains.
 
+Android enforcement agents should prefer native Android instrumentation tests over host-side ADB scripts. For blocker activity/action changes, start `tools/fake-backend` locally and run `pixel8Api34DebugAndroidTest` with `BUZER_BACKEND_BASE_URL=http://10.0.2.2:18433`, `BUZER_BACKEND_TOKEN=test-token`, and `FAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`. Do not use live Todoist or WhatsApp for destructive action tests.
+
 For every completed task, the handoff must include:
 
 ```text
@@ -129,4 +131,3 @@ If the spec, a plan, and existing code disagree:
 3. Follow the plan for implementation sequencing.
 4. Follow existing code patterns for style.
 5. If still ambiguous, document the ambiguity in a handoff and stop before making irreversible changes.
-

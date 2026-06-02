@@ -14,8 +14,10 @@ val localProperties = Properties().apply {
     }
 }
 
-fun localProperty(name: String): String {
-    return localProperties.getProperty(name).orEmpty()
+fun backendConfigValue(name: String): String {
+    return providers.gradleProperty(name).orNull
+        ?: localProperties.getProperty(name)
+        ?: ""
 }
 
 android {
@@ -28,9 +30,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-dev"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["FAKE_BACKEND_BASE_URL"] =
+            providers.gradleProperty("FAKE_BACKEND_BASE_URL").orNull ?: "http://10.0.2.2:18433"
 
-        buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${localProperty("BUZER_BACKEND_BASE_URL")}\"")
-        buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${localProperty("BUZER_BACKEND_TOKEN")}\"")
+        buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${backendConfigValue("BUZER_BACKEND_BASE_URL")}\"")
+        buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${backendConfigValue("BUZER_BACKEND_TOKEN")}\"")
     }
 
     buildFeatures {
@@ -39,6 +44,15 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        managedDevices {
+            localDevices {
+                create("pixel8Api34") {
+                    device = "Pixel 8"
+                    apiLevel = 34
+                    systemImageSource = "google"
+                }
+            }
+        }
     }
 
     compileOptions {
@@ -63,4 +77,10 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

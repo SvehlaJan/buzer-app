@@ -14,6 +14,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.Json
 
 class BuzerApiClient(
@@ -32,19 +33,19 @@ class BuzerApiClient(
     }
 
     suspend fun startTask(id: String) {
-        httpClient.post("$baseUrl/tasks/$id/start")
+        emptyJsonPost("$baseUrl/tasks/$id/start")
     }
 
     suspend fun completeTask(id: String) {
-        httpClient.post("$baseUrl/tasks/$id/done")
+        emptyJsonPost("$baseUrl/tasks/$id/done")
     }
 
     suspend fun postponeStart(id: String) {
-        httpClient.post("$baseUrl/tasks/$id/postpone-start")
+        emptyJsonPost("$baseUrl/tasks/$id/postpone-start")
     }
 
     suspend fun extendTask(id: String) {
-        httpClient.post("$baseUrl/tasks/$id/extend")
+        emptyJsonPost("$baseUrl/tasks/$id/extend")
     }
 
     suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) {
@@ -53,10 +54,18 @@ class BuzerApiClient(
             setBody(request)
         }
     }
+
+    private suspend fun emptyJsonPost(url: String) {
+        httpClient.post(url) {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { })
+        }
+    }
 }
 
 private fun defaultHttpClient(token: String): HttpClient =
     HttpClient {
+        expectSuccess = true
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
