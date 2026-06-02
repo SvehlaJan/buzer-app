@@ -59,3 +59,14 @@ Use this only when Gradle Managed Devices are blocked or too slow. The primary w
 The shared Ktor client originally sent empty action POSTs without an explicit JSON body and did not throw on non-success HTTP responses. Fastify can reject unsupported empty POST content types before route handlers run, and Ktor defaults could let the activity treat that response as success. The client now sends `{}` with `Content-Type: application/json` for empty action endpoints and sets `expectSuccess = true`.
 
 The forced-failure instrumentation tests verify that start and deadline blocker activities hide after backend action failure and that `blocker_action_errors.log` records the failed action. Tests read that file through `InstrumentationRegistry.getInstrumentation().targetContext`.
+
+## Deadline Reschedule Coverage
+
+The deadline blocker instrumentation suite covers:
+
+- `Done` success and backend failure
+- `Reschedule` invalid input staying on the blocker
+- `Reschedule` success posting `/tasks/:id/reschedule`
+- `Reschedule` backend failure hiding the blocker and writing `RESCHEDULE_TASK` to `blocker_action_errors.log`
+
+The first reschedule UI accepts local deadline text in `YYYY-MM-DD HH:MM` format and converts it to an ISO instant using the Android device timezone.
