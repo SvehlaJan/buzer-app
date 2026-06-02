@@ -25,6 +25,18 @@ class FakeBackendClient(
         }
     }
 
+    fun assertRecorded(path: String, vararg bodyFragments: String) {
+        val body = calls()
+        check(body.contains("\"path\":\"$path\"")) {
+            "Expected fake backend call $path, got $body"
+        }
+        bodyFragments.forEach { fragment ->
+            check(body.contains(fragment)) {
+                "Expected fake backend call $path body to contain $fragment, got $body"
+            }
+        }
+    }
+
     private fun request(method: String, path: String, body: String = "{}"): String {
         val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
         connection.requestMethod = method

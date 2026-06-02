@@ -6,8 +6,10 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -71,6 +73,27 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
+    fun deadlineBlocker_rescheduleCallsFakeBackend() {
+        resetTestState()
+
+        val scenario = launchDeadlineBlocker("task-reschedule")
+
+        composeRule.onNodeWithText("Reschedule").performClick()
+        composeRule.onNodeWithContentDescription("New deadline input").performTextInput("2026-06-02 18:30")
+        composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
+        composeRule.onNodeWithText("Save reschedule").performClick()
+
+        waitForActivityDestroyed(scenario)
+        waitForRecordedCall("/tasks/task-reschedule/reschedule")
+        fakeBackend.assertRecorded(
+            "/tasks/task-reschedule/reschedule",
+            "durationMinutes",
+            "45",
+            "dueDatetime"
+        )
+    }
+
+    @Test
     fun startBlocker_backendFailureHidesAndWritesErrorLog() {
         resetTestState()
         fakeBackend.setFailActions(true)
@@ -83,6 +106,26 @@ class BlockerActivityFakeBackendTest {
             waitForActivityDestroyed(scenario)
             waitForRecordedCall("/tasks/task-start-fail/start")
             waitForErrorLog("action=START_TASK taskId=task-start-fail", "500")
+        } finally {
+            fakeBackend.setFailActions(false)
+        }
+    }
+
+    @Test
+    fun deadlineBlocker_rescheduleBackendFailureHidesAndWritesErrorLog() {
+        resetTestState()
+        fakeBackend.setFailActions(true)
+        try {
+            val scenario = launchDeadlineBlocker("task-reschedule-fail")
+
+            composeRule.onNodeWithText("Reschedule").performClick()
+            composeRule.onNodeWithContentDescription("New deadline input").performTextInput("2026-06-02 18:30")
+            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
+            composeRule.onNodeWithText("Save reschedule").performClick()
+
+            waitForActivityDestroyed(scenario)
+            waitForRecordedCall("/tasks/task-reschedule-fail/reschedule")
+            waitForErrorLog("action=RESCHEDULE_TASK taskId=task-reschedule-fail", "500")
         } finally {
             fakeBackend.setFailActions(false)
         }
