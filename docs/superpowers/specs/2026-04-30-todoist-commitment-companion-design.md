@@ -381,6 +381,7 @@ Manual device checklist:
 4. macOS companion using shared Kotlin/Compose logic where practical.
 5. Voice/dictation ingestion, including Gemini or Google Tasks bridges.
 6. Stronger Android lockdown modes using accessibility, overlay, or device-admin experiments.
+7. Backend deployment automation from GitHub to the VPS. Preferred first version: a self-hosted GitHub Actions runner on the VPS that redeploys with `docker compose up -d --build` when pushes change `backend/**`, `docker-compose.yml`, or deployment files.
 
 ## Open Decisions
 
