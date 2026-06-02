@@ -37,7 +37,7 @@
 
 ## Task 1: Fake Backend Review Dismiss
 
-- [ ] Add failing tests to `tools/fake-backend/src/server.test.ts`:
+- [x] Add failing tests to `tools/fake-backend/src/server.test.ts`:
 
 ```ts
 test("review dismiss is recorded", async (t) => {
@@ -75,9 +75,9 @@ test("forced action failures also fail review dismiss and still record call", as
 });
 ```
 
-- [ ] Run `cd tools/fake-backend && npm test`.
+- [x] Run `cd tools/fake-backend && npm test`.
   - Expected before implementation: FAIL because `/review/dismiss` returns 404.
-- [ ] Add `POST /review/dismiss` to `tools/fake-backend/src/server.ts`:
+- [x] Add `POST /review/dismiss` to `tools/fake-backend/src/server.ts`:
 
 ```ts
 app.post("/review/dismiss", async (request, reply) => {
@@ -92,9 +92,9 @@ app.post("/review/dismiss", async (request, reply) => {
 });
 ```
 
-- [ ] Run `cd tools/fake-backend && npm test`.
+- [x] Run `cd tools/fake-backend && npm test`.
   - Expected after implementation: PASS.
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add tools/fake-backend/src/server.ts tools/fake-backend/src/server.test.ts
@@ -103,7 +103,7 @@ git commit -m "test: add fake backend review dismiss route"
 
 ## Task 2: Shared API And Coordinator Dismiss Action
 
-- [ ] Add `dismissMorningReview()` to `client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt`:
+- [x] Add `dismissMorningReview()` to `client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt`:
 
 ```kotlin
 suspend fun dismissMorningReview() {
@@ -111,8 +111,8 @@ suspend fun dismissMorningReview() {
 }
 ```
 
-- [ ] Add `suspend fun dismissMorningReview()` to `EnforcementApi` and implement it in `BuzerEnforcementApi` by delegating to `client.dismissMorningReview()`.
-- [ ] Add this method to `EnforcementCoordinator`:
+- [x] Add `suspend fun dismissMorningReview()` to `EnforcementApi` and implement it in `BuzerEnforcementApi` by delegating to `client.dismissMorningReview()`.
+- [x] Add this method to `EnforcementCoordinator`:
 
 ```kotlin
 suspend fun dismissMorningReview(): CoordinatorActionResult =
@@ -125,14 +125,14 @@ suspend fun dismissMorningReview(): CoordinatorActionResult =
     }
 ```
 
-- [ ] Add this constant inside `EnforcementCoordinator` companion:
+- [x] Add this constant inside `EnforcementCoordinator` companion:
 
 ```kotlin
 const val MORNING_REVIEW_TASK_ID = "morning-review"
 ```
 
-- [ ] Update `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt` fake API to implement `dismissMorningReview()`.
-- [ ] Add a coordinator unit test:
+- [x] Update `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt` fake API to implement `dismissMorningReview()`.
+- [x] Add a coordinator unit test:
 
 ```kotlin
 @Test
@@ -151,9 +151,9 @@ fun dismissMorningReviewReportsFailureAndReturnsHiddenFailure() = runTest {
 }
 ```
 
-- [ ] Run `cd client && ./gradlew :androidApp:testDebugUnitTest`.
+- [x] Run `cd client && ./gradlew :androidApp:testDebugUnitTest`.
   - Expected after implementation: PASS.
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt \
@@ -165,7 +165,7 @@ git commit -m "feat: add morning review dismiss action"
 
 ## Task 3: Morning Review Repair UI
 
-- [ ] Replace placeholder `MorningReviewScreen` with a UI that accepts invalid tasks:
+- [x] Replace placeholder `MorningReviewScreen` with a UI that accepts invalid tasks:
 
 ```kotlin
 @Composable
@@ -178,7 +178,7 @@ fun MorningReviewScreen(
 )
 ```
 
-- [ ] Add transient UI state in `MorningReviewScreen`:
+- [x] Add transient UI state in `MorningReviewScreen`:
 
 ```kotlin
 var repairingTask by remember { mutableStateOf<TaskSnapshotItem?>(null) }
@@ -191,7 +191,7 @@ var pendingDate by remember { mutableStateOf<LocalDate?>(null) }
 val defaultDateTime = remember { LocalDateTime.now().plusHours(1) }
 ```
 
-- [ ] In list mode, show:
+- [x] In list mode, show:
 
 ```kotlin
 Text("Morning review")
@@ -216,7 +216,7 @@ OutlinedButton(onClick = onSnooze, modifier = Modifier.fillMaxWidth()) {
 }
 ```
 
-- [ ] In repair mode, show:
+- [x] In repair mode, show:
 
 ```kotlin
 Text("Repair task")
@@ -277,11 +277,11 @@ OutlinedButton(
 }
 ```
 
-- [ ] Add date/time dialogs using the same `DatePickerDialog` and `TimePicker` in `AlertDialog` pattern from `AddTaskScreen` and `DeadlineBlockerScreen`.
-- [ ] Make the top-level column vertically scrollable.
-- [ ] Run `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebugAndroidTest`.
+- [x] Add date/time dialogs using the same `DatePickerDialog` and `TimePicker` in `AlertDialog` pattern from `AddTaskScreen` and `DeadlineBlockerScreen`.
+- [x] Make the top-level column vertically scrollable.
+- [x] Run `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebugAndroidTest`.
   - Expected after implementation: PASS.
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt \
@@ -291,13 +291,13 @@ git commit -m "feat: show morning review repair form"
 
 ## Task 4: Morning Review Activity Wiring
 
-- [ ] In `MorningReviewActivity`, add Compose state:
+- [x] In `MorningReviewActivity`, add Compose state:
 
 ```kotlin
 var invalidTasks by mutableStateOf(emptyList<TaskSnapshotItem>())
 ```
 
-- [ ] After coordinator creation, load cached invalid tasks first if present:
+- [x] After coordinator creation, load cached invalid tasks first if present:
 
 ```kotlin
 coordinator?.loadLatestSnapshot()
@@ -306,14 +306,14 @@ coordinator?.loadLatestSnapshot()
     ?.let { invalidTasks = it }
 ```
 
-- [ ] In the existing refresh coroutine, set invalid tasks after refresh:
+- [x] In the existing refresh coroutine, set invalid tasks after refresh:
 
 ```kotlin
 val snapshot = coordinator.refreshAndReconcile()
 invalidTasks = SnapshotReducer.reduce(snapshot).invalidTasks
 ```
 
-- [ ] Wire `MorningReviewScreen`:
+- [x] Wire `MorningReviewScreen`:
 
 ```kotlin
 MorningReviewScreen(
@@ -356,10 +356,10 @@ MorningReviewScreen(
 )
 ```
 
-- [ ] Remove the private duplicate `MORNING_REVIEW_TASK_ID` constant from `MorningReviewActivity`.
-- [ ] Run `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebugAndroidTest`.
+- [x] Remove the private duplicate `MORNING_REVIEW_TASK_ID` constant from `MorningReviewActivity`.
+- [x] Run `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebugAndroidTest`.
   - Expected after implementation: PASS.
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt
@@ -368,7 +368,7 @@ git commit -m "feat: wire morning review repair actions"
 
 ## Task 5: Native Fake-Backend Instrumentation Tests
 
-- [ ] Add tests to `BlockerActivityFakeBackendTest.kt`:
+- [x] Add tests to `BlockerActivityFakeBackendTest.kt`:
 
 ```kotlin
 @Test
@@ -447,7 +447,7 @@ fun morningReview_snoozeCallsFakeBackendAndHides() {
 }
 ```
 
-- [ ] Add helpers:
+- [x] Add helpers:
 
 ```kotlin
 private fun selectDefaultRepairDeadline() {
@@ -462,10 +462,10 @@ private fun launchMorningReview(): ActivityScenario<MorningReviewActivity> =
     )
 ```
 
-- [ ] Run `cd client && ./gradlew :androidApp:assembleDebugAndroidTest`.
+- [x] Run `cd client && ./gradlew :androidApp:assembleDebugAndroidTest`.
   - Expected: PASS after implementation.
-- [ ] Start fake backend: `cd tools/fake-backend && PORT=18433 npm run dev`.
-- [ ] Run managed-device suite:
+- [x] Start fake backend: `cd tools/fake-backend && PORT=18433 npm run dev`.
+- [x] Run managed-device suite:
 
 ```bash
 cd client
@@ -477,7 +477,7 @@ cd client
   -PFAKE_BACKEND_BASE_URL=http://10.0.2.2:18433
 ```
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt
@@ -486,11 +486,11 @@ git commit -m "test: cover morning review repair flow"
 
 ## Task 6: Final Documentation And Handoff
 
-- [ ] Update `docs/notes/2026-06-01-native-android-emulator-testing.md` with morning review coverage.
-- [ ] Create `docs/handoffs/2026-06-02-morning-review-invalid-task-repair.md`.
-- [ ] Mark all checkboxes complete in this plan.
-- [ ] Run final `git status --short`.
-- [ ] Commit docs:
+- [x] Update `docs/notes/2026-06-01-native-android-emulator-testing.md` with morning review coverage.
+- [x] Create `docs/handoffs/2026-06-02-morning-review-invalid-task-repair.md`.
+- [x] Mark all checkboxes complete in this plan.
+- [x] Run final `git status --short`.
+- [x] Commit docs:
 
 ```bash
 git add docs/notes/2026-06-01-native-android-emulator-testing.md \

@@ -71,6 +71,20 @@ The deadline blocker instrumentation suite covers:
 
 The active reschedule UI uses the same native Material3 date/time picker pattern as add-task creation. Tests select the default date/time by tapping the `New deadline picker` button, confirming the date dialog with `OK`, then confirming the time dialog with `OK`. The selected local date/time is converted to an ISO instant through `DateTimeSelection.toIsoInstantString()` using the Android device timezone.
 
+## Morning Review Coverage
+
+The native fake-backend workflow now covers invalid-task morning review repair.
+
+The fake backend exposes an invalid assigned-to-user fixture named `Invalid assigned fixture`. Managed-device tests launch `MorningReviewActivity`, wait for the async snapshot refresh, and verify:
+
+- invalid task title and validation messages render
+- missing repair deadline stays on the blocker with `Deadline is required`
+- native repair date/time picker plus duration posts `/tasks/task-invalid/reschedule`
+- repair backend failure hides the blocker and writes `RESCHEDULE_TASK` to `blocker_action_errors.log`
+- snooze posts `/review/dismiss` and hides the blocker
+
+Android 14 managed devices denied exact alarm scheduling with only `SCHEDULE_EXACT_ALARM`, causing morning review snooze to throw `SecurityException`. The app now also declares `USE_EXACT_ALARM`, which is acceptable for this dev-mode MVP and allows exact local blocker rescheduling in emulator verification.
+
 ## Add Task Creation Coverage
 
 The native fake-backend workflow now also covers `POST /tasks`.
