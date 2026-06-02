@@ -77,6 +77,17 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     });
   }
 
+  app.post("/review/dismiss", async (request, reply) => {
+    await maybeDelay();
+    record("POST", request.url, request.body ?? null);
+    if (failActions) {
+      return reply.code(500).send({ error: "forced_failure" });
+    }
+    return reply.send({
+      snoozedUntil: new Date(Date.now() + 5 * 60_000).toISOString()
+    });
+  });
+
   return app;
 }
 

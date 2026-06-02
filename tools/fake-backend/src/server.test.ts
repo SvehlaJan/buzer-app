@@ -70,6 +70,23 @@ test("create task is recorded", async (t) => {
   assert.equal(calls.json().calls[0].body.title, "Buy milk");
 });
 
+test("review dismiss is recorded", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/review/dismiss",
+    headers: { authorization: "Bearer test-token" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(typeof response.json().snoozedUntil, "string");
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls[0].path, "/review/dismiss");
+});
+
 test("forced action failures also fail task creation and still record call", async (t) => {
   const app = await buildServer({ failActions: true });
   t.after(() => app.close());
@@ -92,6 +109,23 @@ test("forced action failures also fail task creation and still record call", asy
   const calls = await app.inject({ method: "GET", url: "/__calls" });
   assert.equal(calls.json().calls.length, 1);
   assert.equal(calls.json().calls[0].path, "/tasks");
+});
+
+test("forced action failures also fail review dismiss and still record call", async (t) => {
+  const app = await buildServer({ failActions: true });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/review/dismiss",
+    headers: { authorization: "Bearer test-token" }
+  });
+
+  assert.equal(response.statusCode, 500);
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls.length, 1);
+  assert.equal(calls.json().calls[0].path, "/review/dismiss");
 });
 
 test("reset clears recorded calls", async (t) => {
