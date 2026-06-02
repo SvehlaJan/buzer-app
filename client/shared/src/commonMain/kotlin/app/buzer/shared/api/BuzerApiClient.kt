@@ -55,6 +55,10 @@ class BuzerApiClient(
         }
     }
 
+    suspend fun dismissMorningReview() {
+        emptyJsonPost("$baseUrl/review/dismiss")
+    }
+
     private suspend fun emptyJsonPost(url: String) {
         httpClient.post(url) {
             contentType(ContentType.Application.Json)

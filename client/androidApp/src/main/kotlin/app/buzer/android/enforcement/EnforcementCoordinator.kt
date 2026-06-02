@@ -74,6 +74,15 @@ class EnforcementCoordinator(
             api.rescheduleTask(taskId, request)
         }
 
+    suspend fun dismissMorningReview(): CoordinatorActionResult =
+        runBackendAction(
+            action = BlockerAction.MORNING_REVIEW_DISMISS,
+            taskId = MORNING_REVIEW_TASK_ID,
+            scheduleStartRetry = false
+        ) {
+            api.dismissMorningReview()
+        }
+
     private fun reconcile(snapshot: TasksSnapshotResponse) {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowProvider())
         snapshot.tasks
@@ -114,7 +123,9 @@ class EnforcementCoordinator(
             triggerAtEpochMillis = Instant.parse(nowProvider()).plusSeconds(RETRY_DELAY_SECONDS).toEpochMilli()
         )
 
-    private companion object {
-        const val RETRY_DELAY_SECONDS = 5L * 60L
+    companion object {
+        const val MORNING_REVIEW_TASK_ID = "morning-review"
+
+        private const val RETRY_DELAY_SECONDS = 5L * 60L
     }
 }

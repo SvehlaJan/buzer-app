@@ -11,6 +11,7 @@ interface EnforcementApi {
     suspend fun completeTask(id: String)
     suspend fun extendTask(id: String)
     suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest)
+    suspend fun dismissMorningReview()
 }
 
 class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
@@ -34,5 +35,9 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
 
     override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) {
         client.rescheduleTask(id, request)
+    }
+
+    override suspend fun dismissMorningReview() {
+        client.dismissMorningReview()
     }
 }

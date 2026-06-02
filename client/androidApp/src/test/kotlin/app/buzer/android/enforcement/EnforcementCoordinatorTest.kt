@@ -147,6 +147,34 @@ class EnforcementCoordinatorTest {
         assertEquals(listOf(ErrorRecord(BlockerAction.COMPLETE_TASK, "task-1", "backend unavailable")), reporter.errors)
     }
 
+    @Test
+    fun dismissMorningReviewFailureReportsErrorWithoutRetry() = runBlocking {
+        val scheduler = RecordingAlarmScheduler()
+        val reporter = RecordingErrorReporter()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1")), failDismissMorningReview = true),
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.dismissMorningReview()
+
+        assertTrue(result is CoordinatorActionResult.FailedAndHidden)
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertEquals(
+            listOf(
+                ErrorRecord(
+                    BlockerAction.MORNING_REVIEW_DISMISS,
+                    EnforcementCoordinator.MORNING_REVIEW_TASK_ID,
+                    "backend unavailable"
+                )
+            ),
+            reporter.errors
+        )
+    }
+
     private fun snapshot(vararg tasks: TaskSnapshotItem): TasksSnapshotResponse =
         TasksSnapshotResponse(
             scheduleVersion = 1,
@@ -191,7 +219,8 @@ class EnforcementCoordinatorTest {
         private val snapshot: TasksSnapshotResponse,
         private val failPostpone: Boolean = false,
         private val failComplete: Boolean = false,
-        private val cancelPostpone: Boolean = false
+        private val cancelPostpone: Boolean = false,
+        private val failDismissMorningReview: Boolean = false
     ) : EnforcementApi {
         override suspend fun getSnapshot(): TasksSnapshotResponse = snapshot
         override suspend fun startTask(id: String) = Unit
@@ -204,6 +233,9 @@ class EnforcementCoordinatorTest {
         }
         override suspend fun extendTask(id: String) = Unit
         override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) = Unit
+        override suspend fun dismissMorningReview() {
+            if (failDismissMorningReview) error("backend unavailable")
+        }
     }
 
     private class FakeSnapshotStore : SnapshotStorage {
