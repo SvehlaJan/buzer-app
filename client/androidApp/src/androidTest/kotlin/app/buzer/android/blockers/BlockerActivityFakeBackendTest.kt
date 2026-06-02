@@ -149,10 +149,98 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
+    @Test
+    fun morningReview_showsInvalidTaskFromSnapshot() {
+        resetTestState()
+
+        launchMorningReview()
+
+        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        waitForText("Invalid assigned fixture")
+        composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
+        composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
+    }
+
+    @Test
+    fun morningReview_repairShowsValidationErrorForMissingDeadline() {
+        resetTestState()
+
+        launchMorningReview()
+
+        waitForText("Invalid assigned fixture")
+        composeRule.onNodeWithText("Repair").performClick()
+        composeRule.onNodeWithText("Save repair").performClick()
+
+        composeRule.onNodeWithText("Deadline is required").assertIsDisplayed()
+    }
+
+    @Test
+    fun morningReview_repairCallsFakeBackend() {
+        resetTestState()
+        val scenario = launchMorningReview()
+
+        waitForText("Invalid assigned fixture")
+        composeRule.onNodeWithText("Repair").performClick()
+        selectDefaultRepairDeadline()
+        composeRule.onNodeWithContentDescription("Repair duration minutes input").performTextInput("45")
+        composeRule.onNodeWithText("Save repair").performClick()
+
+        waitForActivityDestroyed(scenario)
+        waitForRecordedCall("/tasks/task-invalid/reschedule")
+        fakeBackend.assertRecorded(
+            "/tasks/task-invalid/reschedule",
+            "durationMinutes",
+            "45",
+            "dueDatetime"
+        )
+    }
+
+    @Test
+    fun morningReview_repairBackendFailureHidesAndWritesErrorLog() {
+        resetTestState()
+        fakeBackend.setFailActions(true)
+        try {
+            val scenario = launchMorningReview()
+
+            waitForText("Invalid assigned fixture")
+            composeRule.onNodeWithText("Repair").performClick()
+            selectDefaultRepairDeadline()
+            composeRule.onNodeWithContentDescription("Repair duration minutes input").performTextInput("45")
+            composeRule.onNodeWithText("Save repair").performClick()
+
+            waitForActivityDestroyed(scenario)
+            waitForRecordedCall("/tasks/task-invalid/reschedule")
+            waitForErrorLog("action=RESCHEDULE_TASK taskId=task-invalid", "500")
+        } finally {
+            fakeBackend.setFailActions(false)
+        }
+    }
+
+    @Test
+    fun morningReview_snoozeCallsFakeBackendAndHides() {
+        resetTestState()
+        val scenario = launchMorningReview()
+
+        waitForText("Invalid assigned fixture")
+        composeRule.onNodeWithText("Snooze 5 min").performClick()
+
+        waitForActivityDestroyed(scenario)
+        waitForRecordedCall("/review/dismiss")
+        fakeBackend.assertRecorded("/review/dismiss")
+    }
+
     private fun resetTestState() {
         fakeBackend.setFailActions(false)
         fakeBackend.resetCalls()
         blockerErrorLog().delete()
+    }
+
+    private fun waitForText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            runCatching {
+                composeRule.onNodeWithText(text).assertIsDisplayed()
+            }.isSuccess
+        }
     }
 
     private fun waitForRecordedCall(path: String) {
@@ -172,6 +260,12 @@ class BlockerActivityFakeBackendTest {
 
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("New deadline picker").performClick()
+        composeRule.onNodeWithText("OK").performClick()
+        composeRule.onNodeWithText("OK").performClick()
+    }
+
+    private fun selectDefaultRepairDeadline() {
+        composeRule.onNodeWithContentDescription("Repair deadline picker").performClick()
         composeRule.onNodeWithText("OK").performClick()
         composeRule.onNodeWithText("OK").performClick()
     }
@@ -210,6 +304,11 @@ class BlockerActivityFakeBackendTest {
             Intent(ApplicationProvider.getApplicationContext(), DeadlineBlockerActivity::class.java).apply {
                 putExtra(AlarmIntentFactory.EXTRA_TASK_ID, taskId)
             }
+        )
+
+    private fun launchMorningReview(): ActivityScenario<MorningReviewActivity> =
+        ActivityScenario.launch(
+            Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java)
         )
 
     private fun blockerErrorLog(): File =
