@@ -102,15 +102,8 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 onExtend = {
                     runActionOnce { coordinator.extendTask(taskId) }
                 },
-                onReschedule = {
-                    if (actionInFlight) return@DeadlineBlockerScreen
-                    actionInFlight = true
-                    errorReporter.report(
-                        action = BlockerAction.RESCHEDULE_TASK,
-                        taskId = taskId,
-                        message = "Reschedule form is not implemented in this slice"
-                    )
-                    finish()
+                onReschedule = { request ->
+                    runActionOnce { coordinator.rescheduleTask(taskId, request) }
                 },
                 onBack = { finish() },
                 showBack = false

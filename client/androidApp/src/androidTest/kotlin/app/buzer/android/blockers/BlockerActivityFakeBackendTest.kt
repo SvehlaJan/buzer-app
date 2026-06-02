@@ -2,8 +2,10 @@ package app.buzer.android.blockers
 
 import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
@@ -52,6 +54,20 @@ class BlockerActivityFakeBackendTest {
 
         waitForRecordedCall("/tasks/task-deadline/done")
         fakeBackend.assertRecorded("/tasks/task-deadline/done")
+    }
+
+    @Test
+    fun deadlineBlocker_rescheduleShowsValidationErrorForInvalidInput() {
+        resetTestState()
+
+        launchDeadlineBlocker("task-reschedule-invalid")
+
+        composeRule.onNodeWithText("Reschedule").performClick()
+        composeRule.onNodeWithText("Reschedule task").assertIsDisplayed()
+        composeRule.onNodeWithText("Save reschedule").performClick()
+
+        composeRule.onNodeWithText("New deadline is required").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Done").assertCountEquals(0)
     }
 
     @Test
