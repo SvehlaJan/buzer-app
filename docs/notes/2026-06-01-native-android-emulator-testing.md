@@ -69,7 +69,7 @@ The deadline blocker instrumentation suite covers:
 - `Reschedule` success posting `/tasks/:id/reschedule`
 - `Reschedule` backend failure hiding the blocker and writing `RESCHEDULE_TASK` to `blocker_action_errors.log`
 
-The first reschedule UI accepts local deadline text in `YYYY-MM-DD HH:MM` format and converts it to an ISO instant using the Android device timezone.
+The active reschedule UI uses the same native Material3 date/time picker pattern as add-task creation. Tests select the default date/time by tapping the `New deadline picker` button, confirming the date dialog with `OK`, then confirming the time dialog with `OK`. The selected local date/time is converted to an ISO instant through `DateTimeSelection.toIsoInstantString()` using the Android device timezone.
 
 ## Add Task Creation Coverage
 
