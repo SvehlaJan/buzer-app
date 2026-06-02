@@ -70,3 +70,17 @@ The deadline blocker instrumentation suite covers:
 - `Reschedule` backend failure hiding the blocker and writing `RESCHEDULE_TASK` to `blocker_action_errors.log`
 
 The first reschedule UI accepts local deadline text in `YYYY-MM-DD HH:MM` format and converts it to an ISO instant using the Android device timezone.
+
+## Add Task Creation Coverage
+
+The native fake-backend workflow now also covers `POST /tasks`.
+
+The Android add-task flow uses fixed `Me` / `Wife` assignee buttons, native Material3 date/time pickers, local validation, and backend submission through `BuzerApiClient.createTask`.
+
+Managed-device tests pass backend config through Gradle properties:
+
+- `BUZER_BACKEND_BASE_URL=http://10.0.2.2:18433`
+- `BUZER_BACKEND_TOKEN=test-token`
+- `BUZER_ASSIGNEE_ME_ID=user-me`
+- `BUZER_ASSIGNEE_WIFE_ID=user-wife`
+- `FAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`

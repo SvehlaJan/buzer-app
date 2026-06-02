@@ -1,6 +1,6 @@
 # Android Add Task Strict Creation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build the Android add-task flow so companion-created tasks require title, fixed assignee, native-picked deadline, and duration, then create the task through `POST /tasks`.
 
@@ -63,7 +63,7 @@ Key decisions:
 - Modify: `tools/fake-backend/src/server.test.ts`
 - Modify: `tools/fake-backend/src/server.ts`
 
-- [ ] **Step 1: Add failing fake-backend create test**
+- [x] **Step 1: Add failing fake-backend create test**
 
 In `tools/fake-backend/src/server.test.ts`, add:
 
@@ -125,7 +125,7 @@ test("forced action failures also fail task creation and still record call", asy
 });
 ```
 
-- [ ] **Step 2: Run fake-backend tests to verify RED**
+- [x] **Step 2: Run fake-backend tests to verify RED**
 
 Run:
 
@@ -136,7 +136,7 @@ npm test
 
 Expected: `FAILED` because `POST /tasks` is not implemented.
 
-- [ ] **Step 3: Implement fake-backend create route**
+- [x] **Step 3: Implement fake-backend create route**
 
 In `tools/fake-backend/src/server.ts`, add before the action loop:
 
@@ -154,7 +154,7 @@ In `tools/fake-backend/src/server.ts`, add before the action loop:
   });
 ```
 
-- [ ] **Step 4: Add Android assignee build config**
+- [x] **Step 4: Add Android assignee build config**
 
 In `client/androidApp/build.gradle.kts`, add these fields near the existing backend fields:
 
@@ -163,7 +163,7 @@ In `client/androidApp/build.gradle.kts`, add these fields near the existing back
         buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
 ```
 
-- [ ] **Step 5: Run verification**
+- [x] **Step 5: Run verification**
 
 Run:
 
@@ -176,7 +176,7 @@ cd ../../client
 
 Expected: both commands report success.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run:
 
@@ -195,7 +195,7 @@ Expected: commit succeeds.
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/datetime/DateTimeSelectionTest.kt`
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/datetime/DateTimeSelection.kt`
 
-- [ ] **Step 1: Write failing date-time helper tests**
+- [x] **Step 1: Write failing date-time helper tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/datetime/DateTimeSelectionTest.kt`:
 
@@ -248,7 +248,7 @@ class DateTimeSelectionTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run:
 
@@ -259,7 +259,7 @@ cd client
 
 Expected: `FAILED` because the helper does not exist.
 
-- [ ] **Step 3: Implement helper**
+- [x] **Step 3: Implement helper**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/datetime/DateTimeSelection.kt`:
 
@@ -301,7 +301,7 @@ private val displayFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
 ```
 
-- [ ] **Step 4: Run tests to verify GREEN**
+- [x] **Step 4: Run tests to verify GREEN**
 
 Run:
 
@@ -312,7 +312,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -332,7 +332,7 @@ Expected: commit succeeds.
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`
 
-- [ ] **Step 1: Write failing validator tests**
+- [x] **Step 1: Write failing validator tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`:
 
@@ -415,7 +415,7 @@ class AddTaskFormValidatorTest {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run:
 
@@ -426,7 +426,7 @@ cd client
 
 Expected: `FAILED` because validator types do not exist.
 
-- [ ] **Step 3: Implement validator**
+- [x] **Step 3: Implement validator**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`:
 
@@ -487,7 +487,7 @@ object AddTaskFormValidator {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify GREEN**
+- [x] **Step 4: Run tests to verify GREEN**
 
 Run:
 
@@ -498,7 +498,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -519,7 +519,7 @@ Expected: commit succeeds.
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
 
-- [ ] **Step 1: Implement add-task dependencies**
+- [x] **Step 1: Implement add-task dependencies**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskDependencies.kt`:
 
@@ -551,7 +551,7 @@ object AddTaskDependencies {
 }
 ```
 
-- [ ] **Step 2: Replace AddTaskScreen**
+- [x] **Step 2: Replace AddTaskScreen**
 
 Replace `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt` with a form that:
 
@@ -636,7 +636,7 @@ when (val result = AddTaskFormValidator.validate(title, selectedAssignee, deadli
 
 Guard against double-submit by returning early if `submitting` is true.
 
-- [ ] **Step 3: Run Android unit tests**
+- [x] **Step 3: Run Android unit tests**
 
 Run:
 
@@ -647,7 +647,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Run androidTest compile**
+- [x] **Step 4: Run androidTest compile**
 
 Run:
 
@@ -660,7 +660,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -680,7 +680,7 @@ Expected: commit succeeds.
 **Files:**
 - Create: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
 
-- [ ] **Step 1: Write native success and failure tests**
+- [x] **Step 1: Write native success and failure tests**
 
 Create `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`:
 
@@ -783,7 +783,7 @@ class AddTaskFakeBackendTest {
 
 If the failure assertion cannot match `"500"` because the Ktor message differs, use the exact visible message from the failure output and document it in the handoff.
 
-- [ ] **Step 2: Run instrumentation test to verify RED if UI is not complete**
+- [x] **Step 2: Run instrumentation test to verify RED if UI is not complete**
 
 If Task 4 is already complete, this may be GREEN immediately. Run:
 
@@ -799,7 +799,7 @@ cd client
 
 Expected: compile succeeds after Task 4.
 
-- [ ] **Step 3: Run managed-device test**
+- [x] **Step 3: Run managed-device test**
 
 Start fake backend in a separate terminal:
 
@@ -822,7 +822,7 @@ cd client
 
 Expected: all instrumentation tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Run:
 
@@ -842,7 +842,7 @@ Expected: commit succeeds.
 - Create: `docs/handoffs/2026-06-02-android-add-task-strict-creation.md`
 - Update: this plan file
 
-- [ ] **Step 1: Run full verification**
+- [x] **Step 1: Run full verification**
 
 Run:
 
@@ -871,11 +871,11 @@ cd client
 
 Expected: every command reports `BUILD SUCCESSFUL` or test success.
 
-- [ ] **Step 2: Stop fake backend**
+- [x] **Step 2: Stop fake backend**
 
 Stop the terminal session or kill the listener on `18433`.
 
-- [ ] **Step 3: Update emulator testing note**
+- [x] **Step 3: Update emulator testing note**
 
 Append:
 
@@ -895,7 +895,7 @@ Managed-device tests pass backend config through Gradle properties:
 - `FAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`
 ```
 
-- [ ] **Step 4: Write handoff**
+- [x] **Step 4: Write handoff**
 
 Create `docs/handoffs/2026-06-02-android-add-task-strict-creation.md` with:
 
@@ -945,7 +945,7 @@ Status: Complete when all checkboxes are `[x]`.
 Migrate deadline reschedule to the native date/time picker helper.
 ```
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 Run:
 
