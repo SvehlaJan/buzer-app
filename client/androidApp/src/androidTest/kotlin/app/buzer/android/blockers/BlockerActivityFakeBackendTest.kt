@@ -68,7 +68,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Reschedule task").assertIsDisplayed()
         composeRule.onNodeWithText("Save reschedule").performClick()
 
-        composeRule.onNodeWithText("New deadline is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Deadline is required").assertIsDisplayed()
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
     }
 
@@ -79,7 +79,7 @@ class BlockerActivityFakeBackendTest {
         val scenario = launchDeadlineBlocker("task-reschedule")
 
         composeRule.onNodeWithText("Reschedule").performClick()
-        composeRule.onNodeWithContentDescription("New deadline input").performTextInput("2026-06-02 18:30")
+        selectDefaultDeadline()
         composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
         composeRule.onNodeWithText("Save reschedule").performClick()
 
@@ -119,7 +119,7 @@ class BlockerActivityFakeBackendTest {
             val scenario = launchDeadlineBlocker("task-reschedule-fail")
 
             composeRule.onNodeWithText("Reschedule").performClick()
-            composeRule.onNodeWithContentDescription("New deadline input").performTextInput("2026-06-02 18:30")
+            selectDefaultDeadline()
             composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
             composeRule.onNodeWithText("Save reschedule").performClick()
 
@@ -168,6 +168,12 @@ class BlockerActivityFakeBackendTest {
                 "Recorded calls: $lastCalls\n" +
                 "Blocker error log: ${blockerErrorLog().takeIf { it.exists() }?.readText().orEmpty()}"
         )
+    }
+
+    private fun selectDefaultDeadline() {
+        composeRule.onNodeWithContentDescription("New deadline picker").performClick()
+        composeRule.onNodeWithText("OK").performClick()
+        composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun waitForActivityDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
