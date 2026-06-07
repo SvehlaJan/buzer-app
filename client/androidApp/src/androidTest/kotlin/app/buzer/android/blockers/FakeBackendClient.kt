@@ -16,6 +16,10 @@ class FakeBackendClient(
         request("POST", "/__fail-actions", """{"enabled":$enabled}""")
     }
 
+    fun setFailSnapshot(enabled: Boolean) {
+        request("POST", "/__fail-snapshot", """{"enabled":$enabled}""")
+    }
+
     fun calls(): String = request("GET", "/__calls")
 
     fun assertRecorded(path: String) {

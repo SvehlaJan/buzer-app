@@ -22,6 +22,7 @@ class HomeScreenStateTest {
         val state = buildHomeScreenState(snapshot)
 
         assertEquals("Today", state.headline)
+        assertEquals(null, state.statusMessage)
         assertEquals(1, state.invalidCount)
         assertEquals(2, state.activeBlockerCount)
         assertEquals(1, state.startingTodayCount)

@@ -23,6 +23,7 @@ import app.buzer.shared.state.SnapshotViewState
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
+    private var homeStatusMessage by mutableStateOf<String?>(null)
     private val refreshRunner: EnforcementRefreshRunner by lazy {
         EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure, AppLog::debug)
     }
@@ -50,7 +51,8 @@ class MainActivity : ComponentActivity() {
             BuzerApp(
                 openAddTask = openAddTask,
                 bootRescheduleRequired = bootRescheduleRequired,
-                snapshot = snapshotViewState
+                snapshot = snapshotViewState,
+                homeStatusMessage = homeStatusMessage
             )
         }
     }
@@ -63,12 +65,14 @@ class MainActivity : ComponentActivity() {
     private fun refreshEnforcement() {
         val coordinator = coordinator ?: run {
             AppLog.debug("main refresh skipped reason=no_coordinator")
+            homeStatusMessage = "Refresh failed"
             return
         }
         AppLog.debug("main refresh requested")
         refreshRunner.refresh {
             val snapshot = coordinator.refreshAndReconcile()
             snapshotViewState = SnapshotReducer.reduce(snapshot)
+            homeStatusMessage = null
             AppLog.debug(
                 "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
                     "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
@@ -78,6 +82,7 @@ class MainActivity : ComponentActivity() {
 
     private fun reportRefreshFailure(error: Throwable) {
         AppLog.error("main refresh failed", error)
+        homeStatusMessage = "Refresh failed"
         BlockerErrorReporter(applicationContext).report(
             action = BlockerAction.REFRESH_SNAPSHOT,
             taskId = null,

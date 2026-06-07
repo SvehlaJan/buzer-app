@@ -188,6 +188,20 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
+    fun homeScreenShowsRefreshFailureBanner() {
+        resetTestState()
+        fakeBackend.setFailSnapshot(true)
+        try {
+            ActivityScenario.launch(MainActivity::class.java)
+
+            waitForText("Refresh failed")
+            composeRule.onNodeWithText("Refresh failed").assertIsDisplayed()
+        } finally {
+            fakeBackend.setFailSnapshot(false)
+        }
+    }
+
+    @Test
     fun morningReview_repairShowsValidationErrorForMissingDeadline() {
         resetTestState()
 
@@ -257,6 +271,7 @@ class BlockerActivityFakeBackendTest {
 
     private fun resetTestState() {
         fakeBackend.setFailActions(false)
+        fakeBackend.setFailSnapshot(false)
         fakeBackend.resetCalls()
         blockerErrorLog().delete()
     }

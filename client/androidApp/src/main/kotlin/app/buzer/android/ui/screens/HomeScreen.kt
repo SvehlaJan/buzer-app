@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 
 data class HomeScreenState(
     val headline: String,
+    val statusMessage: String?,
     val invalidCount: Int,
     val activeBlockerCount: Int,
     val startingTodayCount: Int,
@@ -27,6 +28,7 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
     if (snapshot == null) {
         HomeScreenState(
             headline = "Today",
+            statusMessage = null,
             invalidCount = 0,
             activeBlockerCount = 0,
             startingTodayCount = 0,
@@ -35,6 +37,7 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
     } else {
         HomeScreenState(
             headline = "Today",
+            statusMessage = null,
             invalidCount = snapshot.invalidTasks.size,
             activeBlockerCount = snapshot.activeBlockers.size,
             startingTodayCount = snapshot.startingToday.size,
@@ -57,6 +60,9 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(state.headline, style = MaterialTheme.typography.headlineMedium)
+        state.statusMessage?.let { message ->
+            Text(message)
+        }
         Text("Invalid: ${state.invalidCount}")
         Text("Active blockers: ${state.activeBlockerCount}")
         Text("Starting today: ${state.startingTodayCount}")

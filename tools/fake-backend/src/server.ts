@@ -18,6 +18,7 @@ export type FakeBackendOptions = {
 export async function buildServer(options: FakeBackendOptions = {}): Promise<FastifyInstance> {
   const token = options.token ?? "test-token";
   let failActions = options.failActions ?? false;
+  let failSnapshot = false;
   const app = Fastify({ logger: false });
   const calls: RecordedCall[] = [];
 
@@ -40,7 +41,12 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     calls.push({ method, path, body, at: new Date().toISOString() });
   }
 
-  app.get("/tasks/snapshot", async () => fixedSnapshot());
+  app.get("/tasks/snapshot", async (_request, reply) => {
+    if (failSnapshot) {
+      return reply.code(500).send({ error: "forced_snapshot_failure" });
+    }
+    return fixedSnapshot();
+  });
 
   app.get("/__calls", async () => ({ calls }));
 
@@ -52,6 +58,11 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   app.post<{ Body: { enabled?: boolean } }>("/__fail-actions", async (request) => {
     failActions = request.body?.enabled === true;
     return { failActions };
+  });
+
+  app.post<{ Body: { enabled?: boolean } }>("/__fail-snapshot", async (request) => {
+    failSnapshot = request.body?.enabled === true;
+    return { failSnapshot };
   });
 
   app.post("/tasks", async (request, reply) => {

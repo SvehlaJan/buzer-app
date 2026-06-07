@@ -182,3 +182,22 @@ test("test helper can toggle forced action failures at runtime", async (t) => {
   assert.equal(calls.json().calls.length, 1);
   assert.equal(calls.json().calls[0].path, "/tasks/task-start/start");
 });
+
+test("test helper can toggle forced snapshot failures at runtime", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const toggle = await app.inject({
+    method: "POST",
+    url: "/__fail-snapshot",
+    payload: { enabled: true }
+  });
+  assert.equal(toggle.statusCode, 200);
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/tasks/snapshot",
+    headers: { authorization: "Bearer test-token" }
+  });
+  assert.equal(response.statusCode, 500);
+});

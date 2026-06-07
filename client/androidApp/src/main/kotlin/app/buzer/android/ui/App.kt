@@ -33,7 +33,8 @@ private enum class AppSection {
 fun BuzerApp(
     openAddTask: Boolean = false,
     bootRescheduleRequired: Boolean = false,
-    snapshot: SnapshotViewState? = null
+    snapshot: SnapshotViewState? = null,
+    homeStatusMessage: String? = null
 ) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -64,6 +65,7 @@ fun BuzerApp(
                             section = AppSection.Deadline
                         },
                         state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
+                            .copy(statusMessage = homeStatusMessage)
                     )
                 } else when (section) {
                     AppSection.Home -> HomeScreen(
@@ -83,6 +85,7 @@ fun BuzerApp(
                             section = AppSection.Deadline
                         },
                         state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
+                            .copy(statusMessage = homeStatusMessage)
                     )
 
                     AppSection.Add -> AddTaskScreen(onBack = { section = AppSection.Home })
