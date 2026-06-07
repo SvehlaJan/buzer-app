@@ -185,6 +185,10 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Active blockers: 0").assertIsDisplayed()
         composeRule.onNodeWithText("Starting today: 1").assertIsDisplayed()
         composeRule.onNodeWithText("Health warnings: 0").assertIsDisplayed()
+        composeRule.onNodeWithText("Add task").assertIsDisplayed()
+        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Start blocker").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Deadline blocker").assertCountEquals(0)
     }
 
     @Test

@@ -37,7 +37,7 @@
 **Files:**
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Add absent-button assertions to the home counts test**
+- [x] **Step 1: Add absent-button assertions to the home counts test**
 
 In `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`, update `homeScreenShowsLatestSnapshotCounts()` to include visible allowed actions and absent obsolete actions:
 
@@ -59,7 +59,7 @@ In `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerA
     }
 ```
 
-- [ ] **Step 2: Run instrumentation compile to verify the test compiles before implementation**
+- [x] **Step 2: Run instrumentation compile to verify the test compiles before implementation**
 
 Run:
 
@@ -70,7 +70,7 @@ cd client
 
 Expected: PASS. This only verifies the new assertions compile. The full managed-device run should still fail until the buttons are removed.
 
-- [ ] **Step 3: Run focused managed-device suite to verify RED**
+- [x] **Step 3: Run focused managed-device suite to verify RED**
 
 Start the fake backend in a separate terminal/session:
 
@@ -100,7 +100,7 @@ Expected: FAIL in `homeScreenShowsLatestSnapshotCounts` because `Start blocker` 
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
 - Modify: `docs/superpowers/plans/2026-06-07-home-static-blocker-route-cleanup.md`
 
-- [ ] **Step 1: Remove obsolete callbacks and buttons from `HomeScreen`**
+- [x] **Step 1: Remove obsolete callbacks and buttons from `HomeScreen`**
 
 Replace `HomeScreen` in `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt` with this signature and action area:
 
@@ -143,7 +143,7 @@ Remove the now-unused `Row` import from the same file:
 import androidx.compose.foundation.layout.Row
 ```
 
-- [ ] **Step 2: Remove dead static sections from `BuzerApp`**
+- [x] **Step 2: Remove dead static sections from `BuzerApp`**
 
 In `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`, remove these imports:
 
@@ -206,7 +206,7 @@ Keep:
 AppSection.Add -> AddTaskScreen(onBack = { section = AppSection.Home })
 ```
 
-- [ ] **Step 3: Run code search to verify static routes are gone**
+- [x] **Step 3: Run code search to verify static routes are gone**
 
 Run:
 
@@ -224,7 +224,7 @@ rg -n "Start blocker|Deadline blocker" client/androidApp/src/main/kotlin/app/buz
 
 Expected: matches only real blocker screen/activity assertions, not `HomeScreen.kt` or `App.kt`.
 
-- [ ] **Step 4: Run local client verification**
+- [x] **Step 4: Run local client verification**
 
 Run:
 
@@ -235,7 +235,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 5: Run managed-device fake-backend verification**
+- [x] **Step 5: Run managed-device fake-backend verification**
 
 With the fake backend still running on `18433`, run:
 
@@ -251,13 +251,13 @@ cd client
 
 Expected: PASS. The suite should include `homeScreenShowsLatestSnapshotCounts`, proving the obsolete buttons are absent and the remaining home actions still render.
 
-- [ ] **Step 6: Stop fake backend**
+- [x] **Step 6: Stop fake backend**
 
 Stop the `PORT=18433 npm run dev` process that was started for this plan. If the process is attached to a tool session, send `Ctrl-C` to that session.
 
 Expected: no listener remains on port `18433`.
 
-- [ ] **Step 7: Write handoff**
+- [x] **Step 7: Write handoff**
 
 Create `docs/handoffs/2026-06-07-home-static-blocker-route-cleanup.md`.
 
@@ -307,7 +307,7 @@ Status: Complete. All checklist items in the implementation plan are marked `[x]
 Run a real device/VPS smoke test across refresh, add strict task, morning review, start, postpone, deadline done, extend, and reschedule.
 ```
 
-- [ ] **Step 8: Commit cleanup**
+- [x] **Step 8: Commit cleanup**
 
 Run:
 

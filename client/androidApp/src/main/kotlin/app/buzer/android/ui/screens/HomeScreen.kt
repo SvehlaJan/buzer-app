@@ -3,7 +3,6 @@ package app.buzer.android.ui.screens
 import app.buzer.shared.state.SnapshotViewState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -49,8 +48,6 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
 fun HomeScreen(
     onAddTask: () -> Unit,
     onMorningReview: () -> Unit,
-    onStartBlocker: () -> Unit,
-    onDeadlineBlocker: () -> Unit,
     state: HomeScreenState = buildHomeScreenState(null)
 ) {
     Column(
@@ -72,17 +69,8 @@ fun HomeScreen(
             Text("Add task")
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onMorningReview, modifier = Modifier.weight(1f)) {
-                Text("Morning review")
-            }
-            OutlinedButton(onClick = onStartBlocker, modifier = Modifier.weight(1f)) {
-                Text("Start blocker")
-            }
-        }
-
-        OutlinedButton(onClick = onDeadlineBlocker, modifier = Modifier.fillMaxWidth()) {
-            Text("Deadline blocker")
+        OutlinedButton(onClick = onMorningReview, modifier = Modifier.fillMaxWidth()) {
+            Text("Morning review")
         }
     }
 }

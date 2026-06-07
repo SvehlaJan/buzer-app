@@ -14,19 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.ui.screens.AddTaskScreen
-import app.buzer.android.ui.screens.DeadlineBlockerScreen
 import app.buzer.android.ui.screens.HomeScreen
-import app.buzer.android.ui.screens.MorningReviewScreen
-import app.buzer.android.ui.screens.StartBlockerScreen
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotViewState
 
 private enum class AppSection {
     Home,
-    Add,
-    Review,
-    Start,
-    Deadline
+    Add
 }
 
 @Composable
@@ -56,14 +50,6 @@ fun BuzerApp(
                         onMorningReview = {
                             openMorningReview()
                         },
-                        onStartBlocker = {
-                            AppLog.debug("ui navigate section=Start source=home mode=static_compose_route")
-                            section = AppSection.Start
-                        },
-                        onDeadlineBlocker = {
-                            AppLog.debug("ui navigate section=Deadline source=home mode=static_compose_route")
-                            section = AppSection.Deadline
-                        },
                         state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
                             .copy(statusMessage = homeStatusMessage)
                     )
@@ -76,22 +62,11 @@ fun BuzerApp(
                         onMorningReview = {
                             openMorningReview()
                         },
-                        onStartBlocker = {
-                            AppLog.debug("ui navigate section=Start source=home mode=static_compose_route")
-                            section = AppSection.Start
-                        },
-                        onDeadlineBlocker = {
-                            AppLog.debug("ui navigate section=Deadline source=home mode=static_compose_route")
-                            section = AppSection.Deadline
-                        },
                         state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
                             .copy(statusMessage = homeStatusMessage)
                     )
 
                     AppSection.Add -> AddTaskScreen(onBack = { section = AppSection.Home })
-                    AppSection.Review -> MorningReviewScreen(onBack = { section = AppSection.Home })
-                    AppSection.Start -> StartBlockerScreen(onBack = { section = AppSection.Home })
-                    AppSection.Deadline -> DeadlineBlockerScreen(onBack = { section = AppSection.Home })
                 }
             }
         }
