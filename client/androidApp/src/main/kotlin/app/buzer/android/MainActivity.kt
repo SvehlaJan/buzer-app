@@ -3,6 +3,9 @@ package app.buzer.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
@@ -13,11 +16,15 @@ import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.enforcement.RescheduleAfterBoot
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.widget.AddTaskWidgetProvider
+import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.state.SnapshotReducer
+import app.buzer.shared.state.SnapshotViewState
 
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
+    private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
     private val refreshRunner: EnforcementRefreshRunner by lazy {
-        EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure)
+        EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure, AppLog::debug)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,6 +32,7 @@ class MainActivity : ComponentActivity() {
         NotificationChannels.ensureCreated(this)
         coordinator = runCatching { EnforcementDependencies.coordinator(applicationContext) }
             .onFailure {
+                AppLog.error("main coordinator create failed", it)
                 BlockerErrorReporter(applicationContext).report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = null,
@@ -41,7 +49,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             BuzerApp(
                 openAddTask = openAddTask,
-                bootRescheduleRequired = bootRescheduleRequired
+                bootRescheduleRequired = bootRescheduleRequired,
+                snapshot = snapshotViewState
             )
         }
     }
@@ -52,11 +61,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshEnforcement() {
-        val coordinator = coordinator ?: return
-        refreshRunner.refresh { coordinator.refreshAndReconcile() }
+        val coordinator = coordinator ?: run {
+            AppLog.debug("main refresh skipped reason=no_coordinator")
+            return
+        }
+        AppLog.debug("main refresh requested")
+        refreshRunner.refresh {
+            val snapshot = coordinator.refreshAndReconcile()
+            snapshotViewState = SnapshotReducer.reduce(snapshot)
+            AppLog.debug(
+                "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
+                    "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
+            )
+        }
     }
 
     private fun reportRefreshFailure(error: Throwable) {
+        AppLog.error("main refresh failed", error)
         BlockerErrorReporter(applicationContext).report(
             action = BlockerAction.REFRESH_SNAPSHOT,
             taskId = null,

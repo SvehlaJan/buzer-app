@@ -15,6 +15,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.buzer.android.MainActivity
 import app.buzer.android.enforcement.AlarmIntentFactory
 import java.io.File
 import org.junit.Assert.fail
@@ -159,6 +160,31 @@ class BlockerActivityFakeBackendTest {
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
         composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeMorningReviewButtonOpensLiveMorningReview() {
+        resetTestState()
+
+        ActivityScenario.launch(MainActivity::class.java)
+
+        composeRule.onNodeWithText("Today").assertIsDisplayed()
+        composeRule.onNodeWithText("Morning review").performClick()
+
+        waitForText("Invalid assigned fixture")
+        composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeScreenShowsLatestSnapshotCounts() {
+        resetTestState()
+
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForText("Invalid: 1")
+        composeRule.onNodeWithText("Active blockers: 0").assertIsDisplayed()
+        composeRule.onNodeWithText("Starting today: 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Health warnings: 0").assertIsDisplayed()
     }
 
     @Test

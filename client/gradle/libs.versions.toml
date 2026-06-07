@@ -8,6 +8,7 @@ androidxTestRules = "1.7.0"
 composeMultiplatform = "1.7.3"
 composeUiTest = "1.7.6"
 junit = "4.13.2"
+kermit = "2.1.0"
 kotlin = "2.3.0"
 lifecycleRuntimeKtx = "2.8.7"
 kotlinxDatetime = "0.7.1"
@@ -24,6 +25,7 @@ androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidxT
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4", version.ref = "composeUiTest" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "composeUiTest" }
 junit = { module = "junit:junit", version.ref = "junit" }
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }

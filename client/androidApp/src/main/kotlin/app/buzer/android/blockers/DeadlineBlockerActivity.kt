@@ -10,6 +10,7 @@ import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
+import app.buzer.shared.diagnostics.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -24,6 +25,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
         if (taskId == null) {
+            AppLog.debug("deadline_blocker missing_task_id")
             errorReporter.report(
                 action = BlockerAction.COMPLETE_TASK,
                 taskId = null,
@@ -41,6 +43,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
         return try {
             EnforcementDependencies.coordinator(applicationContext)
         } catch (error: Exception) {
+            AppLog.error("deadline_blocker coordinator create failed", error)
             errorReporter.report(
                 action = BlockerAction.REFRESH_SNAPSHOT,
                 taskId = null,
@@ -52,12 +55,14 @@ class DeadlineBlockerActivity : ComponentActivity() {
     }
 
     private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
+        AppLog.debug("deadline_blocker prepare taskId=$taskId")
         lifecycleScope.launch {
             try {
                 coordinator.loadLatestSnapshot()
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                AppLog.error("deadline_blocker local snapshot load failed taskId=$taskId", error)
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = taskId,
@@ -70,10 +75,12 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     coordinator.refreshAndReconcile()
                 }
                 if (refreshedSnapshot != null && BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                    AppLog.debug("deadline_blocker hidden reason=task_resolved taskId=$taskId")
                     finish()
                     return@launch
                 }
                 if (refreshedSnapshot == null) {
+                    AppLog.warn("deadline_blocker refresh_timeout taskId=$taskId")
                     errorReporter.report(
                         action = BlockerAction.REFRESH_SNAPSHOT,
                         taskId = taskId,
@@ -83,6 +90,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                AppLog.error("deadline_blocker refresh failed taskId=$taskId", error)
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = taskId,
@@ -94,15 +102,21 @@ class DeadlineBlockerActivity : ComponentActivity() {
     }
 
     private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
+        AppLog.debug("deadline_blocker show taskId=$taskId")
         setContent {
             DeadlineBlockerScreen(
                 onDone = {
+                    AppLog.info("deadline_blocker done_clicked taskId=$taskId")
                     runActionOnce { coordinator.completeTask(taskId) }
                 },
                 onExtend = {
+                    AppLog.info("deadline_blocker extend_clicked taskId=$taskId")
                     runActionOnce { coordinator.extendTask(taskId) }
                 },
                 onReschedule = { request ->
+                    AppLog.info(
+                        "deadline_blocker reschedule_clicked taskId=$taskId duration=${request.durationMinutes}"
+                    )
                     runActionOnce { coordinator.rescheduleTask(taskId, request) }
                 },
                 onBack = { finish() },
@@ -112,7 +126,10 @@ class DeadlineBlockerActivity : ComponentActivity() {
     }
 
     private fun runActionOnce(action: suspend () -> Unit) {
-        if (actionInFlight) return
+        if (actionInFlight) {
+            AppLog.debug("deadline_blocker action ignored reason=in_flight")
+            return
+        }
         actionInFlight = true
         lifecycleScope.launch {
             try {

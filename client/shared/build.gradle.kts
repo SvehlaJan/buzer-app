@@ -11,6 +11,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(libs.kermit)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.content.negotiation)

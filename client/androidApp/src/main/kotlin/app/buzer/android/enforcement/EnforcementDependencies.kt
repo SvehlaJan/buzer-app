@@ -3,6 +3,7 @@ package app.buzer.android.enforcement
 import android.content.Context
 import app.buzer.android.BuildConfig
 import app.buzer.android.sync.SnapshotStore
+import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.api.BuzerApiClient
 
 object EnforcementDependencies {
@@ -27,7 +28,8 @@ object EnforcementDependencies {
             api = BuzerEnforcementApi(client),
             snapshotStore = SnapshotStore(context),
             alarmScheduler = AndroidAlarmScheduler(context),
-            errorReporter = BlockerErrorReporter(context)
+            errorReporter = BlockerErrorReporter(context),
+            logger = AppLog::debug
         )
     }
 }
