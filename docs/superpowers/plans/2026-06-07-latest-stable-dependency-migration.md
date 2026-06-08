@@ -212,7 +212,7 @@ Append:
 - Evidence: record the `Gradle 9.5.1` line.
 ```
 
-- [ ] **Step 5: Commit wrapper upgrade**
+- [x] **Step 5: Commit wrapper upgrade**
 
 Run:
 
@@ -229,8 +229,9 @@ Expected: commit created.
 - Modify: `client/gradle/libs.versions.toml`
 - Modify: `client/build.gradle.kts`
 - Modify: `client/shared/build.gradle.kts`
+- Modify: `client/androidApp/build.gradle.kts`
 
-- [ ] **Step 1: Update AGP/Kotlin versions and add Android-KMP plugin alias**
+- [x] **Step 1: Update AGP/Kotlin versions and add Android-KMP plugin alias**
 
 In `client/gradle/libs.versions.toml`, update:
 
@@ -245,9 +246,15 @@ Then add this plugin alias:
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 ```
 
+Add this app unit-test adapter alias:
+
+```toml
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit" }
+```
+
 Do not try to test the Android-KMP plugin on AGP `8.7.0`; the official prerequisite is AGP `8.10.0` or newer.
 
-- [ ] **Step 2: Expose the plugin at root**
+- [x] **Step 2: Expose the plugin at root and remove app Kotlin Android plugin**
 
 In `client/build.gradle.kts`, add:
 
@@ -257,7 +264,27 @@ alias(libs.plugins.android.kotlin.multiplatform.library) apply false
 
 Keep the existing Android application/library aliases for now.
 
-- [ ] **Step 3: Replace shared module build script**
+In `client/androidApp/build.gradle.kts`, remove the explicit Kotlin Android plugin because AGP 9 has built-in Kotlin support and fails when `org.jetbrains.kotlin.android` is applied:
+
+```kotlin
+alias(libs.plugins.kotlin.android)
+```
+
+In the same file, change the app unit-test Kotlin dependency from:
+
+```kotlin
+testImplementation(libs.kotlin.test)
+```
+
+to:
+
+```kotlin
+testImplementation(libs.kotlin.test.junit)
+```
+
+The app unit tests import `kotlin.test.Test`, which requires the JUnit-backed adapter under AGP 9 built-in Kotlin.
+
+- [x] **Step 3: Replace shared module build script**
 
 Replace `client/shared/build.gradle.kts` with:
 
@@ -282,7 +309,7 @@ kotlin {
             isIncludeAndroidResources = true
         }
 
-        compilerOptions.configure {
+        compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
     }
@@ -308,7 +335,7 @@ kotlin {
 }
 ```
 
-- [ ] **Step 4: Verify Gradle can list shared tasks**
+- [x] **Step 4: Verify Gradle can list shared tasks**
 
 Run:
 
@@ -317,22 +344,20 @@ cd client
 ./gradlew :shared:tasks --all
 ```
 
-Expected: build configures successfully. Confirm the shared test task name. If `:shared:testDebugUnitTest` no longer exists, find the new host-test task and update all later plan commands plus the handoff.
+Expected: build configures successfully. The Android-KMP shared host-test task is `:shared:testAndroidHostTest`; use that task for all post-migration shared test commands.
 
-- [ ] **Step 5: Run shared tests**
+- [x] **Step 5: Run shared tests**
 
-Run one of these, depending on Step 4:
+Run:
 
 ```bash
 cd client
-./gradlew :shared:testDebugUnitTest
+./gradlew :shared:testAndroidHostTest
 ```
-
-or the new host-test task found in Step 4.
 
 Expected: tests pass.
 
-- [ ] **Step 6: Run app test/build smoke**
+- [x] **Step 6: Run app test/build smoke**
 
 Run:
 
@@ -343,12 +368,12 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 7: Commit AGP/Kotlin/KMP build migration**
+- [x] **Step 7: Commit AGP/Kotlin/KMP build migration**
 
 Run:
 
 ```bash
-git add client/gradle/libs.versions.toml client/build.gradle.kts client/shared/build.gradle.kts docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
+git add client/gradle/libs.versions.toml client/build.gradle.kts client/shared/build.gradle.kts client/androidApp/build.gradle.kts docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
 git commit -m "build: migrate shared module to AGP 9 Android KMP"
 ```
 
@@ -423,10 +448,10 @@ Run:
 
 ```bash
 cd client
-./gradlew :shared:testDebugUnitTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
+./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
 ```
 
-Expected: `BUILD SUCCESSFUL`. If the shared task name changed in Task 3, use the updated shared host-test task.
+Expected: `BUILD SUCCESSFUL`.
 
 - [ ] **Step 5: Commit client dependency upgrades**
 
@@ -750,10 +775,10 @@ Run:
 
 ```bash
 cd client
-./gradlew :shared:testDebugUnitTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
+./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest
 ```
 
-Expected: `BUILD SUCCESSFUL`. If the shared host-test task name changed during Task 3, use the updated task name and record the reason in the handoff.
+Expected: `BUILD SUCCESSFUL`.
 
 - [ ] **Step 4: Run managed-device instrumentation**
 

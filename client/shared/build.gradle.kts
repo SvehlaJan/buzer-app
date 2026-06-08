@@ -1,13 +1,27 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.library)
+    alias(libs.plugins.android.kotlin.multiplatform.library)
     alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
     jvmToolchain(17)
 
-    androidTarget()
+    android {
+        namespace = "app.buzer.shared"
+        compileSdk = 35
+        minSdk = 26
+
+        withHostTest {
+            isIncludeAndroidResources = true
+        }
+
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
@@ -26,19 +40,5 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.ktor.client.android)
         }
-    }
-}
-
-android {
-    namespace = "app.buzer.shared"
-    compileSdk = 35
-
-    defaultConfig {
-        minSdk = 26
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }
