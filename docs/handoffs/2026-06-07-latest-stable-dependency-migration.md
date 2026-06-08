@@ -44,6 +44,10 @@ Attempted plan steps:
 - Task 7 Step 3: completed
 - Task 7 Step 4: completed, skipped because Docker is unavailable
 - Task 7 Step 5: completed
+- Task 8 Step 1: completed
+- Task 8 Step 2: completed
+- Task 8 Step 3: completed
+- Task 8 Step 4: completed
 
 ## Files Changed
 
@@ -59,6 +63,9 @@ Attempted plan steps:
 - `client/androidApp/build.gradle.kts`
 - `backend/package.json`
 - `backend/package-lock.json`
+- `tools/fake-backend/package.json`
+- `tools/fake-backend/package-lock.json`
+- `tools/fake-backend/tsconfig.json`
 
 ## Verification
 
@@ -238,6 +245,38 @@ Attempted plan steps:
 - Result: SKIPPED
 - Evidence: failed with `zsh:1: command not found: docker`, so the Docker image build was not available in this environment.
 
+- Command: `cd tools/fake-backend && npm outdated --json`
+- Result: PASS
+- Evidence: npm queried the registry and reported fake-backend updates for `@fastify/cors` `11.2.0`, `typescript` `6.0.3`, and Node 22 type line `@types/node` `22.19.20`; absolute latest `@types/node` major 25 was intentionally not selected because the runtime is Node 22.
+
+- Command: `cd tools/fake-backend && npm install`
+- Result: PASS
+- Evidence: removed 2 packages, changed 3 packages, audited 58 packages, and found 0 vulnerabilities. npm emitted `EBADENGINE` because the local workstation runs Node `v25.9.0` while the project now declares `node: 22.x`.
+
+- Command: `cd tools/fake-backend && npm test`
+- Result: PASS
+- Evidence: Node test runner reported `tests 11`, `pass 11`, `fail 0`.
+
+- Command: `cd tools/fake-backend && npm run build`
+- Result: FAIL
+- Evidence: TypeScript 6 failed with `TS5011`: common source directory was `./src`, so `rootDir` must be explicitly set to adjust the `outDir` layout.
+
+- Command: `npx ctx7@latest library "TypeScript" "TypeScript 6 TS5011 common source directory rootDir setting must be explicitly set migration"`
+- Result: PASS
+- Evidence: resolved official TypeScript docs as `/microsoft/typescript`.
+
+- Command: `npx ctx7@latest docs "/microsoft/typescript/v6.0.2" "TS5011 common source directory rootDir setting must be explicitly set outDir migration TypeScript 6"`
+- Result: PASS
+- Evidence: docs examples show TS5011 when an `outDir` project lacks explicit `rootDir` and TypeScript infers a common source directory.
+
+- Command: `cd tools/fake-backend && npm test`
+- Result: PASS
+- Evidence: after adding `rootDir = "src"`, Node test runner still reported `tests 11`, `pass 11`, `fail 0`.
+
+- Command: `cd tools/fake-backend && npm run build`
+- Result: PASS
+- Evidence: after adding `rootDir = "src"`, `tsc -p tsconfig.json` exited 0.
+
 ## Manual Verification
 
 - None.
@@ -253,6 +292,8 @@ Attempted plan steps:
 - Task 6 connected Android 16 harness verification was skipped because no ADB device or emulator was visible. No fake backend was started for Task 6, and no connected instrumentation command was run.
 - Task 7 Docker build verification was skipped because Docker is not installed.
 - Task 7 npm install was run from local Node `v25.9.0`, which produced an expected `EBADENGINE` warning after adding the intended Node 22 engine.
+- Task 8 npm install was run from local Node `v25.9.0`, which produced the same expected `EBADENGINE` warning after adding the intended Node 22 engine.
+- Task 8 had one TypeScript 6 migration failure fixed before commit: fake-backend `tsconfig.json` now sets `rootDir` explicitly to `src`.
 
 ## Assumptions
 
@@ -261,4 +302,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Proceed to Task 8: upgrade fake-backend Node dependencies. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
+Proceed to Task 9: final full verification. Re-run Task 6 later when a physical Android 16 device is visible to ADB.

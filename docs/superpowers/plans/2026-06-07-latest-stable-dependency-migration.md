@@ -686,8 +686,9 @@ Expected: commit created.
 **Files:**
 - Modify: `tools/fake-backend/package.json`
 - Modify: `tools/fake-backend/package-lock.json`
+- Modify: `tools/fake-backend/tsconfig.json`
 
-- [ ] **Step 1: Replace fake-backend dependency ranges**
+- [x] **Step 1: Replace fake-backend dependency ranges**
 
 Update `tools/fake-backend/package.json` to use exact versions:
 
@@ -708,7 +709,7 @@ Update `tools/fake-backend/package.json` to use exact versions:
 
 Keep existing scripts unchanged.
 
-- [ ] **Step 2: Refresh fake-backend lockfile**
+- [x] **Step 2: Refresh fake-backend lockfile**
 
 Run:
 
@@ -719,7 +720,7 @@ npm install
 
 Expected: `package-lock.json` updates and install succeeds.
 
-- [ ] **Step 3: Verify fake backend**
+- [x] **Step 3: Verify fake backend**
 
 Run:
 
@@ -731,12 +732,14 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 4: Commit fake-backend dependency upgrade**
+If TypeScript 6 reports `TS5011` for `outDir` and an inferred common source directory, add an explicit `rootDir` matching the existing source tree.
+
+- [x] **Step 4: Commit fake-backend dependency upgrade**
 
 Run:
 
 ```bash
-git add tools/fake-backend/package.json tools/fake-backend/package-lock.json docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
+git add tools/fake-backend/package.json tools/fake-backend/package-lock.json tools/fake-backend/tsconfig.json docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
 git commit -m "build: upgrade fake backend dependencies"
 ```
 
