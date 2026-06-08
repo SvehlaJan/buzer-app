@@ -750,7 +750,7 @@ Expected: commit created.
 **Files:**
 - Modify: `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 
-- [ ] **Step 1: Run full backend verification**
+- [x] **Step 1: Run full backend verification**
 
 Run:
 
@@ -764,7 +764,7 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 2: Run full fake-backend verification**
+- [x] **Step 2: Run full fake-backend verification**
 
 Run:
 
@@ -777,7 +777,7 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 3: Run full client JVM/build verification**
+- [x] **Step 3: Run full client JVM/build verification**
 
 Run:
 
@@ -788,7 +788,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Run managed-device instrumentation**
+- [x] **Step 4: Run managed-device instrumentation**
 
 Start fake backend:
 
@@ -811,7 +811,7 @@ cd client
 
 Expected: all instrumentation tests pass.
 
-- [ ] **Step 5: Stop fake backend**
+- [x] **Step 5: Stop fake backend**
 
 Run:
 
@@ -821,7 +821,7 @@ lsof -iTCP:18433 -sTCP:LISTEN -n -P
 
 Expected after stopping server: no output.
 
-- [ ] **Step 6: Final dependency audit**
+- [x] **Step 6: Final dependency audit**
 
 Run:
 
@@ -841,7 +841,7 @@ npm outdated --json
 
 Expected: either `{}` or only intentionally excluded packages.
 
-- [ ] **Step 7: Final git status**
+- [x] **Step 7: Final git status**
 
 Run:
 
@@ -851,7 +851,7 @@ git status --short
 
 Expected: only intentional tracked changes or a clean tree after final commit.
 
-- [ ] **Step 8: Commit final verification handoff**
+- [x] **Step 8: Commit final verification handoff**
 
 Run:
 

@@ -48,6 +48,14 @@ Attempted plan steps:
 - Task 8 Step 2: completed
 - Task 8 Step 3: completed
 - Task 8 Step 4: completed
+- Task 9 Step 1: completed
+- Task 9 Step 2: completed
+- Task 9 Step 3: completed
+- Task 9 Step 4: completed
+- Task 9 Step 5: completed
+- Task 9 Step 6: completed
+- Task 9 Step 7: completed
+- Task 9 Step 8: completed
 
 ## Files Changed
 
@@ -277,6 +285,62 @@ Attempted plan steps:
 - Result: PASS
 - Evidence: after adding `rootDir = "src"`, `tsc -p tsconfig.json` exited 0.
 
+- Command: `cd backend && npm ci`
+- Result: PASS
+- Evidence: added 342 packages, audited 343 packages, and found 0 vulnerabilities. npm emitted expected `EBADENGINE` for local Node `v25.9.0` versus project `node: 22.x`, plus existing transitive deprecation warnings for `prebuild-install`, `glob`, and `fluent-ffmpeg`.
+
+- Command: `cd backend && npm run typecheck`
+- Result: PASS
+- Evidence: final verification `tsc -p tsconfig.json --noEmit` exited 0.
+
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: final verification Vitest `4.1.8` reported `13 passed (13)` test files and `35 passed (35)` tests.
+
+- Command: `cd backend && npm run build`
+- Result: PASS
+- Evidence: final verification `tsc -p tsconfig.build.json` exited 0.
+
+- Command: `cd tools/fake-backend && npm ci`
+- Result: PASS
+- Evidence: added 57 packages, audited 58 packages, and found 0 vulnerabilities. npm emitted expected `EBADENGINE` for local Node `v25.9.0` versus project `node: 22.x`.
+
+- Command: `cd tools/fake-backend && npm test`
+- Result: PASS
+- Evidence: final verification Node test runner reported `tests 11`, `pass 11`, `fail 0`.
+
+- Command: `cd tools/fake-backend && npm run build`
+- Result: PASS
+- Evidence: final verification `tsc -p tsconfig.json` exited 0.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest`
+- Result: PASS
+- Evidence: final verification Gradle reported `BUILD SUCCESSFUL in 1s`; 101 actionable tasks, 14 executed and 87 up-to-date.
+
+- Command: `cd tools/fake-backend && PORT=18433 npm run dev`
+- Result: PASS
+- Evidence: upgraded fake backend printed `fake backend listening on 18433`.
+
+- Command: `cd client && ./gradlew pixel8Api34DebugAndroidTest --rerun-tasks -PBUZER_BACKEND_BASE_URL=http://10.0.2.2:18433 -PBUZER_BACKEND_TOKEN=test-token -PBUZER_ASSIGNEE_ME_ID=user-me -PBUZER_ASSIGNEE_WIFE_ID=user-wife -PFAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`
+- Result: PASS
+- Evidence: final managed-device run finished 17 tests on `pixel8Api34` with 0 skipped and 0 failed; Gradle reported `BUILD SUCCESSFUL in 1m 35s`. Report path: `client/androidApp/build/reports/androidTests/managedDevice/debug/allDevices/index.html`.
+
+- Command: `lsof -iTCP:18433 -sTCP:LISTEN -n -P`
+- Result: PASS
+- Evidence: no output after stopping the upgraded fake backend with `Ctrl-C`, indicating port `18433` was closed.
+
+- Command: `cd backend && npm outdated --json`
+- Result: PASS
+- Evidence: JSON contained only `@types/node`, with `current` and `wanted` both `22.19.20` and absolute `latest` `25.9.2`; Node 25 types are intentionally excluded because this project targets Node 22.
+
+- Command: `cd tools/fake-backend && npm outdated --json`
+- Result: PASS
+- Evidence: JSON contained only `@types/node`, with `current` and `wanted` both `22.19.20` and absolute `latest` `25.9.2`; Node 25 types are intentionally excluded because this project targets Node 22.
+
+- Command: `git status --short`
+- Result: PASS
+- Evidence: clean worktree before writing this final handoff update.
+
 ## Manual Verification
 
 - None.
@@ -294,6 +358,7 @@ Attempted plan steps:
 - Task 7 npm install was run from local Node `v25.9.0`, which produced an expected `EBADENGINE` warning after adding the intended Node 22 engine.
 - Task 8 npm install was run from local Node `v25.9.0`, which produced the same expected `EBADENGINE` warning after adding the intended Node 22 engine.
 - Task 8 had one TypeScript 6 migration failure fixed before commit: fake-backend `tsconfig.json` now sets `rootDir` explicitly to `src`.
+- Task 9 final verification passed except for the already documented physical-device Task 6 skip. Final dependency audit intentionally excludes absolute latest `@types/node@25.9.2` because both Node projects declare runtime `node: 22.x` and use `@types/node@22.19.20`.
 
 ## Assumptions
 
@@ -302,4 +367,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Proceed to Task 9: final full verification. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
+Review the branch and decide whether to merge/push, open a PR, or leave it for review. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
