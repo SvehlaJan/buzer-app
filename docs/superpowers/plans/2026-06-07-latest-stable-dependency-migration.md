@@ -44,7 +44,7 @@
 - Read: `tools/fake-backend/package.json`
 - Create: `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 
-- [ ] **Step 1: Check workspace state**
+- [x] **Step 1: Check workspace state**
 
 Run:
 
@@ -54,7 +54,7 @@ git status --short
 
 Expected: only known documentation files are dirty or untracked. Do not proceed if source/build files are dirty from another agent.
 
-- [ ] **Step 2: Run client baseline**
+- [x] **Step 2: Run client baseline**
 
 Run:
 
@@ -65,7 +65,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 3: Run backend baseline**
+- [x] **Step 3: Run backend baseline**
 
 Run:
 
@@ -79,7 +79,7 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 4: Run fake-backend baseline**
+- [x] **Step 4: Run fake-backend baseline**
 
 Run:
 
@@ -92,7 +92,7 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 5: Record baseline handoff**
+- [x] **Step 5: Record baseline handoff**
 
 Create `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md` with:
 
@@ -146,7 +146,7 @@ Status: In progress. Baseline verification completed before dependency changes.
 Upgrade the Gradle wrapper.
 ```
 
-- [ ] **Step 6: Commit baseline docs if requested by the lead**
+- [x] **Step 6: Commit baseline docs if requested by the lead**
 
 Run only if the lead asks for documentation commits before source edits:
 
