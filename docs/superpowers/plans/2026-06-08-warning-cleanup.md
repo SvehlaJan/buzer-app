@@ -205,7 +205,7 @@ git commit -m "docs: document remaining dependency warnings"
 
 ## Final Verification
 
-- [ ] **Step 1: Run Android warning cleanup verification**
+- [x] **Step 1: Run Android warning cleanup verification**
 
 ```bash
 cd client
@@ -214,7 +214,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL` and no deprecated Compose accessor or v1 Compose UI test warnings.
 
-- [ ] **Step 2: Run emulator instrumentation**
+- [x] **Step 2: Run emulator instrumentation**
 
 ```bash
 cd tools/fake-backend
@@ -233,7 +233,7 @@ cd client
 
 Expected: all instrumentation tests pass.
 
-- [ ] **Step 3: Final status**
+- [x] **Step 3: Final status**
 
 ```bash
 git status --short
