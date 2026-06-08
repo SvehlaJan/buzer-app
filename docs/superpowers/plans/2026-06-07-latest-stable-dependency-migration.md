@@ -525,7 +525,10 @@ Expected: commit created, unless no handoff change was made.
 **Files:**
 - Modify: `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 
-> Current run note: skipped on 2026-06-08 because ADB reported no connected devices and `adb wait-for-device` did not resolve after about 60 seconds. Leave the checkboxes open until a physical device is visible to ADB.
+> Current run notes:
+>
+> - Skipped earlier on 2026-06-08 because ADB reported no connected devices and `adb wait-for-device` did not resolve after about 60 seconds.
+> - Retried later on 2026-06-08 with a physical Pixel 5 / Android 14 / API 34. The connected instrumentation harness passed 17/17 tests through `adb reverse`, but this does not verify the Android 16 / API 36-specific `InputManager.getInstance` regression target. Leave the Android 16 checkboxes open until an API 36 physical device is visible to ADB.
 
 - [ ] **Step 1: Confirm physical device**
 

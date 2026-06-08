@@ -37,8 +37,12 @@ Attempted plan steps:
 - Task 5 Step 2: completed
 - Task 5 Step 3: completed
 - Task 5 Step 4: completed
-- Task 6 Step 1: attempted, skipped because no ADB device was visible
-- Task 6 Steps 2-6: skipped because Step 1 did not find a connected device
+- Task 6 Step 1: completed for physical Pixel 5 / Android 14 / API 34; Android 16 target still unavailable
+- Task 6 Step 2: completed for physical Pixel 5 / Android 14 / API 34
+- Task 6 Step 3: completed for physical Pixel 5 / Android 14 / API 34
+- Task 6 Step 4: completed for physical Pixel 5 / Android 14 / API 34
+- Task 6 Step 5: completed for physical Pixel 5 / Android 14 / API 34
+- Task 6 Step 6: completed for physical Pixel 5 / Android 14 / API 34 evidence
 - Task 7 Step 1: completed
 - Task 7 Step 2: completed
 - Task 7 Step 3: completed
@@ -227,6 +231,46 @@ Attempted plan steps:
 - Result: SKIPPED
 - Evidence: still waiting after about 60 seconds; stopped the wait command with `pkill -f "adb wait-for-device"`.
 
+- Command: `adb devices -l`
+- Result: PASS
+- Evidence: later retry found physical device `11141FDD4002R1`, `model:Pixel_5`, `device:redfin`.
+
+- Command: `adb shell getprop ro.build.version.sdk`
+- Result: PASS
+- Evidence: connected device reported API `34`.
+
+- Command: `adb shell getprop ro.build.version.release`
+- Result: PASS
+- Evidence: connected device reported Android release `14`.
+
+- Command: `adb shell getprop ro.product.model`
+- Result: PASS
+- Evidence: connected device reported `Pixel 5`.
+
+- Command: `cd tools/fake-backend && PORT=18433 npm run dev`
+- Result: PASS
+- Evidence: fake backend printed `fake backend listening on 18433`.
+
+- Command: `adb reverse tcp:18433 tcp:18433`
+- Result: PASS
+- Evidence: command returned `18433`.
+
+- Command: `adb reverse --list`
+- Result: PASS
+- Evidence: output included `UsbFfs tcp:18433 tcp:18433`.
+
+- Command: `cd client && ./gradlew :androidApp:connectedDebugAndroidTest -PBUZER_BACKEND_BASE_URL=http://127.0.0.1:18433 -PBUZER_BACKEND_TOKEN=test-token -PBUZER_ASSIGNEE_ME_ID=user-me -PBUZER_ASSIGNEE_WIFE_ID=user-wife -PFAKE_BACKEND_BASE_URL=http://127.0.0.1:18433`
+- Result: PASS
+- Evidence: connected instrumentation finished 17 tests on `Pixel 5 - 14` with 0 skipped and 0 failed; Gradle reported `BUILD SUCCESSFUL in 49s`.
+
+- Command: `lsof -iTCP:18433 -sTCP:LISTEN -n -P`
+- Result: PASS
+- Evidence: no output after stopping the fake backend with `Ctrl-C`, indicating port `18433` was closed.
+
+- Command: `adb reverse --remove tcp:18433`
+- Result: PASS
+- Evidence: reverse tunnel removed after the connected test run.
+
 - Command: `cd backend && npm outdated --json`
 - Result: PASS
 - Evidence: npm queried the registry and reported backend updates for `better-sqlite3` `12.10.0`, `tsx` `4.22.4`, and `vitest` `4.1.8`; it also reported absolute latest `@types/node` major 25, which was intentionally not selected because the backend runtime is Node 22.
@@ -359,7 +403,7 @@ Attempted plan steps:
 - Task 4 had one build failure fixed before commit: upgraded AndroidX artifacts require `compileSdk >= 36`.
 - Task 4 verification still emits warnings for deprecated Compose dependency accessors (`compose.foundation`, `compose.material3`, `compose.runtime`, `compose.ui`), deprecated Compose test `createEmptyComposeRule`, and an unstripped `libandroidx.graphics.path.so`; these did not fail the build.
 - Task 5 managed-device instrumentation passed. The fake backend was stopped with `kill <pid>` because the original non-TTY server session did not expose stdin for `Ctrl-C`.
-- Task 6 connected Android 16 harness verification was skipped because no ADB device or emulator was visible. No fake backend was started for Task 6, and no connected instrumentation command was run.
+- Task 6 Android 16-specific harness verification remains open. A later physical connected-device retry passed on Pixel 5 / Android 14 / API 34, but this does not verify the Android 16 / API 36 `InputManager.getInstance` regression target.
 - Task 7 Docker build verification was skipped because Docker is not installed.
 - Task 7 npm install was run from local Node `v25.9.0`, which produced an expected `EBADENGINE` warning after adding the intended Node 22 engine.
 - Task 8 npm install was run from local Node `v25.9.0`, which produced the same expected `EBADENGINE` warning after adding the intended Node 22 engine.
@@ -373,4 +417,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Lead decision needed: merge locally, push/open PR, keep branch as-is, or discard. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
+Lead decision needed: merge locally, push/open PR, keep branch as-is, or discard. Re-run the Android 16-specific Task 6 check later when an API 36 physical device is visible to ADB.
