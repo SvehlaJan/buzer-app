@@ -384,8 +384,9 @@ Expected: commit created.
 **Files:**
 - Modify: `client/gradle/libs.versions.toml`
 - Modify: `client/androidApp/build.gradle.kts`
+- Modify: `client/shared/build.gradle.kts`
 
-- [ ] **Step 1: Update version catalog**
+- [x] **Step 1: Update version catalog**
 
 Edit the remaining `client/gradle/libs.versions.toml` versions to:
 
@@ -421,7 +422,9 @@ Keep existing plugin aliases, including:
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 ```
 
-- [ ] **Step 2: Add explicit Espresso dependency**
+Also raise Android module `compileSdk` values to `36` if required by AAR metadata from the upgraded AndroidX dependencies. Keep `targetSdk` unchanged unless a later task explicitly opts into the newer runtime behavior.
+
+- [x] **Step 2: Add explicit Espresso dependency**
 
 In `client/androidApp/build.gradle.kts`, add:
 
@@ -431,7 +434,7 @@ androidTestImplementation(libs.androidx.test.espresso.core)
 
 Place it with the other `androidTestImplementation` dependencies.
 
-- [ ] **Step 3: Verify dependency resolution**
+- [x] **Step 3: Verify dependency resolution**
 
 Run:
 
@@ -442,7 +445,7 @@ cd client
 
 Expected: runtime resolves `androidx.test.espresso:espresso-core:3.7.0`. If Compose UI test still forces an older version, add a strict constraint for Espresso `3.7.0` in `androidTestImplementation` and rerun this step.
 
-- [ ] **Step 4: Run client JVM/build verification**
+- [x] **Step 4: Run client JVM/build verification**
 
 Run:
 
@@ -453,12 +456,12 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit client dependency upgrades**
+- [x] **Step 5: Commit client dependency upgrades**
 
 Run:
 
 ```bash
-git add client/gradle/libs.versions.toml client/androidApp/build.gradle.kts docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
+git add client/gradle/libs.versions.toml client/androidApp/build.gradle.kts client/shared/build.gradle.kts docs/handoffs/2026-06-07-latest-stable-dependency-migration.md
 git commit -m "build: upgrade Android client dependencies"
 ```
 

@@ -28,6 +28,11 @@ Attempted plan steps:
 - Task 3 Step 5: completed
 - Task 3 Step 6: completed
 - Task 3 Step 7: completed
+- Task 4 Step 1: completed
+- Task 4 Step 2: completed
+- Task 4 Step 3: completed
+- Task 4 Step 4: completed
+- Task 4 Step 5: completed
 
 ## Files Changed
 
@@ -136,6 +141,26 @@ Attempted plan steps:
 - Result: PASS
 - Evidence: resumed-session recheck completed with `BUILD SUCCESSFUL in 1s`; 86 actionable tasks, 1 executed and 85 up-to-date.
 
+- Command: `cd client && ./gradlew :androidApp:dependencyInsight --configuration debugAndroidTestRuntimeClasspath --dependency espresso-core`
+- Result: PASS
+- Evidence: resolved `androidx.test.espresso:espresso-core:3.7.0`; Gradle selected it by conflict resolution over Compose UI test's transitive `3.5.0`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest`
+- Result: FAIL
+- Evidence: `:androidApp:checkDebugAarMetadata` found 7 issues. Upgraded AndroidX dependencies including `androidx.activity:activity-compose:1.13.0`, `androidx.core:core:1.18.0`, and `androidx.navigationevent:navigationevent-android:1.0.0` require consumers to compile against Android API 36 or later while `androidApp` still used `compileSdk = 35`.
+
+- Command: `npx ctx7@latest library "Android Developers" "compileSdk Android Gradle Plugin DSL application module AndroidX AAR metadata requires compile SDK 36"`
+- Result: PASS
+- Evidence: resolved official Android Developers documentation as `/websites/developer_android`.
+
+- Command: `npx ctx7@latest docs "/websites/developer_android" "compileSdk Android Gradle Plugin DSL application module targetSdk minSdk compile SDK can be updated separately AAR metadata"`
+- Result: PASS
+- Evidence: docs show `compileSdk = 36` in the Android Gradle Plugin Kotlin DSL and describe `compileSdk` as the API level Gradle uses to compile the app, separate from `targetSdk` and `minSdk`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest`
+- Result: PASS
+- Evidence: after raising `compileSdk` to 36 in both Android modules and leaving app `targetSdk` at 35, Gradle reported `BUILD SUCCESSFUL in 27s`; 101 actionable tasks, 87 executed and 14 up-to-date.
+
 ## Manual Verification
 
 - None.
@@ -145,6 +170,8 @@ Attempted plan steps:
 - No checks skipped in Task 1, Task 2, or Task 3.
 - Task 3 had two expected migration failures that were fixed before commit: AGP 9 rejected the app Kotlin Android plugin, and app JVM tests required `kotlin-test-junit`.
 - Parallel Gradle invocations in the same worktree caused Kotlin daemon incremental-cache contention warnings; sequential Gradle verification passed cleanly.
+- Task 4 had one build failure fixed before commit: upgraded AndroidX artifacts require `compileSdk >= 36`.
+- Task 4 verification still emits warnings for deprecated Compose dependency accessors (`compose.foundation`, `compose.material3`, `compose.runtime`, `compose.ui`), deprecated Compose test `createEmptyComposeRule`, and an unstripped `libandroidx.graphics.path.so`; these did not fail the build.
 
 ## Assumptions
 
@@ -153,4 +180,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Commit Task 3, then proceed to Task 4: upgrade Compose, AndroidX, Ktor, and Kotlinx dependencies.
+Commit Task 4, then proceed to Task 5: verify emulator instrumentation.

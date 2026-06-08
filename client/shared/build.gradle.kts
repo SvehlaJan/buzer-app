@@ -11,7 +11,7 @@ kotlin {
 
     android {
         namespace = "app.buzer.shared"
-        compileSdk = 35
+        compileSdk = 36
         minSdk = 26
 
         withHostTest {
