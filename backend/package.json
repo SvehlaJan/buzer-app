@@ -12,19 +12,22 @@
     "migrate": "tsx src/db/migrations.ts"
   },
   "dependencies": {
-    "@fastify/sensible": "latest",
-    "better-sqlite3": "latest",
-    "dotenv": "latest",
-    "fastify": "latest",
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.34.7",
-    "zod": "latest"
+    "@fastify/sensible": "6.0.4",
+    "better-sqlite3": "12.10.0",
+    "dotenv": "17.4.2",
+    "fastify": "5.8.5",
+    "qrcode-terminal": "0.12.0",
+    "whatsapp-web.js": "1.34.7",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "latest",
-    "@types/node": "latest",
-    "tsx": "latest",
-    "typescript": "latest",
-    "vitest": "latest"
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "22.19.20",
+    "tsx": "4.22.4",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

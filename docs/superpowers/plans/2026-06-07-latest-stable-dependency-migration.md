@@ -608,7 +608,7 @@ Expected: commit created, unless no handoff change was made.
 - Modify: `backend/package.json`
 - Modify: `backend/package-lock.json`
 
-- [ ] **Step 1: Replace backend dependency ranges**
+- [x] **Step 1: Replace backend dependency ranges**
 
 Update `backend/package.json` to use exact versions:
 
@@ -636,7 +636,7 @@ Update `backend/package.json` to use exact versions:
 
 Keep existing scripts unchanged.
 
-- [ ] **Step 2: Refresh backend lockfile**
+- [x] **Step 2: Refresh backend lockfile**
 
 Run:
 
@@ -647,7 +647,7 @@ npm install
 
 Expected: `package-lock.json` updates and install succeeds.
 
-- [ ] **Step 3: Verify backend**
+- [x] **Step 3: Verify backend**
 
 Run:
 
@@ -660,7 +660,7 @@ npm run build
 
 Expected: all commands pass.
 
-- [ ] **Step 4: Verify Docker build if Docker is available**
+- [x] **Step 4: Verify Docker build if Docker is available**
 
 Run:
 
@@ -670,7 +670,7 @@ docker build -t buzer-backend-dependency-audit .
 
 Expected: image builds. If Docker is unavailable, mark this check `SKIPPED` in the handoff with the exact reason.
 
-- [ ] **Step 5: Commit backend dependency upgrade**
+- [x] **Step 5: Commit backend dependency upgrade**
 
 Run:
 

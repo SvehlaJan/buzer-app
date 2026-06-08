@@ -39,6 +39,11 @@ Attempted plan steps:
 - Task 5 Step 4: completed
 - Task 6 Step 1: attempted, skipped because no ADB device was visible
 - Task 6 Steps 2-6: skipped because Step 1 did not find a connected device
+- Task 7 Step 1: completed
+- Task 7 Step 2: completed
+- Task 7 Step 3: completed
+- Task 7 Step 4: completed, skipped because Docker is unavailable
+- Task 7 Step 5: completed
 
 ## Files Changed
 
@@ -52,6 +57,8 @@ Attempted plan steps:
 - `client/build.gradle.kts`
 - `client/shared/build.gradle.kts`
 - `client/androidApp/build.gradle.kts`
+- `backend/package.json`
+- `backend/package-lock.json`
 
 ## Verification
 
@@ -203,6 +210,34 @@ Attempted plan steps:
 - Result: SKIPPED
 - Evidence: still waiting after about 60 seconds; stopped the wait command with `pkill -f "adb wait-for-device"`.
 
+- Command: `cd backend && npm outdated --json`
+- Result: PASS
+- Evidence: npm queried the registry and reported backend updates for `better-sqlite3` `12.10.0`, `tsx` `4.22.4`, and `vitest` `4.1.8`; it also reported absolute latest `@types/node` major 25, which was intentionally not selected because the backend runtime is Node 22.
+
+- Command: `cd backend && npm view @types/node@22 version --json`
+- Result: PASS
+- Evidence: latest available Node 22 type line ended at `22.19.20`.
+
+- Command: `cd backend && npm install`
+- Result: PASS
+- Evidence: removed 2 packages, changed 21 packages, audited 343 packages, and found 0 vulnerabilities. npm emitted `EBADENGINE` because the local workstation runs Node `v25.9.0` while the project now declares `node: 22.x`.
+
+- Command: `cd backend && npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: Vitest `4.1.8` reported `13 passed (13)` test files and `35 passed (35)` tests.
+
+- Command: `cd backend && npm run build`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.build.json` exited 0.
+
+- Command: `cd backend && docker --version`
+- Result: SKIPPED
+- Evidence: failed with `zsh:1: command not found: docker`, so the Docker image build was not available in this environment.
+
 ## Manual Verification
 
 - None.
@@ -216,6 +251,8 @@ Attempted plan steps:
 - Task 4 verification still emits warnings for deprecated Compose dependency accessors (`compose.foundation`, `compose.material3`, `compose.runtime`, `compose.ui`), deprecated Compose test `createEmptyComposeRule`, and an unstripped `libandroidx.graphics.path.so`; these did not fail the build.
 - Task 5 managed-device instrumentation passed. The fake backend was stopped with `kill <pid>` because the original non-TTY server session did not expose stdin for `Ctrl-C`.
 - Task 6 connected Android 16 harness verification was skipped because no ADB device or emulator was visible. No fake backend was started for Task 6, and no connected instrumentation command was run.
+- Task 7 Docker build verification was skipped because Docker is not installed.
+- Task 7 npm install was run from local Node `v25.9.0`, which produced an expected `EBADENGINE` warning after adding the intended Node 22 engine.
 
 ## Assumptions
 
@@ -224,4 +261,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Proceed to Task 7: upgrade backend Node dependencies. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
+Proceed to Task 8: upgrade fake-backend Node dependencies. Re-run Task 6 later when a physical Android 16 device is visible to ADB.
