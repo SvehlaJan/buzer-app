@@ -93,6 +93,8 @@ Backend agents must run relevant unit/integration tests before handing off. Andr
 
 Android enforcement agents should prefer native Android instrumentation tests over host-side ADB scripts. For blocker activity/action changes, start `tools/fake-backend` locally and run `pixel8Api34DebugAndroidTest` with `BUZER_BACKEND_BASE_URL=http://10.0.2.2:18433`, `BUZER_BACKEND_TOKEN=test-token`, and `FAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`. Do not use live Todoist or WhatsApp for destructive action tests.
 
+Toolchain notes (post 2026-06-08 dependency migration): the shared JVM unit-test task is `:shared:testAndroidHostTest` (the old `:shared:testDebugUnitTest` no longer exists). When building from a `git worktree`, export `ANDROID_HOME`/`ANDROID_SDK_ROOT` because `client/local.properties` is gitignored. An Android 16 / API 36 emulator (`Buzer_API_36`) is available for connected tests; scope multi-device runs with `ANDROID_SERIAL`. See `docs/notes/local-development.md` and `docs/notes/2026-06-08-android-16-emulator-setup.md`.
+
 For every completed task, the handoff must include:
 
 ```text
