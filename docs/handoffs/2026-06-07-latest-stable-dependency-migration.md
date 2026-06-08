@@ -33,6 +33,10 @@ Attempted plan steps:
 - Task 4 Step 3: completed
 - Task 4 Step 4: completed
 - Task 4 Step 5: completed
+- Task 5 Step 1: completed
+- Task 5 Step 2: completed
+- Task 5 Step 3: completed
+- Task 5 Step 4: completed
 
 ## Files Changed
 
@@ -161,6 +165,26 @@ Attempted plan steps:
 - Result: PASS
 - Evidence: after raising `compileSdk` to 36 in both Android modules and leaving app `targetSdk` at 35, Gradle reported `BUILD SUCCESSFUL in 27s`; 101 actionable tasks, 87 executed and 14 up-to-date.
 
+- Command: `cd tools/fake-backend && PORT=18433 npm run dev`
+- Result: PASS
+- Evidence: fake backend printed `fake backend listening on 18433`.
+
+- Command: `cd client && ./gradlew pixel8Api34DebugAndroidTest --rerun-tasks -PBUZER_BACKEND_BASE_URL=http://10.0.2.2:18433 -PBUZER_BACKEND_TOKEN=test-token -PBUZER_ASSIGNEE_ME_ID=user-me -PBUZER_ASSIGNEE_WIFE_ID=user-wife -PFAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`
+- Result: PASS
+- Evidence: managed device `pixel8Api34` finished 17 tests with 0 skipped and 0 failed; Gradle reported `BUILD SUCCESSFUL in 2m 4s`. Report path: `client/androidApp/build/reports/androidTests/managedDevice/debug/allDevices/index.html`.
+
+- Command: `lsof -iTCP:18433 -sTCP:LISTEN -n -P`
+- Result: PASS
+- Evidence: initially showed the fake backend listener on PID `90740`, which was the server started for Task 5.
+
+- Command: `kill 90740`
+- Result: PASS
+- Evidence: stopped the non-interactive fake backend process after the test run.
+
+- Command: `lsof -iTCP:18433 -sTCP:LISTEN -n -P`
+- Result: PASS
+- Evidence: no output after stopping the fake backend, indicating port `18433` was closed.
+
 ## Manual Verification
 
 - None.
@@ -172,6 +196,7 @@ Attempted plan steps:
 - Parallel Gradle invocations in the same worktree caused Kotlin daemon incremental-cache contention warnings; sequential Gradle verification passed cleanly.
 - Task 4 had one build failure fixed before commit: upgraded AndroidX artifacts require `compileSdk >= 36`.
 - Task 4 verification still emits warnings for deprecated Compose dependency accessors (`compose.foundation`, `compose.material3`, `compose.runtime`, `compose.ui`), deprecated Compose test `createEmptyComposeRule`, and an unstripped `libandroidx.graphics.path.so`; these did not fail the build.
+- Task 5 managed-device instrumentation passed. The fake backend was stopped with `kill <pid>` because the original non-TTY server session did not expose stdin for `Ctrl-C`.
 
 ## Assumptions
 
@@ -180,4 +205,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Commit Task 4, then proceed to Task 5: verify emulator instrumentation.
+Proceed to Task 6: verify the Android 16 connected test harness on the physical device.

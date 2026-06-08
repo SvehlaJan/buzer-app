@@ -472,7 +472,7 @@ Expected: commit created.
 **Files:**
 - Modify: `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 
-- [ ] **Step 1: Start fake backend**
+- [x] **Step 1: Start fake backend**
 
 Run:
 
@@ -483,7 +483,7 @@ PORT=18433 npm run dev
 
 Expected: server prints that it is listening on `18433`. Keep it running for the next step.
 
-- [ ] **Step 2: Run managed-device tests**
+- [x] **Step 2: Run managed-device tests**
 
 Run:
 
@@ -499,7 +499,7 @@ cd client
 
 Expected: all instrumentation tests pass on `pixel8Api34`.
 
-- [ ] **Step 3: Stop fake backend**
+- [x] **Step 3: Stop fake backend**
 
 Stop the dev server with `Ctrl-C`, then run:
 
@@ -509,7 +509,7 @@ lsof -iTCP:18433 -sTCP:LISTEN -n -P
 
 Expected: no output.
 
-- [ ] **Step 4: Commit emulator verification evidence**
+- [x] **Step 4: Commit emulator verification evidence**
 
 Run:
 
