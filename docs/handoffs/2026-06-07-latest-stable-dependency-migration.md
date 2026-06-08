@@ -37,6 +37,8 @@ Attempted plan steps:
 - Task 5 Step 2: completed
 - Task 5 Step 3: completed
 - Task 5 Step 4: completed
+- Task 6 Step 1: attempted, skipped because no ADB device was visible
+- Task 6 Steps 2-6: skipped because Step 1 did not find a connected device
 
 ## Files Changed
 
@@ -185,6 +187,22 @@ Attempted plan steps:
 - Result: PASS
 - Evidence: no output after stopping the fake backend, indicating port `18433` was closed.
 
+- Command: `adb devices -l`
+- Result: SKIPPED
+- Evidence: command exited 0 but listed no devices under `List of devices attached`.
+
+- Command: `adb shell getprop ro.build.version.sdk`
+- Result: SKIPPED
+- Evidence: failed with `adb: no devices/emulators found`.
+
+- Command: `adb shell getprop ro.build.version.release`
+- Result: SKIPPED
+- Evidence: failed with `adb: no devices/emulators found`.
+
+- Command: `adb wait-for-device`
+- Result: SKIPPED
+- Evidence: still waiting after about 60 seconds; stopped the wait command with `pkill -f "adb wait-for-device"`.
+
 ## Manual Verification
 
 - None.
@@ -197,6 +215,7 @@ Attempted plan steps:
 - Task 4 had one build failure fixed before commit: upgraded AndroidX artifacts require `compileSdk >= 36`.
 - Task 4 verification still emits warnings for deprecated Compose dependency accessors (`compose.foundation`, `compose.material3`, `compose.runtime`, `compose.ui`), deprecated Compose test `createEmptyComposeRule`, and an unstripped `libandroidx.graphics.path.so`; these did not fail the build.
 - Task 5 managed-device instrumentation passed. The fake backend was stopped with `kill <pid>` because the original non-TTY server session did not expose stdin for `Ctrl-C`.
+- Task 6 connected Android 16 harness verification was skipped because no ADB device or emulator was visible. No fake backend was started for Task 6, and no connected instrumentation command was run.
 
 ## Assumptions
 
@@ -205,4 +224,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Proceed to Task 6: verify the Android 16 connected test harness on the physical device.
+Proceed to Task 7: upgrade backend Node dependencies. Re-run Task 6 later when a physical Android 16 device is visible to ADB.

@@ -525,6 +525,8 @@ Expected: commit created, unless no handoff change was made.
 **Files:**
 - Modify: `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 
+> Current run note: skipped on 2026-06-08 because ADB reported no connected devices and `adb wait-for-device` did not resolve after about 60 seconds. Leave the checkboxes open until a physical device is visible to ADB.
+
 - [ ] **Step 1: Confirm physical device**
 
 Run:
