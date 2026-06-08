@@ -868,7 +868,7 @@ Expected: commit created, unless no handoff change was made.
 - Read: `git log --oneline --decorate -10`
 - Read: `git status --short`
 
-- [ ] **Step 1: Review commits**
+- [x] **Step 1: Review commits**
 
 Run:
 
