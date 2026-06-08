@@ -164,7 +164,7 @@ Expected: commit created. If other handoff docs are still untracked and unrelate
 - Modify: `client/gradlew`
 - Modify: `client/gradlew.bat`
 
-- [ ] **Step 1: Upgrade wrapper**
+- [x] **Step 1: Upgrade wrapper**
 
 Run:
 
@@ -176,7 +176,7 @@ cd client
 
 Expected: wrapper files update to Gradle `9.5.1`. Running the wrapper task twice is intentional so the second run uses the upgraded wrapper jar/scripts.
 
-- [ ] **Step 2: Verify wrapper version**
+- [x] **Step 2: Verify wrapper version**
 
 Run:
 
@@ -187,7 +187,7 @@ cd client
 
 Expected: output includes `Gradle 9.5.1`.
 
-- [ ] **Step 3: Run a client smoke build**
+- [x] **Step 3: Run a client smoke build**
 
 Run:
 
@@ -198,7 +198,7 @@ cd client
 
 Expected: either `BUILD SUCCESSFUL` or a failure that clearly belongs to existing AGP/KMP incompatibility. If the failure is unrelated to AGP/KMP, stop and debug before proceeding.
 
-- [ ] **Step 4: Update handoff**
+- [x] **Step 4: Update handoff**
 
 Append:
 

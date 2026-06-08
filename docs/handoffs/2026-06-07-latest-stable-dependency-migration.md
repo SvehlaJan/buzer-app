@@ -16,11 +16,19 @@ Attempted plan steps:
 - Task 1 Step 4: completed
 - Task 1 Step 5: completed
 - Task 1 Step 6: completed before implementation worktree creation by committing planning docs on `master`
+- Task 2 Step 1: completed
+- Task 2 Step 2: completed
+- Task 2 Step 3: completed
+- Task 2 Step 4: completed
 
 ## Files Changed
 
 - `docs/handoffs/2026-06-07-latest-stable-dependency-migration.md`
 - `docs/superpowers/plans/2026-06-07-latest-stable-dependency-migration.md`
+- `client/gradle/wrapper/gradle-wrapper.jar`
+- `client/gradle/wrapper/gradle-wrapper.properties`
+- `client/gradlew`
+- `client/gradlew.bat`
 
 ## Verification
 
@@ -60,13 +68,29 @@ Attempted plan steps:
 - Result: PASS
 - Evidence: `tsc -p tsconfig.json` exited 0.
 
+- Command: `cd client && ./gradlew wrapper --gradle-version=9.5.1`
+- Result: PASS
+- Evidence: first wrapper run completed with `BUILD SUCCESSFUL in 1s`.
+
+- Command: `cd client && ./gradlew wrapper --gradle-version=9.5.1`
+- Result: PASS
+- Evidence: second wrapper run downloaded `gradle-9.5.1-bin.zip`, regenerated wrapper files, and completed with `BUILD SUCCESSFUL in 2m 56s`.
+
+- Command: `cd client && ./gradlew --version`
+- Result: PASS
+- Evidence: output included `Gradle 9.5.1`.
+
+- Command: `cd client && ./gradlew :androidApp:assembleDebugAndroidTest`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 4m 25s`; 68 actionable tasks executed. The expected pre-existing AGP/KMP deprecation warning remains until Task 3.
+
 ## Manual Verification
 
 - None.
 
 ## Known Failures Or Skipped Checks
 
-- No checks skipped in Task 1.
+- No checks skipped in Task 1 or Task 2.
 - The client baseline still emits the expected AGP/KMP deprecation warning that this migration is intended to remove.
 
 ## Assumptions
@@ -76,5 +100,4 @@ Attempted plan steps:
 
 ## Next Recommended Step
 
-Proceed to Task 2: upgrade the Gradle wrapper to `9.5.1`.
-
+Proceed to Task 3: upgrade AGP/Kotlin and migrate the shared module to the Android-KMP plugin.
