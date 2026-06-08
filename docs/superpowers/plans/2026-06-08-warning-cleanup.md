@@ -81,7 +81,7 @@ git commit -m "build: replace deprecated Compose dependency accessors"
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Change imports**
+- [x] **Step 1: Change imports**
 
 In both files, replace:
 
@@ -95,7 +95,7 @@ with:
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 ```
 
-- [ ] **Step 2: Run instrumentation tests on emulator**
+- [x] **Step 2: Run instrumentation tests on emulator**
 
 Start the fake backend:
 
@@ -118,7 +118,7 @@ cd client
 
 Expected: all 17 instrumentation tests pass. If tests fail with timing/synchronization symptoms, do not add sleeps first; use the Compose v2 guidance and synchronize through Compose test APIs such as `waitUntil`/clock advancement where needed.
 
-- [ ] **Step 3: Stop fake backend and verify port**
+- [x] **Step 3: Stop fake backend and verify port**
 
 ```bash
 lsof -iTCP:18433 -sTCP:LISTEN -n -P
@@ -126,7 +126,7 @@ lsof -iTCP:18433 -sTCP:LISTEN -n -P
 
 Expected after stopping the server: no output.
 
-- [ ] **Step 4: Run physical connected smoke if a device is available**
+- [x] **Step 4: Run physical connected smoke if a device is available**
 
 If a device is connected:
 
@@ -144,7 +144,7 @@ adb reverse --remove tcp:18433
 
 Expected: connected tests pass. Record API level in the handoff.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt docs/superpowers/plans/2026-06-08-warning-cleanup.md
