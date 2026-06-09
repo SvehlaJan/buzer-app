@@ -1,156 +1,192 @@
-# VPS Deployment Notes
+# VPS Deployment Runbook
 
-Date: 2026-05-31
+Date: 2026-06-09
 
-## Prerequisites
+The MVP backend deploys manually on the Tailscale-only VPS. The VPS is reachable from the tailnet as:
 
-- VPS: Ubuntu 24.04 at `vmi3085238` (`100.105.180.34` on Tailscale)
-- Docker 28 + docker-compose v2
-- Tailscale running on both local and VPS
-- Todoist personal access token
-- WhatsApp chat ID for escalation messages
-- Random secure token for Android API auth
-
-## Deployment Steps
-
-### 1. Prepare Credentials
-
-Generate `.env` from `.env.example`:
-
-```bash
-cp .env.example .env
+```text
+oc-vps.taila50381.ts.net
 ```
 
-Fill in the required values:
+Current live deployment shape:
 
-```bash
-TODOIST_API_TOKEN=<your-todoist-token>
-TODOIST_USER_ID=<your-todoist-user-id>
-ANDROID_API_TOKEN=<generate-random-secure-string>
-WHATSAPP_RECIPIENT_ID=<chat-id>
-WHATSAPP_DRY_RUN=false
+- repository checkout: `/home/skclaw/buzer-app`
+- Docker Compose project: `buzer-app`
+- service/container: `backend` / `buzer-backend`
+- host port: `18432`
+- container port: `18432`
+- SQLite data volume: `buzer-app_buzer-data`
+- WhatsApp session volume: `buzer-app_buzer-whatsapp`
+
+The backend is intentionally available only on the Tailscale/private network for MVP.
+
+## Repository Files
+
+- `Dockerfile`: production backend image with Node 22 and Chromium for `whatsapp-web.js`.
+- `docker-compose.yml`: current VPS service definition with healthcheck and named volumes.
+- `scripts/deploy-vps.sh`: manual deploy command for the VPS.
+- `scripts/backup-sqlite.sh`: SQLite backup helper that runs inside the backend container.
+- `docs/notes/github-actions-tailscale-deploy.md`: future push-to-deploy notes. No active GitHub Actions deploy workflow is installed for MVP.
+
+## Environment
+
+Secrets live in `/home/skclaw/buzer-app/.env` on the VPS. Do not commit it.
+
+Expected shape:
+
+```env
+NODE_ENV=production
+PORT=18432
+DATABASE_PATH=./data/buzer.sqlite
+ANDROID_API_TOKEN=replace-with-long-random-token
+TODOIST_API_TOKEN=replace-with-todoist-token
+TODOIST_USER_ID=replace-with-current-user-id
+WHATSAPP_RECIPIENT_ID=replace-with-chat-id
+WHATSAPP_DRY_RUN=true
+WHATSAPP_SESSION_PATH=./whatsapp-sessions
+WHATSAPP_CLIENT_ID=buzer
+
+# Compose/deploy settings
+BUZER_HOST_PORT=18432
+BUZER_CONTAINER_PORT=18432
+BUZER_BIND_HOST=0.0.0.0
 ```
 
-**Do not commit `.env` to git.**
-
-### 2. Copy to VPS
+Use a long random Android API token:
 
 ```bash
-scp -r . skclaw@vmi3085238:~/buzer-app/
+openssl rand -base64 48
 ```
 
-Or via Tailscale:
+## Manual Deploy
+
+Run from the VPS:
 
 ```bash
-scp -r . skclaw@100.105.180.34:~/buzer-app/
+ssh oc-vps.taila50381.ts.net
+/home/skclaw/buzer-app/scripts/deploy-vps.sh
 ```
 
-### 3. SSH to VPS
+The deploy script:
+
+- fetches `origin/master`
+- resets the local checkout to `origin/master`
+- rebuilds and restarts `buzer-backend`
+- waits for `/health`
+- prints recent backend logs if health does not pass
+
+This script is allowed to overwrite local repository changes in `/home/skclaw/buzer-app`. Runtime data stays in Docker named volumes unless the volumes are explicitly removed.
+
+## Health Checks
+
+From the VPS:
 
 ```bash
-ssh skclaw@100.105.180.34
-cd ~/buzer-app
+curl --fail http://127.0.0.1:18432/health
 ```
 
-### 4. Start Backend
+From a Tailscale-connected machine:
+
+```bash
+curl --fail http://oc-vps.taila50381.ts.net:18432/health
+```
+
+Expected shape:
+
+```json
+{
+  "ok": true,
+  "service": "buzer-backend",
+  "timestamp": "2026-06-09T20:00:00.000Z",
+  "checks": {
+    "database": "ok"
+  }
+}
+```
+
+`/health` is unauthenticated. Application API routes remain protected by bearer auth.
+
+## Operational Commands
+
+Run from `/home/skclaw/buzer-app` on the VPS:
+
+```bash
+docker compose ps
+docker compose logs --tail=120 backend
+docker compose logs -f backend
+```
+
+Restart without rebuilding:
 
 ```bash
 docker compose up -d
 ```
 
-Verify:
+Rebuild manually:
 
 ```bash
-docker compose ps
+docker compose up -d --build --remove-orphans
+```
+
+## SQLite Backups
+
+Backups are written inside the existing `buzer-app_buzer-data` named volume under `./data/backups`.
+
+Run manually:
+
+```bash
+cd /home/skclaw/buzer-app
+scripts/backup-sqlite.sh
+```
+
+Install a daily cron job for the VPS user:
+
+```bash
+crontab -e
+```
+
+Add:
+
+```cron
+17 3 * * * cd /home/skclaw/buzer-app && scripts/backup-sqlite.sh >> /home/skclaw/buzer-app/backup.log 2>&1
+```
+
+The script keeps 30 days of backups by default. Use `BUZER_BACKUP_RETENTION_DAYS` to adjust retention.
+
+## Enabling WhatsApp
+
+Keep `WHATSAPP_DRY_RUN=true` until the backend and Android smoke tests pass.
+
+To enable live WhatsApp:
+
+```env
+WHATSAPP_DRY_RUN=false
+```
+
+Then redeploy and watch logs for the QR code:
+
+```bash
+/home/skclaw/buzer-app/scripts/deploy-vps.sh
+cd /home/skclaw/buzer-app
 docker compose logs -f backend
 ```
 
-### 5. Test Connectivity
+Scan the QR once. The session is persisted in `buzer-app_buzer-whatsapp`, so normal restarts should not require a new scan.
 
-From local machine via Tailscale:
+## Rollback
 
-```bash
-# Health check (unauth)
-curl http://100.105.180.34:3000/
-
-# Get task snapshot (requires auth)
-curl -H "Authorization: Bearer $ANDROID_API_TOKEN" http://100.105.180.34:3000/tasks/snapshot
-```
-
-Expected response:
-
-```json
-{
-  "scheduleVersion": 1,
-  "serverTime": "2026-05-31T12:34:56Z",
-  "tasks": [],
-  "health": []
-}
-```
-
-### 6. Configure Domain (Later)
-
-When ready to route `oujee.eu` through Cloudflare:
-
-- Add DNS A record pointing to `167.86.68.104` (VPS public IP)
-- Wire through Caddy reverse proxy on VPS
-- Update Android app config to use domain instead of Tailscale IP
-
-## Monitoring
-
-View logs:
+Manual rollback is a git checkout plus redeploy:
 
 ```bash
-docker compose logs -f backend
+cd /home/skclaw/buzer-app
+git fetch origin
+git checkout <known-good-commit>
+docker compose up -d --build --remove-orphans
+curl --fail http://127.0.0.1:18432/health
 ```
 
-Check volume usage:
+After rollback, switch back to `master` before the next normal deploy:
 
 ```bash
-docker volume ls
-docker volume inspect buzer-data
-```
-
-## Troubleshooting
-
-### Container fails to start
-
-```bash
-docker compose logs backend
-```
-
-Check `.env` is present and all required vars are set.
-
-### Todoist sync errors
-
-Enable logging in `docker compose logs` and check:
-- `TODOIST_API_TOKEN` is a valid personal access token
-- `TODOIST_USER_ID` matches token owner
-
-### WhatsApp escalation not working
-
-If `WHATSAPP_DRY_RUN=false`:
-- First run requires QR code scan for `whatsapp-web.js` authentication
-- Check logs for QR output or watch `whatsapp-sessions/` volume for session file
-
-### Port already in use
-
-If 3000 is taken, change in `.env`:
-
-```bash
-PORT=3001
-```
-
-And update `docker-compose.yml` ports if needed.
-
-## Stopping Backend
-
-```bash
-docker compose down
-```
-
-To also remove volumes (deletes data):
-
-```bash
-docker compose down -v
+git checkout master
 ```

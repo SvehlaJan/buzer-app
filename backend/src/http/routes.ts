@@ -26,7 +26,33 @@ const deviceCheckInBody = z.object({
 });
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions): void {
+  app.get("/health", async (_request, reply) => {
+    try {
+      options.db.prepare("select 1").get();
+    } catch (error) {
+      reply.status(503).send({
+        ok: false,
+        service: "buzer-backend",
+        timestamp: new Date().toISOString(),
+        checks: { database: "failed" },
+        message: error instanceof Error ? error.message : "Database health check failed"
+      });
+      return;
+    }
+
+    return {
+      ok: true,
+      service: "buzer-backend",
+      timestamp: new Date().toISOString(),
+      checks: { database: "ok" }
+    };
+  });
+
   app.addHook("preHandler", async (request) => {
+    if (request.url === "/health") {
+      return;
+    }
+
     requireBearerToken(request, options.androidApiToken);
   });
 
