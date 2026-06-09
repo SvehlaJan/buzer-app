@@ -32,12 +32,14 @@
 - [x] Update backend build output to copy `schema.sql` into `dist/db/`.
 - [x] Update VPS deployment notes for `/home/skclaw/buzer-app`, Tailscale hostname `oc-vps.taila50381.ts.net`, and host port `18432`.
 - [x] Add future GitHub Actions over Tailscale note without adding an active workflow.
-- [ ] Run backend verification.
-- [ ] Run Docker/Compose verification where available.
-- [ ] Deploy manually on the VPS.
-- [ ] Write final handoff.
-- [ ] Commit the deployment port.
+- [x] Run backend verification.
+- [x] Run Docker/Compose verification where available.
+- [x] Deploy manually on the VPS.
+- [x] Write final handoff.
+- [x] Commit the deployment port.
 
 ## Notes
 
 The current deployed container responds on port `18432`, but `/health` returns `401` because the deployed code still protects it with bearer auth. The ported code intentionally makes `/health` unauthenticated and checks SQLite with `select 1`.
+
+Completed on 2026-06-09 in commit `09de96c`. The VPS checkout at `/home/skclaw/buzer-app` was reset to `origin/master`, `buzer-backend` was rebuilt, and `/health` passed from both VPS loopback and the Tailscale hostname.
