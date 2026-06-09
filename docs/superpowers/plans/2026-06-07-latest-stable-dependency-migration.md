@@ -529,8 +529,9 @@ Expected: commit created, unless no handoff change was made.
 >
 > - Skipped earlier on 2026-06-08 because ADB reported no connected devices and `adb wait-for-device` did not resolve after about 60 seconds.
 > - Retried later on 2026-06-08 with a physical Pixel 5 / Android 14 / API 34. The connected instrumentation harness passed 17/17 tests through `adb reverse`, but this does not verify the Android 16 / API 36-specific `InputManager.getInstance` regression target. Leave the Android 16 checkboxes open until an API 36 physical device is visible to ADB.
+> - Closed during the 2026-06-09 documentation cleanup. The Android 16 regression target was verified on the `Buzer_API_36` emulator in `docs/handoffs/2026-06-08-api36-verification-and-merge.md`, with 17/17 connected tests passing and no `InputManager.getInstance` failure. A physical Pixel 5 / Android 14 connected run also passed in `docs/handoffs/2026-06-08-warning-cleanup.md`. A physical Android 16 device remains useful for hardware confidence, but is no longer a blocker for this dependency migration plan.
 
-- [ ] **Step 1: Confirm physical device**
+- [x] **Step 1: Confirm physical device**
 
 Run:
 
@@ -542,7 +543,7 @@ adb shell getprop ro.build.version.release
 
 Expected: physical device is connected. Preferred target is Pixel 10 / Android 16 / API 36 if available.
 
-- [ ] **Step 2: Start fake backend**
+- [x] **Step 2: Start fake backend**
 
 Run:
 
@@ -553,7 +554,7 @@ PORT=18433 npm run dev
 
 Expected: fake backend listening on `18433`.
 
-- [ ] **Step 3: Configure reverse tunnel**
+- [x] **Step 3: Configure reverse tunnel**
 
 Run:
 
@@ -564,7 +565,7 @@ adb reverse --list
 
 Expected: output includes `tcp:18433 tcp:18433`.
 
-- [ ] **Step 4: Run connected instrumentation**
+- [x] **Step 4: Run connected instrumentation**
 
 Run:
 
@@ -584,7 +585,7 @@ Expected: the suite either passes or fails on app/test assertions. It must not f
 NoSuchMethodException: android.hardware.input.InputManager.getInstance []
 ```
 
-- [ ] **Step 5: Stop fake backend**
+- [x] **Step 5: Stop fake backend**
 
 Stop the dev server with `Ctrl-C`, then run:
 
@@ -594,7 +595,7 @@ lsof -iTCP:18433 -sTCP:LISTEN -n -P
 
 Expected: no output.
 
-- [ ] **Step 6: Commit connected-test verification evidence**
+- [x] **Step 6: Commit connected-test verification evidence**
 
 Run:
 
@@ -881,7 +882,7 @@ git log --oneline --decorate -10
 
 Expected: migration commits are coherent and ordered.
 
-- [ ] **Step 2: Decide integration path**
+- [x] **Step 2: Decide integration path**
 
 Ask the lead whether to:
 
@@ -892,3 +893,5 @@ Ask the lead whether to:
 ```
 
 Expected: do not merge or push without explicit user approval.
+
+Result: completed by later session. `docs/handoffs/2026-06-08-api36-verification-and-merge.md` records that the lead requested merging everything; `master` was fast-forwarded to the migration branch, and the current cleanup assessment confirmed `master` matches `origin/master` at `8268b59`.

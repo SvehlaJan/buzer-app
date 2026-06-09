@@ -156,7 +156,7 @@ git commit -m "test: migrate Compose instrumentation tests to v2 rule"
 **Files:**
 - Create: `docs/notes/2026-06-08-remaining-dependency-warnings.md`
 
-- [ ] **Step 1: Create warning note**
+- [x] **Step 1: Create warning note**
 
 Create `docs/notes/2026-06-08-remaining-dependency-warnings.md`:
 
@@ -196,12 +196,14 @@ AGP reports that `libandroidx.graphics.path.so` cannot be stripped and is packag
 The physical connected run passed on Pixel 5 / Android 14 / API 34. Android 16 / API 36 remains unverified until an API 36 physical device is available.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/notes/2026-06-08-remaining-dependency-warnings.md docs/superpowers/plans/2026-06-08-warning-cleanup.md
 git commit -m "docs: document remaining dependency warnings"
 ```
+
+Result: completed during the 2026-06-09 documentation cleanup. The note was created with current local Node 26 wording and this plan was updated. The changes are intentionally grouped with the cleanup handoff rather than committed as the original standalone command.
 
 ## Final Verification
 
