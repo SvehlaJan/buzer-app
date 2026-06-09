@@ -1,3 +1,5 @@
+import { readdirSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
 import qrcode from "qrcode-terminal";
 import whatsappWeb from "whatsapp-web.js";
 import type { AccountabilitySender, EscalationInput } from "./accountabilitySender.js";
@@ -10,12 +12,56 @@ export interface WhatsAppWebSenderOptions {
   clientId: string;
 }
 
+const chromiumSingletonFiles = new Set(["SingletonLock", "SingletonSocket", "SingletonCookie"]);
+
+export function removeStaleChromiumSingletonLocks(sessionPath: string): string[] {
+  const removed: string[] = [];
+
+  function visit(path: string, depth: number): void {
+    if (depth > 5) {
+      return;
+    }
+
+    let entries: string[];
+    try {
+      entries = readdirSync(path);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const child = join(path, entry);
+      if (chromiumSingletonFiles.has(entry)) {
+        rmSync(child, { force: true });
+        removed.push(child);
+        continue;
+      }
+
+      try {
+        if (statSync(child).isDirectory()) {
+          visit(child, depth + 1);
+        }
+      } catch {
+        // Ignore broken symlinks or files that disappear during cleanup.
+      }
+    }
+  }
+
+  visit(sessionPath, 0);
+  return removed;
+}
+
 export class WhatsAppWebSender implements AccountabilitySender {
   private readonly client: InstanceType<typeof Client>;
   private ready = false;
   private lastDetail = "not initialized";
 
   constructor(options: WhatsAppWebSenderOptions) {
+    const removedLocks = removeStaleChromiumSingletonLocks(options.sessionPath);
+    if (removedLocks.length > 0) {
+      console.warn(`Removed ${removedLocks.length} stale WhatsApp Chromium profile lock file(s)`);
+    }
+
     this.client = new Client({
       authStrategy: new LocalAuth({
         clientId: options.clientId,
