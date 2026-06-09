@@ -17,6 +17,10 @@ export class EscalationService {
     private readonly recipientId: string
   ) {}
 
+  async getHealth(): Promise<{ connected: boolean; detail: string }> {
+    return this.sender.getHealth();
+  }
+
   async sendForTask(taskId: string, dismissCount: number): Promise<EscalationResult> {
     const task = this.tasks.getById(taskId);
     if (task === null) {

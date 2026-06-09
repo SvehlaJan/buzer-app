@@ -27,24 +27,34 @@ const deviceCheckInBody = z.object({
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions): void {
   app.get("/health", async (_request, reply) => {
+    const checks: {
+      database: "ok" | "failed";
+      whatsapp?: { connected: boolean; detail: string };
+    } = { database: "ok" };
+
     try {
       options.db.prepare("select 1").get();
     } catch (error) {
+      checks.database = "failed";
       reply.status(503).send({
         ok: false,
         service: "buzer-backend",
         timestamp: new Date().toISOString(),
-        checks: { database: "failed" },
+        checks,
         message: error instanceof Error ? error.message : "Database health check failed"
       });
       return;
+    }
+
+    if (options.escalationService !== null && options.escalationService !== undefined) {
+      checks.whatsapp = await options.escalationService.getHealth();
     }
 
     return {
       ok: true,
       service: "buzer-backend",
       timestamp: new Date().toISOString(),
-      checks: { database: "ok" }
+      checks
     };
   });
 

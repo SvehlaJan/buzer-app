@@ -30,19 +30,28 @@ export class WhatsAppWebSender implements AccountabilitySender {
     this.client.on("qr", (qr: string) => {
       this.ready = false;
       this.lastDetail = "qr required";
+      console.log("WhatsApp authentication QR required");
       qrcode.generate(qr, { small: true });
+    });
+    this.client.on("authenticated", () => {
+      this.ready = false;
+      this.lastDetail = "authenticated";
+      console.log("WhatsApp authenticated");
     });
     this.client.on("ready", () => {
       this.ready = true;
       this.lastDetail = "ready";
+      console.log("WhatsApp ready");
     });
     this.client.on("auth_failure", (message: string) => {
       this.ready = false;
       this.lastDetail = `auth failure: ${message}`;
+      console.error(`WhatsApp auth failure: ${message}`);
     });
     this.client.on("disconnected", (reason: string) => {
       this.ready = false;
       this.lastDetail = `disconnected: ${reason}`;
+      console.warn(`WhatsApp disconnected: ${reason}`);
     });
   }
 

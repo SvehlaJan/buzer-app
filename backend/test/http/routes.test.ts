@@ -24,6 +24,36 @@ describe("HTTP routes", () => {
     });
   });
 
+  it("returns WhatsApp health when escalation service is configured", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const sender = new DryRunSender();
+    const escalationService = new EscalationService(db, repo, sender, "wife-chat");
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: new FakeTodoistAdapter(),
+      escalationService
+    });
+
+    const response = await app.inject({ method: "GET", url: "/health" });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      checks: {
+        database: "ok",
+        whatsapp: {
+          connected: true,
+          detail: "dry-run"
+        }
+      }
+    });
+  });
+
   it("rejects missing auth token", async () => {
     const db = new Database(":memory:");
     migrate(db);
