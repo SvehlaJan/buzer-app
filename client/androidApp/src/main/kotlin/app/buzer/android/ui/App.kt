@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import app.buzer.android.blockers.MorningReviewActivity
+import app.buzer.android.enforcement.PermissionHealthItem
+import app.buzer.android.enforcement.overlay.OverlayPermission
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.HomeScreen
 import app.buzer.shared.diagnostics.AppLog
@@ -26,8 +28,8 @@ private enum class AppSection {
 @Composable
 fun BuzerApp(
     openAddTask: Boolean = false,
-    bootRescheduleRequired: Boolean = false,
     snapshot: SnapshotViewState? = null,
+    permissionHealth: List<PermissionHealthItem> = emptyList(),
     homeStatusMessage: String? = null
 ) {
     MaterialTheme {
@@ -41,19 +43,7 @@ fun BuzerApp(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                if (bootRescheduleRequired) {
-                    HomeScreen(
-                        onAddTask = {
-                            AppLog.debug("ui navigate section=Add source=home bootRescheduleRequired=true")
-                            section = AppSection.Add
-                        },
-                        onMorningReview = {
-                            openMorningReview()
-                        },
-                        state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
-                            .copy(statusMessage = homeStatusMessage)
-                    )
-                } else when (section) {
+                when (section) {
                     AppSection.Home -> HomeScreen(
                         onAddTask = {
                             AppLog.debug("ui navigate section=Add source=home")
@@ -62,8 +52,15 @@ fun BuzerApp(
                         onMorningReview = {
                             openMorningReview()
                         },
+                        onOpenOverlaySettings = {
+                            AppLog.info("ui open_overlay_settings source=home")
+                            context.startActivity(OverlayPermission.settingsIntent(context))
+                        },
                         state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
-                            .copy(statusMessage = homeStatusMessage)
+                            .copy(
+                                statusMessage = homeStatusMessage,
+                                permissionHealth = permissionHealth
+                            )
                     )
 
                     AppSection.Add -> AddTaskScreen(onBack = { section = AppSection.Home })

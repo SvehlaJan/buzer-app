@@ -9,6 +9,9 @@ import android.content.Intent
 import app.buzer.android.blockers.DeadlineBlockerActivity
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.blockers.StartBlockerActivity
+import app.buzer.android.enforcement.overlay.OverlayBlockerRequest
+import app.buzer.android.enforcement.overlay.OverlayBlockerServiceStarter
+import app.buzer.shared.diagnostics.AppLog
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,7 +32,10 @@ class AlarmReceiver : BroadcastReceiver() {
         val targetIntent = blockerIntent(context, taskId, kind).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        context.startActivity(targetIntent)
+        val overlayStarted = OverlayBlockerRequest.fromAlarm(kind, taskId)
+            ?.let { OverlayBlockerServiceStarter.tryStart(context, it) }
+            ?: false
+        AppLog.info("overlay_start attempted result=$overlayStarted kind=$kind taskId=$taskId")
         showBlockerNotification(context, taskId, kind, targetIntent)
     }
 

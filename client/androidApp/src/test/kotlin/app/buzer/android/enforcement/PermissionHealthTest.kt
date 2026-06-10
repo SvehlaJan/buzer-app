@@ -11,10 +11,24 @@ class PermissionHealthTest {
             exactAlarmGranted = false,
             notificationsGranted = true,
             batteryOptimizationIgnored = true,
-            bootReceiverEnabled = true
+            bootReceiverEnabled = true,
+            overlayAllowed = true
         )
 
         assertTrue(result.any { it.key == "exact_alarm" && it.level == "error" })
+    }
+
+    @Test
+    fun reportsMissingOverlayPermissionAsError() {
+        val result = PermissionHealth.evaluate(
+            exactAlarmGranted = true,
+            notificationsGranted = true,
+            batteryOptimizationIgnored = true,
+            bootReceiverEnabled = true,
+            overlayAllowed = false
+        )
+
+        assertTrue(result.any { it.key == "overlay" && it.level == "error" })
     }
 
     @Test
@@ -23,7 +37,8 @@ class PermissionHealthTest {
             exactAlarmGranted = true,
             notificationsGranted = true,
             batteryOptimizationIgnored = true,
-            bootReceiverEnabled = true
+            bootReceiverEnabled = true,
+            overlayAllowed = true
         )
 
         assertEquals("ok", result.single().level)

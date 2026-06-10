@@ -87,6 +87,57 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun reconcileLatestSnapshotReturnsFalseAndDoesNotScheduleWhenCacheIsMissing() {
+        val scheduler = RecordingAlarmScheduler()
+        val api = FakeBuzerApi(snapshot(task("task-1")))
+        val logs = mutableListOf<String>()
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" },
+            logger = logs::add
+        )
+
+        assertEquals(false, coordinator.reconcileLatestSnapshot())
+
+        assertEquals(0, api.snapshotCalls)
+        assertTrue(scheduler.cancelledAll.isEmpty())
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertTrue(logs.any { it == "snapshot load result=miss" })
+    }
+
+    @Test
+    fun reconcileLatestSnapshotSchedulesCachedSnapshotWithoutNetwork() {
+        val scheduler = RecordingAlarmScheduler()
+        val api = FakeBuzerApi(snapshot(task("live-task")))
+        val store = FakeSnapshotStore().apply {
+            saved = snapshot(task("cached-task"))
+        }
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertEquals(true, coordinator.reconcileLatestSnapshot())
+
+        assertEquals(0, api.snapshotCalls)
+        assertEquals(listOf("cached-task"), scheduler.cancelledAll)
+        assertEquals(
+            listOf(
+                scheduled("cached-task", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
+                scheduled("cached-task", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("cached-task", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+            ),
+            scheduler.scheduled
+        )
+    }
+
+    @Test
     fun postponeFailureReportsErrorAndSchedulesFiveMinuteStartBlockerRetry() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val reporter = RecordingErrorReporter()
@@ -222,7 +273,13 @@ class EnforcementCoordinatorTest {
         private val cancelPostpone: Boolean = false,
         private val failDismissMorningReview: Boolean = false
     ) : EnforcementApi {
-        override suspend fun getSnapshot(): TasksSnapshotResponse = snapshot
+        var snapshotCalls = 0
+
+        override suspend fun getSnapshot(): TasksSnapshotResponse {
+            snapshotCalls += 1
+            return snapshot
+        }
+
         override suspend fun startTask(id: String) = Unit
         override suspend fun postponeStart(id: String) {
             if (cancelPostpone) throw CancellationException("cancelled")

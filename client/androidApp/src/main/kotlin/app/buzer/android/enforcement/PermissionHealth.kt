@@ -11,7 +11,8 @@ object PermissionHealth {
         exactAlarmGranted: Boolean,
         notificationsGranted: Boolean,
         batteryOptimizationIgnored: Boolean,
-        bootReceiverEnabled: Boolean
+        bootReceiverEnabled: Boolean,
+        overlayAllowed: Boolean
     ): List<PermissionHealthItem> {
         val items = mutableListOf<PermissionHealthItem>()
         if (!exactAlarmGranted) {
@@ -25,6 +26,13 @@ object PermissionHealth {
         }
         if (!bootReceiverEnabled) {
             items += PermissionHealthItem("boot", "warning", "Boot rescheduling is not active.")
+        }
+        if (!overlayAllowed) {
+            items += PermissionHealthItem(
+                "overlay",
+                "error",
+                "Display over other apps permission is required for blocker overlays."
+            )
         }
         return items.ifEmpty {
             listOf(PermissionHealthItem("all", "ok", "Device enforcement permissions look ready."))

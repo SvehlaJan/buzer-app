@@ -92,7 +92,7 @@ Manual verification:
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
 
-- [ ] **Step 1: Add failing tests for cached reconciliation**
+- [x] **Step 1: Add failing tests for cached reconciliation**
 
 Add tests that prove:
 
@@ -122,7 +122,7 @@ fun reconcileLatestSnapshotSchedulesFromCacheWithoutNetwork() {
 }
 ```
 
-- [ ] **Step 2: Implement the coordinator API**
+- [x] **Step 2: Implement the coordinator API**
 
 Keep the private `reconcile(snapshot)` method as the single scheduling implementation and add a public wrapper:
 
@@ -135,7 +135,7 @@ fun reconcileLatestSnapshot(): Boolean {
 }
 ```
 
-- [ ] **Step 3: Verify coordinator tests**
+- [x] **Step 3: Verify coordinator tests**
 
 Run:
 
@@ -154,7 +154,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BootReconcileRunner.kt`
 - Keep or delete: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt`, depending on whether anything else references it
 
-- [ ] **Step 1: Add boot runner with injectable work function**
+- [x] **Step 1: Add boot runner with injectable work function**
 
 Implement a small runner that accepts `Context`, `BroadcastReceiver.PendingResult`, and an injectable suspend block for tests. Production work should create the existing app dependencies and run:
 
@@ -201,7 +201,7 @@ object BootReconcileRunner {
 
 Adapt names to the existing logging/dependency helpers found in the Android module. If no `EnforcementDependencies` helper exists, follow the construction pattern currently used by `MainActivity` or blocker activities.
 
-- [ ] **Step 2: Wire `BootReceiver` to `goAsync()`**
+- [x] **Step 2: Wire `BootReceiver` to `goAsync()`**
 
 Replace the current activity-launch delegation:
 
@@ -212,11 +212,11 @@ override fun onReceive(context: Context, intent: Intent) {
 }
 ```
 
-- [ ] **Step 3: Remove dead boot activity path**
+- [x] **Step 3: Remove dead boot activity path**
 
 If `RescheduleAfterBoot` is no longer referenced, delete it and remove any stale boot extras from `MainActivity`. Keep this scoped: do not change normal app launch behavior.
 
-- [ ] **Step 4: Verify boot code compiles**
+- [x] **Step 4: Verify boot code compiles**
 
 Run:
 
@@ -237,7 +237,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/PermissionHealthTest.kt`
 - Modify permission health UI files found by search
 
-- [ ] **Step 1: Add pure health tests**
+- [x] **Step 1: Add pure health tests**
 
 Extend `PermissionHealth.evaluate(...)` with `overlayAllowed: Boolean`.
 
@@ -246,7 +246,7 @@ Add tests:
 - Overlay missing returns an `error` item with key `overlay`.
 - All permissions granted returns only the existing `all` ok item.
 
-- [ ] **Step 2: Implement overlay permission helper**
+- [x] **Step 2: Implement overlay permission helper**
 
 ```kotlin
 object OverlayPermission {
@@ -261,11 +261,11 @@ object OverlayPermission {
 }
 ```
 
-- [ ] **Step 3: Read overlay state in Android health**
+- [x] **Step 3: Read overlay state in Android health**
 
 Pass `overlayAllowed = OverlayPermission.canDraw(context)` from `AndroidPermissionHealthReader.read(context)`.
 
-- [ ] **Step 4: Add setup affordance**
+- [x] **Step 4: Add setup affordance**
 
 Update the permission health UI so the overlay error has an action that opens `OverlayPermission.settingsIntent(context)`.
 
@@ -276,7 +276,7 @@ Suggested copy:
 - Message: `Display over other apps permission is required for blocker overlays.`
 - Action label: `Open overlay settings`
 
-- [ ] **Step 5: Verify health tests**
+- [x] **Step 5: Verify health tests**
 
 Run:
 
@@ -297,7 +297,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/BlockerOverlayController.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
 
-- [ ] **Step 1: Add manifest declarations**
+- [x] **Step 1: Add manifest declarations**
 
 Add permissions:
 
@@ -320,7 +320,7 @@ Add service:
 </service>
 ```
 
-- [ ] **Step 2: Add request parser tests**
+- [x] **Step 2: Add request parser tests**
 
 Create a small request type that serializes/deserializes the same alarm extras used by `AlarmReceiver`.
 
@@ -332,7 +332,7 @@ Required fields:
 
 Tests should cover start blocker, deadline blocker, morning review, and missing invalid extras.
 
-- [ ] **Step 3: Implement service startup helper**
+- [x] **Step 3: Implement service startup helper**
 
 Expose a helper:
 
@@ -357,7 +357,7 @@ object OverlayBlockerServiceStarter {
 
 Log skipped and failure reasons at call sites.
 
-- [ ] **Step 4: Implement foreground service**
+- [x] **Step 4: Implement foreground service**
 
 Service responsibilities:
 
@@ -368,7 +368,7 @@ Service responsibilities:
 
 For SDK 34+ use the special-use foreground-service type when calling `startForeground`.
 
-- [ ] **Step 5: Implement native overlay view**
+- [x] **Step 5: Implement native overlay view**
 
 Use programmatic Android views in `BlockerOverlayController`:
 
@@ -381,7 +381,7 @@ Use programmatic Android views in `BlockerOverlayController`:
 
 `Open full blocker` may launch the existing deadline blocker activity for reschedule in Phase 1.
 
-- [ ] **Step 6: Wire actions to coordinator**
+- [x] **Step 6: Wire actions to coordinator**
 
 Actions should call:
 
@@ -399,11 +399,11 @@ On `CoordinatorActionResult.Success` or `FailedAndHidden`, remove the overlay an
 
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
 
-- [ ] **Step 1: Preserve pre-start warnings**
+- [x] **Step 1: Preserve pre-start warnings**
 
 Do not overlay for `PRE_START_WARNING`; keep current notification behavior.
 
-- [ ] **Step 2: Try overlay for blocker alarms**
+- [x] **Step 2: Try overlay for blocker alarms**
 
 For `START_BLOCKER`, `DEADLINE_BLOCKER`, and morning review alarms:
 
@@ -412,11 +412,11 @@ For `START_BLOCKER`, `DEADLINE_BLOCKER`, and morning review alarms:
 3. Log `overlay_start attempted result=<true|false> kind=<kind> taskId=<id>`.
 4. Always post the existing full-screen notification fallback.
 
-- [ ] **Step 3: Avoid direct background activity starts**
+- [x] **Step 3: Avoid direct background activity starts**
 
 Remove direct `context.startActivity(targetIntent)` from the broadcast path unless it is guarded behind an explicitly foreground/debug-only condition. Full-screen notification should be the activity fallback.
 
-- [ ] **Step 4: Verify receiver tests or compile coverage**
+- [x] **Step 4: Verify receiver tests or compile coverage**
 
 If existing tests can cover receiver branching, add them. Otherwise document compile-only coverage in the handoff and rely on manual device verification for broadcast behavior.
 
@@ -428,7 +428,7 @@ If existing tests can cover receiver branching, add them. Otherwise document com
 - Modify: `client/androidApp/src/debug/AndroidManifest.xml`
 - Update: `docs/notes/local-development.md` or create `docs/notes/2026-06-10-android-overlay-testing.md`
 
-- [ ] **Step 1: Add a debug overlay launch activity**
+- [x] **Step 1: Add a debug overlay launch activity**
 
 Create a debug-only way to launch a sample overlay from ADB without waiting for a real task alarm.
 
@@ -441,7 +441,7 @@ adb -s 11141FDD4002R1 shell am start \
   --es task_id debug-task
 ```
 
-- [ ] **Step 2: Document overlay grant commands**
+- [x] **Step 2: Document overlay grant commands**
 
 Manual grant path:
 
@@ -465,7 +465,7 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android
 - Create/update: `docs/handoffs/<date>-android-overlay-boot-recovery.md`
 - Optionally update: `docs/notes/2026-06-10-android-overlay-testing.md`
 
-- [ ] **Step 1: Run JVM tests and debug build**
+- [x] **Step 1: Run JVM tests and debug build**
 
 ```bash
 cd client
@@ -474,7 +474,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 2: Install on Pixel 5**
+- [x] **Step 2: Install on Pixel 5**
 
 ```bash
 cd client
@@ -483,7 +483,7 @@ ANDROID_SERIAL=11141FDD4002R1 ./gradlew :androidApp:installDebug
 
 Expected: install succeeds.
 
-- [ ] **Step 3: Grant and verify overlay permission**
+- [x] **Step 3: Grant and verify overlay permission**
 
 Use the settings screen or dev app-op command from Task 6.
 
@@ -495,7 +495,7 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android | rg SYSTEM_ALERT_W
 
 Expected: overlay app-op is allowed.
 
-- [ ] **Step 4: Direct overlay smoke test**
+- [x] **Step 4: Direct overlay smoke test**
 
 Open another app, then launch the debug overlay:
 
@@ -511,7 +511,7 @@ Expected:
 - Overlay is visible above the foreground app.
 - `adb -s 11141FDD4002R1 logcat -d -s Buzer` includes overlay shown and dismissed/action logs.
 
-- [ ] **Step 5: Real timed lock-screen test**
+- [x] **Step 5: Real timed lock-screen test**
 
 Create a short strict task against the live MVP backend, wait for the exact alarm with the phone locked, and verify:
 
@@ -520,7 +520,7 @@ Create a short strict task against the live MVP backend, wait for the exact alar
 - overlay is removed after action
 - fallback full-screen notification still exists
 
-- [ ] **Step 6: Real timed foreground-app test**
+- [x] **Step 6: Real timed foreground-app test**
 
 Open a normal foreground app before the task start/deadline alarm fires.
 
@@ -529,7 +529,7 @@ Expected:
 - Overlay appears above the foreground app when permission is granted.
 - If overlay start fails, full-screen notification fallback is posted.
 
-- [ ] **Step 7: Boot recovery retest**
+- [x] **Step 7: Boot recovery retest**
 
 With a cached snapshot containing a future alarm:
 

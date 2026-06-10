@@ -7,13 +7,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import app.buzer.android.enforcement.AndroidPermissionHealthReader
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.EnforcementRefreshRunner
 import app.buzer.android.enforcement.NotificationChannels
-import app.buzer.android.enforcement.RescheduleAfterBoot
+import app.buzer.android.enforcement.PermissionHealthItem
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
     private var homeStatusMessage by mutableStateOf<String?>(null)
+    private var permissionHealth by mutableStateOf<List<PermissionHealthItem>>(emptyList())
     private val refreshRunner: EnforcementRefreshRunner by lazy {
         EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure, AppLog::debug)
     }
@@ -43,15 +45,11 @@ class MainActivity : ComponentActivity() {
             .getOrNull()
         refreshEnforcement()
         val openAddTask = intent.getBooleanExtra(AddTaskWidgetProvider.EXTRA_OPEN_ADD_TASK, false)
-        val bootRescheduleRequired = intent.getBooleanExtra(
-            RescheduleAfterBoot.EXTRA_BOOT_RESCHEDULE_REQUIRED,
-            false
-        )
         setContent {
             BuzerApp(
                 openAddTask = openAddTask,
-                bootRescheduleRequired = bootRescheduleRequired,
                 snapshot = snapshotViewState,
+                permissionHealth = permissionHealth,
                 homeStatusMessage = homeStatusMessage
             )
         }
@@ -63,6 +61,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshEnforcement() {
+        refreshPermissionHealth()
         val coordinator = coordinator ?: run {
             AppLog.debug("main refresh skipped reason=no_coordinator")
             homeStatusMessage = "Refresh failed"
@@ -88,5 +87,9 @@ class MainActivity : ComponentActivity() {
             taskId = null,
             message = error.message ?: "snapshot refresh failed"
         )
+    }
+
+    private fun refreshPermissionHealth() {
+        permissionHealth = AndroidPermissionHealthReader.read(applicationContext)
     }
 }

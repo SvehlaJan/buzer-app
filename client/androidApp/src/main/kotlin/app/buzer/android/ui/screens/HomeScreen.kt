@@ -1,5 +1,6 @@
 package app.buzer.android.ui.screens
 
+import app.buzer.android.enforcement.PermissionHealthItem
 import app.buzer.shared.state.SnapshotViewState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,8 @@ data class HomeScreenState(
     val invalidCount: Int,
     val activeBlockerCount: Int,
     val startingTodayCount: Int,
-    val healthWarningCount: Int
+    val healthWarningCount: Int,
+    val permissionHealth: List<PermissionHealthItem>
 )
 
 fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
@@ -31,7 +33,8 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
             invalidCount = 0,
             activeBlockerCount = 0,
             startingTodayCount = 0,
-            healthWarningCount = 0
+            healthWarningCount = 0,
+            permissionHealth = emptyList()
         )
     } else {
         HomeScreenState(
@@ -40,7 +43,8 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
             invalidCount = snapshot.invalidTasks.size,
             activeBlockerCount = snapshot.activeBlockers.size,
             startingTodayCount = snapshot.startingToday.size,
-            healthWarningCount = snapshot.healthWarnings.size
+            healthWarningCount = snapshot.healthWarnings.size,
+            permissionHealth = emptyList()
         )
     }
 
@@ -48,6 +52,7 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
 fun HomeScreen(
     onAddTask: () -> Unit,
     onMorningReview: () -> Unit,
+    onOpenOverlaySettings: () -> Unit = {},
     state: HomeScreenState = buildHomeScreenState(null)
 ) {
     Column(
@@ -64,6 +69,16 @@ fun HomeScreen(
         Text("Active blockers: ${state.activeBlockerCount}")
         Text("Starting today: ${state.startingTodayCount}")
         Text("Health warnings: ${state.healthWarningCount}")
+        state.permissionHealth
+            .filterNot { it.key == "all" }
+            .forEach { item ->
+                Text(item.message)
+                if (item.key == "overlay") {
+                    OutlinedButton(onClick = onOpenOverlaySettings, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open overlay settings")
+                    }
+                }
+            }
 
         Button(onClick = onAddTask, modifier = Modifier.fillMaxWidth()) {
             Text("Add task")

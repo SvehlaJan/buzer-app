@@ -42,6 +42,13 @@ class EnforcementCoordinator(
         return snapshot
     }
 
+    fun reconcileLatestSnapshot(): Boolean {
+        val snapshot = loadLatestSnapshot() ?: return false
+        reconcile(snapshot)
+        logger("cached reconcile complete scheduleVersion=${snapshot.scheduleVersion}")
+        return true
+    }
+
     suspend fun startTask(taskId: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.START_TASK,

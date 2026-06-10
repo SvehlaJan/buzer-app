@@ -6,8 +6,7 @@ import android.content.Intent
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            RescheduleAfterBoot.enqueue(context)
-        }
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        BootReconcileRunner.run(context, goAsync())
     }
 }
