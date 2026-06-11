@@ -48,4 +48,27 @@ class EnforcementRefreshRunnerTest {
         job.join()
         assertTrue(reportedFailures.isEmpty())
     }
+
+    @Test
+    fun timeoutReportsRefreshFailure() = runBlocking {
+        val reportedFailures = mutableListOf<Throwable>()
+        val logs = mutableListOf<String>()
+        val neverFinishes = CompletableDeferred<Unit>()
+        val runner = EnforcementRefreshRunner(
+            scope = this,
+            reportFailure = reportedFailures::add,
+            logger = logs::add,
+            timeoutMillis = 1
+        )
+
+        val job = runner.refresh {
+            neverFinishes.await()
+        }
+
+        assertNotNull(job)
+        job.join()
+        assertEquals(1, reportedFailures.size)
+        assertTrue(reportedFailures.single() is EnforcementRefreshTimeoutException)
+        assertTrue(logs.any { it == "refresh_runner timeout timeoutMillis=1" })
+    }
 }

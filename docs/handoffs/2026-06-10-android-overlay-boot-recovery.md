@@ -18,6 +18,7 @@
   - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
   - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BootReceiver.kt`
   - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BootReconcileRunner.kt`
+  - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunner.kt`
   - deleted `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt`
 - Android overlay:
   - `client/androidApp/src/main/AndroidManifest.xml`
@@ -36,6 +37,7 @@
 - Tests/docs:
   - `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
   - `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BootReconcileRunnerTest.kt`
+  - `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunnerTest.kt`
   - `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/PermissionHealthTest.kt`
   - `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
   - `docs/superpowers/plans/2026-06-10-android-overlay-boot-recovery.md`
@@ -68,6 +70,11 @@ Verification:
 - Command: `./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementRefreshRunnerTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; timeout test confirms refresh reports `EnforcementRefreshTimeoutException`.
 
 Verification:
 - Command: `ANDROID_SERIAL=11141FDD4002R1 ./gradlew :androidApp:installDebug`
@@ -104,6 +111,21 @@ Verification:
 - Result: PASS
 - Evidence: Android started `app.buzer.android/.enforcement.BootReceiver`; logs showed `boot_reconcile refresh=timeout` and `boot_reconcile complete`; `dumpsys alarm` showed `RTC_WAKEUP` for `app.buzer.android/.enforcement.AlarmReceiver`; no `BAL_BLOCK` appeared.
 
+Verification:
+- Command: live backend/Todoist smoke task through `POST /tasks`, Android refresh attempt, and cleanup through `POST /tasks/:id/done`.
+- Result: PARTIAL
+- Evidence: backend created task `fd91322f-fce4-4524-a962-b9f2805ca2cc` with Todoist ID `6gqpxJW3MWxj5M57`; cleanup returned `{"ok":true}` and snapshot showed `state=completed`, `isCompleted=true`. Android could not pull the live snapshot because the phone could not connect to `100.105.180.34:18432`.
+
+Verification:
+- Command: `adb -s 11141FDD4002R1 shell ping -c 1 -W 3 100.105.180.34`
+- Result: FAIL
+- Evidence: `1 packets transmitted, 0 received, 100% packet loss`.
+
+Verification:
+- Command: reinstall updated debug APK and launch Buzer with phone unable to reach backend.
+- Result: PASS
+- Evidence: logcat showed `refresh_runner timeout timeoutMillis=10000` and `EnforcementRefreshTimeoutException: snapshot refresh timed out after 10000ms`.
+
 ## Tests Run
 
 - Android JVM tests: PASS.
@@ -113,6 +135,8 @@ Verification:
 - Foreground-app/launcher exact-alarm overlay test: PASS.
 - Lock-screen exact-alarm blocker test: PASS.
 - Boot recovery test: PASS.
+- Live backend/Todoist cleanup: PASS.
+- Live Android sync against the VPS: BLOCKED by phone network route to the Tailscale VPS.
 
 ## Manual Verification
 
@@ -121,12 +145,15 @@ Verification:
 - Exact alarm receiver starts overlay first and keeps full-screen notification fallback.
 - Lock-screen alarm wakes the phone and brings the blocker fallback to focus.
 - Boot recovery no longer starts `MainActivity`; Android delivered `BootReceiver` and no `BAL_BLOCK` was observed.
+- A real Todoist-backed smoke task was created and completed during follow-up testing. It did not remain active.
+- The connected phone currently cannot reach the VPS Tailscale IP `100.105.180.34`; Android live sync requires fixing this device network route.
 
 ## Known Failures / Skipped Checks
 
-- The timed tests used debug exact alarms and debug task IDs, not live Todoist task creation, to avoid modifying real Todoist data during this infrastructure pass.
+- The main alarm/overlay timed tests used debug exact alarms and debug task IDs. A separate live Todoist-backed task was created and completed for backend cleanup verification, but the Android device could not sync it because it cannot reach the Tailscale backend IP.
 - Overlay action against debug task IDs times out after 15 seconds if the backend request does not complete; this is intentional cleanup behavior.
 - Settings pages can hide/suppress app overlays. This is an Android platform limitation; fallback notifications/activities remain necessary.
+- Full live Android end-to-end verification remains pending until the phone can reach the VPS backend.
 
 ## Assumptions
 
@@ -136,4 +163,4 @@ Verification:
 
 ## Next Recommended Step
 
-Use the app against a real short-lived strict task only when you are comfortable creating/modifying live Todoist data. The Android enforcement plumbing is now ready for that MVP check; the remaining risk is backend/Todoist action latency rather than alarm or overlay delivery.
+Fix phone-to-backend connectivity for live Android sync. The most direct option is installing/enabling Tailscale on the Pixel 5 so it can reach `100.105.180.34:18432`. After that, rerun the live short-task smoke test from Android; the app should refresh within 10 seconds, schedule the strict task alarms, show the overlay/fallback blocker, and complete the task through the backend.
