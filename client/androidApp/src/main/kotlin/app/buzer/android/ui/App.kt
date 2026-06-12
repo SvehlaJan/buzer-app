@@ -26,7 +26,6 @@ private enum class AppSection {
 @Composable
 fun BuzerApp(
     openAddTask: Boolean = false,
-    bootRescheduleRequired: Boolean = false,
     snapshot: SnapshotViewState? = null,
     homeStatusMessage: String? = null
 ) {
@@ -41,19 +40,7 @@ fun BuzerApp(
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                if (bootRescheduleRequired) {
-                    HomeScreen(
-                        onAddTask = {
-                            AppLog.debug("ui navigate section=Add source=home bootRescheduleRequired=true")
-                            section = AppSection.Add
-                        },
-                        onMorningReview = {
-                            openMorningReview()
-                        },
-                        state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
-                            .copy(statusMessage = homeStatusMessage)
-                    )
-                } else when (section) {
+                when (section) {
                     AppSection.Home -> HomeScreen(
                         onAddTask = {
                             AppLog.debug("ui navigate section=Add source=home")

@@ -154,7 +154,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BootReconcileRunner.kt`
 - Keep or delete: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/RescheduleAfterBoot.kt`, depending on whether anything else references it
 
-- [ ] **Step 1: Add boot runner with injectable work function**
+- [x] **Step 1: Add boot runner with injectable work function**
 
 Implement a small runner that accepts `Context`, `BroadcastReceiver.PendingResult`, and an injectable suspend block for tests. Production work should create the existing app dependencies and run:
 
@@ -201,7 +201,7 @@ object BootReconcileRunner {
 
 Adapt names to the existing logging/dependency helpers found in the Android module. If no `EnforcementDependencies` helper exists, follow the construction pattern currently used by `MainActivity` or blocker activities.
 
-- [ ] **Step 2: Wire `BootReceiver` to `goAsync()`**
+- [x] **Step 2: Wire `BootReceiver` to `goAsync()`**
 
 Replace the current activity-launch delegation:
 
@@ -212,11 +212,11 @@ override fun onReceive(context: Context, intent: Intent) {
 }
 ```
 
-- [ ] **Step 3: Remove dead boot activity path**
+- [x] **Step 3: Remove dead boot activity path**
 
 If `RescheduleAfterBoot` is no longer referenced, delete it and remove any stale boot extras from `MainActivity`. Keep this scoped: do not change normal app launch behavior.
 
-- [ ] **Step 4: Verify boot code compiles**
+- [x] **Step 4: Verify boot code compiles**
 
 Run:
 

@@ -13,7 +13,6 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.EnforcementRefreshRunner
 import app.buzer.android.enforcement.NotificationChannels
-import app.buzer.android.enforcement.RescheduleAfterBoot
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
@@ -43,14 +42,9 @@ class MainActivity : ComponentActivity() {
             .getOrNull()
         refreshEnforcement()
         val openAddTask = intent.getBooleanExtra(AddTaskWidgetProvider.EXTRA_OPEN_ADD_TASK, false)
-        val bootRescheduleRequired = intent.getBooleanExtra(
-            RescheduleAfterBoot.EXTRA_BOOT_RESCHEDULE_REQUIRED,
-            false
-        )
         setContent {
             BuzerApp(
                 openAddTask = openAddTask,
-                bootRescheduleRequired = bootRescheduleRequired,
                 snapshot = snapshotViewState,
                 homeStatusMessage = homeStatusMessage
             )
