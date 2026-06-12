@@ -297,7 +297,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/BlockerOverlayController.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
 
-- [ ] **Step 1: Add manifest declarations**
+- [x] **Step 1: Add manifest declarations**
 
 Add permissions:
 
@@ -320,7 +320,7 @@ Add service:
 </service>
 ```
 
-- [ ] **Step 2: Add request parser tests**
+- [x] **Step 2: Add request parser tests**
 
 Create a small request type that serializes/deserializes the same alarm extras used by `AlarmReceiver`.
 
@@ -332,7 +332,7 @@ Required fields:
 
 Tests should cover start blocker, deadline blocker, morning review, and missing invalid extras.
 
-- [ ] **Step 3: Implement service startup helper**
+- [x] **Step 3: Implement service startup helper**
 
 Expose a helper:
 
@@ -357,7 +357,7 @@ object OverlayBlockerServiceStarter {
 
 Log skipped and failure reasons at call sites.
 
-- [ ] **Step 4: Implement foreground service**
+- [x] **Step 4: Implement foreground service**
 
 Service responsibilities:
 
@@ -368,7 +368,7 @@ Service responsibilities:
 
 For SDK 34+ use the special-use foreground-service type when calling `startForeground`.
 
-- [ ] **Step 5: Implement native overlay view**
+- [x] **Step 5: Implement native overlay view**
 
 Use programmatic Android views in `BlockerOverlayController`:
 
@@ -381,7 +381,7 @@ Use programmatic Android views in `BlockerOverlayController`:
 
 `Open full blocker` may launch the existing deadline blocker activity for reschedule in Phase 1.
 
-- [ ] **Step 6: Wire actions to coordinator**
+- [x] **Step 6: Wire actions to coordinator**
 
 Actions should call:
 
