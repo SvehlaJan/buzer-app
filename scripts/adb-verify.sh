@@ -100,12 +100,13 @@ cmd_logcat_clear() {
 
 cmd_logcat() {
   local lines="${1:-$log_lines}"
-  adbx logcat -d -s "$log_tag" -t "$lines"
+  # Filter by tag across the whole buffer, then tail. Do NOT pass `-t` together with `-s`:
+  # `-t N` keeps the last N lines of the *entire* buffer before the tag filter applies.
+  adbx logcat -d -s "$log_tag" | tail -n "$lines"
 }
 
 cmd_boot_log() {
-  local lines="${1:-$log_lines}"
-  adbx logcat -d -s "$log_tag" -t "$lines" | filter 'boot_reconcile|BAL_BLOCK|reschedule|reconcile complete'
+  adbx logcat -d -s "$log_tag" | filter 'boot_reconcile|BAL_BLOCK|reschedule|reconcile complete'
 }
 
 cmd_alarms() {
