@@ -428,7 +428,7 @@ If existing tests can cover receiver branching, add them. Otherwise document com
 - Modify: `client/androidApp/src/debug/AndroidManifest.xml`
 - Update: `docs/notes/local-development.md` or create `docs/notes/2026-06-10-android-overlay-testing.md`
 
-- [ ] **Step 1: Add a debug overlay launch activity**
+- [x] **Step 1: Add a debug overlay launch activity**
 
 Create a debug-only way to launch a sample overlay from ADB without waiting for a real task alarm.
 
@@ -441,7 +441,7 @@ adb -s 11141FDD4002R1 shell am start \
   --es task_id debug-task
 ```
 
-- [ ] **Step 2: Document overlay grant commands**
+- [x] **Step 2: Document overlay grant commands** — recorded in `docs/notes/2026-06-12-android-overlay-testing.md`.
 
 Manual grant path:
 

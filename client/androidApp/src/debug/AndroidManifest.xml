@@ -5,6 +5,9 @@
         <activity
             android:name=".debug.DebugBlockerLauncherActivity"
             android:exported="true" />
+        <activity
+            android:name=".debug.DebugOverlayLauncherActivity"
+            android:exported="true" />
     </application>
 
 </manifest>
