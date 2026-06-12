@@ -471,7 +471,7 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android
 > output and scopes to the Pixel 5 via `BUZER_DEVICE_SERIAL=11141FDD4002R1`. See
 > `docs/notes/2026-06-12-agent-token-efficient-android-testing.md`.
 
-- [ ] **Step 1: Run JVM tests and debug build**
+- [x] **Step 1: Run JVM tests and debug build** — 53 unit tests pass; `assembleDebug` succeeds.
 
 ```bash
 cd client
@@ -480,7 +480,7 @@ cd client
 
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 2: Install on Pixel 5**
+- [x] **Step 2: Install on Pixel 5** — installed on `emulator-5554` (API 34) instead; Pixel 5 install deferred (device not unlockable at implementation time).
 
 ```bash
 cd client
@@ -489,7 +489,7 @@ ANDROID_SERIAL=11141FDD4002R1 ./gradlew :androidApp:installDebug
 
 Expected: install succeeds.
 
-- [ ] **Step 3: Grant and verify overlay permission**
+- [x] **Step 3: Grant and verify overlay permission** — `appops set ... SYSTEM_ALERT_WINDOW allow` on emulator; `adb-verify.sh perms` confirms `SYSTEM_ALERT_WINDOW: allow`.
 
 Use the settings screen or dev app-op command from Task 6.
 
@@ -501,7 +501,7 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android | rg SYSTEM_ALERT_W
 
 Expected: overlay app-op is allowed.
 
-- [ ] **Step 4: Direct overlay smoke test**
+- [x] **Step 4: Direct overlay smoke test** — debug launch over a foreground app logged `debug_overlay launch result=true`, `overlay shown kind=START_BLOCKER/DEADLINE_BLOCKER` (FGS allowed, `addView` succeeded). Visual confirmation over the Settings app omitted: `TYPE_APPLICATION_OVERLAY` draws below system UI (expected limitation).
 
 Open another app, then launch the debug overlay:
 
@@ -517,7 +517,7 @@ Expected:
 - Overlay is visible above the foreground app.
 - `adb -s 11141FDD4002R1 logcat -d -s Buzer` includes overlay shown and dismissed/action logs.
 
-- [ ] **Step 5: Real timed lock-screen test**
+- [ ] **Step 5: Real timed lock-screen test** — DEFERRED to Pixel 5 (device not unlockable at implementation time; needs a real timed alarm with the phone locked).
 
 Create a short strict task against the live MVP backend, wait for the exact alarm with the phone locked, and verify:
 
@@ -526,7 +526,7 @@ Create a short strict task against the live MVP backend, wait for the exact alar
 - overlay is removed after action
 - fallback full-screen notification still exists
 
-- [ ] **Step 6: Real timed foreground-app test**
+- [ ] **Step 6: Real timed foreground-app test** — DEFERRED to Pixel 5 (needs a real timed alarm while a normal app is foregrounded). The overlay-add path is proven via the debug smoke test; this step confirms it over a real third-party app from an exact alarm.
 
 Open a normal foreground app before the task start/deadline alarm fires.
 
@@ -535,7 +535,7 @@ Expected:
 - Overlay appears above the foreground app when permission is granted.
 - If overlay start fails, full-screen notification fallback is posted.
 
-- [ ] **Step 7: Boot recovery retest**
+- [x] **Step 7: Boot recovery retest** — emulator reboot: logs show `boot_reconcile received`, `boot_reconcile cached=true`, `cached reconcile complete scheduleVersion=4`, `boot_reconcile refresh=success`, `boot_reconcile complete`, and **no `BAL_BLOCK`** for `MainActivity`. `scheduled=0` because the live snapshot had no active/starting-today tasks; alarm-restoration with real scheduled alarms remains a Pixel 5 data check.
 
 With a cached snapshot containing a future alarm:
 
