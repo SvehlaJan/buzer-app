@@ -42,6 +42,18 @@ class EnforcementCoordinator(
         return snapshot
     }
 
+    /**
+     * Reschedules alarms from the latest cached snapshot without any network call.
+     * Returns true when a cached snapshot was found and reconciled, false on cache miss.
+     * Used by boot recovery so enforcement survives reboot without opening the app.
+     */
+    fun reconcileLatestSnapshot(): Boolean {
+        val snapshot = loadLatestSnapshot() ?: return false
+        reconcile(snapshot)
+        logger("cached reconcile complete scheduleVersion=${snapshot.scheduleVersion}")
+        return true
+    }
+
     suspend fun startTask(taskId: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.START_TASK,

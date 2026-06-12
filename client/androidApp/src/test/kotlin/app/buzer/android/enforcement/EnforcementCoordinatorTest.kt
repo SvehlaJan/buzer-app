@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EnforcementCoordinatorTest {
@@ -175,6 +176,49 @@ class EnforcementCoordinatorTest {
         )
     }
 
+    @Test
+    fun reconcileLatestSnapshotReturnsFalseAndSchedulesNothingWhenCacheMisses() {
+        val scheduler = RecordingAlarmScheduler()
+        val api = FakeBuzerApi(snapshot(task("task-1")))
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertFalse(coordinator.reconcileLatestSnapshot())
+        assertEquals(0, api.snapshotCalls)
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertTrue(scheduler.cancelledAll.isEmpty())
+    }
+
+    @Test
+    fun reconcileLatestSnapshotSchedulesFromCacheWithoutNetwork() {
+        val scheduler = RecordingAlarmScheduler()
+        val api = FakeBuzerApi(snapshot(task("task-1")))
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = FakeSnapshotStore(snapshot(task("task-1"))),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertTrue(coordinator.reconcileLatestSnapshot())
+        assertEquals(0, api.snapshotCalls)
+        assertEquals(listOf("task-1"), scheduler.cancelledAll)
+        assertEquals(
+            listOf(
+                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+            ),
+            scheduler.scheduled
+        )
+    }
+
     private fun snapshot(vararg tasks: TaskSnapshotItem): TasksSnapshotResponse =
         TasksSnapshotResponse(
             scheduleVersion = 1,
@@ -222,7 +266,13 @@ class EnforcementCoordinatorTest {
         private val cancelPostpone: Boolean = false,
         private val failDismissMorningReview: Boolean = false
     ) : EnforcementApi {
-        override suspend fun getSnapshot(): TasksSnapshotResponse = snapshot
+        var snapshotCalls = 0
+            private set
+
+        override suspend fun getSnapshot(): TasksSnapshotResponse {
+            snapshotCalls += 1
+            return snapshot
+        }
         override suspend fun startTask(id: String) = Unit
         override suspend fun postponeStart(id: String) {
             if (cancelPostpone) throw CancellationException("cancelled")
@@ -238,8 +288,8 @@ class EnforcementCoordinatorTest {
         }
     }
 
-    private class FakeSnapshotStore : SnapshotStorage {
-        var saved: TasksSnapshotResponse? = null
+    private class FakeSnapshotStore(initial: TasksSnapshotResponse? = null) : SnapshotStorage {
+        var saved: TasksSnapshotResponse? = initial
 
         override fun save(snapshot: TasksSnapshotResponse) {
             saved = snapshot

@@ -92,7 +92,7 @@ Manual verification:
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
 
-- [ ] **Step 1: Add failing tests for cached reconciliation**
+- [x] **Step 1: Add failing tests for cached reconciliation**
 
 Add tests that prove:
 
@@ -122,7 +122,7 @@ fun reconcileLatestSnapshotSchedulesFromCacheWithoutNetwork() {
 }
 ```
 
-- [ ] **Step 2: Implement the coordinator API**
+- [x] **Step 2: Implement the coordinator API**
 
 Keep the private `reconcile(snapshot)` method as the single scheduling implementation and add a public wrapper:
 
@@ -135,7 +135,7 @@ fun reconcileLatestSnapshot(): Boolean {
 }
 ```
 
-- [ ] **Step 3: Verify coordinator tests**
+- [x] **Step 3: Verify coordinator tests**
 
 Run:
 
