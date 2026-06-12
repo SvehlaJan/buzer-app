@@ -27,6 +27,11 @@ Expected local commands after client setup:
 cd client
 ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 ./gradlew :androidApp:assembleDebug
+
+# Or, for a concise low-token pass/fail summary of the JVM unit tests:
+scripts/test.sh                 # androidApp debug unit tests
+scripts/test.sh Coordinator     # filter to matching test classes
+scripts/test.sh --shared        # also run shared host tests
 ```
 
 Note: the shared JVM unit-test task is `:shared:testAndroidHostTest`. The pre-AGP-9 name `:shared:testDebugUnitTest` no longer exists; older plan/handoff docs that reference it are historical.

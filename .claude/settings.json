@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/test.sh)",
+      "Bash(scripts/test.sh *)",
+      "Bash(scripts/adb-verify.sh)",
+      "Bash(scripts/adb-verify.sh *)"
+    ]
+  }
+}
