@@ -465,6 +465,12 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android
 - Create/update: `docs/handoffs/<date>-android-overlay-boot-recovery.md`
 - Optionally update: `docs/notes/2026-06-10-android-overlay-testing.md`
 
+> Token-efficient evidence: prefer `scripts/adb-verify.sh` for the logcat/alarms/perms/screenshot
+> steps below (`logcat-clear`, `boot-log`, `alarms`, `perms`, `screenshot`, `install`, `health`).
+> The explicit `adb` commands are kept for clarity, but the helper emits smaller, pre-filtered
+> output and scopes to the Pixel 5 via `BUZER_DEVICE_SERIAL=11141FDD4002R1`. See
+> `docs/notes/2026-06-12-agent-token-efficient-android-testing.md`.
+
 - [ ] **Step 1: Run JVM tests and debug build**
 
 ```bash

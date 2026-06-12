@@ -95,6 +95,8 @@ Android enforcement agents should prefer native Android instrumentation tests ov
 
 Toolchain notes (post 2026-06-08 dependency migration): the shared JVM unit-test task is `:shared:testAndroidHostTest` (the old `:shared:testDebugUnitTest` no longer exists). When building from a `git worktree`, export `ANDROID_HOME`/`ANDROID_SDK_ROOT` because `client/local.properties` is gitignored. An Android 16 / API 36 emulator (`Buzer_API_36`) is available for connected tests; scope multi-device runs with `ANDROID_SERIAL`. See `docs/notes/local-development.md` and `docs/notes/2026-06-08-android-16-emulator-setup.md`.
 
+For device/emulator verification, prefer `scripts/adb-verify.sh` over raw `adb logcat`/`dumpsys`/`screencap`. It emits small, pre-filtered evidence (cleared + tag-filtered logcat, app-scoped `dumpsys alarm`, overlay/notification/exact-alarm/full-screen app-op state, and exit-checked downscaled screenshots) and refuses to guess between multiple attached devices. Use it to keep handoff evidence cheap and consistent. Rationale and the full token-efficiency checklist: `docs/notes/2026-06-12-agent-token-efficient-android-testing.md`.
+
 For every completed task, the handoff must include:
 
 ```text

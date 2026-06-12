@@ -47,6 +47,24 @@ export ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
 
 When more than one device/emulator is attached, scope a connected run with `ANDROID_SERIAL=<serial>` (for example `ANDROID_SERIAL=emulator-5584`); otherwise `connectedDebugAndroidTest` runs on every attached device.
 
+### Device verification helper
+
+`scripts/adb-verify.sh` wraps the common low-token device checks so verification output stays small and consistent (cleared + tag-filtered logcat, app-scoped `dumpsys alarm`, overlay/notification/exact-alarm app-op state, exit-checked downscaled screenshots). It resolves the target from `BUZER_DEVICE_SERIAL`, then `ANDROID_SERIAL`, then the sole attached device, and refuses to guess when several are connected.
+
+```bash
+scripts/adb-verify.sh devices
+scripts/adb-verify.sh logcat-clear          # before triggering an action
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh logcat 200
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh boot-log
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh alarms
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh perms
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh screenshot /tmp/buzer.png
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh install
+BUZER_DEVICE_SERIAL=11141FDD4002R1 scripts/adb-verify.sh health
+```
+
+Rationale: `docs/notes/2026-06-12-agent-token-efficient-android-testing.md`.
+
 ## Android Debug Backend Configuration
 
 The Android debug app reads VPS backend settings from ignored `client/local.properties`:
