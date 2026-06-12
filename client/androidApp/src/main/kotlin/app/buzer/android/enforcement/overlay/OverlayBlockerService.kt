@@ -13,11 +13,14 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.shared.diagnostics.AppLog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /**
  * Foreground service that shows a blocker overlay above the current foreground app and routes
@@ -72,16 +75,26 @@ class OverlayBlockerService : Service() {
         actionInFlight = true
         scope.launch {
             try {
-                when (action) {
-                    OverlayAction.START -> coordinator.startTask(request.taskId)
-                    OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId)
-                    OverlayAction.COMPLETE -> coordinator.completeTask(request.taskId)
-                    OverlayAction.EXTEND -> coordinator.extendTask(request.taskId)
-                    OverlayAction.DISMISS -> coordinator.dismissMorningReview()
-                    OverlayAction.OPEN_FULL -> Unit
+                // Bound the action so a hung/slow backend can never trap the full-screen
+                // overlay. The coordinator reports backend failures internally; either way
+                // the overlay dismisses, matching the blocker activities' finish-regardless flow.
+                withTimeout(ACTION_TIMEOUT_MS) {
+                    when (action) {
+                        OverlayAction.START -> coordinator.startTask(request.taskId)
+                        OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId)
+                        OverlayAction.COMPLETE -> coordinator.completeTask(request.taskId)
+                        OverlayAction.EXTEND -> coordinator.extendTask(request.taskId)
+                        OverlayAction.DISMISS -> coordinator.dismissMorningReview()
+                        OverlayAction.OPEN_FULL -> Unit
+                    }
                 }
+            } catch (timeout: TimeoutCancellationException) {
+                AppLog.warn("overlay_action timeout action=$action taskId=${request.taskId} afterMs=$ACTION_TIMEOUT_MS")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                AppLog.warn("overlay_action error action=$action ${error.message}")
             } finally {
-                // Backend failures are reported inside the coordinator; either way, dismiss.
                 stopOverlay()
             }
         }
@@ -132,6 +145,7 @@ class OverlayBlockerService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 4711
+        private const val ACTION_TIMEOUT_MS = 15_000L
 
         fun intent(context: Context, request: OverlayBlockerRequest): Intent =
             request.writeTo(Intent(context, OverlayBlockerService::class.java))
