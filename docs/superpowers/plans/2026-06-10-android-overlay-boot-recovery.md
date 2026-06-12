@@ -399,11 +399,11 @@ On `CoordinatorActionResult.Success` or `FailedAndHidden`, remove the overlay an
 
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
 
-- [ ] **Step 1: Preserve pre-start warnings**
+- [x] **Step 1: Preserve pre-start warnings**
 
 Do not overlay for `PRE_START_WARNING`; keep current notification behavior.
 
-- [ ] **Step 2: Try overlay for blocker alarms**
+- [x] **Step 2: Try overlay for blocker alarms**
 
 For `START_BLOCKER`, `DEADLINE_BLOCKER`, and morning review alarms:
 
@@ -412,11 +412,11 @@ For `START_BLOCKER`, `DEADLINE_BLOCKER`, and morning review alarms:
 3. Log `overlay_start attempted result=<true|false> kind=<kind> taskId=<id>`.
 4. Always post the existing full-screen notification fallback.
 
-- [ ] **Step 3: Avoid direct background activity starts**
+- [x] **Step 3: Avoid direct background activity starts**
 
 Remove direct `context.startActivity(targetIntent)` from the broadcast path unless it is guarded behind an explicitly foreground/debug-only condition. Full-screen notification should be the activity fallback.
 
-- [ ] **Step 4: Verify receiver tests or compile coverage**
+- [x] **Step 4: Verify receiver tests or compile coverage** — compile-only: `AlarmReceiver` is framework-coupled (Context/Intent/NotificationManager), so no JVM unit test was added. The parsing it relies on (`OverlayBlockerRequest.fromExtras`) is unit-tested; broadcast branching is verified by compile + the Task 7 emulator run.
 
 If existing tests can cover receiver branching, add them. Otherwise document compile-only coverage in the handoff and rely on manual device verification for broadcast behavior.
 

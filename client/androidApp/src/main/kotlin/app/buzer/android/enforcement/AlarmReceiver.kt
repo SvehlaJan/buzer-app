@@ -9,6 +9,9 @@ import android.content.Intent
 import app.buzer.android.blockers.DeadlineBlockerActivity
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.blockers.StartBlockerActivity
+import app.buzer.android.enforcement.overlay.OverlayBlockerRequest
+import app.buzer.android.enforcement.overlay.OverlayBlockerServiceStarter
+import app.buzer.shared.diagnostics.AppLog
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -26,10 +29,19 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     private fun openBlocker(context: Context, taskId: String?, kind: AlarmKind) {
+        val request = OverlayBlockerRequest.fromExtras(taskId, kind.name)
+        if (request != null) {
+            val started = OverlayBlockerServiceStarter.tryStart(context, request)
+            AppLog.info("overlay_start attempted result=$started kind=$kind taskId=$taskId")
+        } else {
+            AppLog.warn("overlay_start skipped reason=invalid_request kind=$kind taskId=$taskId")
+        }
+        // Always post the full-screen notification fallback. Its full-screen intent is the
+        // activity launch path; we no longer start the activity directly from the broadcast,
+        // which Android blocks from the background (BAL_BLOCK).
         val targetIntent = blockerIntent(context, taskId, kind).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        context.startActivity(targetIntent)
         showBlockerNotification(context, taskId, kind, targetIntent)
     }
 
