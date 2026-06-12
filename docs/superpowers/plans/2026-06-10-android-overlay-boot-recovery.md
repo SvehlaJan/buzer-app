@@ -237,7 +237,7 @@ Expected: `BUILD SUCCESSFUL`.
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/PermissionHealthTest.kt`
 - Modify permission health UI files found by search
 
-- [ ] **Step 1: Add pure health tests**
+- [x] **Step 1: Add pure health tests**
 
 Extend `PermissionHealth.evaluate(...)` with `overlayAllowed: Boolean`.
 
@@ -246,7 +246,7 @@ Add tests:
 - Overlay missing returns an `error` item with key `overlay`.
 - All permissions granted returns only the existing `all` ok item.
 
-- [ ] **Step 2: Implement overlay permission helper**
+- [x] **Step 2: Implement overlay permission helper**
 
 ```kotlin
 object OverlayPermission {
@@ -261,11 +261,11 @@ object OverlayPermission {
 }
 ```
 
-- [ ] **Step 3: Read overlay state in Android health**
+- [x] **Step 3: Read overlay state in Android health**
 
 Pass `overlayAllowed = OverlayPermission.canDraw(context)` from `AndroidPermissionHealthReader.read(context)`.
 
-- [ ] **Step 4: Add setup affordance**
+- [ ] **Step 4: Add setup affordance** — deferred: no permission-health UI consumer exists yet (`AndroidPermissionHealthReader` is currently unused across the app). `OverlayPermission.settingsIntent()` is implemented and ready to wire when a health UI is built. Recorded as a gap in the handoff.
 
 Update the permission health UI so the overlay error has an action that opens `OverlayPermission.settingsIntent(context)`.
 
@@ -276,7 +276,7 @@ Suggested copy:
 - Message: `Display over other apps permission is required for blocker overlays.`
 - Action label: `Open overlay settings`
 
-- [ ] **Step 5: Verify health tests**
+- [x] **Step 5: Verify health tests**
 
 Run:
 

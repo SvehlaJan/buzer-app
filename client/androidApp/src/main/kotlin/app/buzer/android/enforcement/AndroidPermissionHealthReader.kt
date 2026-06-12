@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
+import app.buzer.android.enforcement.overlay.OverlayPermission
 
 object AndroidPermissionHealthReader {
     fun read(context: Context): List<PermissionHealthItem> {
@@ -14,7 +15,8 @@ object AndroidPermissionHealthReader {
             exactAlarmGranted = canScheduleExactAlarms(context),
             notificationsGranted = notificationsGranted(context),
             batteryOptimizationIgnored = batteryOptimizationIgnored(context),
-            bootReceiverEnabled = receiverEnabled(context, BootReceiver::class.java)
+            bootReceiverEnabled = receiverEnabled(context, BootReceiver::class.java),
+            overlayAllowed = OverlayPermission.canDraw(context)
         )
     }
 
