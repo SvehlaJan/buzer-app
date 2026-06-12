@@ -81,7 +81,8 @@ Verification:
 ## Manual Verification
 
 - Emulator (`emulator-5554`, API 34): install, overlay grant, overlay launch above a foreground app (log-confirmed), live snapshot refresh + cache save, and full reboot boot-recovery sequence.
-- Overlay visual confirmation over the Settings app was omitted: `TYPE_APPLICATION_OVERLAY` sits below system UI, which is the documented Phase 1 limitation. Overlay-add success is confirmed via `overlay shown` logs.
+- Overlay visual confirmation over the Settings app was omitted on the emulator: `TYPE_APPLICATION_OVERLAY` sits below system UI, which is the documented Phase 1 limitation. Overlay-add success is confirmed via `overlay shown` logs.
+- Pixel 5 (`11141FDD4002R1`): install + permissions confirmed (`SYSTEM_ALERT_WINDOW/POST_NOTIFICATION/SCHEDULE_EXACT_ALARM/USE_FULL_SCREEN_INTENT: allow`, battery whitelisted). Debug overlay launched over the Clock app and **rendered correctly with the full blocker UI** (title, summary, Start now / Postpone 5 min) — visual confirmation over a real non-system foreground app. Tapping `Start now` logged `overlay_action action=START` → `action start action=START_TASK`, confirming the action→coordinator wiring.
 
 ## Known Failures / Skipped Checks
 
@@ -89,6 +90,7 @@ Verification:
 - Boot recovery showed `scheduled=0` because the live snapshot has no active/starting-today tasks; alarm restoration with real future alarms is unverified (data limitation, not code).
 - Task 3 Step 4 overlay setup affordance is unwired — `AndroidPermissionHealthReader` has no UI consumer in the app yet; `OverlayPermission.settingsIntent()` is implemented and ready.
 - `AlarmReceiver` overlay branching has compile-only coverage (framework-coupled); verified via emulator.
+- **Robustness gap found on Pixel 5:** tapping an overlay action against a non-existent `debug-task` left the action hanging at `action start` with no result for minutes — the overlay has no action-level timeout, so a hung/slow backend leaves the full-screen overlay stuck with no escape (had to `am force-stop` to clear it). The existing blocker activities share the no-timeout behavior, but it is riskier for a screen-covering overlay. Recommended follow-up: wrap the coordinator action in `OverlayBlockerService.handleAction` with a timeout (and add a dismiss/escape affordance) so a stuck backend cannot lock the screen. Not in this plan's scope.
 
 ## Assumptions
 

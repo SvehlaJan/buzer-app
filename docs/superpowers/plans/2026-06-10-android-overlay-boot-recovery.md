@@ -501,7 +501,7 @@ adb -s 11141FDD4002R1 shell cmd appops get app.buzer.android | rg SYSTEM_ALERT_W
 
 Expected: overlay app-op is allowed.
 
-- [x] **Step 4: Direct overlay smoke test** — debug launch over a foreground app logged `debug_overlay launch result=true`, `overlay shown kind=START_BLOCKER/DEADLINE_BLOCKER` (FGS allowed, `addView` succeeded). Visual confirmation over the Settings app omitted: `TYPE_APPLICATION_OVERLAY` draws below system UI (expected limitation).
+- [x] **Step 4: Direct overlay smoke test** — debug launch over a foreground app logged `debug_overlay launch result=true`, `overlay shown kind=START_BLOCKER/DEADLINE_BLOCKER` (FGS allowed, `addView` succeeded). Visual confirmation over the Settings app omitted on emulator (system UI); **visually confirmed on the Pixel 5 over the Clock app** (real non-system foreground app) — full blocker UI rendered, and tapping `Start now` logged `overlay_action`→`action start`.
 
 Open another app, then launch the debug overlay:
 
@@ -526,7 +526,7 @@ Create a short strict task against the live MVP backend, wait for the exact alar
 - overlay is removed after action
 - fallback full-screen notification still exists
 
-- [ ] **Step 6: Real timed foreground-app test** — DEFERRED to Pixel 5 (needs a real timed alarm while a normal app is foregrounded). The overlay-add path is proven via the debug smoke test; this step confirms it over a real third-party app from an exact alarm.
+- [ ] **Step 6: Real timed foreground-app test** — overlay-over-a-real-foreground-app is now **visually confirmed on the Pixel 5** (debug launch over the Clock app). Still pending: triggering it from a real exact alarm (needs a real scheduled task), so left unchecked.
 
 Open a normal foreground app before the task start/deadline alarm fires.
 
