@@ -13,11 +13,13 @@ export interface TodoistTaskUpsert {
   deletedAt: string | null;
   rawJson: string;
   updatedAt: string;
+  commitmentOwnerId?: string | null;
 }
 
 export interface TaskWithCommitment extends TodoistTaskUpsert {
   state: string;
   startedAt: string | null;
+  commitmentOwnerId: string | null;
   startDismissCount: number;
   deadlineExtensionCount: number;
   lastSnoozedAt: string | null;
@@ -41,6 +43,7 @@ const taskWithCommitmentSelect = `
     t.updated_at as updatedAt,
     c.state,
     c.started_at as startedAt,
+    c.commitment_owner_id as commitmentOwnerId,
     c.start_dismiss_count as startDismissCount,
     c.deadline_extension_count as deadlineExtensionCount,
     c.last_snoozed_at as lastSnoozedAt,
@@ -77,12 +80,18 @@ export class TaskRepository {
       `).run(task);
 
       this.db.prepare(`
-        insert or ignore into commitment_states (
-          task_id, state, start_dismiss_count, deadline_extension_count, schedule_version, updated_at
+        insert into commitment_states (
+          task_id, state, started_at, commitment_owner_id, start_dismiss_count,
+          deadline_extension_count, schedule_version, updated_at
         ) values (
-          @id, 'planned', 0, 0, 1, @updatedAt
+          @id, 'planned', null, @commitmentOwnerId, 0, 0, 1, @updatedAt
         )
-      `).run(task);
+        on conflict(task_id) do update set
+          commitment_owner_id = coalesce(commitment_states.commitment_owner_id, excluded.commitment_owner_id)
+      `).run({
+        ...task,
+        commitmentOwnerId: task.commitmentOwnerId ?? null
+      });
     });
 
     tx();

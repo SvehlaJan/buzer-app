@@ -28,11 +28,24 @@ create table if not exists commitment_states (
   task_id text primary key references todoist_tasks(id) on delete cascade,
   state text not null,
   started_at text,
+  commitment_owner_id text,
   start_dismiss_count integer not null default 0,
   deadline_extension_count integer not null default 0,
   last_snoozed_at text,
   escalation_sent_at text,
   schedule_version integer not null default 1,
+  updated_at text not null
+);
+
+create table if not exists todoist_projects (
+  todoist_project_id text primary key,
+  name text not null,
+  shared integer not null,
+  can_assign_tasks integer not null,
+  is_inbox_project integer not null,
+  is_deleted integer not null,
+  is_archived integer not null,
+  raw_json text not null,
   updated_at text not null
 );
 

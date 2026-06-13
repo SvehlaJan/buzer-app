@@ -22,13 +22,15 @@ describe("TaskRepository", () => {
       completedAt: null,
       deletedAt: null,
       rawJson: JSON.stringify({ id: "todoist-1" }),
-      updatedAt: "2026-05-08T10:00:00Z"
+      updatedAt: "2026-05-08T10:00:00Z",
+      commitmentOwnerId: "user-self"
     });
 
     const snapshot = repo.getByTodoistTaskId("todoist-1");
     expect(snapshot?.title).toBe("Write report");
     expect(snapshot?.state).toBe("planned");
     expect(snapshot?.scheduleVersion).toBe(1);
+    expect(snapshot?.commitmentOwnerId).toBe("user-self");
   });
 });
 
