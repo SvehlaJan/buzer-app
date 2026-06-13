@@ -83,7 +83,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       body.duration_unit = "minute";
     }
     if (input.assigneeId !== null) {
-      body.assignee_id = input.assigneeId;
+      body.assignee_id = parseTodoistNumericId(input.assigneeId);
     }
 
     const response = await this.request<TodoistApiTask>("/tasks", {
@@ -189,4 +189,15 @@ export class HttpTodoistAdapter implements TodoistAdapter {
 
 function stringifyNullable(value: string | number | null): string | null {
   return value === null ? null : String(value);
+}
+
+function parseTodoistNumericId(value: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new Error("todoist_assignee_id_must_be_numeric");
+  }
+  const numericValue = Number(value);
+  if (!Number.isSafeInteger(numericValue)) {
+    throw new Error("todoist_assignee_id_must_be_numeric");
+  }
+  return numericValue;
 }

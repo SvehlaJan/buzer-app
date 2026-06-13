@@ -11,10 +11,10 @@ describe("HttpTodoistAdapter", () => {
       id: "todoist-created",
       content: "Pay bill",
       project_id: "project-1",
-      responsible_uid: "user-self",
+      responsible_uid: "43186358",
       due: { datetime: "2026-05-08T16:00:00Z" },
       duration: { amount: 30, unit: "minute" },
-      added_by_uid: "user-self",
+      added_by_uid: "43186358",
       updated_at: "2026-05-08T10:00:00Z"
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
@@ -22,7 +22,7 @@ describe("HttpTodoistAdapter", () => {
     const created = await adapter.createTask({
       title: "Pay bill",
       projectId: "project-1",
-      assigneeId: "user-self",
+      assigneeId: "43186358",
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 30
     });
@@ -32,7 +32,7 @@ describe("HttpTodoistAdapter", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       content: "Pay bill",
       project_id: "project-1",
-      assignee_id: "user-self",
+      assignee_id: 43186358,
       due_datetime: "2026-05-08T16:00:00Z",
       duration: 30,
       duration_unit: "minute"
@@ -40,7 +40,7 @@ describe("HttpTodoistAdapter", () => {
     expect(created.task).toMatchObject({
       todoistTaskId: "todoist-created",
       projectId: "project-1",
-      assigneeId: "user-self",
+      assigneeId: "43186358",
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 30
     });
@@ -67,6 +67,42 @@ describe("HttpTodoistAdapter", () => {
     });
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty("assignee_id");
+  });
+
+  it("rejects non-numeric REST assignee IDs before fetch", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.createTask({
+      title: "Pay bill",
+      projectId: "project-1",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30
+    })).rejects.toThrow("todoist_assignee_id_must_be_numeric");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends only content when optional create fields are null", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "todoist-inbox",
+      content: "Inbox task",
+      added_by_uid: "43186358",
+      updated_at: "2026-05-08T10:00:00Z"
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.createTask({
+      title: "Inbox task",
+      projectId: null,
+      assigneeId: null,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      content: "Inbox task"
+    });
   });
 
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
