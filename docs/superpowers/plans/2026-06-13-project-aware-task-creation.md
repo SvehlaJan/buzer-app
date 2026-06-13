@@ -492,7 +492,7 @@ Expected: commit succeeds.
 - Modify: `backend/test/todoist/httpTodoistAdapter.test.ts`
 - Modify: `backend/test/fakes/fakeTodoistAdapter.ts`
 
-- [ ] **Step 1: Add failing adapter tests**
+- [x] **Step 1: Add failing adapter tests**
 
 Append to `backend/test/todoist/httpTodoistAdapter.test.ts`:
 
@@ -605,7 +605,7 @@ it("sync maps Todoist projects", async () => {
 });
 ```
 
-- [ ] **Step 2: Run adapter tests to verify RED**
+- [x] **Step 2: Run adapter tests to verify RED**
 
 Run:
 
@@ -616,7 +616,7 @@ npm test -- httpTodoistAdapter
 
 Expected: FAIL because adapter types and REST create response shape are not updated.
 
-- [ ] **Step 3: Add project and create result types**
+- [x] **Step 3: Add project and create result types**
 
 In `backend/src/todoist/todoistTypes.ts`, add:
 
@@ -672,7 +672,7 @@ export interface TodoistAdapter {
 }
 ```
 
-- [ ] **Step 4: Update FakeTodoistAdapter**
+- [x] **Step 4: Update FakeTodoistAdapter**
 
 Modify `backend/test/fakes/fakeTodoistAdapter.ts`:
 
@@ -726,7 +726,7 @@ export class FakeTodoistAdapter implements TodoistAdapter {
 }
 ```
 
-- [ ] **Step 5: Switch HttpTodoistAdapter createTask to REST**
+- [x] **Step 5: Switch HttpTodoistAdapter createTask to REST**
 
 In `backend/src/todoist/httpTodoistAdapter.ts`:
 
@@ -806,7 +806,7 @@ Add:
   }
 ```
 
-- [ ] **Step 6: Preserve Sync command behavior for complete/reschedule**
+- [x] **Step 6: Preserve Sync command behavior for complete/reschedule**
 
 Keep `command`, `completeTask`, and `rescheduleTask` using `/sync`. In `request`, allow JSON request bodies to keep their content type:
 
@@ -820,7 +820,7 @@ headers: {
 
 This existing order lets the REST create call override content type to `application/json`.
 
-- [ ] **Step 7: Run adapter tests**
+- [x] **Step 7: Run adapter tests**
 
 Run:
 
@@ -834,7 +834,7 @@ Expected: PASS.
 
 If `npm run typecheck` reports existing `TodoistSyncResult` literals without `projects`, update those existing test fixtures to include `projects: []`. Do not implement Task 3 project persistence in this task.
 
-- [ ] **Step 8: Commit Task 2**
+- [x] **Step 8: Commit Task 2**
 
 Run:
 
