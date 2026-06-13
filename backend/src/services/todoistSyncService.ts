@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 
@@ -7,6 +8,7 @@ export class TodoistSyncService {
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
+    private readonly projects: ProjectRepository,
     private readonly todoist: TodoistAdapter
   ) {}
 
@@ -18,6 +20,20 @@ export class TodoistSyncService {
     const now = new Date().toISOString();
 
     const tx = this.db.transaction(() => {
+      for (const project of result.projects) {
+        this.projects.upsertProject({
+          todoistProjectId: project.todoistProjectId,
+          name: project.name,
+          shared: project.shared,
+          canAssignTasks: project.canAssignTasks,
+          isInboxProject: project.isInboxProject,
+          isDeleted: project.isDeleted,
+          isArchived: project.isArchived,
+          rawJson: JSON.stringify(project.rawJson),
+          updatedAt: project.updatedAt
+        });
+      }
+
       for (const task of result.tasks) {
         const existing = this.tasks.getByTodoistTaskId(task.todoistTaskId);
         const id = existing?.id ?? randomUUID();

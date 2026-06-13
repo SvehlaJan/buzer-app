@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
+import { ProjectRepository } from "../repositories/projectRepository.js";
 import { TaskRepository } from "../repositories/taskRepository.js";
 import { TaskActionService } from "../services/taskActionService.js";
 import { TaskSnapshotService } from "../services/taskSnapshotService.js";
@@ -88,6 +89,19 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const repo = new TaskRepository(options.db);
     const service = new TaskSnapshotService(repo, options.currentUserId);
     return service.getSnapshot(new Date().toISOString());
+  });
+
+  app.get("/projects", async () => {
+    const repo = new ProjectRepository(options.db);
+    return {
+      projects: repo.listActive().map((project) => ({
+        id: project.todoistProjectId,
+        name: project.name,
+        canAssignTasks: project.canAssignTasks,
+        shared: project.shared,
+        isInboxProject: project.isInboxProject
+      }))
+    };
   });
 
   app.post("/tasks", async (request) => {

@@ -5,6 +5,7 @@ import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
+import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
@@ -40,6 +41,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const db = openDatabase(dbPath);
   const tasks = new TaskRepository(db);
+  const projects = new ProjectRepository(db);
   const todoist = new HttpTodoistAdapter(todoistApiToken);
   const whatsappDryRun = process.env.WHATSAPP_DRY_RUN !== "false";
   const whatsappSender = whatsappDryRun
@@ -60,7 +62,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     escalationService
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, tasks, todoist),
+    new TodoistSyncService(db, tasks, projects, todoist),
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")

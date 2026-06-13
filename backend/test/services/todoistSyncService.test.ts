@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
+import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
@@ -29,7 +30,7 @@ describe("TodoistSyncService", () => {
       }]
     });
 
-    const service = new TodoistSyncService(db, repo, adapter);
+    const service = new TodoistSyncService(db, repo, new ProjectRepository(db), adapter);
     await service.syncOnce();
 
     expect(repo.getByTodoistTaskId("todoist-1")?.title).toBe("Pick up parcel");
@@ -103,7 +104,7 @@ describe("TodoistSyncService", () => {
       ]
     });
 
-    const service = new TodoistSyncService(db, repo, adapter);
+    const service = new TodoistSyncService(db, repo, new ProjectRepository(db), adapter);
     await service.syncOnce();
 
     expect(repo.getByTodoistTaskId("todoist-completed")).toMatchObject({
@@ -114,5 +115,33 @@ describe("TodoistSyncService", () => {
       deletedAt: "2026-05-08T16:50:00Z",
       state: "deleted"
     });
+  });
+
+  it("stores synced projects", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    const adapter = new FakeTodoistAdapter();
+    adapter.syncResults.push({
+      syncToken: "project-token",
+      tasks: [],
+      projects: [{
+        todoistProjectId: "project-family",
+        name: "Family",
+        shared: true,
+        canAssignTasks: true,
+        isInboxProject: false,
+        isDeleted: false,
+        isArchived: false,
+        rawJson: { id: "project-family" },
+        updatedAt: "2026-06-13T10:00:00Z"
+      }]
+    });
+
+    const service = new TodoistSyncService(db, taskRepo, projectRepo, adapter);
+    await service.syncOnce();
+
+    expect(projectRepo.getActiveByTodoistProjectId("project-family")?.name).toBe("Family");
   });
 });

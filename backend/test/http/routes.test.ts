@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { migrate } from "../../src/db/migrations.js";
+import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
 import { buildServer } from "../../src/server.js";
@@ -79,6 +80,42 @@ describe("HTTP routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tasks: [] });
+  });
+
+  it("returns active projects with auth token", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/projects",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      projects: [{
+        id: "project-family",
+        name: "Family",
+        canAssignTasks: true,
+        shared: true,
+        isInboxProject: false
+      }]
+    });
   });
 
   it("handles task action routes and device check-in", async () => {

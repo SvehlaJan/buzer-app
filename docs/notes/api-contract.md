@@ -63,6 +63,18 @@ interface HealthStatus {
   message: string;
 }
 
+interface ProjectItem {
+  id: string;
+  name: string;
+  canAssignTasks: boolean;
+  shared: boolean;
+  isInboxProject: boolean;
+}
+
+interface ProjectsResponse {
+  projects: ProjectItem[];
+}
+
 interface ApiError {
   code: string;
   message: string;
@@ -75,6 +87,10 @@ interface ApiError {
 ### `GET /tasks/snapshot`
 
 Returns the latest task snapshot for Android alarm reconciliation and UI.
+
+### `GET /projects`
+
+Returns active Todoist projects available for Android task creation. `canAssignTasks` tells Android whether an assignee must be selected.
 
 ### `POST /tasks`
 
