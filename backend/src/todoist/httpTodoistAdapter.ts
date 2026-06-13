@@ -57,7 +57,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       method: "POST",
       body: this.encodeForm({
         sync_token: syncToken,
-        resource_types: JSON.stringify(["items"])
+        resource_types: JSON.stringify(["items", "projects"])
       })
     });
 

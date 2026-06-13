@@ -28,6 +28,7 @@ describe("HttpTodoistAdapter", () => {
     });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://todoist.test/api/v1/tasks");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       content: "Pay bill",
       project_id: "project-1",
@@ -104,7 +105,7 @@ describe("HttpTodoistAdapter", () => {
   });
 
   it("sync maps Todoist projects", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_token: "project-token",
       items: [],
       projects: [
@@ -124,6 +125,8 @@ describe("HttpTodoistAdapter", () => {
 
     const result = await adapter.sync("*");
 
+    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(JSON.parse(body.get("resource_types") ?? "[]")).toEqual(["items", "projects"]);
     expect(result.projects).toEqual([
       {
         todoistProjectId: "project-family",
