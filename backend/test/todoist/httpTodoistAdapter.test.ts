@@ -6,15 +6,17 @@ describe("HttpTodoistAdapter", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends item_add temp_id at the command level", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = new URLSearchParams(String(init?.body));
-      const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ uuid: string; temp_id?: string }>;
-      return new Response(JSON.stringify({
-        sync_status: { [commands[0]?.uuid ?? ""]: "ok" },
-        temp_id_mapping: { [commands[0]?.temp_id ?? ""]: "todoist-1" }
-      }));
-    });
+  it("creates tasks through REST with optional assignee", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "todoist-created",
+      content: "Pay bill",
+      project_id: "project-1",
+      responsible_uid: "user-self",
+      due: { datetime: "2026-05-08T16:00:00Z" },
+      duration: { amount: 30, unit: "minute" },
+      added_by_uid: "user-self",
+      updated_at: "2026-05-08T10:00:00Z"
+    })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
     const created = await adapter.createTask({
@@ -25,26 +27,45 @@ describe("HttpTodoistAdapter", () => {
       durationMinutes: 30
     });
 
-    const init = fetchMock.mock.calls[0]?.[1];
-    const body = new URLSearchParams(String(init?.body));
-    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{
-      type: string;
-      uuid: string;
-      temp_id?: string;
-      args: Record<string, unknown>;
-    }>;
-    expect(created.todoistTaskId).toBe("todoist-1");
-    expect(commands[0]).toMatchObject({
-      type: "item_add",
-      args: {
-        content: "Pay bill",
-        project_id: "project-1",
-        responsible_uid: "user-self"
-      }
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://todoist.test/api/v1/tasks");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      content: "Pay bill",
+      project_id: "project-1",
+      assignee_id: "user-self",
+      due_datetime: "2026-05-08T16:00:00Z",
+      duration: 30,
+      duration_unit: "minute"
     });
-    expect(commands[0]?.uuid).toEqual(expect.any(String));
-    expect(commands[0]?.temp_id).toEqual(expect.any(String));
-    expect(commands[0]?.args).not.toHaveProperty("temp_id");
+    expect(created.task).toMatchObject({
+      todoistTaskId: "todoist-created",
+      projectId: "project-1",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30
+    });
+  });
+
+  it("omits assignee_id when creating a task without assignment", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "todoist-personal",
+      content: "Personal task",
+      project_id: "project-personal",
+      due: { datetime: "2026-05-08T18:00:00Z" },
+      duration: { amount: 45, unit: "minute" },
+      added_by_uid: "user-self",
+      updated_at: "2026-05-08T10:00:00Z"
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.createTask({
+      title: "Personal task",
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-05-08T18:00:00Z",
+      durationMinutes: 45
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty("assignee_id");
   });
 
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
@@ -80,5 +101,50 @@ describe("HttpTodoistAdapter", () => {
       completedAt: null,
       deletedAt: "2026-05-08T12:02:00Z"
     });
+  });
+
+  it("sync maps Todoist projects", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_token: "project-token",
+      items: [],
+      projects: [
+        {
+          id: "project-family",
+          name: "Family",
+          shared: true,
+          can_assign_tasks: true,
+          inbox_project: false,
+          is_deleted: false,
+          is_archived: false,
+          updated_at: "2026-06-13T10:00:00Z"
+        }
+      ]
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    const result = await adapter.sync("*");
+
+    expect(result.projects).toEqual([
+      {
+        todoistProjectId: "project-family",
+        name: "Family",
+        shared: true,
+        canAssignTasks: true,
+        isInboxProject: false,
+        isDeleted: false,
+        isArchived: false,
+        rawJson: {
+          id: "project-family",
+          name: "Family",
+          shared: true,
+          can_assign_tasks: true,
+          inbox_project: false,
+          is_deleted: false,
+          is_archived: false,
+          updated_at: "2026-06-13T10:00:00Z"
+        },
+        updatedAt: "2026-06-13T10:00:00Z"
+      }
+    ]);
   });
 });

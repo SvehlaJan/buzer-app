@@ -13,6 +13,7 @@ describe("TodoistSyncService", () => {
     const adapter = new FakeTodoistAdapter();
     adapter.syncResults.push({
       syncToken: "next-token",
+      projects: [],
       tasks: [{
         todoistTaskId: "todoist-1",
         title: "Pick up parcel",
@@ -71,6 +72,7 @@ describe("TodoistSyncService", () => {
     const adapter = new FakeTodoistAdapter();
     adapter.syncResults.push({
       syncToken: "terminal-token",
+      projects: [],
       tasks: [
         {
           todoistTaskId: "todoist-completed",

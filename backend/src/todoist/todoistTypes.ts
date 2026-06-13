@@ -11,3 +11,15 @@ export interface TodoistTaskMirror {
   rawJson: unknown;
   updatedAt: string;
 }
+
+export interface TodoistProjectMirror {
+  todoistProjectId: string;
+  name: string;
+  shared: boolean;
+  canAssignTasks: boolean;
+  isInboxProject: boolean;
+  isDeleted: boolean;
+  isArchived: boolean;
+  rawJson: unknown;
+  updatedAt: string;
+}

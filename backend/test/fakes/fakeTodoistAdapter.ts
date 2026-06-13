@@ -1,6 +1,7 @@
 import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
+  TodoistCreateTaskResult,
   TodoistRescheduleInput,
   TodoistSyncResult
 } from "../../src/todoist/todoistAdapter.js";
@@ -8,16 +9,32 @@ import type {
 export class FakeTodoistAdapter implements TodoistAdapter {
   syncResults: TodoistSyncResult[] = [];
   createdTasks: TodoistCreateTaskInput[] = [];
+  createResults: TodoistCreateTaskResult[] = [];
   completedTaskIds: string[] = [];
   reschedules: TodoistRescheduleInput[] = [];
 
   async sync(_syncToken: string): Promise<TodoistSyncResult> {
-    return this.syncResults.shift() ?? { syncToken: "empty-token", tasks: [] };
+    return this.syncResults.shift() ?? { syncToken: "empty-token", tasks: [], projects: [] };
   }
 
-  async createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string }> {
+  async createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult> {
     this.createdTasks.push(input);
-    return { todoistTaskId: `created-${this.createdTasks.length}` };
+    return this.createResults.shift() ?? {
+      todoistTaskId: `created-${this.createdTasks.length}`,
+      task: {
+        todoistTaskId: `created-${this.createdTasks.length}`,
+        title: input.title,
+        projectId: input.projectId,
+        assigneeId: input.assigneeId,
+        creatorId: "user-self",
+        dueDatetime: input.dueDatetime,
+        durationMinutes: input.durationMinutes,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: { id: `created-${this.createdTasks.length}` },
+        updatedAt: "2026-06-13T10:00:00Z"
+      }
+    };
   }
 
   async completeTask(todoistTaskId: string): Promise<void> {

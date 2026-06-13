@@ -1,16 +1,22 @@
-import type { TodoistTaskMirror } from "./todoistTypes.js";
+import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
 
 export interface TodoistSyncResult {
   syncToken: string;
   tasks: TodoistTaskMirror[];
+  projects: TodoistProjectMirror[];
 }
 
 export interface TodoistCreateTaskInput {
   title: string;
   projectId: string | null;
-  assigneeId: string;
+  assigneeId: string | null;
   dueDatetime: string | null;
   durationMinutes: number | null;
+}
+
+export interface TodoistCreateTaskResult {
+  todoistTaskId: string;
+  task: TodoistTaskMirror;
 }
 
 export interface TodoistRescheduleInput {
@@ -21,7 +27,7 @@ export interface TodoistRescheduleInput {
 
 export interface TodoistAdapter {
   sync(syncToken: string): Promise<TodoistSyncResult>;
-  createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string }>;
+  createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult>;
   completeTask(todoistTaskId: string): Promise<void>;
   rescheduleTask(input: TodoistRescheduleInput): Promise<void>;
 }

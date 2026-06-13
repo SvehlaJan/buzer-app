@@ -5,7 +5,7 @@ import type {
   TodoistRescheduleInput,
   TodoistSyncResult
 } from "./todoistAdapter.js";
-import type { TodoistTaskMirror } from "./todoistTypes.js";
+import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
 
 interface TodoistApiTask {
   id: string;
@@ -30,8 +30,20 @@ interface SyncResponse {
   sync_token?: string;
   items?: TodoistApiTask[];
   tasks?: TodoistApiTask[];
+  projects?: TodoistApiProject[];
   sync_status?: Record<string, string>;
   temp_id_mapping?: Record<string, string>;
+}
+
+interface TodoistApiProject {
+  id: string;
+  name?: string;
+  shared?: boolean;
+  can_assign_tasks?: boolean;
+  inbox_project?: boolean;
+  is_deleted?: boolean;
+  is_archived?: boolean;
+  updated_at?: string;
 }
 
 export class HttpTodoistAdapter implements TodoistAdapter {
@@ -51,30 +63,36 @@ export class HttpTodoistAdapter implements TodoistAdapter {
 
     return {
       syncToken: response.sync_token ?? syncToken,
-      tasks: (response.items ?? response.tasks ?? []).map((task) => this.mapTask(task))
+      tasks: (response.items ?? response.tasks ?? []).map((task) => this.mapTask(task)),
+      projects: (response.projects ?? []).map((project) => this.mapProject(project))
     };
   }
 
-  async createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string }> {
-    const commandId = randomUUID();
-    const tempId = randomUUID();
-    const args: Record<string, unknown> = {
-      content: input.title,
-      responsible_uid: input.assigneeId
+  async createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string; task: TodoistTaskMirror }> {
+    const body: Record<string, unknown> = {
+      content: input.title
     };
-
     if (input.projectId !== null) {
-      args.project_id = input.projectId;
+      body.project_id = input.projectId;
     }
     if (input.dueDatetime !== null) {
-      args.due = { datetime: input.dueDatetime };
+      body.due_datetime = input.dueDatetime;
     }
     if (input.durationMinutes !== null) {
-      args.duration = { amount: input.durationMinutes, unit: "minute" };
+      body.duration = input.durationMinutes;
+      body.duration_unit = "minute";
+    }
+    if (input.assigneeId !== null) {
+      body.assignee_id = input.assigneeId;
     }
 
-    const response = await this.command(commandId, "item_add", args, tempId);
-    return { todoistTaskId: response.temp_id_mapping?.[tempId] ?? tempId };
+    const response = await this.request<TodoistApiTask>("/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "content-type": "application/json" }
+    });
+    const task = this.mapTask(response);
+    return { todoistTaskId: task.todoistTaskId, task };
   }
 
   async completeTask(todoistTaskId: string): Promise<void> {
@@ -151,6 +169,20 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       deletedAt: task.is_deleted === true ? task.updated_at ?? new Date().toISOString() : null,
       rawJson: task,
       updatedAt: task.updated_at ?? new Date().toISOString()
+    };
+  }
+
+  private mapProject(project: TodoistApiProject): TodoistProjectMirror {
+    return {
+      todoistProjectId: String(project.id),
+      name: project.name ?? "",
+      shared: project.shared === true,
+      canAssignTasks: project.can_assign_tasks === true,
+      isInboxProject: project.inbox_project === true,
+      isDeleted: project.is_deleted === true,
+      isArchived: project.is_archived === true,
+      rawJson: project,
+      updatedAt: project.updated_at ?? new Date().toISOString()
     };
   }
 }
