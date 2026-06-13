@@ -647,10 +647,10 @@ export interface TodoistSyncResult {
 
 export interface TodoistCreateTaskInput {
   title: string;
-  projectId: string;
+  projectId: string | null;
   assigneeId: string | null;
-  dueDatetime: string;
-  durationMinutes: number;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
 }
 
 export interface TodoistCreateTaskResult {
@@ -752,12 +752,18 @@ Replace `createTask` with:
 ```ts
   async createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string; task: TodoistTaskMirror }> {
     const body: Record<string, unknown> = {
-      content: input.title,
-      project_id: input.projectId,
-      due_datetime: input.dueDatetime,
-      duration: input.durationMinutes,
-      duration_unit: "minute"
+      content: input.title
     };
+    if (input.projectId !== null) {
+      body.project_id = input.projectId;
+    }
+    if (input.dueDatetime !== null) {
+      body.due_datetime = input.dueDatetime;
+    }
+    if (input.durationMinutes !== null) {
+      body.duration = input.durationMinutes;
+      body.duration_unit = "minute";
+    }
     if (input.assigneeId !== null) {
       body.assignee_id = input.assigneeId;
     }
@@ -825,6 +831,8 @@ npm run typecheck
 ```
 
 Expected: PASS.
+
+If `npm run typecheck` reports existing `TodoistSyncResult` literals without `projects`, update those existing test fixtures to include `projects: []`. Do not implement Task 3 project persistence in this task.
 
 - [ ] **Step 8: Commit Task 2**
 
