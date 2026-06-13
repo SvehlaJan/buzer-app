@@ -857,7 +857,7 @@ Expected: commit succeeds.
 - Modify: `backend/test/http/routes.test.ts`
 - Modify: `docs/notes/api-contract.md`
 
-- [ ] **Step 1: Add failing sync-service project test**
+- [x] **Step 1: Add failing sync-service project test**
 
 Append to `backend/test/services/todoistSyncService.test.ts`:
 
@@ -897,7 +897,7 @@ Add import:
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 ```
 
-- [ ] **Step 2: Add failing route test for GET /projects**
+- [x] **Step 2: Add failing route test for GET /projects**
 
 Append to `backend/test/http/routes.test.ts`:
 
@@ -945,7 +945,7 @@ Add import:
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 ```
 
-- [ ] **Step 3: Run tests to verify RED**
+- [x] **Step 3: Run tests to verify RED**
 
 Run:
 
@@ -956,7 +956,7 @@ npm test -- todoistSyncService routes
 
 Expected: FAIL because `TodoistSyncService` constructor and `/projects` route are not updated.
 
-- [ ] **Step 4: Update TodoistSyncService constructor and sync**
+- [x] **Step 4: Update TodoistSyncService constructor and sync**
 
 Modify `backend/src/services/todoistSyncService.ts` constructor:
 
@@ -990,7 +990,7 @@ Inside the transaction in `syncOnce`, before task upserts, add:
       }
 ```
 
-- [ ] **Step 5: Update server wiring**
+- [x] **Step 5: Update server wiring**
 
 In `backend/src/server.ts`, import `ProjectRepository`, instantiate it, and pass it to `TodoistSyncService`:
 
@@ -1007,7 +1007,7 @@ import { ProjectRepository } from "./repositories/projectRepository.js";
     new TodoistSyncService(db, tasks, projects, todoist),
 ```
 
-- [ ] **Step 6: Add /projects route**
+- [x] **Step 6: Add /projects route**
 
 In `backend/src/http/routes.ts`, import `ProjectRepository`:
 
@@ -1032,7 +1032,7 @@ Add after `GET /tasks/snapshot`:
   });
 ```
 
-- [ ] **Step 7: Update existing TodoistSyncService constructors**
+- [x] **Step 7: Update existing TodoistSyncService constructors**
 
 In existing tests and app code, change:
 
@@ -1046,7 +1046,7 @@ to:
 new TodoistSyncService(db, repo, new ProjectRepository(db), adapter)
 ```
 
-- [ ] **Step 8: Update API contract note**
+- [x] **Step 8: Update API contract note**
 
 In `docs/notes/api-contract.md`, add:
 
@@ -1072,7 +1072,7 @@ Add endpoint:
 Returns active Todoist projects available for Android task creation. `canAssignTasks` tells Android whether an assignee must be selected.
 ```
 
-- [ ] **Step 9: Run Task 3 tests**
+- [x] **Step 9: Run Task 3 tests**
 
 Run:
 
@@ -1084,7 +1084,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit Task 3**
+- [x] **Step 10: Commit Task 3**
 
 Run:
 
