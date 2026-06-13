@@ -93,7 +93,7 @@ Fake backend and docs:
 - Modify: `backend/src/repositories/taskRepository.ts`
 - Modify: `backend/test/repositories/taskRepository.test.ts`
 
-- [ ] **Step 1: Write failing project repository tests**
+- [x] **Step 1: Write failing project repository tests**
 
 Create `backend/test/repositories/projectRepository.test.ts`:
 
@@ -173,7 +173,7 @@ describe("ProjectRepository", () => {
 });
 ```
 
-- [ ] **Step 2: Add failing migration test for existing databases**
+- [x] **Step 2: Add failing migration test for existing databases**
 
 Append to `backend/test/db/migrations.test.ts`:
 
@@ -219,7 +219,7 @@ it("adds project mirror and commitment owner columns to an existing database", (
 });
 ```
 
-- [ ] **Step 3: Run repository and migration tests to verify RED**
+- [x] **Step 3: Run repository and migration tests to verify RED**
 
 Run:
 
@@ -230,7 +230,7 @@ npm test -- projectRepository migrations
 
 Expected: FAIL because `ProjectRepository`, `todoist_projects`, and `commitment_owner_id` do not exist.
 
-- [ ] **Step 4: Update schema**
+- [x] **Step 4: Update schema**
 
 In `backend/src/db/schema.sql`, add `commitment_owner_id text,` inside `commitment_states` after `started_at text,`.
 
@@ -250,7 +250,7 @@ create table if not exists todoist_projects (
 );
 ```
 
-- [ ] **Step 5: Add additive migration helpers**
+- [x] **Step 5: Add additive migration helpers**
 
 Modify `backend/src/db/migrations.ts`:
 
@@ -279,7 +279,7 @@ function ensureColumn(db: Database.Database, table: string, column: string, defi
 }
 ```
 
-- [ ] **Step 6: Create ProjectRepository**
+- [x] **Step 6: Create ProjectRepository**
 
 Create `backend/src/repositories/projectRepository.ts`:
 
@@ -400,7 +400,7 @@ function fromRow(row: ProjectRow): TodoistProject {
 }
 ```
 
-- [ ] **Step 7: Add commitment owner to TaskRepository**
+- [x] **Step 7: Add commitment owner to TaskRepository**
 
 Modify `backend/src/repositories/taskRepository.ts`:
 
@@ -444,7 +444,7 @@ Replace the `insert or ignore into commitment_states` statement with:
       });
 ```
 
-- [ ] **Step 8: Extend TaskRepository test for commitment owner**
+- [x] **Step 8: Extend TaskRepository test for commitment owner**
 
 In `backend/test/repositories/taskRepository.test.ts`, update the existing task upsert call to include:
 
@@ -458,7 +458,7 @@ Then add:
 expect(snapshot?.commitmentOwnerId).toBe("user-self");
 ```
 
-- [ ] **Step 9: Run Task 1 tests**
+- [x] **Step 9: Run Task 1 tests**
 
 Run:
 
@@ -470,7 +470,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit Task 1**
+- [x] **Step 10: Commit Task 1**
 
 Run:
 
