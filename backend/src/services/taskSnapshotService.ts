@@ -11,10 +11,12 @@ export class TaskSnapshotService {
   getSnapshot(serverTime: string) {
     const rows = this.tasks.listAll();
     const items = rows.map((task) => {
+      const isCompanionOwnedByUser = task.commitmentOwnerId === this.currentUserId;
+      const isAssignedToUser = task.assigneeId === this.currentUserId || isCompanionOwnedByUser;
       const validation = validateTaskStrictness({
         title: task.title,
         creatorId: task.creatorId,
-        assigneeId: task.assigneeId,
+        assigneeId: isCompanionOwnedByUser ? this.currentUserId : task.assigneeId,
         dueDatetime: task.dueDatetime,
         durationMinutes: task.durationMinutes,
         currentUserId: this.currentUserId
@@ -39,7 +41,7 @@ export class TaskSnapshotService {
         durationMinutes: task.durationMinutes,
         startAt,
         state: terminalState ?? (validation.valid ? task.state : "invalid"),
-        isAssignedToUser: task.assigneeId === this.currentUserId,
+        isAssignedToUser,
         isCreatedByUser: task.creatorId === this.currentUserId,
         isCompleted: task.completedAt !== null,
         isDeleted: task.deletedAt !== null,

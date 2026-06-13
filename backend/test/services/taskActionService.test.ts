@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
+import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { EscalationService } from "../../src/services/escalationService.js";
@@ -65,12 +66,24 @@ describe("TaskActionService", () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, adapter, "user-self");
+    const service = new TaskActionService(db, repo, projectRepo, adapter, "user-self");
 
     await expect(service.create({
       title: "Loose commitment",
-      projectId: null,
+      projectId: "project-family",
       assigneeId: "user-self",
       dueDatetime: null,
       durationMinutes: null,
@@ -88,12 +101,24 @@ describe("TaskActionService", () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, adapter, "user-self");
+    const service = new TaskActionService(db, repo, projectRepo, adapter, "user-self");
 
     await expect(service.create({
       title: "Unassigned task",
-      projectId: null,
+      projectId: "project-family",
       assigneeId: null,
       dueDatetime: "2026-05-08T12:00:00Z",
       durationMinutes: 30,
@@ -102,7 +127,7 @@ describe("TaskActionService", () => {
     })).rejects.toMatchObject({
       code: "task_validation_failed",
       statusCode: 422,
-      details: { errors: ["assignee_required_for_created_task"] }
+      details: { errors: ["assignee_required_for_assignable_project"] }
     });
 
     expect(adapter.createdTasks).toEqual([]);
@@ -127,7 +152,7 @@ describe("TaskActionService", () => {
       updatedAt: "2026-05-08T10:00:00Z"
     });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, adapter);
+    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter);
 
     await service.extend("task-1", "2026-05-08T18:00:00Z");
 
@@ -157,8 +182,20 @@ describe("TaskActionService", () => {
       rawJson: "{}",
       updatedAt: "2026-05-08T10:00:00Z"
     });
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, adapter);
+    const service = new TaskActionService(db, repo, projectRepo, adapter);
 
     await service.start("task-1", "2026-05-08T17:00:00Z");
     await service.postponeStart("task-1", "2026-05-08T17:05:00Z");
@@ -170,7 +207,7 @@ describe("TaskActionService", () => {
     await service.done("task-1", "2026-05-08T19:00:00Z");
     const created = await service.create({
       title: "New task",
-      projectId: null,
+      projectId: "project-family",
       assigneeId: "user-self",
       dueDatetime: "2026-05-09T12:00:00Z",
       durationMinutes: 30,
@@ -204,7 +241,7 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new DryRunSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, adapter, "", escalation);
+    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
 
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
     await service.postponeStart("task-1", "2026-05-08T15:05:00Z");
@@ -222,7 +259,7 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new DeferredSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, adapter, "", escalation);
+    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
 
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
     const first = service.postponeStart("task-1", "2026-05-08T15:05:00Z");
@@ -243,7 +280,7 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new FailingSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, adapter, "", escalation);
+    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
 
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
     await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z")).resolves.toEqual({
@@ -261,6 +298,116 @@ describe("TaskActionService", () => {
     expect(repo.getById("task-1")).toMatchObject({
       startDismissCount: 3,
       lastSnoozedAt: "2026-05-08T15:15:00.000Z"
+    });
+  });
+
+  it("creates a self-owned commitment in a non-assignable project without Todoist assignee", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    const created = await service.create({
+      title: "Personal strict task",
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    });
+
+    expect(adapter.createdTasks[0]).toEqual({
+      title: "Personal strict task",
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30
+    });
+    expect(taskRepo.getById(created.id)).toMatchObject({
+      assigneeId: null,
+      commitmentOwnerId: "user-self"
+    });
+  });
+
+  it("requires assignee for assignable projects", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Shared task",
+      projectId: "project-family",
+      assigneeId: null,
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["assignee_required_for_assignable_project"] }
+    });
+  });
+
+  it("rejects assignee for non-assignable projects", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Personal task",
+      projectId: "project-personal",
+      assigneeId: "user-self",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["assignee_not_supported_for_project"] }
     });
   });
 });

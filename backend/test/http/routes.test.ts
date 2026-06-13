@@ -163,6 +163,18 @@ describe("HTTP routes", () => {
   it("rejects invalid self-assigned task creation without calling Todoist", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
     const adapter = new FakeTodoistAdapter();
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
 
@@ -172,7 +184,7 @@ describe("HTTP routes", () => {
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Loose commitment",
-        projectId: null,
+        projectId: "project-family",
         assigneeId: "user-self",
         dueDatetime: null,
         durationMinutes: null
@@ -186,6 +198,41 @@ describe("HTTP routes", () => {
       details: { errors: ["due_datetime_required", "duration_required"] }
     });
     expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("accepts omitted assignee for non-assignable project creation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Personal strict task",
+        projectId: "project-personal",
+        dueDatetime: "2026-06-13T12:00:00Z",
+        durationMinutes: 30
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(adapter.createdTasks[0]?.assigneeId).toBeNull();
   });
 
   it("sends escalation through postpone route on second start postpone", async () => {

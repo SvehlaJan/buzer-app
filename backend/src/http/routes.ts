@@ -9,12 +9,15 @@ import type { BuildServerOptions } from "../server.js";
 import { requireBearerToken } from "./auth.js";
 
 const taskIdParams = z.object({ id: z.string().min(1) });
+const nullableString = z.string().min(1).nullish().transform((value) => value ?? null);
+const nullablePositiveInt = z.number().int().positive().nullish().transform((value) => value ?? null);
+
 const createTaskBody = z.object({
   title: z.string().min(1),
-  projectId: z.string().nullable(),
-  assigneeId: z.string().min(1),
-  dueDatetime: z.string().nullable(),
-  durationMinutes: z.number().int().positive().nullable()
+  projectId: z.string().min(1),
+  assigneeId: nullableString,
+  dueDatetime: nullableString,
+  durationMinutes: nullablePositiveInt
 });
 const rescheduleBody = z.object({
   dueDatetime: z.string().min(1),
@@ -107,7 +110,14 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks", async (request) => {
     const body = createTaskBody.parse(request.body);
     const repo = new TaskRepository(options.db);
-    const service = new TaskActionService(options.db, repo, options.todoist, options.currentUserId);
+    const service = new TaskActionService(
+      options.db,
+      repo,
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     return service.create({
       ...body,
       creatorId: options.currentUserId,
@@ -117,27 +127,55 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 
   app.post("/tasks/:id/start", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     await service.start(id, new Date().toISOString());
     return { ok: true };
   });
 
   app.post("/tasks/:id/done", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     await service.done(id, new Date().toISOString());
     return { ok: true };
   });
 
   app.post("/tasks/:id/postpone-start", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist, "", options.escalationService ?? null);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     return service.postponeStart(id, new Date().toISOString());
   });
 
   app.post("/tasks/:id/extend", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     await service.extend(id, new Date().toISOString());
     return { ok: true };
   });
@@ -145,7 +183,14 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks/:id/reschedule", async (request) => {
     const { id } = taskIdParams.parse(request.params);
     const body = rescheduleBody.parse(request.body);
-    const service = new TaskActionService(options.db, new TaskRepository(options.db), options.todoist);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
     await service.reschedule(id, { ...body, now: new Date().toISOString() });
     return { ok: true };
   });

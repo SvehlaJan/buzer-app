@@ -98,4 +98,66 @@ describe("TaskSnapshotService", () => {
     expect(snapshot.tasks.map((task) => task.isCompleted)).toEqual([true, false]);
     expect(snapshot.tasks.map((task) => task.isDeleted)).toEqual([false, true]);
   });
+
+  it("treats companion-owned tasks as assigned to the current user", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-personal",
+      todoistTaskId: "todoist-personal",
+      title: "Personal strict task",
+      projectId: "project-personal",
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z",
+      commitmentOwnerId: "user-self"
+    });
+    const service = new TaskSnapshotService(repo, "user-self");
+
+    const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
+
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "task-personal",
+      isAssignedToUser: true,
+      state: "planned",
+      validationErrors: []
+    });
+  });
+
+  it("does not validate unassigned user-created tasks as current-user commitments without an owner", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-unassigned",
+      todoistTaskId: "todoist-unassigned",
+      title: "Loose personal task",
+      projectId: "project-personal",
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z",
+      commitmentOwnerId: null
+    });
+    const service = new TaskSnapshotService(repo, "user-self");
+
+    const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
+
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "task-unassigned",
+      isAssignedToUser: false,
+      state: "invalid",
+      validationErrors: ["assignee_required_for_created_task"]
+    });
+  });
 });

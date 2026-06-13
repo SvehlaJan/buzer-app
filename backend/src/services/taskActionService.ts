@@ -2,13 +2,14 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { validateTaskStrictness } from "../domain/taskValidation.js";
 import { addMinutes } from "../domain/time.js";
+import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import type { EscalationService } from "./escalationService.js";
 
 export interface CreateTaskInput {
   title: string;
-  projectId: string | null;
+  projectId: string;
   assigneeId: string | null;
   dueDatetime: string | null;
   durationMinutes: number | null;
@@ -26,18 +27,58 @@ export class TaskActionService {
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
+    private readonly projects: ProjectRepository,
     private readonly todoist: TodoistAdapter,
     private readonly currentUserId = "",
     private readonly escalationService: EscalationService | null = null
   ) {}
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {
+    const project = this.projects.getActiveByTodoistProjectId(input.projectId);
+    if (project === null) {
+      throw Object.assign(new Error("Project not found"), {
+        code: "project_not_found",
+        statusCode: 404
+      });
+    }
+
+    const errors: string[] = [];
+    if (input.title.trim().length === 0) {
+      errors.push("title_required");
+    }
+    if (input.dueDatetime === null) {
+      errors.push("due_datetime_required");
+    }
+    if (input.durationMinutes === null) {
+      errors.push("duration_required");
+    }
+    if (project.canAssignTasks && input.assigneeId === null) {
+      errors.push("assignee_required_for_assignable_project");
+    }
+    if (!project.canAssignTasks && input.assigneeId !== null) {
+      errors.push("assignee_not_supported_for_project");
+    }
+    if (errors.length > 0) {
+      throw Object.assign(new Error("Task validation failed"), {
+        code: "task_validation_failed",
+        statusCode: 422,
+        details: { errors }
+      });
+    }
+
+    const dueDatetime = input.dueDatetime;
+    const durationMinutes = input.durationMinutes;
+    if (dueDatetime === null || durationMinutes === null) {
+      throw new Error("unreachable_missing_schedule_after_validation");
+    }
+
+    const strictAssigneeId = project.canAssignTasks ? input.assigneeId : this.currentUserId;
     const validation = validateTaskStrictness({
       title: input.title,
       creatorId: input.creatorId,
-      assigneeId: input.assigneeId,
-      dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes,
+      assigneeId: strictAssigneeId,
+      dueDatetime,
+      durationMinutes,
       currentUserId: this.currentUserId
     });
     if (!validation.valid) {
@@ -47,35 +88,44 @@ export class TaskActionService {
         details: { errors: validation.errors }
       });
     }
-    if (input.assigneeId === null) {
-      throw Object.assign(new Error("Task validation failed"), {
-        code: "task_validation_failed",
-        statusCode: 422,
-        details: { errors: ["assignee_required_for_created_task"] }
-      });
-    }
 
     const created = await this.todoist.createTask({
       title: input.title,
       projectId: input.projectId,
       assigneeId: input.assigneeId,
-      dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes
+      dueDatetime,
+      durationMinutes
     });
+    const verificationErrors = verifyCreatedTask({
+      task: created.task,
+      expectedProjectId: input.projectId,
+      expectedAssigneeId: input.assigneeId,
+      expectedDueDatetime: dueDatetime,
+      expectedDurationMinutes: durationMinutes
+    });
+    if (verificationErrors.length > 0) {
+      throw Object.assign(new Error("Todoist create verification failed"), {
+        code: "todoist_create_verification_failed",
+        statusCode: 422,
+        details: { errors: verificationErrors, todoistTaskId: created.todoistTaskId }
+      });
+    }
+
     const id = randomUUID();
     this.tasks.upsertTodoistTask({
       id,
       todoistTaskId: created.todoistTaskId,
-      title: input.title,
-      projectId: input.projectId,
-      assigneeId: input.assigneeId,
-      creatorId: input.creatorId,
-      dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes,
-      completedAt: null,
-      deletedAt: null,
-      rawJson: JSON.stringify({ id: created.todoistTaskId }),
-      updatedAt: input.now
+      title: created.task.title,
+      projectId: created.task.projectId,
+      assigneeId: created.task.assigneeId,
+      creatorId: created.task.creatorId ?? input.creatorId,
+      dueDatetime: created.task.dueDatetime,
+      durationMinutes: created.task.durationMinutes,
+      completedAt: created.task.completedAt,
+      deletedAt: created.task.deletedAt,
+      rawJson: JSON.stringify(created.task.rawJson),
+      updatedAt: input.now,
+      commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
     });
     return { id, todoistTaskId: created.todoistTaskId };
   }
@@ -181,4 +231,39 @@ export class TaskActionService {
     }
     return task;
   }
+}
+
+function verifyCreatedTask(input: {
+  task: TaskWithTodoistFields;
+  expectedProjectId: string;
+  expectedAssigneeId: string | null;
+  expectedDueDatetime: string;
+  expectedDurationMinutes: number;
+}): string[] {
+  const errors: string[] = [];
+  if (input.task.projectId !== input.expectedProjectId) {
+    errors.push("project_mismatch");
+  }
+  if (input.expectedAssigneeId !== null && input.task.assigneeId !== input.expectedAssigneeId) {
+    errors.push("assignee_mismatch");
+  }
+  if (input.task.dueDatetime !== input.expectedDueDatetime) {
+    errors.push("due_datetime_mismatch");
+  }
+  if (input.task.durationMinutes !== input.expectedDurationMinutes) {
+    errors.push("duration_mismatch");
+  }
+  return errors;
+}
+
+interface TaskWithTodoistFields {
+  title: string;
+  projectId: string | null;
+  assigneeId: string | null;
+  creatorId: string | null;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
+  completedAt: string | null;
+  deletedAt: string | null;
+  rawJson: unknown;
 }
