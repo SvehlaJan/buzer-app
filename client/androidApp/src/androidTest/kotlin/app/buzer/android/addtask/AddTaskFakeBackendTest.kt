@@ -32,70 +32,79 @@ class AddTaskFakeBackendTest {
     fun addTask_requiresExplicitProjectSelectionOnFirstOpen() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            composeRule.onNodeWithText("Add task").performClick()
+            waitForText("Select project")
+            composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+            selectDefaultDeadline()
+            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
+            composeRule.onNodeWithText("Save").performClick()
 
-        composeRule.onNodeWithText("Add task").performClick()
-        waitForText("Select project")
-        composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
-        selectDefaultDeadline()
-        composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-        composeRule.onNodeWithText("Save").performClick()
-
-        composeRule.onNodeWithText("Project is required").assertIsDisplayed()
-        assertNoRecordedCall("/tasks")
+            composeRule.onNodeWithText("Project is required").assertIsDisplayed()
+            assertNoRecordedCall("/tasks")
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
     fun addTask_sharedProjectRequiresAssigneeAndCreatesTask() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            composeRule.onNodeWithText("Add task").performClick()
+            selectProject("Test Shared")
+            composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+            selectDefaultDeadline()
+            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
+            composeRule.onNodeWithText("Save").performClick()
+            composeRule.onNodeWithText("Assignee is required for this project").assertIsDisplayed()
 
-        composeRule.onNodeWithText("Add task").performClick()
-        selectProject("Test Shared")
-        composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
-        selectDefaultDeadline()
-        composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-        composeRule.onNodeWithText("Save").performClick()
-        composeRule.onNodeWithText("Assignee is required for this project").assertIsDisplayed()
+            composeRule.onNodeWithText("Me").performClick()
+            composeRule.onNodeWithText("Save").performClick()
 
-        composeRule.onNodeWithText("Me").performClick()
-        composeRule.onNodeWithText("Save").performClick()
-
-        waitForRecordedCall("/tasks")
-        fakeBackend.assertRecorded(
-            "/tasks",
-            "\"title\":\"Buy milk\"",
-            "\"projectId\":\"project-test\"",
-            "\"assigneeId\":\"user-me\"",
-            "\"durationMinutes\":45",
-            "dueDatetime"
-        )
+            waitForRecordedCall("/tasks")
+            fakeBackend.assertRecorded(
+                "/tasks",
+                "\"title\":\"Buy milk\"",
+                "\"projectId\":\"project-test\"",
+                "\"assigneeId\":\"user-me\"",
+                "\"durationMinutes\":45",
+                "dueDatetime"
+            )
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
     fun addTask_personalProjectOmitsAssignee() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            composeRule.onNodeWithText("Add task").performClick()
+            selectProject("Test Personal (personal)")
+            composeRule.onAllNodesWithText("Me").assertCountEquals(0)
+            composeRule.onNodeWithContentDescription("Title input").performTextInput("Personal task")
+            selectDefaultDeadline()
+            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("30")
+            composeRule.onNodeWithText("Save").performClick()
 
-        composeRule.onNodeWithText("Add task").performClick()
-        selectProject("Test Personal (personal)")
-        composeRule.onAllNodesWithText("Me").assertCountEquals(0)
-        composeRule.onNodeWithContentDescription("Title input").performTextInput("Personal task")
-        selectDefaultDeadline()
-        composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("30")
-        composeRule.onNodeWithText("Save").performClick()
-
-        waitForRecordedCall("/tasks")
-        fakeBackend.assertRecorded(
-            "/tasks",
-            "\"title\":\"Personal task\"",
-            "\"projectId\":\"project-personal\"",
-            "\"durationMinutes\":30",
-            "dueDatetime"
-        )
-        fakeBackend.assertRecordedWithout("/tasks", "assigneeId")
+            waitForRecordedCall("/tasks")
+            fakeBackend.assertRecorded(
+                "/tasks",
+                "\"title\":\"Personal task\"",
+                "\"projectId\":\"project-personal\"",
+                "\"durationMinutes\":30",
+                "dueDatetime"
+            )
+            fakeBackend.assertRecordedWithout("/tasks", "assigneeId")
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
@@ -103,16 +112,19 @@ class AddTaskFakeBackendTest {
         resetTestState()
         fakeBackend.setFailProjects(true)
         try {
-            ActivityScenario.launch(MainActivity::class.java)
+            val scenario = ActivityScenario.launch(MainActivity::class.java)
+            try {
+                composeRule.onNodeWithText("Add task").performClick()
+                waitForText("500")
+                composeRule.onNodeWithText("Save").assertIsNotEnabled()
 
-            composeRule.onNodeWithText("Add task").performClick()
-            waitForText("500")
-            composeRule.onNodeWithText("Save").assertIsNotEnabled()
-
-            fakeBackend.setFailProjects(false)
-            composeRule.onNodeWithText("Retry").performClick()
-            waitForText("Select project")
-            composeRule.onNodeWithText("Select project").assertIsDisplayed()
+                fakeBackend.setFailProjects(false)
+                composeRule.onNodeWithText("Retry").performClick()
+                waitForText("Select project")
+                composeRule.onNodeWithText("Select project").assertIsDisplayed()
+            } finally {
+                scenario.close()
+            }
         } finally {
             fakeBackend.setFailProjects(false)
         }
@@ -123,20 +135,23 @@ class AddTaskFakeBackendTest {
         resetTestState()
         fakeBackend.setFailActions(true)
         try {
-            ActivityScenario.launch(MainActivity::class.java)
+            val scenario = ActivityScenario.launch(MainActivity::class.java)
+            try {
+                composeRule.onNodeWithText("Add task").performClick()
+                selectProject("Test Shared")
+                composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+                composeRule.onNodeWithText("Me").performClick()
+                selectDefaultDeadline()
+                composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
+                composeRule.onNodeWithText("Save").performClick()
 
-            composeRule.onNodeWithText("Add task").performClick()
-            selectProject("Test Shared")
-            composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
-            composeRule.onNodeWithText("Me").performClick()
-            selectDefaultDeadline()
-            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-            composeRule.onNodeWithText("Save").performClick()
-
-            waitForRecordedCall("/tasks")
-            composeRule.onNodeWithText("Add committed task").assertIsDisplayed()
-            composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
-            composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+                waitForRecordedCall("/tasks")
+                composeRule.onNodeWithText("Add committed task").assertIsDisplayed()
+                composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
+                composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+            } finally {
+                scenario.close()
+            }
         } finally {
             fakeBackend.setFailActions(false)
         }
@@ -155,11 +170,14 @@ class AddTaskFakeBackendTest {
             firstScenario.close()
         }
 
-        ActivityScenario.launch(MainActivity::class.java)
-
-        composeRule.onNodeWithText("Add task").performClick()
-        waitForText("Test Personal")
-        composeRule.onNodeWithText("Test Personal").assertIsDisplayed()
+        val secondScenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            composeRule.onNodeWithText("Add task").performClick()
+            waitForText("Test Personal")
+            composeRule.onNodeWithText("Test Personal").assertIsDisplayed()
+        } finally {
+            secondScenario.close()
+        }
     }
 
     private fun selectProject(label: String) {
@@ -216,9 +234,14 @@ class AddTaskFakeBackendTest {
     }
 
     private fun assertNoRecordedCall(path: String) {
-        val calls = fakeBackend.calls()
-        check(!calls.contains("\"path\":\"$path\"")) {
-            "Expected no fake backend call $path. Recorded calls: $calls"
+        val deadline = SystemClock.elapsedRealtime() + 800
+        var lastCalls = ""
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lastCalls = runCatching { fakeBackend.calls() }.getOrDefault(lastCalls)
+            check(!lastCalls.contains("\"path\":\"$path\"")) {
+                "Expected no fake backend call $path. Recorded calls: $lastCalls"
+            }
+            SystemClock.sleep(100)
         }
     }
 }

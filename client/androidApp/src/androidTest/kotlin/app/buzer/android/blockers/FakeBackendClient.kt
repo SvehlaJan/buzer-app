@@ -3,6 +3,11 @@ package app.buzer.android.blockers
 import androidx.test.platform.app.InstrumentationRegistry
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class FakeBackendClient(
     private val baseUrl: String = InstrumentationRegistry.getArguments()
@@ -46,13 +51,37 @@ class FakeBackendClient(
     }
 
     fun assertRecordedWithout(path: String, vararg forbiddenFragments: String) {
-        val body = calls()
-        check(body.contains("\"path\":\"$path\"")) {
-            "Expected fake backend call $path, got $body"
+        val callsBody = calls()
+        val matchingBodies = recordedCallBodies(callsBody, path)
+        check(matchingBodies.isNotEmpty()) {
+            "Expected fake backend call $path, got $callsBody"
         }
         forbiddenFragments.forEach { fragment ->
-            check(!body.contains(fragment)) {
-                "Expected fake backend call $path body to omit $fragment, got $body"
+            val matchingForbiddenBodies = matchingBodies.filter { it.contains(fragment) }
+            check(matchingForbiddenBodies.isEmpty()) {
+                "Expected fake backend call $path body to omit $fragment, " +
+                    "got matching bodies $matchingForbiddenBodies. Full recorded calls: $callsBody"
+            }
+        }
+    }
+
+    private fun recordedCallBodies(callsBody: String, path: String): List<String> {
+        val callsArray = runCatching {
+            Json.parseToJsonElement(callsBody)
+                .jsonObject["calls"]
+                ?.jsonArray
+                ?: error("Missing calls array")
+        }.getOrElse { error ->
+            throw AssertionError("Expected fake backend calls JSON, got $callsBody", error)
+        }
+
+        return callsArray.mapNotNull { call ->
+            val callObject = call.jsonObject
+            val recordedPath = callObject["path"]?.jsonPrimitive?.contentOrNull
+            if (recordedPath == path) {
+                callObject["body"]?.toString() ?: "null"
+            } else {
+                null
             }
         }
     }
