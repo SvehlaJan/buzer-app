@@ -19,6 +19,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   const token = options.token ?? "test-token";
   let failActions = options.failActions ?? false;
   let failSnapshot = false;
+  let failProjects = false;
   const app = Fastify({ logger: false });
   const calls: RecordedCall[] = [];
 
@@ -48,8 +49,11 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     return fixedSnapshot();
   });
 
-  app.get("/projects", async () => {
+  app.get("/projects", async (_request, reply) => {
     await maybeDelay();
+    if (failProjects) {
+      return reply.code(500).send({ error: "forced_project_failure" });
+    }
     return {
       projects: [
         {
@@ -85,6 +89,11 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   app.post<{ Body: { enabled?: boolean } }>("/__fail-snapshot", async (request) => {
     failSnapshot = request.body?.enabled === true;
     return { failSnapshot };
+  });
+
+  app.post<{ Body: { enabled?: boolean } }>("/__fail-projects", async (request) => {
+    failProjects = request.body?.enabled === true;
+    return { failProjects };
   });
 
   app.post("/tasks", async (request, reply) => {

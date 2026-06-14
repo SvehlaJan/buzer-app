@@ -235,3 +235,48 @@ test("test helper can toggle forced snapshot failures at runtime", async (t) => 
   });
   assert.equal(response.statusCode, 500);
 });
+
+test("test helper can toggle forced project failures at runtime", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const toggle = await app.inject({
+    method: "POST",
+    url: "/__fail-projects",
+    payload: { enabled: true }
+  });
+  assert.equal(toggle.statusCode, 200);
+  assert.deepEqual(toggle.json(), { failProjects: true });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/projects",
+    headers: { authorization: "Bearer test-token" }
+  });
+  assert.equal(response.statusCode, 500);
+  assert.deepEqual(response.json(), { error: "forced_project_failure" });
+});
+
+test("project failure toggle can be disabled", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  await app.inject({
+    method: "POST",
+    url: "/__fail-projects",
+    payload: { enabled: true }
+  });
+  await app.inject({
+    method: "POST",
+    url: "/__fail-projects",
+    payload: { enabled: false }
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/projects",
+    headers: { authorization: "Bearer test-token" }
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().projects.length, 2);
+});
