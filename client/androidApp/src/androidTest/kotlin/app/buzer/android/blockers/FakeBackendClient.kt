@@ -20,6 +20,10 @@ class FakeBackendClient(
         request("POST", "/__fail-snapshot", """{"enabled":$enabled}""")
     }
 
+    fun setFailProjects(enabled: Boolean) {
+        request("POST", "/__fail-projects", """{"enabled":$enabled}""")
+    }
+
     fun calls(): String = request("GET", "/__calls")
 
     fun assertRecorded(path: String) {
@@ -37,6 +41,18 @@ class FakeBackendClient(
         bodyFragments.forEach { fragment ->
             check(body.contains(fragment)) {
                 "Expected fake backend call $path body to contain $fragment, got $body"
+            }
+        }
+    }
+
+    fun assertRecordedWithout(path: String, vararg forbiddenFragments: String) {
+        val body = calls()
+        check(body.contains("\"path\":\"$path\"")) {
+            "Expected fake backend call $path, got $body"
+        }
+        forbiddenFragments.forEach { fragment ->
+            check(!body.contains(fragment)) {
+                "Expected fake backend call $path body to omit $fragment, got $body"
             }
         }
     }
