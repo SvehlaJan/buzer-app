@@ -52,6 +52,16 @@ export ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
 
 When more than one device/emulator is attached, scope a connected run with `ANDROID_SERIAL=<serial>` (for example `ANDROID_SERIAL=emulator-5584`); otherwise `connectedDebugAndroidTest` runs on every attached device.
 
+### Fake-backend Android E2E
+
+Use this as the default deterministic Android E2E lane:
+
+```bash
+scripts/e2e-fake-backend.sh
+```
+
+The script starts `tools/fake-backend` on port `18433` when needed, runs `pixel8Api34DebugAndroidTest`, and passes the emulator URL `http://10.0.2.2:18433` into both the app and instrumentation helper.
+
 ### Device verification helper
 
 `scripts/adb-verify.sh` wraps the common low-token device checks so verification output stays small and consistent (cleared + tag-filtered logcat, app-scoped `dumpsys alarm`, overlay/notification/exact-alarm app-op state, exit-checked downscaled screenshots). It resolves the target from `BUZER_DEVICE_SERIAL`, then `ANDROID_SERIAL`, then the sole attached device, and refuses to guess when several are connected.
