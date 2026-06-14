@@ -47,12 +47,26 @@ data class TasksSnapshotResponse(
 )
 
 @Serializable
+data class ProjectItem(
+    val id: String,
+    val name: String,
+    val canAssignTasks: Boolean,
+    val shared: Boolean,
+    val isInboxProject: Boolean
+)
+
+@Serializable
+data class ProjectsResponse(
+    val projects: List<ProjectItem>
+)
+
+@Serializable
 data class CreateTaskRequest(
     val title: String,
-    val projectId: String?,
-    val assigneeId: String,
-    val dueDatetime: String?,
-    val durationMinutes: Int?
+    val projectId: String,
+    val assigneeId: String? = null,
+    val dueDatetime: String,
+    val durationMinutes: Int
 )
 
 @Serializable
