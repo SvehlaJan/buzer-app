@@ -16,6 +16,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.MainActivity
 import app.buzer.android.blockers.FakeBackendClient
+import app.buzer.android.tasks.AddTaskDependencies
+import java.lang.reflect.Modifier
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -196,7 +198,14 @@ class AddTaskFakeBackendTest {
         fakeBackend.setFailActions(false)
         fakeBackend.setFailProjects(false)
         fakeBackend.resetCalls()
+        resetProjectRepositoryCache()
         clearProjectSelection()
+    }
+
+    private fun resetProjectRepositoryCache() {
+        val field = AddTaskDependencies::class.java.getDeclaredField("cachedProjectRepository")
+        field.isAccessible = true
+        field.set(if (Modifier.isStatic(field.modifiers)) null else AddTaskDependencies, null)
     }
 
     private fun clearProjectSelection() {

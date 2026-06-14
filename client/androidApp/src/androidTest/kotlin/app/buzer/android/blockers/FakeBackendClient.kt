@@ -39,13 +39,15 @@ class FakeBackendClient(
     }
 
     fun assertRecorded(path: String, vararg bodyFragments: String) {
-        val body = calls()
-        check(body.contains("\"path\":\"$path\"")) {
-            "Expected fake backend call $path, got $body"
+        val callsBody = calls()
+        val matchingBodies = recordedCallBodies(callsBody, path)
+        check(matchingBodies.isNotEmpty()) {
+            "Expected fake backend call $path, got $callsBody"
         }
         bodyFragments.forEach { fragment ->
-            check(body.contains(fragment)) {
-                "Expected fake backend call $path body to contain $fragment, got $body"
+            check(matchingBodies.any { it.contains(fragment) }) {
+                "Expected fake backend call $path body to contain $fragment, " +
+                    "got matching bodies $matchingBodies. Full recorded calls: $callsBody"
             }
         }
     }
