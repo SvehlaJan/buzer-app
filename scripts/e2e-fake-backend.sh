@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${PORT:-18433}"
-TOKEN="${BUZER_BACKEND_TOKEN:-test-token}"
+TOKEN="test-token"
 FAKE_BACKEND_URL="http://127.0.0.1:${PORT}"
 EMULATOR_BACKEND_URL="http://10.0.2.2:${PORT}"
 STARTED_PID=""
@@ -23,6 +23,12 @@ wait_for_fake_backend() {
       -H "Authorization: Bearer ${TOKEN}" \
       "${FAKE_BACKEND_URL}/projects" >/dev/null; then
       return 0
+    fi
+    if [[ -n "${STARTED_PID}" ]] && ! kill -0 "${STARTED_PID}" >/dev/null 2>&1; then
+      local exit_code=0
+      wait "${STARTED_PID}" || exit_code="$?"
+      echo "Fake backend exited before becoming ready with status ${exit_code}" >&2
+      return 1
     fi
     sleep 1
   done
