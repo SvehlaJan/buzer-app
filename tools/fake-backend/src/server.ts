@@ -48,6 +48,28 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     return fixedSnapshot();
   });
 
+  app.get("/projects", async () => {
+    await maybeDelay();
+    return {
+      projects: [
+        {
+          id: "project-test",
+          name: "Test Shared",
+          canAssignTasks: true,
+          shared: true,
+          isInboxProject: false
+        },
+        {
+          id: "project-personal",
+          name: "Test Personal",
+          canAssignTasks: false,
+          shared: false,
+          isInboxProject: false
+        }
+      ]
+    };
+  });
+
   app.get("/__calls", async () => ({ calls }));
 
   app.post("/__reset", async () => {

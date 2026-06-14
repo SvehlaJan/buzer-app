@@ -70,6 +70,40 @@ test("create task is recorded", async (t) => {
   assert.equal(calls.json().calls[0].body.title, "Buy milk");
 });
 
+test("projects are returned for add-task screen", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/projects",
+    headers: { authorization: "Bearer test-token" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().projects[0].id, "project-test");
+  assert.equal(response.json().projects[0].canAssignTasks, true);
+});
+
+test("create task accepts personal project without assignee", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/tasks",
+    headers: { authorization: "Bearer test-token" },
+    payload: {
+      title: "Personal task",
+      projectId: "project-personal",
+      dueDatetime: "2026-06-02T16:30:00Z",
+      durationMinutes: 45
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+});
+
 test("review dismiss is recorded", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
