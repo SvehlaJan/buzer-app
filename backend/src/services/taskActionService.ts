@@ -51,6 +51,8 @@ export class TaskActionService {
     }
     if (input.durationMinutes === null) {
       errors.push("duration_required");
+    } else if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
+      errors.push("duration_must_be_positive_minutes");
     }
     if (project.canAssignTasks && input.assigneeId === null) {
       errors.push("assignee_required_for_assignable_project");
@@ -244,7 +246,7 @@ function verifyCreatedTask(input: {
   if (input.task.projectId !== input.expectedProjectId) {
     errors.push("project_mismatch");
   }
-  if (input.expectedAssigneeId !== null && input.task.assigneeId !== input.expectedAssigneeId) {
+  if (input.task.assigneeId !== input.expectedAssigneeId) {
     errors.push("assignee_mismatch");
   }
   if (input.task.dueDatetime !== input.expectedDueDatetime) {

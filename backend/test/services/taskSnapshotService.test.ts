@@ -160,4 +160,35 @@ describe("TaskSnapshotService", () => {
       validationErrors: ["assignee_required_for_created_task"]
     });
   });
+
+  it("does not keep enforcing companion-owned tasks after Todoist assigns someone else", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-reassigned",
+      todoistTaskId: "todoist-reassigned",
+      title: "Reassigned personal task",
+      projectId: "project-personal",
+      assigneeId: "someone-else",
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z",
+      commitmentOwnerId: "user-self"
+    });
+    const service = new TaskSnapshotService(repo, "user-self");
+
+    const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
+
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "task-reassigned",
+      isAssignedToUser: false,
+      state: "planned",
+      validationErrors: []
+    });
+  });
 });

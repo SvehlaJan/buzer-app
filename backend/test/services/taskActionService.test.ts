@@ -410,4 +410,92 @@ describe("TaskActionService", () => {
       details: { errors: ["assignee_not_supported_for_project"] }
     });
   });
+
+  it("rejects Todoist-created assignee mismatch when expected assignee is null", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    adapter.createResults.push({
+      todoistTaskId: "created-1",
+      task: {
+        todoistTaskId: "created-1",
+        title: "Personal strict task",
+        projectId: "project-personal",
+        assigneeId: "someone",
+        creatorId: "user-self",
+        dueDatetime: "2026-06-13T12:00:00Z",
+        durationMinutes: 30,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: { id: "created-1" },
+        updatedAt: "2026-06-13T10:00:00Z"
+      }
+    });
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Personal strict task",
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "todoist_create_verification_failed",
+      statusCode: 422,
+      details: { errors: ["assignee_mismatch"], todoistTaskId: "created-1" }
+    });
+
+    expect(taskRepo.getByTodoistTaskId("created-1")).toBeNull();
+  });
+
+  it("rejects non-positive duration before calling Todoist even when task is assigned away", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Assigned-away task",
+      projectId: "project-family",
+      assigneeId: "someone-else",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 0,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["duration_must_be_positive_minutes"] }
+    });
+
+    expect(adapter.createdTasks).toEqual([]);
+  });
 });

@@ -11,7 +11,7 @@ export class TaskSnapshotService {
   getSnapshot(serverTime: string) {
     const rows = this.tasks.listAll();
     const items = rows.map((task) => {
-      const isCompanionOwnedByUser = task.commitmentOwnerId === this.currentUserId;
+      const isCompanionOwnedByUser = task.assigneeId === null && task.commitmentOwnerId === this.currentUserId;
       const isAssignedToUser = task.assigneeId === this.currentUserId || isCompanionOwnedByUser;
       const validation = validateTaskStrictness({
         title: task.title,
