@@ -163,7 +163,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       projectId: task.project_id ?? null,
       assigneeId: stringifyNullable(task.responsible_uid ?? task.assignee_id ?? null),
       creatorId: stringifyNullable(task.added_by_uid ?? task.assigned_by_uid ?? task.user_id ?? null),
-      dueDatetime: task.due?.datetime ?? task.due_datetime ?? null,
+      dueDatetime: normalizeTodoistDueDatetime(task.due?.datetime ?? task.due_datetime ?? task.due?.date ?? null),
       durationMinutes,
       completedAt,
       deletedAt: task.is_deleted === true ? task.updated_at ?? new Date().toISOString() : null,
@@ -200,4 +200,18 @@ function parseTodoistNumericId(value: string): number {
     throw new Error("todoist_assignee_id_must_be_numeric");
   }
   return numericValue;
+}
+
+function normalizeTodoistDueDatetime(value: string | null): string | null {
+  if (value === null || !value.includes("T")) {
+    return null;
+  }
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return value;
+  }
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+  return new Date(timestamp).toISOString().replace(".000Z", "Z");
 }

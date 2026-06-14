@@ -52,7 +52,7 @@ test("create task is recorded", async (t) => {
     headers: { authorization: "Bearer test-token" },
     payload: {
       title: "Buy milk",
-      projectId: null,
+      projectId: "project-test",
       assigneeId: "user-me",
       dueDatetime: "2026-06-02T16:30:00Z",
       durationMinutes: 45
@@ -131,7 +131,7 @@ test("forced action failures also fail task creation and still record call", asy
     headers: { authorization: "Bearer test-token" },
     payload: {
       title: "Buy milk",
-      projectId: null,
+      projectId: "project-test",
       assigneeId: "user-me",
       dueDatetime: "2026-06-02T16:30:00Z",
       durationMinutes: 45

@@ -2386,7 +2386,7 @@ Expected: commit succeeds.
 **Files:**
 - Create/update: `docs/handoffs/2026-06-13-project-aware-task-creation.md`
 
-- [ ] **Step 1: Run backend tests and typecheck**
+- [x] **Step 1: Run backend tests and typecheck**
 
 Run:
 
@@ -2399,7 +2399,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 2: Run fake backend tests**
+- [x] **Step 2: Run fake backend tests**
 
 Run:
 
@@ -2410,7 +2410,7 @@ npm test
 
 Expected: PASS.
 
-- [ ] **Step 3: Run Android/shared tests and assemble**
+- [x] **Step 3: Run Android/shared tests and assemble**
 
 Run:
 
@@ -2431,7 +2431,7 @@ BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install
 
 Expected: PASS. Evidence includes install success for `app.buzer.android`.
 
-- [ ] **Step 5: Verify backend deployment path before live destructive test**
+- [x] **Step 5: Verify backend deployment path before live destructive test**
 
 Run a backend smoke against local tests first. If deploying to the VPS in the same session, use the repo's existing deployment notes:
 
@@ -2471,7 +2471,7 @@ BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh alarms
 
 Expected: start and deadline alarms exist for the personal commitment.
 
-- [ ] **Step 7: Write handoff**
+- [x] **Step 7: Write handoff**
 
 Create or update `docs/handoffs/2026-06-13-project-aware-task-creation.md` with:
 

@@ -69,6 +69,30 @@ describe("HttpTodoistAdapter", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty("assignee_id");
   });
 
+  it("maps REST create due.date datetimes to normalized dueDatetime", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      id: "todoist-created",
+      content: "Pay bill",
+      project_id: "project-1",
+      responsible_uid: "43186358",
+      due: { date: "2026-05-08T16:00:00.000000Z" },
+      duration: { amount: 30, unit: "minute" },
+      added_by_uid: "43186358",
+      updated_at: "2026-05-08T10:00:00Z"
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    const created = await adapter.createTask({
+      title: "Pay bill",
+      projectId: "project-1",
+      assigneeId: "43186358",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30
+    });
+
+    expect(created.task.dueDatetime).toBe("2026-05-08T16:00:00Z");
+  });
+
   it("rejects non-numeric REST assignee IDs before fetch", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
