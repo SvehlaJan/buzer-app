@@ -1107,7 +1107,7 @@ Expected: commit succeeds.
 - Modify: `backend/test/services/taskSnapshotService.test.ts`
 - Modify: `backend/test/http/routes.test.ts`
 
-- [ ] **Step 1: Add failing TaskActionService tests**
+- [x] **Step 1: Add failing TaskActionService tests**
 
 Append to `backend/test/services/taskActionService.test.ts`:
 
@@ -1229,7 +1229,7 @@ Add import:
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 ```
 
-- [ ] **Step 2: Add failing snapshot test for commitment owner**
+- [x] **Step 2: Add failing snapshot test for commitment owner**
 
 Append to `backend/test/services/taskSnapshotService.test.ts`:
 
@@ -1266,7 +1266,7 @@ it("treats companion-owned tasks as assigned to the current user", () => {
 });
 ```
 
-- [ ] **Step 3: Add failing route tests for omitted nullable fields**
+- [x] **Step 3: Add failing route tests for omitted nullable fields**
 
 Append to `backend/test/http/routes.test.ts`:
 
@@ -1307,7 +1307,7 @@ it("accepts omitted assignee for non-assignable project creation", async () => {
 });
 ```
 
-- [ ] **Step 4: Run tests to verify RED**
+- [x] **Step 4: Run tests to verify RED**
 
 Run:
 
@@ -1318,7 +1318,7 @@ npm test -- taskActionService taskSnapshotService routes
 
 Expected: FAIL because creation is still assignment-only and schema requires explicit nullable fields.
 
-- [ ] **Step 5: Update route schema to normalize omitted/null fields**
+- [x] **Step 5: Update route schema to normalize omitted/null fields**
 
 In `backend/src/http/routes.ts`, replace `createTaskBody` with:
 
@@ -1335,7 +1335,7 @@ const createTaskBody = z.object({
 });
 ```
 
-- [ ] **Step 6: Inject ProjectRepository into TaskActionService**
+- [x] **Step 6: Inject ProjectRepository into TaskActionService**
 
 In `backend/src/services/taskActionService.ts`, import `ProjectRepository` and update constructor:
 
@@ -1356,7 +1356,7 @@ import type { ProjectRepository } from "../repositories/projectRepository.js";
 
 Update all `new TaskActionService(...)` calls to pass `new ProjectRepository(options.db)` or the test repository.
 
-- [ ] **Step 7: Replace create validation**
+- [x] **Step 7: Replace create validation**
 
 In `TaskActionService.create`, replace the validation block before Todoist create with:
 
@@ -1400,7 +1400,7 @@ In `TaskActionService.create`, replace the validation block before Todoist creat
     }
 ```
 
-- [ ] **Step 8: Verify Todoist returned fields**
+- [x] **Step 8: Verify Todoist returned fields**
 
 In `TaskActionService.create`, call Todoist with non-null schedule values and verify:
 
@@ -1462,7 +1462,7 @@ interface TaskWithTodoistFields {
 }
 ```
 
-- [ ] **Step 9: Persist commitment owner for non-assignable tasks**
+- [x] **Step 9: Persist commitment owner for non-assignable tasks**
 
 In the `upsertTodoistTask` call inside create, use returned task fields and add `commitmentOwnerId`:
 
@@ -1484,7 +1484,7 @@ In the `upsertTodoistTask` call inside create, use returned task fields and add 
     });
 ```
 
-- [ ] **Step 10: Update snapshot validation for commitment ownership**
+- [x] **Step 10: Update snapshot validation for commitment ownership**
 
 In `backend/src/services/taskSnapshotService.ts`, compute:
 
@@ -1504,7 +1504,7 @@ Return:
         isAssignedToUser,
 ```
 
-- [ ] **Step 11: Update route constructors**
+- [x] **Step 11: Update route constructors**
 
 In `backend/src/http/routes.ts`, each `TaskActionService` constructor must include `new ProjectRepository(options.db)`:
 
@@ -1521,7 +1521,7 @@ const service = new TaskActionService(
 
 Use this full constructor in all action routes; for routes that do not need escalation, passing `options.currentUserId` and `options.escalationService ?? null` is still correct.
 
-- [ ] **Step 12: Run Task 4 tests**
+- [x] **Step 12: Run Task 4 tests**
 
 Run:
 
@@ -1533,7 +1533,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 13: Commit Task 4**
+- [x] **Step 13: Commit Task 4**
 
 Run:
 
