@@ -1553,7 +1553,7 @@ Expected: commit succeeds.
 - Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt`
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientJsonTest.kt`
 
-- [ ] **Step 1: Replace JSON serialization test with target behavior**
+- [x] **Step 1: Replace JSON serialization test with target behavior**
 
 Modify `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientJsonTest.kt`:
 
@@ -1608,7 +1608,7 @@ class BuzerApiClientJsonTest {
 }
 ```
 
-- [ ] **Step 2: Run shared test to verify RED**
+- [x] **Step 2: Run shared test to verify RED**
 
 Run:
 
@@ -1619,7 +1619,7 @@ cd client
 
 Expected: FAIL because project models do not exist and JSON still emits explicit nulls.
 
-- [ ] **Step 3: Update shared models**
+- [x] **Step 3: Update shared models**
 
 In `client/shared/src/commonMain/kotlin/app/buzer/shared/model/TaskModels.kt`, add:
 
@@ -1652,7 +1652,7 @@ data class CreateTaskRequest(
 )
 ```
 
-- [ ] **Step 4: Add API client getProjects and omit nulls**
+- [x] **Step 4: Add API client getProjects and omit nulls**
 
 In `client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt`, import `ProjectsResponse`, add:
 
@@ -1676,7 +1676,7 @@ Update create-task logging to handle nullable assignee:
 "api create_task request titleLength=${request.title.length} project=${request.projectId} assignee=${request.assigneeId} " +
 ```
 
-- [ ] **Step 5: Run shared tests**
+- [x] **Step 5: Run shared tests**
 
 Run:
 
@@ -1687,7 +1687,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 Run:
 
@@ -1707,7 +1707,7 @@ Expected: commit succeeds.
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskProjectRepository.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskDependencies.kt`
 
-- [ ] **Step 1: Create project selection store**
+- [x] **Step 1: Create project selection store**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/tasks/ProjectSelectionStore.kt`:
 
@@ -1733,7 +1733,7 @@ class ProjectSelectionStore(context: Context) {
 }
 ```
 
-- [ ] **Step 2: Create project repository**
+- [x] **Step 2: Create project repository**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskProjectRepository.kt`:
 
@@ -1768,7 +1768,7 @@ class AddTaskProjectRepository(
 }
 ```
 
-- [ ] **Step 3: Add dependencies factory**
+- [x] **Step 3: Add dependencies factory**
 
 In `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskDependencies.kt`, add:
 
@@ -1802,7 +1802,7 @@ Add helper:
 
 The existing `createTaskAction` stays, but update its log line to include `project=${request.projectId}`.
 
-- [ ] **Step 4: Run Android unit tests**
+- [x] **Step 4: Run Android unit tests**
 
 Run:
 
@@ -1813,7 +1813,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 6**
+- [x] **Step 5: Commit Task 6**
 
 Run:
 
@@ -1832,7 +1832,7 @@ Expected: commit succeeds.
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 
-- [ ] **Step 1: Replace validator tests**
+- [x] **Step 1: Replace validator tests**
 
 Modify `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`:
 
@@ -1948,7 +1948,7 @@ class AddTaskFormValidatorTest {
 }
 ```
 
-- [ ] **Step 2: Run validator test to verify RED**
+- [x] **Step 2: Run validator test to verify RED**
 
 Run:
 
@@ -1959,7 +1959,7 @@ cd client
 
 Expected: FAIL because validator signature and project rules are not updated.
 
-- [ ] **Step 3: Update validator**
+- [x] **Step 3: Update validator**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`:
 
@@ -2027,7 +2027,7 @@ object AddTaskFormValidator {
 }
 ```
 
-- [ ] **Step 4: Run validator test**
+- [x] **Step 4: Run validator test**
 
 Run:
 
@@ -2038,7 +2038,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
 
 Run:
 
@@ -2056,7 +2056,7 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
 
-- [ ] **Step 1: Update AddTaskScreen parameters**
+- [x] **Step 1: Update AddTaskScreen parameters**
 
 Modify the function signature in `AddTaskScreen.kt`:
 
@@ -2084,7 +2084,7 @@ import androidx.compose.runtime.LaunchedEffect
 import app.buzer.shared.model.ProjectItem
 ```
 
-- [ ] **Step 2: Add project state**
+- [x] **Step 2: Add project state**
 
 Inside `AddTaskScreen`, add state after `title`:
 
@@ -2119,7 +2119,9 @@ Add loader:
     }
 ```
 
-- [ ] **Step 3: Add project selector UI before assignee row**
+Implementation note: the final code intentionally does not fall back to `loaded.firstOrNull()` on first open. It only preselects a persisted/initial project ID so project selection remains mandatory.
+
+- [x] **Step 3: Add project selector UI before assignee row**
 
 Before the assignee `Row`, insert:
 
@@ -2182,7 +2184,7 @@ Before the assignee `Row`, insert:
         }
 ```
 
-- [ ] **Step 4: Show assignee row only for assignable projects**
+- [x] **Step 4: Show assignee row only for assignable projects**
 
 Wrap the existing assignee `Row`:
 
@@ -2215,7 +2217,7 @@ Wrap the existing assignee `Row`:
         }
 ```
 
-- [ ] **Step 5: Update submit validation and logs**
+- [x] **Step 5: Update submit validation and logs**
 
 Change submit log:
 
@@ -2244,7 +2246,7 @@ Disable Save while projects are loading or failed:
             enabled = !submitting && !projectsLoading && projectLoadError == null,
 ```
 
-- [ ] **Step 6: Run Android unit tests and assemble**
+- [x] **Step 6: Run Android unit tests and assemble**
 
 Run:
 
@@ -2255,7 +2257,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 8**
+- [x] **Step 7: Commit Task 8**
 
 Run:
 
@@ -2274,7 +2276,7 @@ Expected: commit succeeds.
 - Modify: `tools/fake-backend/src/server.ts`
 - Modify: `tools/fake-backend/src/server.test.ts`
 
-- [ ] **Step 1: Add failing fake backend tests**
+- [x] **Step 1: Add failing fake backend tests**
 
 Append to `tools/fake-backend/src/server.test.ts`:
 
@@ -2314,7 +2316,7 @@ test("create task accepts personal project without assignee", async (t) => {
 });
 ```
 
-- [ ] **Step 2: Run fake backend tests to verify RED**
+- [x] **Step 2: Run fake backend tests to verify RED**
 
 Run:
 
@@ -2325,7 +2327,7 @@ npm test
 
 Expected: FAIL because `/projects` is missing.
 
-- [ ] **Step 3: Implement fake projects route**
+- [x] **Step 3: Implement fake projects route**
 
 In `tools/fake-backend/src/server.ts`, add before `POST /tasks`:
 
@@ -2355,7 +2357,7 @@ In `tools/fake-backend/src/server.ts`, add before `POST /tasks`:
 
 Leave `POST /tasks` permissive enough to record either payload with or without `assigneeId`.
 
-- [ ] **Step 4: Run fake backend tests**
+- [x] **Step 4: Run fake backend tests**
 
 Run:
 
@@ -2366,7 +2368,7 @@ npm test
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit Task 9**
+- [x] **Step 5: Commit Task 9**
 
 Run:
 
