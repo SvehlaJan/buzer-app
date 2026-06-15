@@ -87,3 +87,69 @@
 1. Install the Android build and manually verify that Home updates after tapping `I'm starting`.
 2. Polish the Home in-progress section formatting and add a route/action to the active task flow.
 3. Run the remaining real-device add-task, alarm, and overlay checks after the UI pass.
+
+## 2026-06-15 Add Task Empty Projects Follow-Up
+
+### Task / Plan
+
+- User reported that, on the real device, Add Task showed a disabled `Select project` button with
+  no loading state or retry action.
+- This was investigated during the real-device project-aware Add Task verification.
+
+### Files Changed
+
+- `backend/src/services/todoistSyncService.ts`
+- `backend/test/fakes/fakeTodoistAdapter.ts`
+- `backend/test/services/todoistSyncService.test.ts`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskProjectLoadFeedback.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskProjectLoadFeedbackTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+
+### Root Cause
+
+- The backend `/projects` endpoint returned `{"projects":[]}` on the VPS.
+- The backend database already had a stored Todoist incremental sync token from before the project
+  mirror existed. After deploying project support, the sync service kept using that incremental
+  token, so Todoist did not send unchanged project records and the new mirror stayed empty.
+- Android treated the empty project list as a successful load, leaving `Select project` disabled
+  without showing an error or retry.
+
+### What Changed
+
+- Backend: `TodoistSyncService` now forces a full Todoist sync (`sync_token=*`) when the active
+  project mirror is empty, allowing upgraded databases to backfill projects.
+- Android: Add Task now shows `No projects available. Check Tailscale/backend sync, then retry.`
+  with the existing retry action when project loading completes with an empty list and no exception.
+
+### Verification
+
+- Command: `ssh -o BatchMode=yes -o ConnectTimeout=8 oc-vps.taila50381.ts.net 'token=$(docker exec buzer-backend printenv ANDROID_API_TOKEN); curl --fail --silent --show-error -H "Authorization: Bearer $token" http://127.0.0.1:18432/projects'`
+- Result: PASS/diagnostic
+- Evidence: returned `{"projects":[]}` before the fix, confirming backend project mirror was empty.
+
+- Command: `cd backend && npm test -- todoistSyncService`
+- Result: RED then PASS
+- Evidence: initial failure showed `existing-incremental-token` was used instead of `*`; after the
+  fix, 4 tests passed.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.addtask.AddTaskProjectLoadFeedbackTest' --console=plain`
+- Result: RED then PASS
+- Evidence: initial failure was unresolved `AddTaskProjectLoadFeedback`; after implementation,
+  `BUILD SUCCESSFUL`.
+
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: 15 test files and 58 tests passed.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+### Known Failures / Skipped Checks
+
+- The backend fix still needs to be deployed and verified with a non-empty `/projects` response.
+- The updated Android build still needs to be installed on the Pixel 10 and manually checked.

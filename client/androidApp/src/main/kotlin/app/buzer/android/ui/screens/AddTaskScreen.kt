@@ -41,6 +41,7 @@ import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
+import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.datetime.datePickerMillisToLocalDate
 import app.buzer.android.ui.datetime.localDateToDatePickerMillis
@@ -101,6 +102,11 @@ fun AddTaskScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDate by remember { mutableStateOf<LocalDate?>(null) }
     val defaultDateTime = remember { LocalDateTime.now().plusHours(1) }
+    val projectFeedbackMessage = AddTaskProjectLoadFeedback.message(
+        projectsLoading = projectsLoading,
+        projects = projects,
+        projectLoadError = projectLoadError
+    )
 
     fun applyLoadedProjects(loaded: List<ProjectItem>) {
         projects = loaded
@@ -183,8 +189,8 @@ fun AddTaskScreen(
             }
         }
 
-        projectLoadError?.let {
-            Text(it)
+        projectFeedbackMessage?.let { message ->
+            Text(message)
             OutlinedButton(
                 onClick = {
                     scope.launch {

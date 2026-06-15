@@ -144,4 +144,37 @@ describe("TodoistSyncService", () => {
 
     expect(projectRepo.getActiveByTodoistProjectId("project-family")?.name).toBe("Family");
   });
+
+  it("forces a full sync when the project mirror is empty", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, updated_at)
+      values (1, 'existing-incremental-token', '2026-06-15T10:00:00Z')
+    `).run();
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    const adapter = new FakeTodoistAdapter();
+    adapter.syncResults.push({
+      syncToken: "full-sync-token",
+      tasks: [],
+      projects: [{
+        todoistProjectId: "project-family",
+        name: "Family",
+        shared: true,
+        canAssignTasks: true,
+        isInboxProject: false,
+        isDeleted: false,
+        isArchived: false,
+        rawJson: { id: "project-family" },
+        updatedAt: "2026-06-15T10:01:00Z"
+      }]
+    });
+
+    const service = new TodoistSyncService(db, taskRepo, projectRepo, adapter);
+    await service.syncOnce();
+
+    expect(adapter.syncTokens).toEqual(["*"]);
+    expect(projectRepo.listActive().map((project) => project.todoistProjectId)).toEqual(["project-family"]);
+  });
 });

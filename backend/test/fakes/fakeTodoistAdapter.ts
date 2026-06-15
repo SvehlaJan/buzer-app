@@ -8,12 +8,14 @@ import type {
 
 export class FakeTodoistAdapter implements TodoistAdapter {
   syncResults: TodoistSyncResult[] = [];
+  syncTokens: string[] = [];
   createdTasks: TodoistCreateTaskInput[] = [];
   createResults: TodoistCreateTaskResult[] = [];
   completedTaskIds: string[] = [];
   reschedules: TodoistRescheduleInput[] = [];
 
-  async sync(_syncToken: string): Promise<TodoistSyncResult> {
+  async sync(syncToken: string): Promise<TodoistSyncResult> {
+    this.syncTokens.push(syncToken);
     return this.syncResults.shift() ?? { syncToken: "empty-token", tasks: [], projects: [] };
   }
 

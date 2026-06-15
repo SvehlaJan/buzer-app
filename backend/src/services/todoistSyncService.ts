@@ -16,7 +16,8 @@ export class TodoistSyncService {
     const current = this.db
       .prepare("select sync_token as syncToken from todoist_sync_state where id = 1")
       .get() as { syncToken: string } | undefined;
-    const result = await this.todoist.sync(current?.syncToken ?? "*");
+    const syncToken = this.projects.listActive().length === 0 ? "*" : current?.syncToken ?? "*";
+    const result = await this.todoist.sync(syncToken);
     const now = new Date().toISOString();
 
     const tx = this.db.transaction(() => {
