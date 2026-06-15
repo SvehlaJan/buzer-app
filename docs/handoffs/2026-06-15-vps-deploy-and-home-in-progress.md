@@ -153,3 +153,60 @@
 
 - The backend fix still needs to be deployed and verified with a non-empty `/projects` response.
 - The updated Android build still needs to be installed on the Pixel 10 and manually checked.
+
+## 2026-06-15 Post-Create Alarm Scheduling Follow-Up
+
+### Task / Plan
+
+- User created a live task successfully, but no start/deadline blocker appeared after locking the
+  phone.
+- Investigated the live device and backend state before implementing a fix.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskCreateFlow.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskCreateFlowTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
+
+### Root Cause
+
+- Add Task successfully posted to the backend and returned to Home, but it did not trigger
+  `MainActivity.refreshEnforcement()`.
+- Since navigation from Add Task to Home is in-app Compose state, `MainActivity.onResume()` did not
+  run. Android therefore did not fetch the new snapshot or schedule local alarms for the newly
+  created task.
+- Device `dumpsys alarm` showed no current pending Buzer alarms, only historical Buzer alarm stats
+  from the prior June 13 verification run.
+
+### What Changed
+
+- Added a small successful-create flow helper that calls backend create, then `onTaskCreated`, then
+  returns Home.
+- `AddTaskScreen` now accepts `onTaskCreated`.
+- `BuzerApp` passes `onTaskCreated` through to Add Task.
+- `MainActivity` wires `onTaskCreated = ::refreshEnforcement`, so successful task creation now
+  immediately refreshes the snapshot and reconciles local alarms.
+
+### Verification
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.addtask.AddTaskCreateFlowTest' --console=plain`
+- Result: RED then PASS
+- Evidence: initial failure was missing `runSuccessfulAddTaskCreate`; after implementation, focused
+  serial rerun passed.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.addtask.AddTaskCreateFlowTest' --tests 'app.buzer.android.ui.addtask.AddTaskProjectLoadFeedbackTest' --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+### Known Failures / Skipped Checks
+
+- A parallel Gradle run briefly corrupted Kotlin incremental caches; `./gradlew --stop` and a serial
+  rerun cleared it.
+- The updated Android build still needs to be installed and verified with a new live task using a
+  wider window, for example deadline 8 minutes out and duration 3 minutes.

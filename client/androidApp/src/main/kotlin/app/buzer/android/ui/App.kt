@@ -27,7 +27,8 @@ private enum class AppSection {
 fun BuzerApp(
     openAddTask: Boolean = false,
     snapshot: SnapshotViewState? = null,
-    homeStatusMessage: String? = null
+    homeStatusMessage: String? = null,
+    onTaskCreated: () -> Unit = {}
 ) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -53,7 +54,10 @@ fun BuzerApp(
                             .copy(statusMessage = homeStatusMessage)
                     )
 
-                    AppSection.Add -> AddTaskScreen(onBack = { section = AppSection.Home })
+                    AppSection.Add -> AddTaskScreen(
+                        onBack = { section = AppSection.Home },
+                        onTaskCreated = onTaskCreated
+                    )
                 }
             }
         }

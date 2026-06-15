@@ -42,6 +42,7 @@ import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
+import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.datetime.datePickerMillisToLocalDate
 import app.buzer.android.ui.datetime.localDateToDatePickerMillis
@@ -56,6 +57,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddTaskScreen(
     onBack: () -> Unit,
+    onTaskCreated: () -> Unit = {},
     createTask: suspend (CreateTaskRequest) -> Unit = AddTaskDependencies.createTaskAction(),
     assigneeOptions: List<AddTaskAssigneeOption> = AddTaskDependencies.assigneeOptions(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -300,9 +302,13 @@ fun AddTaskScreen(
                                         "project=${result.request.projectId} assignee=${result.request.assigneeId} " +
                                         "due=${result.request.dueDatetime} duration=${result.request.durationMinutes}"
                                 )
-                                createTask(result.request)
+                                runSuccessfulAddTaskCreate(
+                                    request = result.request,
+                                    createTask = createTask,
+                                    onTaskCreated = onTaskCreated,
+                                    onBack = onBack
+                                )
                                 AppLog.info("add_task create_success")
-                                onBack()
                             } catch (error: Exception) {
                                 AppLog.error(
                                     "add_task create_failed type=${error::class.simpleName} message=${error.message}",

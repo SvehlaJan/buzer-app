@@ -46,7 +46,8 @@ class MainActivity : ComponentActivity() {
             BuzerApp(
                 openAddTask = openAddTask,
                 snapshot = snapshotViewState,
-                homeStatusMessage = homeStatusMessage
+                homeStatusMessage = homeStatusMessage,
+                onTaskCreated = ::refreshEnforcement
             )
         }
     }
