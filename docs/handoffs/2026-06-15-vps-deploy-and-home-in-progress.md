@@ -151,8 +151,8 @@
 
 ### Known Failures / Skipped Checks
 
-- The backend fix still needs to be deployed and verified with a non-empty `/projects` response.
-- The updated Android build still needs to be installed on the Pixel 10 and manually checked.
+- Resolved later in this session: the backend fix was deployed to the VPS, `/projects` returned
+  8 projects, and the updated Android build was installed on the Pixel 10.
 
 ## 2026-06-15 Post-Create Alarm Scheduling Follow-Up
 
@@ -208,5 +208,54 @@
 
 - A parallel Gradle run briefly corrupted Kotlin incremental caches; `./gradlew --stop` and a serial
   rerun cleared it.
-- The updated Android build still needs to be installed and verified with a new live task using a
-  wider window, for example deadline 8 minutes out and duration 3 minutes.
+- Resolved later in this session: the updated Android build was installed and verified with a live
+  deadline blocker. The start blocker was intentionally not exercised because the saved task's
+  `startAt` was already in the past by the time creation completed.
+
+## 2026-06-15 Live Deadline Blocker Verification
+
+### Task / Plan
+
+- Verify that successful Add Task creation now triggers snapshot refresh, local alarm scheduling,
+  deadline overlay display, backend completion, and overlay watcher dismissal on Pixel 10
+  `56061FDCR005J0`.
+
+### Files Changed
+
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md`
+
+### Manual Verification Performed
+
+- User created `test task 2` from the Android Add Task screen with project `Home`, due
+  `2026-06-15 22:32 Europe/Warsaw`, and duration `2`.
+- The post-create refresh scheduled one deadline alarm. The start alarm did not schedule because
+  `startAt=2026-06-15T20:30:00.000Z` was already in the past when the task was saved.
+- User locked the phone, waited for the deadline blocker, and tapped Done.
+
+### Verification
+
+- Command: `/bin/zsh -lc 'BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh logcat 260'`
+- Result: PASS
+- Evidence: logs showed `overlay_start attempted result=true kind=DEADLINE_BLOCKER
+  taskId=d7677b00-5445-4d97-95bc-aa2053e139bb` at `22:32:00.143`,
+  `deadline_blocker done_clicked` at `22:32:07.142`, `POST
+  /tasks/d7677b00-5445-4d97-95bc-aa2053e139bb/done -> 200 OK`, `action success`, and
+  `overlay_watcher resolved kind=DEADLINE_BLOCKER` followed by `overlay dismissed`.
+
+- Command: `/bin/zsh -lc 'BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh alarms'`
+- Result: PASS
+- Evidence: app-scoped alarm dump showed only historical Buzer wakeups after completion; no pending
+  live deadline alarm remained for the completed task.
+
+- Command: `ssh -o BatchMode=yes -o ConnectTimeout=8 oc-vps.taila50381.ts.net 'token=$(docker exec buzer-backend printenv ANDROID_API_TOKEN); curl --fail --silent --show-error -H "Authorization: Bearer $token" http://127.0.0.1:18432/tasks/snapshot'`
+- Result: PASS
+- Evidence: backend snapshot returned `test task 2` with id
+  `d7677b00-5445-4d97-95bc-aa2053e139bb`, Todoist id `6grvFg86GpG8GHQw`, state
+  `completed`, `isCompleted=true`, and `updatedAt=2026-06-15T20:32:06.753Z`.
+
+### Known Failures / Skipped Checks
+
+- Start blocker still needs a fresh manual pass with enough lead time, for example due 8 minutes
+  out and duration 3 minutes, so `startAt` is still in the future after task creation.
+- `test task` from the earlier failed scheduling check remains planned/past-due in the backend and
+  Todoist unless cleaned up manually.
