@@ -7,8 +7,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import app.buzer.android.blockers.BlockerTaskSnapshotGate
 import app.buzer.android.blockers.DeadlineBlockerActivity
 import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
@@ -16,9 +18,11 @@ import app.buzer.shared.diagnostics.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
@@ -30,6 +34,7 @@ import kotlinx.coroutines.withTimeout
 class OverlayBlockerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var controller: BlockerOverlayController? = null
+    private var watcherJob: Job? = null
     private var actionInFlight = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -54,7 +59,48 @@ class OverlayBlockerService : Service() {
 
         val controller = BlockerOverlayController(this).also { this.controller = it }
         controller.show(request) { action -> handleAction(action, request, coordinator) }
+        startResolutionWatcher(request, coordinator)
         return START_NOT_STICKY
+    }
+
+    private fun startResolutionWatcher(
+        request: OverlayBlockerRequest,
+        coordinator: EnforcementCoordinator
+    ) {
+        if (request.kind == AlarmKind.MORNING_REVIEW) return
+        watcherJob?.cancel()
+        watcherJob = scope.launch {
+            repeat(MAX_WATCH_POLLS) { attempt ->
+                delay(WATCH_POLL_INTERVAL_MS)
+                if (controller == null) return@launch
+                try {
+                    val snapshot = withTimeout(WATCH_REFRESH_TIMEOUT_MS) {
+                        coordinator.refreshAndReconcile()
+                    }
+                    if (BlockerTaskSnapshotGate.isBlockerResolved(snapshot, request.taskId, request.kind)) {
+                        AppLog.info(
+                            "overlay_watcher resolved kind=${request.kind} taskId=${request.taskId} " +
+                                "attempt=${attempt + 1}"
+                        )
+                        stopOverlay()
+                        return@launch
+                    }
+                } catch (timeout: TimeoutCancellationException) {
+                    AppLog.warn(
+                        "overlay_watcher refresh_timeout kind=${request.kind} " +
+                            "taskId=${request.taskId} attempt=${attempt + 1}"
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    AppLog.warn(
+                        "overlay_watcher refresh_failed kind=${request.kind} " +
+                            "taskId=${request.taskId} attempt=${attempt + 1} ${error.message}"
+                    )
+                }
+            }
+            AppLog.warn("overlay_watcher stopped reason=max_polls kind=${request.kind} taskId=${request.taskId}")
+        }
     }
 
     private fun handleAction(
@@ -130,6 +176,8 @@ class OverlayBlockerService : Service() {
     }
 
     private fun stopOverlay() {
+        watcherJob?.cancel()
+        watcherJob = null
         controller?.remove()
         controller = null
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -137,6 +185,8 @@ class OverlayBlockerService : Service() {
     }
 
     override fun onDestroy() {
+        watcherJob?.cancel()
+        watcherJob = null
         controller?.remove()
         controller = null
         scope.cancel()
@@ -146,6 +196,9 @@ class OverlayBlockerService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 4711
         private const val ACTION_TIMEOUT_MS = 15_000L
+        private const val WATCH_POLL_INTERVAL_MS = 2_000L
+        private const val WATCH_REFRESH_TIMEOUT_MS = 8_000L
+        private const val MAX_WATCH_POLLS = 60
 
         fun intent(context: Context, request: OverlayBlockerRequest): Intent =
             request.writeTo(Intent(context, OverlayBlockerService::class.java))

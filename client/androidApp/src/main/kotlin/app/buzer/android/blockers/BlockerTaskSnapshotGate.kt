@@ -1,5 +1,6 @@
 package app.buzer.android.blockers
 
+import app.buzer.android.enforcement.AlarmKind
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.TasksSnapshotResponse
 
@@ -10,5 +11,11 @@ internal object BlockerTaskSnapshotGate {
             task.isDeleted ||
             task.state == CommitmentState.completed ||
             task.state == CommitmentState.deleted
+    }
+
+    fun isBlockerResolved(snapshot: TasksSnapshotResponse, taskId: String, kind: AlarmKind): Boolean {
+        val task = snapshot.tasks.firstOrNull { it.id == taskId } ?: return false
+        if (isTaskResolved(snapshot, taskId)) return true
+        return kind == AlarmKind.START_BLOCKER && task.state == CommitmentState.started
     }
 }

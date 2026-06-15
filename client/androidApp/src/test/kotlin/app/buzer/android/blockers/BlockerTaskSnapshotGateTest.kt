@@ -1,6 +1,7 @@
 package app.buzer.android.blockers
 
 import app.buzer.shared.model.CommitmentState
+import app.buzer.android.enforcement.AlarmKind
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
@@ -29,6 +30,38 @@ class BlockerTaskSnapshotGateTest {
 
         assertFalse(BlockerTaskSnapshotGate.isTaskResolved(snapshot, "task-1"))
         assertFalse(BlockerTaskSnapshotGate.isTaskResolved(snapshot, "missing"))
+    }
+
+    @Test
+    fun startBlockerIsResolvedWhenTaskHasStarted() {
+        val snapshot = snapshot(task("task-1", state = CommitmentState.started))
+
+        assertTrue(BlockerTaskSnapshotGate.isBlockerResolved(snapshot, "task-1", AlarmKind.START_BLOCKER))
+    }
+
+    @Test
+    fun deadlineBlockerIsNotResolvedWhenTaskHasStarted() {
+        val snapshot = snapshot(task("task-1", state = CommitmentState.started))
+
+        assertFalse(BlockerTaskSnapshotGate.isBlockerResolved(snapshot, "task-1", AlarmKind.DEADLINE_BLOCKER))
+    }
+
+    @Test
+    fun taskBlockersAreResolvedWhenTaskIsCompletedOrDeleted() {
+        assertTrue(
+            BlockerTaskSnapshotGate.isBlockerResolved(
+                snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true)),
+                "task-1",
+                AlarmKind.START_BLOCKER
+            )
+        )
+        assertTrue(
+            BlockerTaskSnapshotGate.isBlockerResolved(
+                snapshot(task("task-1", state = CommitmentState.deleted, isDeleted = true)),
+                "task-1",
+                AlarmKind.DEADLINE_BLOCKER
+            )
+        )
     }
 
     private fun snapshot(vararg tasks: TaskSnapshotItem): TasksSnapshotResponse =
