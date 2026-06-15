@@ -64,3 +64,30 @@ Notes:
 - This likely needs a backend endpoint exposing Todoist projects from the local mirror or live sync.
 - It should be implemented together with the backend task-create fix so Android-created tasks land
   in a project where due date and assignment semantics are verified.
+
+Status:
+
+- Implemented in the project-aware task creation branch.
+
+## Make Loading And Error States Obvious
+
+The app should make backend/network failures visible enough that a user understands what failed and
+what to do next.
+
+Observed during real-device verification on 2026-06-15:
+
+- The device was initially not connected to the Tailscale network, so project-loading requests could
+  not reach the VPS.
+- The Add Task project picker did not make the failure obvious enough. The user saw that projects did
+  not load, but the app should have shown a clear error surface.
+
+Candidate behavior:
+
+- Show visible loading indicators for backend-backed screen initialization, especially Add Task
+  project loading and Home snapshot refresh.
+- Show alert dialogs or similarly prominent error surfaces for failed required operations.
+- Include a retry action on recoverable network/backend failures.
+- Keep inline field validation for user-fixable form mistakes, but use prominent errors for system
+  failures such as no network, Tailscale disconnected, backend unavailable, auth failure, or server
+  errors.
+- Ensure errors are logged with endpoint/action context and visible user-facing messages are concise.
