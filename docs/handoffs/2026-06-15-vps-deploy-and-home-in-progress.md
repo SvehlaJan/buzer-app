@@ -259,3 +259,78 @@
   out and duration 3 minutes, so `startAt` is still in the future after task creation.
 - `test task` from the earlier failed scheduling check remains planned/past-due in the backend and
   Todoist unless cleaned up manually.
+
+## 2026-06-15 Stale Notification Start-Blocker Retest
+
+### Task / Plan
+
+- User reproduced a duplicate start blocker by tapping the blocker notification after already
+  tapping Start on the overlay.
+- Root cause: the notification content intent launches the fallback `StartBlockerActivity`; that
+  activity refreshed state but only used the generic completed/deleted gate, so it did not hide when
+  the task had moved to `started`.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGate.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGateTest.kt`
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md`
+
+### What Changed
+
+- Added an activity-facing gate helper that delegates to the existing kind-aware blocker resolution
+  rule.
+- `StartBlockerActivity` now hides after refresh when a start blocker is resolved by task state
+  `started`, not only when the task is completed/deleted.
+- `DeadlineBlockerActivity` now uses the same explicit helper with `DEADLINE_BLOCKER` to keep the
+  fallback activity paths symmetrical.
+
+### Verification
+
+- Command: `npx ctx7@latest library "Android" "Android PendingIntent notification contentIntent stale full-screen notification activity should verify current state before showing blocker"`
+- Result: PASS
+- Evidence: official Android Developers docs source selected as `/websites/developer_android`.
+
+- Command: `npx ctx7@latest docs /websites/developer_android "Android PendingIntent notification contentIntent full-screen intent launches activity when notification tapped stale state apps should handle current state"`
+- Result: PASS
+- Evidence: docs confirmed `PendingIntent.getActivity` launches an activity and notification launch
+  can use `FLAG_ACTIVITY_NEW_TASK` / `FLAG_ACTIVITY_CLEAR_TOP`; fix remains app-side state gating.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.blockers.BlockerTaskSnapshotGateTest' --console=plain`
+- Result: RED then PASS
+- Evidence: RED failed with unresolved `shouldHideAfterRefresh`; after implementation, focused test
+  passed with `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `/bin/zsh -lc 'BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install'`
+- Result: PASS
+- Evidence: `Installed debug build on 56061FDCR005J0.`
+
+- Command: `/bin/zsh -lc 'BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh logcat 420'`
+- Result: PASS
+- Evidence: after the user tapped the stale notification, logs showed
+  `start_blocker hidden reason=task_resolved taskId=20d4ea8c-84bc-435f-9b00-06805f980035`.
+  The deadline blocker then fired, the user tapped Done, `POST
+  /tasks/20d4ea8c-84bc-435f-9b00-06805f980035/done` returned `200 OK`, and `action success
+  action=COMPLETE_TASK` was logged.
+
+- Command: `ssh -o BatchMode=yes -o ConnectTimeout=8 oc-vps.taila50381.ts.net 'token=$(docker exec buzer-backend printenv ANDROID_API_TOKEN); curl --fail --silent --show-error -H "Authorization: Bearer $token" http://127.0.0.1:18432/tasks/snapshot | python3 -c "...extract task 20d4ea8c-84bc-435f-9b00-06805f980035..."`
+- Result: PASS
+- Evidence: backend snapshot returned `test task 4`, state `completed`, `isCompleted=True`,
+  `startedAt=2026-06-15T20:48:12.147Z`, and `updatedAt=2026-06-15T20:50:02.934Z`.
+
+### Known Failures / Skipped Checks
+
+- Notification cancellation itself is still not centralized; stale notification taps are now
+  harmless because the fallback activities refresh and hide, but the notification may still remain
+  until Android/user/app flow clears it.
+- Earlier live test tasks may still exist in Todoist/backend unless cleaned up manually.

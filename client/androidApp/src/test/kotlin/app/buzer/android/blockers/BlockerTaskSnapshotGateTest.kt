@@ -40,6 +40,13 @@ class BlockerTaskSnapshotGateTest {
     }
 
     @Test
+    fun startBlockerActivityIsHiddenWhenTaskHasStarted() {
+        val snapshot = snapshot(task("task-1", state = CommitmentState.started))
+
+        assertTrue(BlockerTaskSnapshotGate.shouldHideAfterRefresh(snapshot, "task-1", AlarmKind.START_BLOCKER))
+    }
+
+    @Test
     fun deadlineBlockerIsNotResolvedWhenTaskHasStarted() {
         val snapshot = snapshot(task("task-1", state = CommitmentState.started))
 

@@ -18,4 +18,7 @@ internal object BlockerTaskSnapshotGate {
         if (isTaskResolved(snapshot, taskId)) return true
         return kind == AlarmKind.START_BLOCKER && task.state == CommitmentState.started
     }
+
+    fun shouldHideAfterRefresh(snapshot: TasksSnapshotResponse, taskId: String, kind: AlarmKind): Boolean =
+        isBlockerResolved(snapshot, taskId, kind)
 }

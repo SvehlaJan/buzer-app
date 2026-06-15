@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.EnforcementCoordinator
@@ -74,7 +75,14 @@ class StartBlockerActivity : ComponentActivity() {
                 val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
                     coordinator.refreshAndReconcile()
                 }
-                if (refreshedSnapshot != null && BlockerTaskSnapshotGate.isTaskResolved(refreshedSnapshot, taskId)) {
+                if (
+                    refreshedSnapshot != null &&
+                    BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                        refreshedSnapshot,
+                        taskId,
+                        AlarmKind.START_BLOCKER
+                    )
+                ) {
                     AppLog.debug("start_blocker hidden reason=task_resolved taskId=$taskId")
                     finish()
                     return@launch
