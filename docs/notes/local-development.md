@@ -62,6 +62,34 @@ scripts/e2e-fake-backend.sh
 
 The script starts `tools/fake-backend` on port `18433` when needed, runs `pixel8Api34DebugAndroidTest`, and passes the emulator URL `http://10.0.2.2:18433` into both the app and instrumentation helper.
 
+### Local Real-Backend Smoke
+
+This opt-in smoke uses live Todoist and must not be run casually. It starts the real backend locally with `WHATSAPP_DRY_RUN=true`, creates one assignable-project task and one non-assignable-project task through backend `POST /tasks`, verifies they appear in `/tasks/snapshot`, then deletes the created Todoist tasks directly through Todoist REST.
+
+Create an ignored `backend/.env.local-smoke`:
+
+```properties
+NODE_ENV=development
+PORT=18434
+DATABASE_PATH=./data/buzer-local-smoke.db
+ANDROID_API_TOKEN=replace-with-local-token
+TODOIST_API_TOKEN=replace-with-real-token
+TODOIST_USER_ID=replace-with-current-user-id
+SMOKE_ASSIGNEE_ID=replace-with-current-user-id
+WHATSAPP_RECIPIENT_ID=dry-run-recipient
+WHATSAPP_DRY_RUN=true
+WHATSAPP_SESSION_PATH=./whatsapp-sessions
+WHATSAPP_CLIENT_ID=buzer-local-smoke
+```
+
+Run:
+
+```bash
+scripts/local-real-backend-smoke.mjs --i-understand-this-uses-live-todoist
+```
+
+The script refuses to run if `WHATSAPP_DRY_RUN` is not `true`. If cleanup fails, it prints the Todoist task IDs and titles for manual deletion.
+
 ### Device verification helper
 
 `scripts/adb-verify.sh` wraps the common low-token device checks so verification output stays small and consistent (cleared + tag-filtered logcat, app-scoped `dumpsys alarm`, overlay/notification/exact-alarm app-op state, exit-checked downscaled screenshots). It resolves the target from `BUZER_DEVICE_SERIAL`, then `ANDROID_SERIAL`, then the sole attached device, and refuses to guess when several are connected.
