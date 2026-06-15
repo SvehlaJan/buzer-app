@@ -29,6 +29,7 @@ object EnforcementDependencies {
             snapshotStore = SnapshotStore(context),
             alarmScheduler = AndroidAlarmScheduler(context),
             errorReporter = BlockerErrorReporter(context),
+            blockerNotificationCleaner = AndroidBlockerNotificationCleaner(context),
             logger = AppLog::debug
         )
     }

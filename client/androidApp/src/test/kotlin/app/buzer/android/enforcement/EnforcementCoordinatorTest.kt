@@ -130,6 +130,24 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun successfulStartCancelsTaskBlockerNotifications() = runBlocking {
+        val notifications = RecordingBlockerNotificationCleaner()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            blockerNotificationCleaner = notifications,
+            nowProvider = { "2026-05-28T11:01:00Z" }
+        )
+
+        val result = coordinator.startTask("task-1")
+
+        assertEquals(CoordinatorActionResult.Success, result)
+        assertEquals(listOf("task-1"), notifications.cancelledTaskIds)
+    }
+
+    @Test
     fun deadlineCompleteFailureReportsErrorWithoutRetry() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val reporter = RecordingErrorReporter()
@@ -324,6 +342,14 @@ class EnforcementCoordinatorTest {
 
         override fun report(action: BlockerAction, taskId: String?, message: String, showNotification: Boolean) {
             errors += ErrorRecord(action, taskId, message)
+        }
+    }
+
+    private class RecordingBlockerNotificationCleaner : BlockerNotificationCleaner {
+        val cancelledTaskIds = mutableListOf<String>()
+
+        override fun cancelForTask(taskId: String) {
+            cancelledTaskIds += taskId
         }
     }
 }

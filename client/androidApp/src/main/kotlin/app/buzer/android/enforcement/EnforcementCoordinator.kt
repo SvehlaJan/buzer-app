@@ -19,6 +19,7 @@ class EnforcementCoordinator(
     private val snapshotStore: SnapshotStorage,
     private val alarmScheduler: AlarmScheduler,
     private val errorReporter: BlockerErrorReporting,
+    private val blockerNotificationCleaner: BlockerNotificationCleaner = NoOpBlockerNotificationCleaner,
     private val nowProvider: () -> String = { Instant.now().toString() },
     private val logger: (String) -> Unit = {}
 ) {
@@ -133,6 +134,7 @@ class EnforcementCoordinator(
         return try {
             logger("action start action=$action taskId=$taskId")
             call()
+            blockerNotificationCleaner.cancelForTask(taskId)
             refreshAndReconcile()
             logger("action success action=$action taskId=$taskId")
             CoordinatorActionResult.Success

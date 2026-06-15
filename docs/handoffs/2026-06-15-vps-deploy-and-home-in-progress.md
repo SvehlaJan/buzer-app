@@ -334,3 +334,60 @@
   harmless because the fallback activities refresh and hide, but the notification may still remain
   until Android/user/app flow clears it.
 - Earlier live test tasks may still exist in Todoist/backend unless cleaned up manually.
+
+## 2026-06-15 Blocker Notification Cleanup
+
+### Task / Plan
+
+- Follow-up to stale notification handling: remove task blocker notifications after successful
+  blocker actions so old notification taps are less likely in the first place.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerNotificationCleaner.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md`
+
+### What Changed
+
+- Added `BlockerNotificationCleaner` with a no-op test/default implementation and an Android
+  implementation that cancels the start/deadline blocker notification IDs for a task.
+- `EnforcementCoordinator` now cancels blocker notifications after a successful backend action and
+  before snapshot refresh/reconcile.
+- Android dependency wiring now passes the real cleaner to the coordinator.
+
+### Verification
+
+- Command: `npx ctx7@latest library "Android" "Android NotificationManager cancel notification by id PendingIntent blocker notification cleanup after successful action"`
+- Result: PASS
+- Evidence: official Android Developers docs source selected as `/websites/developer_android`.
+
+- Command: `npx ctx7@latest docs /websites/developer_android "NotificationManager cancel(int id) cancel notification by id from app Kotlin"`
+- Result: PASS
+- Evidence: docs confirmed `NotificationManager.cancel(String tag, int id)` cancels previously
+  posted notifications and that notifications are identified by tag/id pairs; the app posts blocker
+  notifications without tags, using stable IDs.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementCoordinatorTest' --console=plain`
+- Result: RED then PASS
+- Evidence: RED failed with missing `blockerNotificationCleaner` / `BlockerNotificationCleaner`;
+  after implementation, focused coordinator tests passed with `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `/bin/zsh -lc 'BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install'`
+- Result: PASS
+- Evidence: `Installed debug build on 56061FDCR005J0.`
+
+### Known Failures / Skipped Checks
+
+- No fresh live task was created after this cleanup change; verification is unit/build/install only.
+- Earlier live test tasks may still exist in Todoist/backend unless cleaned up manually.
