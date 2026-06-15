@@ -47,3 +47,6 @@ captures/
 # Generated reports
 reports/
 test-results/
+
+# Superpowers visual brainstorming artifacts
+.superpowers/
