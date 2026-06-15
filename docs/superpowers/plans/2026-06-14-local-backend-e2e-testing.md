@@ -69,7 +69,7 @@ Docs:
 - Modify: `tools/fake-backend/src/server.ts`
 - Modify: `tools/fake-backend/src/server.test.ts`
 
-- [ ] **Step 1: Add failing fake-backend project failure tests**
+- [x] **Step 1: Add failing fake-backend project failure tests**
 
 Append these tests to `tools/fake-backend/src/server.test.ts` near the existing project/snapshot failure tests:
 
@@ -120,7 +120,7 @@ test("project failure toggle can be disabled", async (t) => {
 });
 ```
 
-- [ ] **Step 2: Run fake-backend tests to verify RED**
+- [x] **Step 2: Run fake-backend tests to verify RED**
 
 Run:
 
@@ -131,7 +131,7 @@ npm test
 
 Expected: FAIL because `POST /__fail-projects` returns 404.
 
-- [ ] **Step 3: Implement project failure toggle**
+- [x] **Step 3: Implement project failure toggle**
 
 In `tools/fake-backend/src/server.ts`, add state after `let failSnapshot = false;`:
 
@@ -177,7 +177,7 @@ Add this helper endpoint near `__fail-snapshot`:
   });
 ```
 
-- [ ] **Step 4: Run fake-backend tests**
+- [x] **Step 4: Run fake-backend tests**
 
 Run:
 
@@ -188,7 +188,7 @@ npm test
 
 Expected: PASS, including the new project failure toggle tests.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 Run:
 
@@ -207,7 +207,7 @@ Expected: commit succeeds.
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
 
-- [ ] **Step 1: Run the current Add Task E2E test to verify existing RED**
+- [x] **Step 1: Run the current Add Task E2E test to verify existing RED**
 
 Start fake backend in one terminal:
 
@@ -230,7 +230,7 @@ cd client
 
 Expected: FAIL because the current Add Task tests try to click `Me` before selecting an assignable project. If the managed-device suite fails on another already-known test first, record that and continue with the replacement tests in Step 3.
 
-- [ ] **Step 2: Extend the instrumentation fake backend client**
+- [x] **Step 2: Extend the instrumentation fake backend client**
 
 Modify `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt`.
 
@@ -254,7 +254,7 @@ Add:
     }
 ```
 
-- [ ] **Step 3: Replace Add Task fake-backend tests with project-aware flows**
+- [x] **Step 3: Replace Add Task fake-backend tests with project-aware flows**
 
 Replace `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt` with:
 
@@ -482,7 +482,7 @@ class AddTaskFakeBackendTest {
 }
 ```
 
-- [ ] **Step 4: Run Android instrumentation test**
+- [x] **Step 4: Run Android instrumentation test**
 
 Start fake backend if it is not already running:
 
@@ -505,7 +505,7 @@ cd client
 
 Expected: PASS. If it fails because a Compose node is not found, inspect the test report and update the test to match the actual displayed text, not by using coordinates.
 
-- [ ] **Step 5: Run full fake-backend Android instrumentation suite**
+- [x] **Step 5: Run full fake-backend Android instrumentation suite**
 
 Run:
 
@@ -521,7 +521,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 Run:
 
@@ -540,7 +540,7 @@ Expected: commit succeeds.
 - Create: `scripts/e2e-fake-backend.sh`
 - Modify: `docs/notes/local-development.md`
 
-- [ ] **Step 1: Create the fake-backend E2E runner script**
+- [x] **Step 1: Create the fake-backend E2E runner script**
 
 Create `scripts/e2e-fake-backend.sh`:
 
@@ -600,7 +600,7 @@ cd "${ROOT_DIR}/client"
   -PFAKE_BACKEND_BASE_URL="${EMULATOR_BACKEND_URL}"
 ```
 
-- [ ] **Step 2: Make the script executable**
+- [x] **Step 2: Make the script executable**
 
 Run:
 
@@ -608,7 +608,7 @@ Run:
 chmod +x scripts/e2e-fake-backend.sh
 ```
 
-- [ ] **Step 3: Run the fake-backend E2E runner**
+- [x] **Step 3: Run the fake-backend E2E runner**
 
 Run:
 
@@ -618,7 +618,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS with Gradle reporting `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Document the fake E2E command**
+- [x] **Step 4: Document the fake E2E command**
 
 In `docs/notes/local-development.md`, add under `### Instrumentation harnesses`:
 
@@ -635,7 +635,7 @@ The script starts `tools/fake-backend` on port `18433` when needed, runs `pixel8
 ```
 ```
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 Run:
 
@@ -655,7 +655,7 @@ Expected: commit succeeds.
 - Create: `scripts/local-real-backend-smoke.test.mjs`
 - Modify: `docs/notes/local-development.md`
 
-- [ ] **Step 1: Write failing tests for smoke helper functions**
+- [x] **Step 1: Write failing tests for smoke helper functions**
 
 Create `scripts/local-real-backend-smoke.test.mjs`:
 
@@ -716,7 +716,7 @@ test("todoistDeleteUrl encodes task id", () => {
 });
 ```
 
-- [ ] **Step 2: Run smoke helper tests to verify RED**
+- [x] **Step 2: Run smoke helper tests to verify RED**
 
 Run:
 
@@ -726,7 +726,7 @@ node --test scripts/local-real-backend-smoke.test.mjs
 
 Expected: FAIL because `scripts/local-real-backend-smoke.mjs` does not exist.
 
-- [ ] **Step 3: Create local real-backend smoke script**
+- [x] **Step 3: Create local real-backend smoke script**
 
 Create `scripts/local-real-backend-smoke.mjs`:
 
@@ -961,7 +961,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 4: Make the smoke script executable**
+- [x] **Step 4: Make the smoke script executable**
 
 Run:
 
@@ -969,7 +969,7 @@ Run:
 chmod +x scripts/local-real-backend-smoke.mjs
 ```
 
-- [ ] **Step 5: Run smoke helper tests**
+- [x] **Step 5: Run smoke helper tests**
 
 Run:
 
@@ -979,7 +979,7 @@ node --test scripts/local-real-backend-smoke.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 6: Run smoke script non-live checks**
+- [x] **Step 6: Run smoke script non-live checks**
 
 Run:
 
@@ -997,7 +997,7 @@ scripts/local-real-backend-smoke.mjs
 
 Expected: FAIL with `Refusing to run without --i-understand-this-uses-live-todoist`.
 
-- [ ] **Step 7: Document local real-backend smoke**
+- [x] **Step 7: Document local real-backend smoke**
 
 In `docs/notes/local-development.md`, add:
 
@@ -1032,7 +1032,7 @@ The script refuses to run if `WHATSAPP_DRY_RUN` is not `true`. If cleanup fails,
 ```
 ```
 
-- [ ] **Step 8: Optionally run local real-backend smoke**
+- [x] **Step 8: Optionally run local real-backend smoke**
 
 Only run this if `backend/.env.local-smoke` exists with real local credentials and the user has explicitly approved live Todoist use in this session:
 
@@ -1042,7 +1042,7 @@ scripts/local-real-backend-smoke.mjs --i-understand-this-uses-live-todoist
 
 Expected: PASS, with logs indicating created tasks were deleted. If credentials are unavailable, SKIP and document the skip in the handoff.
 
-- [ ] **Step 9: Commit Task 4**
+- [x] **Step 9: Commit Task 4**
 
 Run:
 
@@ -1061,7 +1061,7 @@ Expected: commit succeeds.
 - Create/update: `docs/handoffs/2026-06-14-local-backend-e2e-testing.md`
 - Modify: `docs/superpowers/plans/2026-06-14-local-backend-e2e-testing.md`
 
-- [ ] **Step 1: Run fake backend tests**
+- [x] **Step 1: Run fake backend tests**
 
 Run:
 
@@ -1072,7 +1072,7 @@ npm test
 
 Expected: PASS.
 
-- [ ] **Step 2: Run Android unit/shared tests**
+- [x] **Step 2: Run Android unit/shared tests**
 
 Run:
 
@@ -1083,7 +1083,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 3: Run fake-backend Android E2E script**
+- [x] **Step 3: Run fake-backend Android E2E script**
 
 Run:
 
@@ -1093,7 +1093,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS. If the managed device image is unavailable or emulator startup fails, document the exact failure and whether `connectedDebugAndroidTest` was run on an already-available emulator.
 
-- [ ] **Step 4: Run smoke helper tests**
+- [x] **Step 4: Run smoke helper tests**
 
 Run:
 
@@ -1103,7 +1103,7 @@ node --test scripts/local-real-backend-smoke.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 5: Run backend checks**
+- [x] **Step 5: Run backend checks**
 
 Run:
 
@@ -1116,7 +1116,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Run local real-backend smoke or document skip**
+- [x] **Step 6: Run local real-backend smoke or document skip**
 
 If `backend/.env.local-smoke` exists and the user approves live Todoist use in the execution session, run:
 
