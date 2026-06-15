@@ -463,6 +463,54 @@ describe("TaskActionService", () => {
     expect(taskRepo.getByTodoistTaskId("created-1")).toBeNull();
   });
 
+  it("accepts Todoist-created due datetime when only fractional seconds differ", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const taskRepo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    adapter.createResults.push({
+      todoistTaskId: "created-1",
+      task: {
+        todoistTaskId: "created-1",
+        title: "Personal strict task",
+        projectId: "project-personal",
+        assigneeId: null,
+        creatorId: "user-self",
+        dueDatetime: "2026-06-13T12:00:00Z",
+        durationMinutes: 30,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: { id: "created-1" },
+        updatedAt: "2026-06-13T10:00:00Z"
+      }
+    });
+    const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
+
+    const created = await service.create({
+      title: "Personal strict task",
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-06-13T12:00:00.927Z",
+      durationMinutes: 30,
+      creatorId: "user-self",
+      now: "2026-06-13T10:00:00Z"
+    });
+
+    expect(taskRepo.getById(created.id)?.dueDatetime).toBe("2026-06-13T12:00:00Z");
+  });
+
   it("rejects non-positive duration before calling Todoist even when task is assigned away", async () => {
     const db = new Database(":memory:");
     migrate(db);

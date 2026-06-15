@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildSmokeTitle,
   chooseProjects,
+  extractTodoistTaskIdFromErrorText,
   parseEnvText,
   todoistDeleteUrl,
   validateConfig
@@ -50,5 +51,14 @@ test("todoistDeleteUrl encodes task id", () => {
   assert.equal(
     todoistDeleteUrl("https://api.todoist.com/api/v1", "task/1"),
     "https://api.todoist.com/api/v1/tasks/task%2F1"
+  );
+});
+
+test("extractTodoistTaskIdFromErrorText returns verification failure task id", () => {
+  assert.equal(
+    extractTodoistTaskIdFromErrorText(
+      "{\"code\":\"todoist_create_verification_failed\",\"details\":{\"todoistTaskId\":\"6grjp9GQ9HQvxJGg\"}}"
+    ),
+    "6grjp9GQ9HQvxJGg"
   );
 });

@@ -64,6 +64,16 @@ export function todoistDeleteUrl(baseUrl, taskId) {
   return `${baseUrl.replace(/\/$/, "")}/tasks/${encodeURIComponent(taskId)}`;
 }
 
+export function extractTodoistTaskIdFromErrorText(text) {
+  try {
+    const parsed = JSON.parse(text);
+    const taskId = parsed?.details?.todoistTaskId;
+    return typeof taskId === "string" && taskId.length > 0 ? taskId : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadEnvFile(path) {
   if (!existsSync(path)) {
     throw new Error(`Env file not found: ${path}`);
@@ -80,9 +90,31 @@ async function requestJson(url, options = {}) {
   const text = await response.text();
   const body = text.length > 0 ? JSON.parse(text) : null;
   if (!response.ok) {
-    throw new Error(`${options.method ?? "GET"} ${url} failed with HTTP ${response.status}: ${text}`);
+    const error = new Error(`${options.method ?? "GET"} ${url} failed with HTTP ${response.status}: ${text}`);
+    error.todoistTaskId = extractTodoistTaskIdFromErrorText(text);
+    throw error;
   }
   return body;
+}
+
+async function createSmokeTask(baseUrl, token, createdTasks, title, body) {
+  try {
+    const created = await requestJson(`${baseUrl}/tasks`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    createdTasks.push({ ...created, title });
+    return created;
+  } catch (error) {
+    if (typeof error.todoistTaskId === "string") {
+      createdTasks.push({ todoistTaskId: error.todoistTaskId, title });
+    }
+    throw error;
+  }
 }
 
 async function waitForBackend(baseUrl) {
@@ -203,37 +235,33 @@ async function main() {
     const dueDatetime = new Date(Date.now() + 10 * 60_000).toISOString().replace(".000Z", "Z");
 
     const assignableTitle = buildSmokeTitle(runId, "assignable");
-    const assignableCreated = await requestJson(`${baseUrl}/tasks`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${config.ANDROID_API_TOKEN}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
+    const assignableCreated = await createSmokeTask(
+      baseUrl,
+      config.ANDROID_API_TOKEN,
+      createdTasks,
+      assignableTitle,
+      {
         title: assignableTitle,
         projectId: assignable.id,
         assigneeId: config.SMOKE_ASSIGNEE_ID ?? config.TODOIST_USER_ID,
         dueDatetime,
         durationMinutes: 3
-      })
-    });
-    createdTasks.push({ ...assignableCreated, title: assignableTitle });
+      }
+    );
 
     const personalTitle = buildSmokeTitle(runId, "personal");
-    const personalCreated = await requestJson(`${baseUrl}/tasks`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${config.ANDROID_API_TOKEN}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
+    const personalCreated = await createSmokeTask(
+      baseUrl,
+      config.ANDROID_API_TOKEN,
+      createdTasks,
+      personalTitle,
+      {
         title: personalTitle,
         projectId: personal.id,
         dueDatetime,
         durationMinutes: 3
-      })
-    });
-    createdTasks.push({ ...personalCreated, title: personalTitle });
+      }
+    );
 
     await waitForSnapshotTasks(baseUrl, config.ANDROID_API_TOKEN, createdTasks.map((task) => task.id));
     console.log(`Local real-backend smoke passed for run ${runId}`);

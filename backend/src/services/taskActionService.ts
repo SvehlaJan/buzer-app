@@ -249,13 +249,28 @@ function verifyCreatedTask(input: {
   if (input.task.assigneeId !== input.expectedAssigneeId) {
     errors.push("assignee_mismatch");
   }
-  if (input.task.dueDatetime !== input.expectedDueDatetime) {
+  if (!sameDueDatetime(input.task.dueDatetime, input.expectedDueDatetime)) {
     errors.push("due_datetime_mismatch");
   }
   if (input.task.durationMinutes !== input.expectedDurationMinutes) {
     errors.push("duration_mismatch");
   }
   return errors;
+}
+
+function sameDueDatetime(actual: string | null, expected: string): boolean {
+  if (actual === expected) {
+    return true;
+  }
+  if (actual === null) {
+    return false;
+  }
+  const actualTimestamp = Date.parse(actual);
+  const expectedTimestamp = Date.parse(expected);
+  if (!Number.isFinite(actualTimestamp) || !Number.isFinite(expectedTimestamp)) {
+    return false;
+  }
+  return Math.floor(actualTimestamp / 1000) === Math.floor(expectedTimestamp / 1000);
 }
 
 interface TaskWithTodoistFields {

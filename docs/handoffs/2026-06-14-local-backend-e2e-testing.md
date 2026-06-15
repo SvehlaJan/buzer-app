@@ -83,7 +83,7 @@
 
 ## Known Failures / Skipped Checks
 
-- Live real-backend smoke was skipped because `backend/.env.local-smoke` does not exist in this checkout.
+- Live real-backend smoke was initially skipped because `backend/.env.local-smoke` did not exist in this checkout. On 2026-06-15, the env was copied from `/home/skclaw/buzer-app/.env` on `oc-vps.taila50381.ts.net`, rewritten locally with smoke-safe overrides, and the live smoke passed.
 - Task 3 worker initially hit sandbox `tsx` IPC failure; elevated/outside-sandbox script runs passed afterward.
 - Subagent quota was exhausted during final Task 3 quality review, so the last Task 3 review and Task 4 implementation/review were completed locally.
 - Existing unrelated dirty files remain untouched:
@@ -102,6 +102,54 @@
 
 ## Next Recommended Step
 
-1. Create `backend/.env.local-smoke` with local dry-run settings and real Todoist credentials when ready.
-2. Run `scripts/local-real-backend-smoke.mjs --i-understand-this-uses-live-todoist`.
-3. Then return to the product backlog items: Home should show the in-progress task, and Add Task should gain the mandatory persisted project picker behavior already covered by tests.
+1. Return to the product backlog items: Home should show the in-progress task, and Add Task should gain the mandatory persisted project picker behavior already covered by tests.
+
+## 2026-06-15 Live Smoke Follow-Up
+
+- Copied the VPS env from `oc-vps.taila50381.ts.net:/home/skclaw/buzer-app/.env` to ignored local file `backend/.env.local-smoke`.
+- Rewrote local-only safety values without printing secrets:
+  - `NODE_ENV=development`
+  - `PORT=18434`
+  - `DATABASE_PATH=./data/buzer-local-smoke.db`
+  - `WHATSAPP_DRY_RUN=true`
+  - `WHATSAPP_SESSION_PATH=./whatsapp-sessions`
+  - `WHATSAPP_CLIENT_ID=buzer-local-smoke`
+  - `SMOKE_ASSIGNEE_ID` from `TODOIST_USER_ID`
+- First live smoke exposed `todoist_create_verification_failed` with `due_datetime_mismatch`. Todoist created task `6grjp9GQ9HQvxJGg`; it was manually deleted with Todoist REST and returned HTTP 204.
+- Root cause: the smoke script generated fractional-second due datetimes, while Todoist REST returns due datetimes at whole-second precision. Backend verification compared strings exactly.
+- Fix: backend create verification now compares due datetimes at Todoist whole-second precision, and the smoke script records `todoistTaskId` from verification-failure responses so cleanup can delete failed-created Todoist tasks.
+
+Verification:
+- Command: direct Todoist create/delete due probe
+- Result: PASS
+- Evidence: Todoist returned `due.date` without fractional seconds for requested fractional-second due datetime; probe task was deleted with HTTP 204.
+
+Verification:
+- Command: `cd backend && npm test -- taskActionService`
+- Result: PASS
+- Evidence: Vitest reported 1 test file passed, 13 tests passed.
+
+Verification:
+- Command: `node --test scripts/local-real-backend-smoke.test.mjs`
+- Result: PASS
+- Evidence: Node test runner reported 7 tests passed, 0 failed.
+
+Verification:
+- Command: `cd backend && npm test`
+- Result: PASS
+- Evidence: Vitest reported 15 test files passed, 57 tests passed.
+
+Verification:
+- Command: `scripts/local-real-backend-smoke.mjs --i-understand-this-uses-live-todoist`
+- Result: PASS
+- Evidence: Smoke passed for run `20260615061342`; cleaned Todoist tasks `6grjpww2P6HccHFq` and `6grjpwr8Jv82XG7g`.
+
+Verification:
+- Command: `cd backend && npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` completed successfully.
+
+Verification:
+- Command: `cd backend && npm run build`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.build.json` completed and copied `src/db/schema.sql` to `dist/db/schema.sql`.
