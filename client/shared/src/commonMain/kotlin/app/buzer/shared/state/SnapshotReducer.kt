@@ -11,6 +11,7 @@ data class SnapshotViewState(
     val serverTime: String,
     val invalidTasks: List<TaskSnapshotItem>,
     val activeBlockers: List<TaskSnapshotItem>,
+    val inProgressTasks: List<TaskSnapshotItem>,
     val startingToday: List<TaskSnapshotItem>,
     val healthWarnings: List<HealthStatus>
 )
@@ -28,6 +29,7 @@ object SnapshotReducer {
                 it.state == CommitmentState.start_blocker_active ||
                     it.state == CommitmentState.deadline_blocker_active
             },
+            inProgressTasks = visibleTasks.filter { it.state == CommitmentState.started },
             startingToday = visibleTasks.filter {
                 it.state == CommitmentState.planned && it.startAt?.isoDatePrefix() == serverDate
             },

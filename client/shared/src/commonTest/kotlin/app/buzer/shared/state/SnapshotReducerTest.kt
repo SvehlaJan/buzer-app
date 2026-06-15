@@ -17,6 +17,7 @@ class SnapshotReducerTest {
             tasks = listOf(
                 task("invalid", CommitmentState.invalid, validationErrors = listOf("duration_required")),
                 task("start", CommitmentState.start_blocker_active),
+                task("started", CommitmentState.started),
                 task("later", CommitmentState.planned, startAt = "2026-05-08T15:00:00Z"),
                 task("tomorrow", CommitmentState.planned, startAt = "2026-05-09T08:00:00Z")
             ),
@@ -31,6 +32,7 @@ class SnapshotReducerTest {
         assertEquals(7, result.scheduleVersion)
         assertEquals(listOf("invalid"), result.invalidTasks.map { it.id })
         assertEquals(listOf("start"), result.activeBlockers.map { it.id })
+        assertEquals(listOf("started"), result.inProgressTasks.map { it.id })
         assertEquals(listOf("later"), result.startingToday.map { it.id })
         assertEquals(listOf("whatsapp"), result.healthWarnings.map { it.key })
     }

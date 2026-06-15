@@ -19,6 +19,13 @@ Candidate behavior:
 - Show task title, deadline, remaining time, and primary action to open the deadline blocker/details.
 - If multiple tasks are started, show the soonest deadline first and keep the rest scannable.
 
+Status:
+
+- Implemented the first slice on 2026-06-15: Home now preserves `state=started` tasks from the
+  snapshot and shows the soonest-deadline in-progress task with its due timestamp.
+- Follow-up UI polish remains: format the due time more nicely, show remaining time, and add a
+  direct action to the active task/detail or deadline flow once that destination exists.
+
 ## Avoid Duplicate Blocker Surfaces
 
 During the same run, the start alarm produced both overlay and activity surfaces. The activity
