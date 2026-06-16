@@ -465,3 +465,179 @@
 ### Next Recommended Step
 
 - Proceed with Task 2: wire loading, refresh, and error states into Home.
+
+## 2026-06-16 Task 2 Home Loading, Refresh, And Error States
+
+### Task / Plan
+
+- Plan: `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`
+- Task: Task 2, Home Loading, Refresh, and Error States.
+- Checkbox status: Steps 1 through 8 completed and marked `[x]` in the plan after the code commit.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
+- `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md` (uncommitted)
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md` (uncommitted)
+
+### What Changed
+
+- Added explicit `HomeContentState` values for loading, ready, and blocking error.
+- Updated `buildHomeScreenState` to distinguish first-load loading, no-data refresh error, ready refresh, and ready stale-data warning.
+- Updated Home UI to keep the headline visible, use shared loading/warning/error components, hide counts/actions while loading or blocked by no-data error, and expose retry.
+- Added MainActivity Home refresh in-flight/error state and retry wiring.
+- Wrapped the normal app content in `InsetSafeContent`.
+- Built Home state once in `BuzerApp` and applied `homeStatusMessage` only as an override.
+
+### Verification
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.HomeScreenStateTest' --console=plain`
+- Result: RED
+- Evidence: compile failed as expected with unresolved `HomeContentState`, missing `refreshInFlight`/`refreshError` parameters, and missing `contentState`.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.HomeScreenStateTest' --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL` after implementation.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+### Manual Verification
+
+- Not run on a device or emulator in this pass. Verification was limited to focused and broad JVM/unit test commands.
+
+### Known Failures / Skipped Checks
+
+- Skipped real-device visual verification of Android 15+ system-bar safe area behavior.
+- Skipped instrumentation tests; Task 2 only changed Home/App state/rendering and MainActivity refresh wiring.
+
+### Assumptions
+
+- Retrying after a no-snapshot refresh error should clear the previous Home refresh error/status while the retry is in flight, so Home returns to the blocking loading state until the retry succeeds or fails.
+- `homeStatusMessage` remains an override for existing activity-level refresh messages; derived stale/refreshing status is used when no override is present.
+
+### Commit
+
+- `0c7e5d3 feat: show home loading and refresh states`
+
+### Next Recommended Step
+
+1. Controller can review/stage the uncommitted plan and handoff updates, then proceed to Task 3.
+
+## 2026-06-16 Task 2 Review Fix: Derived Home Refresh Errors
+
+### Task / Plan
+
+- Follow-up review fix for Task 2 in `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`.
+- Issue: generic `homeStatusMessage = "Refresh failed"` masked derived Home states from `homeRefreshError`.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md` (uncommitted)
+
+### What Changed
+
+- Removed `homeStatusMessage` from `MainActivity` and `BuzerApp`.
+- Added `buildBuzerHomeState` so app-level Home state always uses the derived `buildHomeScreenState` refresh behavior.
+- Added pure tests for app-level no-snapshot refresh error and stale-data refresh failure rendering.
+- Preserved refresh failure reporting through `homeRefreshError`.
+
+### Verification
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.HomeScreenStateTest' --console=plain`
+- Result: RED
+- Evidence: compile failed as expected with unresolved `buildBuzerHomeState` before implementation.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.HomeScreenStateTest' --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `git diff --cached --check`
+- Result: PASS
+- Evidence: no whitespace errors before commit.
+
+### Manual Verification
+
+- Not run on a device or emulator. Verification was JVM/unit focused.
+
+### Known Failures / Skipped Checks
+
+- Skipped visual verification of Home rendering; pure state tests cover the masking regression.
+
+### Commit
+
+- `10d631c fix: use derived home refresh errors`
+
+### Next Recommended Step
+
+1. Controller can review/stage the uncommitted handoff/plan docs and proceed to Task 3.
+
+## 2026-06-16 Task 2 Review Fix: Refresh Started Race
+
+### Task / Plan
+
+- Follow-up review fix for Task 2 in `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`.
+- Issue: `MainActivity.refreshEnforcement()` set `homeRefreshInFlight` and cleared `homeRefreshError` after `EnforcementRefreshRunner.refresh` launched the coroutine, allowing a fast completion/failure to be overwritten.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunner.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunnerTest.kt`
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md` (uncommitted)
+
+### What Changed
+
+- Added `onStarted` to `EnforcementRefreshRunner.refresh`, called after the active-job guard and before `launch`.
+- Preserved overlapping refresh skip behavior: skipped refreshes return `null` and do not call `onStarted`.
+- Moved `MainActivity` Home refresh state setup into `onStarted`, before the coroutine can complete.
+- Added runner tests for callback ordering and skipped overlapping refresh behavior.
+
+### Verification
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementRefreshRunnerTest' --console=plain`
+- Result: RED
+- Evidence: compile failed as expected with missing `onStarted` parameter before implementation.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementRefreshRunnerTest' --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.HomeScreenStateTest' --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+- Command: `git diff --cached --check`
+- Result: PASS
+- Evidence: no whitespace errors before commit.
+
+### Manual Verification
+
+- Not run on a device or emulator. Verification was JVM/unit focused.
+
+### Known Failures / Skipped Checks
+
+- Skipped visual/device verification; the fix is scoped to refresh runner ordering and MainActivity state timing.
+
+### Commit
+
+- `b828f8b fix: set home refresh state before launch`
+
+### Next Recommended Step
+
+1. Controller can review/stage the uncommitted handoff/plan docs and proceed to the next task.

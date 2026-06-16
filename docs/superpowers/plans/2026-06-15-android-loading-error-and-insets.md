@@ -313,7 +313,7 @@ git commit -m "feat: add android ui status primitives"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
 
-- [ ] **Step 1: Add failing Home state tests**
+- [x] **Step 1: Add failing Home state tests**
 
 Append these tests to `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`:
 
@@ -389,7 +389,7 @@ Also add the import if needed:
 import app.buzer.android.ui.screens.HomeContentState
 ```
 
-- [ ] **Step 2: Run Home tests and verify RED**
+- [x] **Step 2: Run Home tests and verify RED**
 
 Run:
 
@@ -399,7 +399,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: FAIL at Kotlin compilation because `HomeContentState` and the new `buildHomeScreenState` parameters do not exist.
 
-- [ ] **Step 3: Update Home screen state model**
+- [x] **Step 3: Update Home screen state model**
 
 Modify `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt` near the existing state data classes:
 
@@ -475,7 +475,7 @@ fun buildHomeScreenState(
     }
 ```
 
-- [ ] **Step 4: Add explicit Home retry callback and update Home UI rendering**
+- [x] **Step 4: Add explicit Home retry callback and update Home UI rendering**
 
 Update `HomeScreen` signature before changing the body:
 
@@ -525,7 +525,7 @@ import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.WarningStatus
 ```
 
-- [ ] **Step 5: Add activity refresh state**
+- [x] **Step 5: Add activity refresh state**
 
 In `MainActivity`, add:
 
@@ -619,7 +619,7 @@ state = buildHomeScreenState(
 
 Then pass `onRetryRefresh = onRetryHomeRefresh`.
 
-- [ ] **Step 6: Apply inset-safe root to normal app**
+- [x] **Step 6: Apply inset-safe root to normal app**
 
 In `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`, wrap current `Column` in `InsetSafeContent`:
 
@@ -664,7 +664,7 @@ Add import:
 import app.buzer.android.ui.status.InsetSafeContent
 ```
 
-- [ ] **Step 7: Run Home tests and broad unit tests**
+- [x] **Step 7: Run Home tests and broad unit tests**
 
 Run:
 
@@ -675,7 +675,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: both commands PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 8: Commit Home loading state**
+- [x] **Step 8: Commit Home loading state**
 
 Run:
 
