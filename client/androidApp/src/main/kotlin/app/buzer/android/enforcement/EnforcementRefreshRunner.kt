@@ -12,12 +12,16 @@ class EnforcementRefreshRunner(
 ) {
     private var refreshJob: Job? = null
 
-    fun refresh(refresh: suspend () -> Unit): Job? {
+    fun refresh(
+        onStarted: () -> Unit = {},
+        refresh: suspend () -> Unit
+    ): Job? {
         if (refreshJob?.isActive == true) {
             logger("refresh_runner skipped reason=already_active")
             return null
         }
 
+        onStarted()
         val job = scope.launch {
             try {
                 logger("refresh_runner started")

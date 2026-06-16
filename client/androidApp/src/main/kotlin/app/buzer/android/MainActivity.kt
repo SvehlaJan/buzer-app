@@ -68,7 +68,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         AppLog.debug("main refresh requested")
-        val job = refreshRunner.refresh {
+        refreshRunner.refresh(
+            onStarted = {
+                homeRefreshInFlight = true
+                homeRefreshError = null
+            }
+        ) {
             try {
                 val snapshot = coordinator.refreshAndReconcile()
                 snapshotViewState = SnapshotReducer.reduce(snapshot)
@@ -80,10 +85,6 @@ class MainActivity : ComponentActivity() {
             } finally {
                 homeRefreshInFlight = false
             }
-        }
-        if (job != null) {
-            homeRefreshInFlight = true
-            homeRefreshError = null
         }
     }
 
