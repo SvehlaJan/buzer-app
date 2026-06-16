@@ -53,7 +53,7 @@
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/status/OperationStatusTest.kt`
 
-- [ ] **Step 1: Write failing status model tests**
+- [x] **Step 1: Write failing status model tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/status/OperationStatusTest.kt`:
 
@@ -93,7 +93,7 @@ class OperationStatusTest {
 }
 ```
 
-- [ ] **Step 2: Run focused test and verify RED**
+- [x] **Step 2: Run focused test and verify RED**
 
 Run:
 
@@ -103,7 +103,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: FAIL at Kotlin compilation because `OperationStatus` and `ScreenLoadState` do not exist.
 
-- [ ] **Step 3: Add pure status models**
+- [x] **Step 3: Add pure status models**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/OperationStatus.kt`:
 
@@ -135,7 +135,7 @@ sealed interface ScreenLoadState<out T> {
 }
 ```
 
-- [ ] **Step 4: Add reusable Compose components**
+- [x] **Step 4: Add reusable Compose components**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`:
 
@@ -282,7 +282,7 @@ fun ErrorAlertDialog(
 }
 ```
 
-- [ ] **Step 5: Run focused test and verify GREEN**
+- [x] **Step 5: Run focused test and verify GREEN**
 
 Run:
 
@@ -292,7 +292,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 6: Commit shared status layer**
+- [x] **Step 6: Commit shared status layer**
 
 Run:
 

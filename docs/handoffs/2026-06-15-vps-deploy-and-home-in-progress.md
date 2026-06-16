@@ -391,3 +391,77 @@
 
 - No fresh live task was created after this cleanup change; verification is unit/build/install only.
 - Earlier live test tasks may still exist in Todoist/backend unless cleaned up manually.
+
+## 2026-06-16 Android Loading/Error Status Task 1
+
+### Task / Plan
+
+- Plan: `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`
+- Task: Task 1, Shared Status Models and UI Components.
+- Checkbox status: Task 1 steps 1 through 6 are complete. Later tasks remain untouched.
+
+### Files Changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/OperationStatus.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/status/OperationStatusTest.kt`
+- `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`
+- `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md`
+
+### What Changed
+
+- Added pure shared Android UI status models: `OperationStatus` and `ScreenLoadState`.
+- Added reusable Compose status primitives for inset-safe content, inline loading, warnings,
+  blocking loading/error screens, loading action buttons, and retryable error dialogs.
+- Added focused model tests for loading, failed, and blocking screen load states.
+- Committed the three Task 1 code/test files as `250b758 feat: add android ui status primitives`.
+
+### Verification
+
+- Command: `npx ctx7@latest library "Compose Multiplatform" "Compose Material3 AlertDialog Button OutlinedButton CircularProgressIndicator Row Column safeDrawingPadding Modifier padding fillMaxSize fillMaxWidth"`
+- Result: PASS
+- Evidence: selected official JetBrains Compose Multiplatform docs as `/jetbrains/compose-multiplatform`.
+
+- Command: `npx ctx7@latest docs /jetbrains/compose-multiplatform "Compose Material3 AlertDialog Button OutlinedButton CircularProgressIndicator Row Column safeDrawingPadding Modifier padding fillMaxSize fillMaxWidth"`
+- Result: PASS
+- Evidence: docs showed Compose layout and `Modifier.safeDrawingPadding()` usage consistent with
+  the planned component implementation.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.status.OperationStatusTest' --console=plain`
+- Result: RED
+- Evidence: Kotlin compilation failed with unresolved references to `OperationStatus` and
+  `ScreenLoadState`, as expected before adding production files.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.status.OperationStatusTest' --console=plain`
+- Result: PASS
+- Evidence: after adding the status model and component files, Gradle reported `BUILD SUCCESSFUL`.
+
+- Command: `git diff --cached --check`
+- Result: PASS
+- Evidence: no whitespace errors were reported before commit.
+
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.status.OperationStatusTest' --console=plain`
+- Result: PASS
+- Evidence: pre-commit rerun reported `BUILD SUCCESSFUL`.
+
+### Manual Verification
+
+- No device or visual UI verification was performed for this shared primitive-only task.
+- Self-review checked the cached diff and confirmed the code commit contained only the three Task 1
+  files requested by the task.
+
+### Known Failures / Skipped Checks
+
+- Did not run the full Android unit suite or assemble task; verification was the focused Task 1 test.
+- Documentation files were updated after the Task 1 code commit and are intentionally not included
+  in commit `250b758`.
+
+### Assumptions
+
+- The plan-provided Compose component signatures are the intended stable API for later wiring tasks.
+- `ErrorAlertDialog` keeps retry optional by rendering a confirm button only when both retry label
+  and callback are provided.
+
+### Next Recommended Step
+
+- Proceed with Task 2: wire loading, refresh, and error states into Home.
