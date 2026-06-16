@@ -1,5 +1,9 @@
 package app.buzer.android.ui.screens
 
+import app.buzer.android.ui.status.BlockingErrorState
+import app.buzer.android.ui.status.BlockingLoadingState
+import app.buzer.android.ui.status.InlineLoadingStatus
+import app.buzer.android.ui.status.WarningStatus
 import app.buzer.shared.state.SnapshotViewState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,8 +23,15 @@ data class HomeInProgressTask(
     val dueDatetime: String?
 )
 
+sealed interface HomeContentState {
+    data object Loading : HomeContentState
+    data object Ready : HomeContentState
+    data class Error(val message: String) : HomeContentState
+}
+
 data class HomeScreenState(
     val headline: String,
+    val contentState: HomeContentState,
     val statusMessage: String?,
     val invalidCount: Int,
     val activeBlockerCount: Int,
@@ -30,10 +41,19 @@ data class HomeScreenState(
     val healthWarningCount: Int
 )
 
-fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
+fun buildHomeScreenState(
+    snapshot: SnapshotViewState?,
+    refreshInFlight: Boolean = false,
+    refreshError: String? = null
+): HomeScreenState =
     if (snapshot == null) {
         HomeScreenState(
             headline = "Today",
+            contentState = if (refreshError != null) {
+                HomeContentState.Error(refreshError)
+            } else {
+                HomeContentState.Loading
+            },
             statusMessage = null,
             invalidCount = 0,
             activeBlockerCount = 0,
@@ -49,7 +69,12 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
 
         HomeScreenState(
             headline = "Today",
-            statusMessage = null,
+            contentState = HomeContentState.Ready,
+            statusMessage = when {
+                refreshInFlight -> "Refreshing..."
+                refreshError != null -> "Refresh failed. Showing last known data."
+                else -> null
+            },
             invalidCount = snapshot.invalidTasks.size,
             activeBlockerCount = snapshot.activeBlockers.size,
             inProgressCount = snapshot.inProgressTasks.size,
@@ -68,6 +93,7 @@ fun buildHomeScreenState(snapshot: SnapshotViewState?): HomeScreenState =
 fun HomeScreen(
     onAddTask: () -> Unit,
     onMorningReview: () -> Unit,
+    onRetryRefresh: () -> Unit = {},
     state: HomeScreenState = buildHomeScreenState(null)
 ) {
     Column(
@@ -78,28 +104,43 @@ fun HomeScreen(
     ) {
         Text(state.headline, style = MaterialTheme.typography.headlineMedium)
         state.statusMessage?.let { message ->
-            Text(message)
-        }
-        Text("Invalid: ${state.invalidCount}")
-        Text("Active blockers: ${state.activeBlockerCount}")
-        state.currentInProgressTask?.let { task ->
-            Text("In progress: ${task.title}", style = MaterialTheme.typography.titleMedium)
-            task.dueDatetime?.let { dueDatetime ->
-                Text("Due: $dueDatetime")
-            }
-            if (state.inProgressCount > 1) {
-                Text("${state.inProgressCount - 1} more in progress")
+            if (message == "Refreshing...") {
+                InlineLoadingStatus(message)
+            } else {
+                WarningStatus(message = message, onRetry = onRetryRefresh)
             }
         }
-        Text("Starting today: ${state.startingTodayCount}")
-        Text("Health warnings: ${state.healthWarningCount}")
 
-        Button(onClick = onAddTask, modifier = Modifier.fillMaxWidth()) {
-            Text("Add task")
-        }
+        when (val contentState = state.contentState) {
+            HomeContentState.Loading -> BlockingLoadingState("Loading tasks...")
+            is HomeContentState.Error -> BlockingErrorState(
+                message = contentState.message,
+                onRetry = onRetryRefresh
+            )
 
-        OutlinedButton(onClick = onMorningReview, modifier = Modifier.fillMaxWidth()) {
-            Text("Morning review")
+            HomeContentState.Ready -> {
+                Text("Invalid: ${state.invalidCount}")
+                Text("Active blockers: ${state.activeBlockerCount}")
+                state.currentInProgressTask?.let { task ->
+                    Text("In progress: ${task.title}", style = MaterialTheme.typography.titleMedium)
+                    task.dueDatetime?.let { dueDatetime ->
+                        Text("Due: $dueDatetime")
+                    }
+                    if (state.inProgressCount > 1) {
+                        Text("${state.inProgressCount - 1} more in progress")
+                    }
+                }
+                Text("Starting today: ${state.startingTodayCount}")
+                Text("Health warnings: ${state.healthWarningCount}")
+
+                Button(onClick = onAddTask, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add task")
+                }
+
+                OutlinedButton(onClick = onMorningReview, modifier = Modifier.fillMaxWidth()) {
+                    Text("Morning review")
+                }
+            }
         }
     }
 }

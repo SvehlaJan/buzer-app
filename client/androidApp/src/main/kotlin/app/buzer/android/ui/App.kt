@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.HomeScreen
+import app.buzer.android.ui.screens.buildHomeScreenState
+import app.buzer.android.ui.status.InsetSafeContent
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotViewState
 
@@ -28,6 +30,9 @@ fun BuzerApp(
     openAddTask: Boolean = false,
     snapshot: SnapshotViewState? = null,
     homeStatusMessage: String? = null,
+    homeRefreshInFlight: Boolean = false,
+    homeRefreshError: String? = null,
+    onRetryHomeRefresh: () -> Unit = {},
     onTaskCreated: () -> Unit = {}
 ) {
     MaterialTheme {
@@ -40,24 +45,32 @@ fun BuzerApp(
                 context.startActivity(Intent(context, MorningReviewActivity::class.java))
             }
 
-            Column(modifier = Modifier.fillMaxSize()) {
-                when (section) {
-                    AppSection.Home -> HomeScreen(
-                        onAddTask = {
-                            AppLog.debug("ui navigate section=Add source=home")
-                            section = AppSection.Add
-                        },
-                        onMorningReview = {
-                            openMorningReview()
-                        },
-                        state = app.buzer.android.ui.screens.buildHomeScreenState(snapshot)
-                            .copy(statusMessage = homeStatusMessage)
-                    )
+            InsetSafeContent {
+                val homeState = buildHomeScreenState(
+                    snapshot = snapshot,
+                    refreshInFlight = homeRefreshInFlight,
+                    refreshError = homeRefreshError
+                )
 
-                    AppSection.Add -> AddTaskScreen(
-                        onBack = { section = AppSection.Home },
-                        onTaskCreated = onTaskCreated
-                    )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    when (section) {
+                        AppSection.Home -> HomeScreen(
+                            onAddTask = {
+                                AppLog.debug("ui navigate section=Add source=home")
+                                section = AppSection.Add
+                            },
+                            onMorningReview = {
+                                openMorningReview()
+                            },
+                            onRetryRefresh = onRetryHomeRefresh,
+                            state = homeState.copy(statusMessage = homeStatusMessage ?: homeState.statusMessage)
+                        )
+
+                        AppSection.Add -> AddTaskScreen(
+                            onBack = { section = AppSection.Home },
+                            onTaskCreated = onTaskCreated
+                        )
+                    }
                 }
             }
         }

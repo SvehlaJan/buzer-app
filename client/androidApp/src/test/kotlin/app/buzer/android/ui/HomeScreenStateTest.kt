@@ -1,5 +1,6 @@
 package app.buzer.android.ui
 
+import app.buzer.android.ui.screens.HomeContentState
 import app.buzer.android.ui.screens.buildHomeScreenState
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HealthLevel
@@ -9,6 +10,74 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class HomeScreenStateTest {
+    @Test
+    fun showsInitialLoadingBeforeFirstSnapshot() {
+        val state = buildHomeScreenState(
+            snapshot = null,
+            refreshInFlight = true,
+            refreshError = null
+        )
+
+        assertEquals(HomeContentState.Loading, state.contentState)
+        assertEquals(null, state.statusMessage)
+    }
+
+    @Test
+    fun showsBlockingErrorWhenRefreshFailsBeforeFirstSnapshot() {
+        val state = buildHomeScreenState(
+            snapshot = null,
+            refreshInFlight = false,
+            refreshError = "Backend unavailable"
+        )
+
+        assertEquals(HomeContentState.Error("Backend unavailable"), state.contentState)
+        assertEquals(null, state.statusMessage)
+    }
+
+    @Test
+    fun keepsExistingDataVisibleWhileRefreshing() {
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 2,
+            serverTime = "2026-05-08T07:00:00Z",
+            invalidTasks = emptyList(),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = emptyList(),
+            healthWarnings = emptyList()
+        )
+
+        val state = buildHomeScreenState(
+            snapshot = snapshot,
+            refreshInFlight = true,
+            refreshError = null
+        )
+
+        assertEquals(HomeContentState.Ready, state.contentState)
+        assertEquals("Refreshing...", state.statusMessage)
+    }
+
+    @Test
+    fun keepsExistingDataVisibleWithStaleWarningAfterRefreshFailure() {
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 2,
+            serverTime = "2026-05-08T07:00:00Z",
+            invalidTasks = emptyList(),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = emptyList(),
+            healthWarnings = emptyList()
+        )
+
+        val state = buildHomeScreenState(
+            snapshot = snapshot,
+            refreshInFlight = false,
+            refreshError = "Network request failed"
+        )
+
+        assertEquals(HomeContentState.Ready, state.contentState)
+        assertEquals("Refresh failed. Showing last known data.", state.statusMessage)
+    }
+
     @Test
     fun summarizesSnapshotCountsForHome() {
         val snapshot = SnapshotViewState(
