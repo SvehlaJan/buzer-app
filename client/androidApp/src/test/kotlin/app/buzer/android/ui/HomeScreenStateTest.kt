@@ -79,6 +79,40 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun appHomeStateUsesBlockingErrorWithoutStatusBeforeFirstSnapshot() {
+        val state = buildBuzerHomeState(
+            snapshot = null,
+            homeRefreshInFlight = false,
+            homeRefreshError = "Backend unavailable"
+        )
+
+        assertEquals(HomeContentState.Error("Backend unavailable"), state.contentState)
+        assertEquals(null, state.statusMessage)
+    }
+
+    @Test
+    fun appHomeStateUsesDerivedStaleWarningAfterRefreshFailure() {
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 2,
+            serverTime = "2026-05-08T07:00:00Z",
+            invalidTasks = emptyList(),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = emptyList(),
+            healthWarnings = emptyList()
+        )
+
+        val state = buildBuzerHomeState(
+            snapshot = snapshot,
+            homeRefreshInFlight = false,
+            homeRefreshError = "Network request failed"
+        )
+
+        assertEquals(HomeContentState.Ready, state.contentState)
+        assertEquals("Refresh failed. Showing last known data.", state.statusMessage)
+    }
+
+    @Test
     fun summarizesSnapshotCountsForHome() {
         val snapshot = SnapshotViewState(
             scheduleVersion = 2,

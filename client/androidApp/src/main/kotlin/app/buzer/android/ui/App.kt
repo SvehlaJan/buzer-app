@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.HomeScreen
+import app.buzer.android.ui.screens.HomeScreenState
 import app.buzer.android.ui.screens.buildHomeScreenState
 import app.buzer.android.ui.status.InsetSafeContent
 import app.buzer.shared.diagnostics.AppLog
@@ -29,7 +30,6 @@ private enum class AppSection {
 fun BuzerApp(
     openAddTask: Boolean = false,
     snapshot: SnapshotViewState? = null,
-    homeStatusMessage: String? = null,
     homeRefreshInFlight: Boolean = false,
     homeRefreshError: String? = null,
     onRetryHomeRefresh: () -> Unit = {},
@@ -46,10 +46,10 @@ fun BuzerApp(
             }
 
             InsetSafeContent {
-                val homeState = buildHomeScreenState(
+                val homeState = buildBuzerHomeState(
                     snapshot = snapshot,
-                    refreshInFlight = homeRefreshInFlight,
-                    refreshError = homeRefreshError
+                    homeRefreshInFlight = homeRefreshInFlight,
+                    homeRefreshError = homeRefreshError
                 )
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -63,7 +63,7 @@ fun BuzerApp(
                                 openMorningReview()
                             },
                             onRetryRefresh = onRetryHomeRefresh,
-                            state = homeState.copy(statusMessage = homeStatusMessage ?: homeState.statusMessage)
+                            state = homeState
                         )
 
                         AppSection.Add -> AddTaskScreen(
@@ -76,3 +76,14 @@ fun BuzerApp(
         }
     }
 }
+
+internal fun buildBuzerHomeState(
+    snapshot: SnapshotViewState?,
+    homeRefreshInFlight: Boolean,
+    homeRefreshError: String?
+): HomeScreenState =
+    buildHomeScreenState(
+        snapshot = snapshot,
+        refreshInFlight = homeRefreshInFlight,
+        refreshError = homeRefreshError
+    )

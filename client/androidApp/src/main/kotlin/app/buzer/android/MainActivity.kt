@@ -22,7 +22,6 @@ import app.buzer.shared.state.SnapshotViewState
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
-    private var homeStatusMessage by mutableStateOf<String?>(null)
     private var homeRefreshInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
     private val refreshRunner: EnforcementRefreshRunner by lazy {
@@ -48,7 +47,6 @@ class MainActivity : ComponentActivity() {
             BuzerApp(
                 openAddTask = openAddTask,
                 snapshot = snapshotViewState,
-                homeStatusMessage = homeStatusMessage,
                 homeRefreshInFlight = homeRefreshInFlight,
                 homeRefreshError = homeRefreshError,
                 onRetryHomeRefresh = ::refreshEnforcement,
@@ -67,19 +65,14 @@ class MainActivity : ComponentActivity() {
             AppLog.debug("main refresh skipped reason=no_coordinator")
             homeRefreshInFlight = false
             homeRefreshError = "Refresh failed"
-            homeStatusMessage = "Refresh failed"
             return
         }
         AppLog.debug("main refresh requested")
-        homeRefreshInFlight = true
-        homeRefreshError = null
-        homeStatusMessage = null
-        refreshRunner.refresh {
+        val job = refreshRunner.refresh {
             try {
                 val snapshot = coordinator.refreshAndReconcile()
                 snapshotViewState = SnapshotReducer.reduce(snapshot)
                 homeRefreshError = null
-                homeStatusMessage = null
                 AppLog.debug(
                     "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
                         "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
@@ -88,12 +81,15 @@ class MainActivity : ComponentActivity() {
                 homeRefreshInFlight = false
             }
         }
+        if (job != null) {
+            homeRefreshInFlight = true
+            homeRefreshError = null
+        }
     }
 
     private fun reportRefreshFailure(error: Throwable) {
         AppLog.error("main refresh failed", error)
         homeRefreshError = error.message ?: "snapshot refresh failed"
-        homeStatusMessage = "Refresh failed"
         BlockerErrorReporter(applicationContext).report(
             action = BlockerAction.REFRESH_SNAPSHOT,
             taskId = null,
