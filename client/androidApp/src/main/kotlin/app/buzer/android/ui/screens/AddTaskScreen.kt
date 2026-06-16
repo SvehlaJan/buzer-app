@@ -42,10 +42,14 @@ import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
+import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.datetime.datePickerMillisToLocalDate
 import app.buzer.android.ui.datetime.localDateToDatePickerMillis
+import app.buzer.android.ui.status.ErrorAlertDialog
+import app.buzer.android.ui.status.InlineLoadingStatus
+import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectItem
@@ -93,12 +97,14 @@ fun AddTaskScreen(
     var projects by remember { mutableStateOf<List<ProjectItem>>(emptyList()) }
     var projectsLoading by remember { mutableStateOf(true) }
     var projectLoadError by remember { mutableStateOf<String?>(null) }
+    var projectLoadDialogMessage by remember { mutableStateOf<String?>(null) }
     var selectedProject by remember { mutableStateOf<ProjectItem?>(null) }
     var projectMenuExpanded by remember { mutableStateOf(false) }
     var selectedAssignee by remember { mutableStateOf<AddTaskAssigneeOption?>(null) }
     var deadline by remember { mutableStateOf<DateTimeSelection?>(null) }
     var durationMinutes by remember { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -107,6 +113,11 @@ fun AddTaskScreen(
     val projectFeedbackMessage = AddTaskProjectLoadFeedback.message(
         projectsLoading = projectsLoading,
         projects = projects,
+        projectLoadError = projectLoadError
+    )
+    val submitState = AddTaskSubmitState(
+        submitting = submitting,
+        projectsLoading = projectsLoading,
         projectLoadError = projectLoadError
     )
 
@@ -120,14 +131,95 @@ fun AddTaskScreen(
         selectedProject?.let { persistProjectId(it.id) }
     }
 
+    fun retryProjects() {
+        scope.launch {
+            projectsLoading = true
+            projectLoadError = null
+            projectLoadDialogMessage = null
+            try {
+                applyLoadedProjects(refreshProjectList())
+            } catch (error: Exception) {
+                AppLog.error(
+                    "add_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
+                    error
+                )
+                val message = error.message ?: "Project loading failed"
+                projectLoadError = message
+                projectLoadDialogMessage = message
+            } finally {
+                projectsLoading = false
+            }
+        }
+    }
+
+    fun submitRequest(request: CreateTaskRequest) {
+        if (submitting) return
+        submitting = true
+        errorText = null
+        submitDialogMessage = null
+        scope.launch {
+            try {
+                AppLog.info(
+                    "add_task create_start titleLength=${request.title.length} " +
+                        "project=${request.projectId} assignee=${request.assigneeId} " +
+                        "due=${request.dueDatetime} duration=${request.durationMinutes}"
+                )
+                runSuccessfulAddTaskCreate(
+                    request = request,
+                    createTask = createTask,
+                    onTaskCreated = onTaskCreated,
+                    onBack = onBack
+                )
+                AppLog.info("add_task create_success")
+            } catch (error: Exception) {
+                AppLog.error(
+                    "add_task create_failed type=${error::class.simpleName} message=${error.message}",
+                    error
+                )
+                val message = error.message ?: "Task creation failed"
+                errorText = message
+                submitDialogMessage = message
+            } finally {
+                AppLog.debug("add_task create_finished submitting=false")
+                submitting = false
+            }
+        }
+    }
+
+    fun validateAndSubmit() {
+        if (submitting) return
+        AppLog.info(
+            "add_task submit_clicked titleLength=${title.length} project=${selectedProject?.id} assignee=${selectedAssignee?.id} " +
+                "deadline=${deadline?.formatForDisplay()} durationInput=$durationMinutes"
+        )
+        when (
+            val result = AddTaskFormValidator.validate(
+                title,
+                selectedProject,
+                selectedAssignee,
+                deadline,
+                durationMinutes
+            )
+        ) {
+            is AddTaskFormResult.Invalid -> {
+                AppLog.warn("add_task validation_failed message=${result.message}")
+                errorText = result.message
+            }
+            is AddTaskFormResult.Valid -> submitRequest(result.request)
+        }
+    }
+
     LaunchedEffect(Unit) {
         projectsLoading = true
         projectLoadError = null
+        projectLoadDialogMessage = null
         try {
             applyLoadedProjects(loadProjectList())
         } catch (error: Exception) {
             AppLog.error("add_task projects load_failed type=${error::class.simpleName} message=${error.message}", error)
-            projectLoadError = error.message ?: "Project loading failed"
+            val message = error.message ?: "Project loading failed"
+            projectLoadError = message
+            projectLoadDialogMessage = message
         } finally {
             projectsLoading = false
         }
@@ -147,6 +239,7 @@ fun AddTaskScreen(
                 title = it
                 errorText = null
             },
+            enabled = !submitState.formDisabled,
             label = { Text("Title") },
             singleLine = true,
             modifier = Modifier
@@ -154,10 +247,14 @@ fun AddTaskScreen(
                 .semantics { contentDescription = "Title input" }
         )
 
+        if (projectsLoading) {
+            InlineLoadingStatus("Loading projects...")
+        }
+
         Box(modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
                 onClick = { projectMenuExpanded = true },
-                enabled = !projectsLoading && projects.isNotEmpty(),
+                enabled = !submitState.formDisabled && !projectsLoading && projects.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = "Project picker" }
@@ -185,7 +282,8 @@ fun AddTaskScreen(
                             persistProjectId(project.id)
                             projectMenuExpanded = false
                             errorText = null
-                        }
+                        },
+                        enabled = !submitState.formDisabled
                     )
                 }
             }
@@ -194,23 +292,8 @@ fun AddTaskScreen(
         projectFeedbackMessage?.let { message ->
             Text(message)
             OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        projectsLoading = true
-                        projectLoadError = null
-                        try {
-                            applyLoadedProjects(refreshProjectList())
-                        } catch (error: Exception) {
-                            AppLog.error(
-                                "add_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
-                                error
-                            )
-                            projectLoadError = error.message ?: "Project loading failed"
-                        } finally {
-                            projectsLoading = false
-                        }
-                    }
-                },
+                onClick = { retryProjects() },
+                enabled = !submitState.formDisabled && !projectsLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Retry")
@@ -225,6 +308,7 @@ fun AddTaskScreen(
                     if (selected) {
                         Button(
                             onClick = { selectedAssignee = option },
+                            enabled = !submitState.formDisabled,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(label)
@@ -235,6 +319,7 @@ fun AddTaskScreen(
                                 selectedAssignee = option
                                 errorText = null
                             },
+                            enabled = !submitState.formDisabled,
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(label)
@@ -249,6 +334,7 @@ fun AddTaskScreen(
                 showDatePicker = true
                 errorText = null
             },
+            enabled = !submitState.formDisabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { contentDescription = "Deadline picker" }
@@ -262,6 +348,7 @@ fun AddTaskScreen(
                 durationMinutes = it
                 errorText = null
             },
+            enabled = !submitState.formDisabled,
             label = { Text("Duration minutes") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -272,65 +359,17 @@ fun AddTaskScreen(
 
         errorText?.let { Text(it) }
 
-        Button(
-            onClick = {
-                if (submitting) return@Button
-                AppLog.info(
-                    "add_task submit_clicked titleLength=${title.length} project=${selectedProject?.id} assignee=${selectedAssignee?.id} " +
-                        "deadline=${deadline?.formatForDisplay()} durationInput=$durationMinutes"
-                )
-                when (
-                    val result = AddTaskFormValidator.validate(
-                        title,
-                        selectedProject,
-                        selectedAssignee,
-                        deadline,
-                        durationMinutes
-                    )
-                ) {
-                    is AddTaskFormResult.Invalid -> {
-                        AppLog.warn("add_task validation_failed message=${result.message}")
-                        errorText = result.message
-                    }
-                    is AddTaskFormResult.Valid -> {
-                        submitting = true
-                        errorText = null
-                        scope.launch {
-                            try {
-                                AppLog.info(
-                                    "add_task create_start titleLength=${result.request.title.length} " +
-                                        "project=${result.request.projectId} assignee=${result.request.assigneeId} " +
-                                        "due=${result.request.dueDatetime} duration=${result.request.durationMinutes}"
-                                )
-                                runSuccessfulAddTaskCreate(
-                                    request = result.request,
-                                    createTask = createTask,
-                                    onTaskCreated = onTaskCreated,
-                                    onBack = onBack
-                                )
-                                AppLog.info("add_task create_success")
-                            } catch (error: Exception) {
-                                AppLog.error(
-                                    "add_task create_failed type=${error::class.simpleName} message=${error.message}",
-                                    error
-                                )
-                                errorText = error.message ?: "Task creation failed"
-                            } finally {
-                                AppLog.debug("add_task create_finished submitting=false")
-                                submitting = false
-                            }
-                        }
-                    }
-                }
-            },
-            enabled = !submitting && !projectsLoading && projectLoadError == null,
+        LoadingActionButton(
+            label = "Save task",
+            loadingLabel = "Saving...",
+            loading = submitting,
+            onClick = { validateAndSubmit() },
+            enabled = submitState.saveEnabled,
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (submitting) "Saving..." else "Save")
-        }
+        )
         OutlinedButton(
             onClick = onBack,
-            enabled = !submitting,
+            enabled = !submitState.formDisabled,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Back")
@@ -356,7 +395,7 @@ fun AddTaskScreen(
                             showTimePicker = true
                         }
                     },
-                    enabled = datePickerState.selectedDateMillis != null
+                    enabled = !submitState.formDisabled && datePickerState.selectedDateMillis != null
                 ) {
                     Text("OK")
                 }
@@ -394,7 +433,8 @@ fun AddTaskScreen(
                         showTimePicker = false
                         pendingDate = null
                         errorText = null
-                    }
+                    },
+                    enabled = !submitState.formDisabled
                 ) {
                     Text("OK")
                 }
@@ -408,6 +448,29 @@ fun AddTaskScreen(
                 ) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    projectLoadDialogMessage?.let { message ->
+        ErrorAlertDialog(
+            title = "Projects did not load",
+            message = message,
+            onDismiss = { projectLoadDialogMessage = null },
+            retryLabel = "Retry",
+            onRetry = { retryProjects() }
+        )
+    }
+
+    submitDialogMessage?.let { message ->
+        ErrorAlertDialog(
+            title = "Task was not saved",
+            message = message,
+            onDismiss = { submitDialogMessage = null },
+            retryLabel = "Retry Save",
+            onRetry = {
+                submitDialogMessage = null
+                validateAndSubmit()
             }
         )
     }

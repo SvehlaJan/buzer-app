@@ -41,7 +41,7 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
             selectDefaultDeadline()
             composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-            composeRule.onNodeWithText("Save").performClick()
+            composeRule.onNodeWithText("Save task").performClick()
 
             composeRule.onNodeWithText("Project is required").assertIsDisplayed()
             assertNoRecordedCall("/tasks")
@@ -61,11 +61,11 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
             selectDefaultDeadline()
             composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-            composeRule.onNodeWithText("Save").performClick()
+            composeRule.onNodeWithText("Save task").performClick()
             composeRule.onNodeWithText("Assignee is required for this project").assertIsDisplayed()
 
             composeRule.onNodeWithText("Me").performClick()
-            composeRule.onNodeWithText("Save").performClick()
+            composeRule.onNodeWithText("Save task").performClick()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -93,7 +93,7 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Personal task")
             selectDefaultDeadline()
             composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("30")
-            composeRule.onNodeWithText("Save").performClick()
+            composeRule.onNodeWithText("Save task").performClick()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -118,7 +118,7 @@ class AddTaskFakeBackendTest {
             try {
                 composeRule.onNodeWithText("Add task").performClick()
                 waitForText("500")
-                composeRule.onNodeWithText("Save").assertIsNotEnabled()
+                composeRule.onNodeWithText("Save task").assertIsNotEnabled()
 
                 fakeBackend.setFailProjects(false)
                 composeRule.onNodeWithText("Retry").performClick()
@@ -145,7 +145,7 @@ class AddTaskFakeBackendTest {
                 composeRule.onNodeWithText("Me").performClick()
                 selectDefaultDeadline()
                 composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
-                composeRule.onNodeWithText("Save").performClick()
+                composeRule.onNodeWithText("Save task").performClick()
 
                 waitForRecordedCall("/tasks")
                 composeRule.onNodeWithText("Add committed task").assertIsDisplayed()
