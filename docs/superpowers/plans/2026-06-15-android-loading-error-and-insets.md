@@ -697,7 +697,7 @@ git commit -m "feat: show home loading and refresh states"
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitStateTest.kt`
 - Create or modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitState.kt`
 
-- [ ] **Step 1: Write failing submit-state tests**
+- [x] **Step 1: Write failing submit-state tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitStateTest.kt`:
 
@@ -728,7 +728,7 @@ class AddTaskSubmitStateTest {
 }
 ```
 
-- [ ] **Step 2: Run focused test and verify RED**
+- [x] **Step 2: Run focused test and verify RED**
 
 Run:
 
@@ -738,7 +738,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: FAIL at Kotlin compilation because `AddTaskSubmitState` does not exist.
 
-- [ ] **Step 3: Implement submit state helper**
+- [x] **Step 3: Implement submit state helper**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitState.kt`:
 
@@ -756,7 +756,7 @@ data class AddTaskSubmitState(
 }
 ```
 
-- [ ] **Step 4: Run focused test and verify GREEN**
+- [x] **Step 4: Run focused test and verify GREEN**
 
 Run:
 
@@ -766,7 +766,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Add project-load and submit alert state to AddTaskScreen**
+- [x] **Step 5: Add project-load and submit alert state to AddTaskScreen**
 
 In `AddTaskScreen`, add state:
 
@@ -802,7 +802,7 @@ errorText = message
 submitDialogMessage = message
 ```
 
-- [ ] **Step 6: Add Add Task dialogs and retry handlers**
+- [x] **Step 6: Add Add Task dialogs and retry handlers**
 
 Add helper function inside `AddTaskScreen`:
 
@@ -914,7 +914,7 @@ import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.LoadingActionButton
 ```
 
-- [ ] **Step 7: Use loading components and disable duplicate form edits**
+- [x] **Step 7: Use loading components and disable duplicate form edits**
 
 In the project picker area, when `projectsLoading` is true, render:
 
@@ -943,7 +943,7 @@ LoadingActionButton(
 )
 ```
 
-- [ ] **Step 8: Run Add Task tests and broad unit tests**
+- [x] **Step 8: Run Add Task tests and broad unit tests**
 
 Run:
 
@@ -954,7 +954,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: both commands PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 9: Commit Add Task loading/error behavior**
+- [x] **Step 9: Commit Add Task loading/error behavior**
 
 Run:
 
@@ -976,7 +976,7 @@ git commit -m "feat: show add task loading and errors"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
 
-- [ ] **Step 1: Write failing blocker action state tests**
+- [x] **Step 1: Write failing blocker action state tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`:
 
@@ -1008,7 +1008,7 @@ class BlockerActionStateTest {
 }
 ```
 
-- [ ] **Step 2: Run focused test and verify RED**
+- [x] **Step 2: Run focused test and verify RED**
 
 Run:
 
@@ -1018,7 +1018,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: FAIL at Kotlin compilation because `BlockerActionState` does not exist.
 
-- [ ] **Step 3: Add blocker action state**
+- [x] **Step 3: Add blocker action state**
 
 In `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`, add near the top:
 
@@ -1036,7 +1036,7 @@ sealed interface BlockerActionState {
 }
 ```
 
-- [ ] **Step 4: Update StartBlockerScreen signature and UI**
+- [x] **Step 4: Update StartBlockerScreen signature and UI**
 
 Change `StartBlockerScreen` signature:
 
@@ -1108,7 +1108,7 @@ import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.status.WarningStatus
 ```
 
-- [ ] **Step 5: Update DeadlineBlockerScreen signature and UI**
+- [x] **Step 5: Update DeadlineBlockerScreen signature and UI**
 
 Change `DeadlineBlockerScreen` signature with the same parameters:
 
@@ -1148,7 +1148,7 @@ LoadingActionButton(
 
 Add the same `ErrorAlertDialog` block as Start.
 
-- [ ] **Step 6: Wire StartBlockerActivity state**
+- [x] **Step 6: Wire StartBlockerActivity state**
 
 In `StartBlockerActivity`, add state fields:
 
@@ -1245,7 +1245,7 @@ StartBlockerScreen(
 )
 ```
 
-- [ ] **Step 7: Wire DeadlineBlockerActivity state**
+- [x] **Step 7: Wire DeadlineBlockerActivity state**
 
 Apply the same pattern as Step 6 with deadline-specific labels:
 
@@ -1255,7 +1255,7 @@ Apply the same pattern as Step 6 with deadline-specific labels:
 
 Update `DeadlineBlockerScreen` call with `checking`, `warningMessage`, `actionState`, `errorMessage`, `onDismissError`, and `onRetryAction`.
 
-- [ ] **Step 8: Run blocker tests and broad unit tests**
+- [x] **Step 8: Run blocker tests and broad unit tests**
 
 Run:
 
@@ -1266,7 +1266,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: both commands PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 9: Commit blocker loading behavior**
+- [x] **Step 9: Commit blocker loading behavior**
 
 Run:
 
