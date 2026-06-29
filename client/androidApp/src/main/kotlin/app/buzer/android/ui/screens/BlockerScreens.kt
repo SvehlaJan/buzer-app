@@ -9,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,16 +32,38 @@ import androidx.compose.ui.unit.dp
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.datetime.datePickerMillisToLocalDate
 import app.buzer.android.ui.datetime.localDateToDatePickerMillis
+import app.buzer.android.ui.status.BlockingLoadingState
+import app.buzer.android.ui.status.ErrorAlertDialog
+import app.buzer.android.ui.status.LoadingActionButton
+import app.buzer.android.ui.status.WarningStatus
 import app.buzer.shared.model.RescheduleTaskRequest
 import java.time.LocalDate
 import java.time.LocalDateTime
+
+sealed interface BlockerActionState {
+    data object Idle : BlockerActionState
+    data class Loading(val label: String) : BlockerActionState
+    data class Failed(val message: String) : BlockerActionState
+
+    val actionsDisabled: Boolean
+        get() = this is Loading
+
+    val loadingLabel: String?
+        get() = (this as? Loading)?.label
+}
 
 @Composable
 fun StartBlockerScreen(
     onBack: () -> Unit,
     onStart: () -> Unit = {},
     onPostpone: () -> Unit = {},
-    showBack: Boolean = true
+    showBack: Boolean = true,
+    checking: Boolean = false,
+    warningMessage: String? = null,
+    actionState: BlockerActionState = BlockerActionState.Idle,
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {},
+    onRetryAction: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -50,18 +71,46 @@ fun StartBlockerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Start blocker")
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
-            Text("I'm starting")
+        if (checking) {
+            BlockingLoadingState("Checking task state...")
+            return@Column
         }
-        OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) {
-            Text("Postpone 5 min")
+        warningMessage?.let { WarningStatus(it) }
+        Text("Start blocker")
+        LoadingActionButton(
+            label = "I'm starting",
+            loadingLabel = actionState.loadingLabel ?: "Starting...",
+            loading = actionState is BlockerActionState.Loading,
+            onClick = onStart,
+            enabled = !actionState.actionsDisabled,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedButton(
+            onClick = onPostpone,
+            enabled = !actionState.actionsDisabled,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (actionState is BlockerActionState.Loading) "Working..." else "Postpone 5 min")
         }
         if (showBack) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onBack,
+                enabled = !actionState.actionsDisabled,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Back")
             }
         }
+    }
+
+    errorMessage?.let { message ->
+        ErrorAlertDialog(
+            title = "Action failed",
+            message = message,
+            onDismiss = onDismissError,
+            retryLabel = "Retry",
+            onRetry = onRetryAction
+        )
     }
 }
 
@@ -72,7 +121,13 @@ fun DeadlineBlockerScreen(
     onDone: () -> Unit = {},
     onExtend: () -> Unit = {},
     onReschedule: (RescheduleTaskRequest) -> Unit = {},
-    showBack: Boolean = true
+    showBack: Boolean = true,
+    checking: Boolean = false,
+    warningMessage: String? = null,
+    actionState: BlockerActionState = BlockerActionState.Idle,
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {},
+    onRetryAction: () -> Unit = {}
 ) {
     var rescheduleVisible by remember { mutableStateOf(false) }
     var deadline by remember { mutableStateOf<DateTimeSelection?>(null) }
@@ -90,6 +145,11 @@ fun DeadlineBlockerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (checking) {
+            BlockingLoadingState("Checking task state...")
+            return@Column
+        }
+        warningMessage?.let { WarningStatus(it) }
         if (rescheduleVisible) {
             Text("Reschedule task")
             OutlinedButton(
@@ -97,6 +157,7 @@ fun DeadlineBlockerScreen(
                     showDatePicker = true
                     errorText = null
                 },
+                enabled = !actionState.actionsDisabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = "New deadline picker" }
@@ -111,13 +172,17 @@ fun DeadlineBlockerScreen(
                 },
                 label = { Text("Duration minutes") },
                 singleLine = true,
+                enabled = !actionState.actionsDisabled,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = "Duration minutes input" }
             )
             errorText?.let { Text(it) }
-            Button(
+            LoadingActionButton(
+                label = "Save reschedule",
+                loadingLabel = actionState.loadingLabel ?: "Rescheduling...",
+                loading = actionState is BlockerActionState.Loading,
                 onClick = {
                     val selectedDeadline = deadline
                     val duration = durationText.trim().toIntOrNull()
@@ -136,25 +201,34 @@ fun DeadlineBlockerScreen(
                         }
                     }
                 },
+                enabled = !actionState.actionsDisabled,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save reschedule")
-            }
+            )
             OutlinedButton(
                 onClick = {
                     rescheduleVisible = false
                     errorText = null
                 },
+                enabled = !actionState.actionsDisabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Cancel")
             }
         } else {
             Text("Deadline blocker")
-            Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                Text("Done")
-            }
-            OutlinedButton(onClick = onExtend, modifier = Modifier.fillMaxWidth()) {
+            LoadingActionButton(
+                label = "Done",
+                loadingLabel = actionState.loadingLabel ?: "Completing...",
+                loading = actionState is BlockerActionState.Loading,
+                onClick = onDone,
+                enabled = !actionState.actionsDisabled,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedButton(
+                onClick = onExtend,
+                enabled = !actionState.actionsDisabled,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Extend 30 min")
             }
             OutlinedButton(
@@ -162,16 +236,31 @@ fun DeadlineBlockerScreen(
                     rescheduleVisible = true
                     errorText = null
                 },
+                enabled = !actionState.actionsDisabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Reschedule")
             }
             if (showBack) {
-                OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onBack,
+                    enabled = !actionState.actionsDisabled,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Back")
                 }
             }
         }
+    }
+
+    errorMessage?.let { message ->
+        ErrorAlertDialog(
+            title = "Action failed",
+            message = message,
+            onDismiss = onDismissError,
+            retryLabel = "Retry",
+            onRetry = onRetryAction
+        )
     }
 
     val initialDate = deadline?.date ?: LocalDate.now()
