@@ -1287,7 +1287,7 @@ git commit -m "feat: show blocker checking and action progress"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
 
-- [ ] **Step 1: Write failing Morning Review state tests**
+- [x] **Step 1: Write failing Morning Review state tests**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`:
 
@@ -1341,7 +1341,7 @@ class MorningReviewScreenStateTest {
 }
 ```
 
-- [ ] **Step 2: Run focused test and verify RED**
+- [x] **Step 2: Run focused test and verify RED**
 
 Run:
 
@@ -1351,7 +1351,7 @@ cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.
 
 Expected: FAIL at Kotlin compilation because `MorningReviewContentState` and `buildMorningReviewContentState` do not exist.
 
-- [ ] **Step 3: Add Morning Review content state**
+- [x] **Step 3: Add Morning Review content state**
 
 In `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`, add:
 
@@ -1377,7 +1377,7 @@ fun buildMorningReviewContentState(
     }
 ```
 
-- [ ] **Step 4: Update MorningReviewScreen signature and UI**
+- [x] **Step 4: Update MorningReviewScreen signature and UI**
 
 Add parameters:
 
@@ -1438,7 +1438,7 @@ actionErrorMessage?.let { message ->
 }
 ```
 
-- [ ] **Step 5: Update MorningReviewTaskList snooze loading**
+- [x] **Step 5: Update MorningReviewTaskList snooze loading**
 
 Change signature:
 
@@ -1465,7 +1465,7 @@ LoadingActionButton(
 )
 ```
 
-- [ ] **Step 6: Wire MorningReviewActivity state**
+- [x] **Step 6: Wire MorningReviewActivity state**
 
 In `MorningReviewActivity.onCreate`, add:
 
@@ -1593,7 +1593,7 @@ onRetryAction = {
 }
 ```
 
-- [ ] **Step 7: Run Morning Review and broad tests**
+- [x] **Step 7: Run Morning Review and broad tests**
 
 Run:
 
@@ -1604,7 +1604,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: both commands PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 8: Commit Morning Review loading behavior**
+- [x] **Step 8: Commit Morning Review loading behavior**
 
 Run:
 
