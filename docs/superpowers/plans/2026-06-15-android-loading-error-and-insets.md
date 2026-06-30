@@ -1622,7 +1622,7 @@ git commit -m "feat: show morning review loading and errors"
 **Files:**
 - Modify: `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md`
 
-- [ ] **Step 1: Run full Android verification**
+- [x] **Step 1: Run full Android verification**
 
 Run:
 
@@ -1632,7 +1632,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: PASS with `BUILD SUCCESSFUL`.
 
-- [ ] **Step 2: Install on connected Pixel**
+- [x] **Step 2: Install on connected Pixel**
 
 Run:
 
@@ -1642,7 +1642,7 @@ BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install
 
 Expected: PASS with `Installed debug build on 56061FDCR005J0.`
 
-- [ ] **Step 3: Verify system bar insets manually**
+- [x] **Step 3: Verify system bar insets manually**
 
 On Pixel 10:
 
@@ -1661,7 +1661,7 @@ BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh screenshot /tmp/buzer-i
 
 Expected: screenshot command exits 0 and image shows content below status bar.
 
-- [ ] **Step 4: Verify Add Task project error path manually**
+- [x] **Step 4: Verify Add Task project error path manually**
 
 On Pixel 10:
 
@@ -1673,7 +1673,7 @@ On Pixel 10:
 
 If disrupting network/config is not acceptable during this session, record `SKIPPED: project load failure path not manually triggered because it would interrupt the active device/backend test setup` in the handoff.
 
-- [ ] **Step 5: Update handoff**
+- [x] **Step 5: Update handoff**
 
 Append a `## 2026-06-15 Android Loading/Error/Insets Implementation` section to `docs/handoffs/2026-06-15-vps-deploy-and-home-in-progress.md` containing these concrete subsections:
 

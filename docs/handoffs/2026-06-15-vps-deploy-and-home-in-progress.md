@@ -641,3 +641,74 @@
 ### Next Recommended Step
 
 1. Controller can review/stage the uncommitted handoff/plan docs and proceed to the next task.
+
+## 2026-06-15 Android Loading/Error/Insets Implementation
+
+### Task / Plan
+
+- Executed `docs/superpowers/plans/2026-06-15-android-loading-error-and-insets.md`.
+- All checkboxes complete: Task 1 (Shared Status Models and UI Components), Task 2 (Home Loading,
+  Refresh, and Error States), Task 3 (Add Task Project and Submit Feedback), Task 4 (Blocker
+  Checking and Action Progress), Task 5 (Morning Review Loading and Action Feedback), and Task 6
+  (Final Verification, Device Install, and Handoff).
+
+### Files Changed
+
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunner.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitState.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/OperationStatus.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunnerTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/status/OperationStatusTest.kt`
+
+### Verification
+
+- Command: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 16s`, 70 actionable tasks (5 executed, 65 up-to-date).
+
+- Command: `BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install`
+- Result: PASS
+- Evidence: `Installed debug build on 56061FDCR005J0.`
+
+### Manual Verification
+
+- System bar insets (Home): PASS. Screenshot on Pixel 10 shows the "Today" title and content
+  starting clearly below the status bar in both the loading state and the loaded state.
+- System bar insets (Add Task): PASS. Screenshot shows "Add committed task" title and the project
+  picker fully below the status bar; launched directly via
+  `am start -n app.buzer.android/.MainActivity --ez app.buzer.extra.OPEN_ADD_TASK true`.
+- System bar insets (blocker, live trigger): SKIPPED: no fresh blocker was triggered after the
+  insets change. Home reported `Active blockers: 0` for the duration of this session.
+- Add Task project error path: SKIPPED: project load failure path not manually triggered because
+  it would interrupt the active device/backend test setup. The device's Tailscale connection to
+  the backend (`100.105.180.34:18432`) was observed dropping and reconnecting on its own during
+  this session; the drop incidentally exercised the Home blocking-error state (`ConnectException`,
+  retryable error message, visible "Retry" button, no status-bar overlap — see logcat evidence
+  below), but by the time Add Task was opened the connection had recovered (`add_task projects
+  load_success count=8`), so a deliberate disconnect was not forced to avoid disrupting the live
+  device/backend session.
+- Incidental Home error-state evidence (not a deliberate trigger): logcat showed
+  `java.net.ConnectException: Failed to connect to /100.105.180.34:18432` followed by `main refresh
+  failed`; the resulting screenshot showed the red error text and a "Retry" button below the status
+  bar, confirming the Task 2 blocking-error UI and inset handling work together correctly.
+
+### Known Failures / Skipped Checks
+
+- Live blocker inset check and deliberate Add Task project-error trigger were not performed this
+  session (see SKIPPED notes above). Recommend re-running these two checks the next time a live
+  blocker fires or a controlled backend outage can be scheduled without disrupting active use.
