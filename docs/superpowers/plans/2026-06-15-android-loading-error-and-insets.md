@@ -1683,7 +1683,7 @@ Append a `## 2026-06-15 Android Loading/Error/Insets Implementation` section to 
 - `### Manual Verification`: include Android system-bar overlap and Add Task project loading/error checks, each with `PASS`, `FAIL`, or the exact `SKIPPED` sentence from Steps 3 or 4.
 - `### Known Failures / Skipped Checks`: list remaining gaps, or write `None` if no gaps remain.
 
-- [ ] **Step 6: Commit final handoff**
+- [x] **Step 6: Commit final handoff**
 
 Run:
 
