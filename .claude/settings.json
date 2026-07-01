@@ -4,7 +4,15 @@
       "Bash(scripts/test.sh)",
       "Bash(scripts/test.sh *)",
       "Bash(scripts/adb-verify.sh)",
-      "Bash(scripts/adb-verify.sh *)"
+      "Bash(scripts/adb-verify.sh *)",
+      "Bash(cd client && ./gradlew :shared:testAndroidHostTest*)",
+      "Bash(./gradlew :shared:testAndroidHostTest*)",
+      "Bash(cd client && ./gradlew :androidApp:testDebugUnitTest*)",
+      "Bash(./gradlew :androidApp:testDebugUnitTest*)",
+      "Bash(cd client && ./gradlew :androidApp:assembleDebug*)",
+      "Bash(./gradlew :androidApp:assembleDebug*)",
+      "Bash(cd client && ./gradlew :androidApp:compileDebugKotlin*)",
+      "Bash(./gradlew :androidApp:compileDebugKotlin*)"
     ]
   }
 }
