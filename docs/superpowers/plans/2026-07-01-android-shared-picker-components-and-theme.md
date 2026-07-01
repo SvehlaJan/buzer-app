@@ -610,7 +610,7 @@ git commit -m "feat: add WheelDurationField hour/minute picker"
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDateTimeField.kt`
 - Test: `client/androidApp/src/test/kotlin/app/buzer/android/ui/pickers/WheelDateTimeFieldTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/pickers/WheelDateTimeFieldTest.kt`:
 
@@ -659,12 +659,12 @@ class WheelDateTimeFieldTest {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.pickers.WheelDateTimeFieldTest' --console=plain`
 Expected: compile failure — `toDateTimeSelection`, `toLocalDateTime`, and `startDateTimeFor` are unresolved references.
 
-- [ ] **Step 3: Implement WheelDateTimeField**
+- [x] **Step 3: Implement WheelDateTimeField**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDateTimeField.kt`:
 
@@ -754,12 +754,12 @@ fun WheelDateTimeField(
 If the compiler reports missing required parameters on `WheelDateTimePicker` (for example if `minDateTime`/`maxDateTime`/`yearsRange`/`timeFormat` turn out not to have defaults), check
 `npx ctx7@latest docs /commandiron/wheelpickercompose "WheelDateTimePicker composable full parameter list and defaults"` and add the missing ones — a reasonable default `yearsRange` is `IntRange(LocalDateTime.now().year, LocalDateTime.now().year + 5)` and a reasonable default `timeFormat` is `TimeFormat.HOUR_24`, matching the 24-hour `TimePicker` behavior being replaced.
 
-- [ ] **Step 4: Run the test and verify GREEN**
+- [x] **Step 4: Run the test and verify GREEN**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.pickers.WheelDateTimeFieldTest' --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Add a Compose Preview** — skip this step. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
+- [x] **Step 5: Add a Compose Preview** — skipped. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
 
 (Reference only, not to be added — kept here for when preview tooling is added later:)
 
@@ -773,12 +773,12 @@ private fun WheelDateTimeFieldPreview() {
 }
 ```
 
-- [ ] **Step 6: Run the broad unit test suite**
+- [x] **Step 6: Run the broad unit test suite**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDateTimeField.kt \
