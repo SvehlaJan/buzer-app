@@ -1770,12 +1770,12 @@ git commit -m "feat: use wheel pickers for Morning Review repair"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/datetime/DateTimeSelection.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/datetime/DateTimeSelectionTest.kt`
 
-- [ ] **Step 1: Confirm nothing else references the helpers**
+- [x] **Step 1: Confirm nothing else references the helpers**
 
 Run: `grep -rn "datePickerMillisToLocalDate\|localDateToDatePickerMillis" client/androidApp/src`
 Expected: no matches outside `DateTimeSelection.kt` and `DateTimeSelectionTest.kt` (Tasks 6-8 removed the only call sites).
 
-- [ ] **Step 2: Delete the helpers**
+- [x] **Step 2: Delete the helpers**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/datetime/DateTimeSelection.kt`. Replace the whole file:
 
@@ -1805,7 +1805,7 @@ private val displayFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
 ```
 
-- [ ] **Step 3: Delete the obsolete test**
+- [x] **Step 3: Delete the obsolete test**
 
 Edit `client/androidApp/src/test/kotlin/app/buzer/android/ui/datetime/DateTimeSelectionTest.kt`. Remove the `convertsDatePickerUtcMillisToLocalDateWithoutDeviceTimezoneShift` test and the now-unused `ZoneId`-for-UTC-conversion import usage that only it needed (keep `import java.time.ZoneId` since `convertsLocalSelectionToIsoInstant` still uses it). The full updated file:
 
@@ -1845,7 +1845,7 @@ class DateTimeSelectionTest {
 }
 ```
 
-- [ ] **Step 4: Run tests and assemble**
+- [x] **Step 4: Run tests and assemble**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
@@ -1853,7 +1853,7 @@ Expected: `BUILD SUCCESSFUL`.
 Run: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/datetime/DateTimeSelection.kt \
