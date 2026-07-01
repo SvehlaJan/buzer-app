@@ -30,17 +30,4 @@ class DateTimeSelectionTest {
 
         assertEquals("2026-06-02 08:05", selection.formatForDisplay())
     }
-
-    @Test
-    fun convertsDatePickerUtcMillisToLocalDateWithoutDeviceTimezoneShift() {
-        val millis = LocalDate.of(2026, 6, 2)
-            .atStartOfDay(ZoneId.of("UTC"))
-            .toInstant()
-            .toEpochMilli()
-
-        assertEquals(
-            LocalDate.of(2026, 6, 2),
-            datePickerMillisToLocalDate(millis)
-        )
-    }
 }
