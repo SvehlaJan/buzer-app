@@ -1249,7 +1249,7 @@ git commit -m "feat: use wheel pickers for Add Task deadline and duration"
 **Files:**
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
 
-- [ ] **Step 1: Update imports**
+- [x] **Step 1: Update imports**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`. Remove:
 
@@ -1276,7 +1276,7 @@ import app.buzer.android.ui.pickers.WheelDateTimeField
 import app.buzer.android.ui.pickers.WheelDurationField
 ```
 
-- [ ] **Step 2: Replace the reschedule state and form fields**
+- [x] **Step 2: Replace the reschedule state and form fields**
 
 Replace this state block in `DeadlineBlockerScreen`:
 
@@ -1403,7 +1403,7 @@ with:
             )
 ```
 
-- [ ] **Step 3: Delete the date/time picker dialog block**
+- [x] **Step 3: Delete the date/time picker dialog block**
 
 Delete the block at the bottom of `DeadlineBlockerScreen` (after the `errorMessage?.let { ... }` block, before the function's closing `}`):
 
@@ -1484,7 +1484,7 @@ Delete the block at the bottom of `DeadlineBlockerScreen` (after the `errorMessa
     }
 ```
 
-- [ ] **Step 4: Run tests and assemble**
+- [x] **Step 4: Run tests and assemble**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
@@ -1492,7 +1492,7 @@ Expected: `BUILD SUCCESSFUL`.
 Run: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt
