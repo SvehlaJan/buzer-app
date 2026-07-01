@@ -391,7 +391,7 @@ git commit -m "fix: apply inset-safe padding to all activities via shared entry 
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDurationField.kt`
 - Test: `client/androidApp/src/test/kotlin/app/buzer/android/ui/pickers/WheelDurationFieldTest.kt`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `client/androidApp/src/test/kotlin/app/buzer/android/ui/pickers/WheelDurationFieldTest.kt`:
 
@@ -442,12 +442,12 @@ class WheelDurationFieldTest {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.pickers.WheelDurationFieldTest' --console=plain`
 Expected: compile failure — `totalDurationMinutes`, `durationWheelStart`, `formatDuration`, and `canConfirmDuration` are unresolved references.
 
-- [ ] **Step 3: Implement WheelDurationField**
+- [x] **Step 3: Implement WheelDurationField**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDurationField.kt`:
 
@@ -570,12 +570,12 @@ fun WheelDurationField(
 If the compiler reports that `WheelTextPicker`'s parameters don't match (e.g. a required `rowCount` or `style` with no default), check the actual signature with
 `npx ctx7@latest docs /commandiron/wheelpickercompose "WheelTextPicker composable full parameter list and defaults"` and adjust the call — the parameter names/behavior described here (`texts`, `startIndex`, `size`, `onScrollFinished`) are confirmed from the library's documented usage examples, but exact default values were not independently verified against the library's source.
 
-- [ ] **Step 4: Run the test and verify GREEN**
+- [x] **Step 4: Run the test and verify GREEN**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.pickers.WheelDurationFieldTest' --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Add a Compose Preview for device-free visual verification**
+- [ ] **Step 5: Add a Compose Preview for device-free visual verification** — deferred: `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module; adding it is out of this task's two-file scope. Tracked as a follow-up (see spawned background task) rather than silently skipped.
 
 Append to `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDurationField.kt`:
 
@@ -589,12 +589,12 @@ private fun WheelDurationFieldPreview() {
 }
 ```
 
-- [ ] **Step 6: Run the broad unit test suite**
+- [x] **Step 6: Run the broad unit test suite**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDurationField.kt \
@@ -759,9 +759,9 @@ If the compiler reports missing required parameters on `WheelDateTimePicker` (fo
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.pickers.WheelDateTimeFieldTest' --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Add a Compose Preview**
+- [ ] **Step 5: Add a Compose Preview** — skip this step. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
 
-Append to `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDateTimeField.kt`:
+(Reference only, not to be added — kept here for when preview tooling is added later:)
 
 ```kotlin
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
@@ -1205,9 +1205,9 @@ Delete the entire date/time picker dialog block (originally after the `Column { 
 
 Finally, in `validateAndSubmit()`, the call to `AddTaskFormValidator.validate(title, selectedProject, selectedAssignee, deadline, durationMinutes)` already matches positionally — no change needed there since `durationMinutes` is now an `Int` variable matching the validator's new `Int` parameter.
 
-- [ ] **Step 6: Add a Compose Preview for AddTaskScreen**
+- [ ] **Step 6: Add a Compose Preview for AddTaskScreen** — skip this step. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
 
-Add near the bottom of `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`:
+(Reference only, not to be added — kept here for when preview tooling is added later:)
 
 ```kotlin
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
