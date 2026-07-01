@@ -34,7 +34,7 @@ class AddTaskFormValidatorTest {
             selectedProject = assignableProject,
             selectedAssignee = me,
             deadline = deadline,
-            durationText = "45",
+            durationMinutes = 45,
             zoneId = zone
         )
 
@@ -53,7 +53,7 @@ class AddTaskFormValidatorTest {
             selectedProject = personalProject,
             selectedAssignee = null,
             deadline = deadline,
-            durationText = "30",
+            durationMinutes = 30,
             zoneId = zone
         )
 
@@ -64,21 +64,21 @@ class AddTaskFormValidatorTest {
 
     @Test
     fun rejectsBlankTitle() {
-        val result = AddTaskFormValidator.validate("", assignableProject, me, deadline, "45", zone)
+        val result = AddTaskFormValidator.validate("", assignableProject, me, deadline, 45, zone)
 
         assertEquals(AddTaskFormResult.Invalid("Title is required"), result)
     }
 
     @Test
     fun rejectsMissingProject() {
-        val result = AddTaskFormValidator.validate("Buy milk", null, me, deadline, "45", zone)
+        val result = AddTaskFormValidator.validate("Buy milk", null, me, deadline, 45, zone)
 
         assertEquals(AddTaskFormResult.Invalid("Project is required"), result)
     }
 
     @Test
     fun rejectsMissingAssigneeForAssignableProject() {
-        val result = AddTaskFormValidator.validate("Buy milk", assignableProject, null, deadline, "45", zone)
+        val result = AddTaskFormValidator.validate("Buy milk", assignableProject, null, deadline, 45, zone)
 
         assertEquals(AddTaskFormResult.Invalid("Assignee is required for this project"), result)
     }
@@ -90,7 +90,7 @@ class AddTaskFormValidatorTest {
             selectedProject = assignableProject,
             selectedAssignee = AddTaskAssigneeOption("Me", ""),
             deadline = deadline,
-            durationText = "45",
+            durationMinutes = 45,
             zoneId = zone
         )
 
@@ -99,18 +99,8 @@ class AddTaskFormValidatorTest {
 
     @Test
     fun rejectsMissingDeadline() {
-        val result = AddTaskFormValidator.validate("Buy milk", assignableProject, me, null, "45", zone)
+        val result = AddTaskFormValidator.validate("Buy milk", assignableProject, me, null, 45, zone)
 
         assertEquals(AddTaskFormResult.Invalid("Deadline is required"), result)
-    }
-
-    @Test
-    fun rejectsInvalidDuration() {
-        val result = AddTaskFormValidator.validate("Buy milk", assignableProject, me, deadline, "0", zone)
-
-        assertEquals(
-            AddTaskFormResult.Invalid("Duration must be a positive whole number of minutes"),
-            result
-        )
     }
 }

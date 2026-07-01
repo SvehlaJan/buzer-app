@@ -21,7 +21,7 @@ object AddTaskFormValidator {
         selectedProject: ProjectItem?,
         selectedAssignee: AddTaskAssigneeOption?,
         deadline: DateTimeSelection?,
-        durationText: String,
+        durationMinutes: Int,
         zoneId: ZoneId = ZoneId.systemDefault()
     ): AddTaskFormResult {
         val trimmedTitle = title.trim()
@@ -43,18 +43,13 @@ object AddTaskFormValidator {
             return AddTaskFormResult.Invalid("Deadline is required")
         }
 
-        val duration = durationText.trim().toIntOrNull()
-        if (duration == null || duration <= 0) {
-            return AddTaskFormResult.Invalid("Duration must be a positive whole number of minutes")
-        }
-
         return AddTaskFormResult.Valid(
             CreateTaskRequest(
                 title = trimmedTitle,
                 projectId = selectedProject.id,
                 assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
                 dueDatetime = deadline.toIsoInstantString(zoneId),
-                durationMinutes = duration
+                durationMinutes = durationMinutes
             )
         )
     }

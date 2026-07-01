@@ -8,22 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
@@ -45,16 +36,14 @@ import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.datetime.datePickerMillisToLocalDate
-import app.buzer.android.ui.datetime.localDateToDatePickerMillis
+import app.buzer.android.ui.pickers.WheelDateTimeField
+import app.buzer.android.ui.pickers.WheelDurationField
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectItem
-import java.time.LocalDate
-import java.time.LocalDateTime
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,14 +91,10 @@ fun AddTaskScreen(
     var projectMenuExpanded by remember { mutableStateOf(false) }
     var selectedAssignee by remember { mutableStateOf<AddTaskAssigneeOption?>(null) }
     var deadline by remember { mutableStateOf<DateTimeSelection?>(null) }
-    var durationMinutes by remember { mutableStateOf("") }
+    var durationMinutes by remember { mutableStateOf(30) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var pendingDate by remember { mutableStateOf<LocalDate?>(null) }
-    val defaultDateTime = remember { LocalDateTime.now().plusHours(1) }
     val projectFeedbackMessage = AddTaskProjectLoadFeedback.message(
         projectsLoading = projectsLoading,
         projects = projects,
@@ -329,32 +314,26 @@ fun AddTaskScreen(
             }
         }
 
-        OutlinedButton(
-            onClick = {
-                showDatePicker = true
+        WheelDateTimeField(
+            selection = deadline,
+            onSelectionChange = {
+                deadline = it
                 errorText = null
             },
+            label = "Deadline picker",
             enabled = !submitState.formDisabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "Deadline picker" }
-        ) {
-            Text(deadline?.formatForDisplay() ?: "No deadline selected")
-        }
+            modifier = Modifier.fillMaxWidth()
+        )
 
-        OutlinedTextField(
-            value = durationMinutes,
-            onValueChange = {
+        WheelDurationField(
+            minutes = durationMinutes,
+            onMinutesChange = {
                 durationMinutes = it
                 errorText = null
             },
+            label = "Duration minutes input",
             enabled = !submitState.formDisabled,
-            label = { Text("Duration minutes") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "Duration minutes input" }
+            modifier = Modifier.fillMaxWidth()
         )
 
         errorText?.let { Text(it) }
@@ -374,82 +353,6 @@ fun AddTaskScreen(
         ) {
             Text("Back")
         }
-    }
-
-    val initialDate = deadline?.date ?: LocalDate.now()
-    val initialHour = deadline?.hour ?: defaultDateTime.hour
-    val initialMinute = deadline?.minute ?: 0
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = localDateToDatePickerMillis(initialDate)
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { selectedMillis ->
-                            pendingDate = datePickerMillisToLocalDate(selectedMillis)
-                            showDatePicker = false
-                            showTimePicker = true
-                        }
-                    },
-                    enabled = !submitState.formDisabled && datePickerState.selectedDateMillis != null
-                ) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    if (showTimePicker) {
-        val timePickerState = rememberTimePickerState(
-            initialHour = initialHour,
-            initialMinute = initialMinute,
-            is24Hour = true
-        )
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            title = { Text("Select deadline time") },
-            text = {
-                TimePicker(state = timePickerState)
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        deadline = DateTimeSelection(
-                            date = pendingDate ?: initialDate,
-                            hour = timePickerState.hour,
-                            minute = timePickerState.minute
-                        )
-                        showTimePicker = false
-                        pendingDate = null
-                        errorText = null
-                    },
-                    enabled = !submitState.formDisabled
-                ) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showTimePicker = false
-                        pendingDate = null
-                    }
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 
     projectLoadDialogMessage?.let { message ->
