@@ -797,7 +797,7 @@ git commit -m "feat: add WheelDateTimeField combined date and time picker"
 
 `AddTaskFormValidator.validate` currently takes `durationText: String` and parses/validates it itself. Once `AddTaskScreen` holds an `Int` from `WheelDurationField` (which already guarantees a positive value before it can be confirmed), that parsing is dead weight — the validator should take the `Int` directly.
 
-- [ ] **Step 1: Update the validator test to the new signature (RED)**
+- [x] **Step 1: Update the validator test to the new signature (RED)**
 
 Edit `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`. Replace every `durationText = "45"` / `durationText = "30"` / positional `"45"` argument with `durationMinutes = 45` / `durationMinutes = 30` (named), and delete the `rejectsInvalidDuration` test entirely (that state — a non-numeric or non-positive duration string — can no longer occur once the caller passes a validated `Int`). The full updated file:
 
@@ -910,12 +910,12 @@ class AddTaskFormValidatorTest {
 }
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.addtask.AddTaskFormValidatorTest' --console=plain`
 Expected: compile failure — no `validate` overload matches `durationMinutes: Int` yet.
 
-- [ ] **Step 3: Update the validator**
+- [x] **Step 3: Update the validator**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`. Replace the whole `validate` function:
 
@@ -1006,12 +1006,12 @@ with:
     }
 ```
 
-- [ ] **Step 4: Run the test and verify GREEN**
+- [x] **Step 4: Run the test and verify GREEN**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.ui.addtask.AddTaskFormValidatorTest' --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Migrate AddTaskScreen's state and imports**
+- [x] **Step 5: Migrate AddTaskScreen's state and imports**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`.
 
@@ -1205,7 +1205,7 @@ Delete the entire date/time picker dialog block (originally after the `Column { 
 
 Finally, in `validateAndSubmit()`, the call to `AddTaskFormValidator.validate(title, selectedProject, selectedAssignee, deadline, durationMinutes)` already matches positionally — no change needed there since `durationMinutes` is now an `Int` variable matching the validator's new `Int` parameter.
 
-- [ ] **Step 6: Add a Compose Preview for AddTaskScreen** — skip this step. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
+- [x] **Step 6: Add a Compose Preview for AddTaskScreen** — skipped. `androidApp` has no `androidx.compose.ui:ui-tooling-preview`/`ui-tooling` dependency and no existing `@Preview` usage anywhere in the module (confirmed during Task 4); adding one is out of scope here and tracked as a separate follow-up. Do not attempt to add the dependency yourself.
 
 (Reference only, not to be added — kept here for when preview tooling is added later:)
 
@@ -1225,7 +1225,7 @@ private fun AddTaskScreenPreview() {
 }
 ```
 
-- [ ] **Step 7: Run tests and assemble**
+- [x] **Step 7: Run tests and assemble**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
@@ -1233,7 +1233,7 @@ Expected: `BUILD SUCCESSFUL`.
 Run: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt \
