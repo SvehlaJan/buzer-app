@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.runtime)
     implementation(libs.compose.ui)
+    implementation(libs.wheel.picker.compose)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
