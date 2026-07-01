@@ -6,7 +6,10 @@ import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
@@ -96,9 +99,20 @@ class BuzerApiClient(
     }
 }
 
-private fun defaultHttpClient(token: String): HttpClient =
-    HttpClient {
+private const val DEFAULT_TIMEOUT_MILLIS = 5_000L
+
+internal fun defaultHttpClient(
+    token: String,
+    timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
+    engine: HttpClientEngine? = null
+): HttpClient {
+    val config: HttpClientConfig<*>.() -> Unit = {
         expectSuccess = true
+        install(HttpTimeout) {
+            connectTimeoutMillis = timeoutMillis
+            requestTimeoutMillis = timeoutMillis
+            socketTimeoutMillis = timeoutMillis
+        }
         install(Logging) {
             logger = object : Logger {
                 override fun log(message: String) {
@@ -115,6 +129,8 @@ private fun defaultHttpClient(token: String): HttpClient =
             bearerAuth(token)
         }
     }
+    return if (engine != null) HttpClient(engine, config) else HttpClient(config)
+}
 
 internal val buzerApiJson: Json = Json {
     ignoreUnknownKeys = true
