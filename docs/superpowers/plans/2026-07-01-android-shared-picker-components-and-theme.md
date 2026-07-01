@@ -183,7 +183,7 @@ git commit -m "feat: add shared spacing tokens and BuzerTheme wrapper"
 
 `BuzerApp` (in `App.kt`) currently wraps itself in `MaterialTheme { Surface { InsetSafeContent { ... } } }`. If `setBuzerContent` also applies `BuzerTheme`/`InsetSafeContent` around whatever it's given, and `MainActivity` calls `setBuzerContent { BuzerApp(...) }`, `BuzerApp`'s own wrapping would nest `Modifier.safeDrawingPadding()` twice — double-applying system-bar padding. So `BuzerApp` must stop wrapping itself in this task, and rely on `setBuzerContent` for both theme and insets, same as every other Activity.
 
-- [ ] **Step 1: Add `setBuzerContent` to StatusComponents.kt**
+- [x] **Step 1: Add `setBuzerContent` to StatusComponents.kt**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`. Add these imports near the top (alongside the existing `androidx.compose.*` imports):
 
@@ -207,7 +207,7 @@ fun ComponentActivity.setBuzerContent(content: @Composable () -> Unit) {
 }
 ```
 
-- [ ] **Step 2: Remove BuzerApp's own theme/insets wrapping**
+- [x] **Step 2: Remove BuzerApp's own theme/insets wrapping**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt`. Replace:
 
@@ -297,7 +297,7 @@ with:
 
 Remove the now-unused imports `androidx.compose.material3.MaterialTheme` and `app.buzer.android.ui.status.InsetSafeContent` from this file (the `Surface`/`Column`/etc. imports stay).
 
-- [ ] **Step 3: Wire MainActivity through setBuzerContent**
+- [x] **Step 3: Wire MainActivity through setBuzerContent**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt`. Replace:
 
@@ -327,7 +327,7 @@ with:
 
 (the rest of the `BuzerApp(...)` call and its closing `}` and `)` are unchanged).
 
-- [ ] **Step 4: Wire StartBlockerActivity through setBuzerContent**
+- [x] **Step 4: Wire StartBlockerActivity through setBuzerContent**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/blockers/StartBlockerActivity.kt`. Replace:
 
@@ -355,15 +355,15 @@ with:
             StartBlockerScreen(
 ```
 
-- [ ] **Step 5: Wire DeadlineBlockerActivity through setBuzerContent**
+- [x] **Step 5: Wire DeadlineBlockerActivity through setBuzerContent**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`. Same replacement as Step 4: swap the `androidx.activity.compose.setContent` import for `app.buzer.android.ui.status.setBuzerContent`, and in `showBlocker`, change `setContent {` to `setBuzerContent {` (the call wraps `DeadlineBlockerScreen(...)`).
 
-- [ ] **Step 6: Wire MorningReviewActivity through setBuzerContent**
+- [x] **Step 6: Wire MorningReviewActivity through setBuzerContent**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`. Same replacement: swap the `androidx.activity.compose.setContent` import for `app.buzer.android.ui.status.setBuzerContent`, and change `setContent {` to `setBuzerContent {` (the call wraps `MorningReviewScreen(...)`).
 
-- [ ] **Step 7: Run the full test suite and assemble**
+- [x] **Step 7: Run the full test suite and assemble**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
@@ -371,7 +371,7 @@ Expected: `BUILD SUCCESSFUL`.
 Run: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt \
