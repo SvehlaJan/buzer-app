@@ -2,7 +2,6 @@ package app.buzer.android.blockers
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,6 +14,7 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.StartBlockerScreen
+import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -125,7 +125,7 @@ class StartBlockerActivity : ComponentActivity() {
 
     private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         AppLog.debug("start_blocker show taskId=$taskId")
-        setContent {
+        setBuzerContent {
             StartBlockerScreen(
                 onStart = {
                     AppLog.info("start_blocker start_clicked taskId=$taskId")

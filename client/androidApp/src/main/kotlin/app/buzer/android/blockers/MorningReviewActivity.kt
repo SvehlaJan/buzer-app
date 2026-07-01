@@ -2,7 +2,6 @@ package app.buzer.android.blockers
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,6 +16,7 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.ScheduledAlarm
 import app.buzer.android.ui.screens.MorningReviewScreen
 import app.buzer.android.ui.screens.buildMorningReviewContentState
+import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
@@ -188,7 +188,7 @@ class MorningReviewActivity : ComponentActivity() {
             runRefresh(coordinator)
         }
 
-        setContent {
+        setBuzerContent {
             MorningReviewScreen(
                 invalidTasks = invalidTasks,
                 onRepair = { taskId, request ->

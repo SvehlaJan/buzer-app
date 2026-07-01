@@ -2,7 +2,6 @@ package app.buzer.android
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -14,6 +13,7 @@ import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.EnforcementRefreshRunner
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.ui.BuzerApp
+import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotReducer
@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             .getOrNull()
         refreshEnforcement()
         val openAddTask = intent.getBooleanExtra(AddTaskWidgetProvider.EXTRA_OPEN_ADD_TASK, false)
-        setContent {
+        setBuzerContent {
             BuzerApp(
                 openAddTask = openAddTask,
                 snapshot = snapshotViewState,

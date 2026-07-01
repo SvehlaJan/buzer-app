@@ -1,5 +1,7 @@
 package app.buzer.android.ui.status
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.buzer.android.ui.theme.BuzerTheme
 
 @Composable
 fun InsetSafeContent(
@@ -30,6 +33,16 @@ fun InsetSafeContent(
             .safeDrawingPadding()
     ) {
         content()
+    }
+}
+
+fun ComponentActivity.setBuzerContent(content: @Composable () -> Unit) {
+    setContent {
+        BuzerTheme {
+            InsetSafeContent {
+                content()
+            }
+        }
     }
 }
 

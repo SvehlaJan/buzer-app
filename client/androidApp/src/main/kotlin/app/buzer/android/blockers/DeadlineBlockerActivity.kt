@@ -2,7 +2,6 @@ package app.buzer.android.blockers
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -15,6 +14,7 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
+import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -125,7 +125,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
 
     private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
         AppLog.debug("deadline_blocker show taskId=$taskId")
-        setContent {
+        setBuzerContent {
             DeadlineBlockerScreen(
                 onDone = {
                     AppLog.info("deadline_blocker done_clicked taskId=$taskId")
