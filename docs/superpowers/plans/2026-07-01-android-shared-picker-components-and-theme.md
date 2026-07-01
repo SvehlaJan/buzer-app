@@ -50,7 +50,7 @@ Out of scope for this plan (see spec): retrofitting `Spacing` onto existing unto
 
 This task only adds the dependency and confirms it resolves and compiles — no code uses it yet. This is deliberately isolated so a resolution/version problem with the archived `dev.chrisbanes.snapper` transitive dependency surfaces immediately, not after other work is built on top of it.
 
-- [ ] **Step 1: Add the JitPack repository**
+- [x] **Step 1: Add the JitPack repository**
 
 Edit `client/settings.gradle.kts`. Current content (relevant block):
 
@@ -77,7 +77,7 @@ dependencyResolutionManagement {
 }
 ```
 
-- [ ] **Step 2: Add the version catalog entry**
+- [x] **Step 2: Add the version catalog entry**
 
 Edit `client/gradle/libs.versions.toml`. In `[versions]`, add a line after `ktor = "3.5.0"`:
 
@@ -91,7 +91,7 @@ In `[libraries]`, add a line after the `ktor-serialization-kotlinx-json` entry:
 wheel-picker-compose = { module = "com.github.commandiron:WheelPickerCompose", version.ref = "wheelPickerCompose" }
 ```
 
-- [ ] **Step 3: Add the dependency to androidApp**
+- [x] **Step 3: Add the dependency to androidApp**
 
 Edit `client/androidApp/build.gradle.kts`. In the `dependencies { }` block, add after `implementation(libs.compose.ui)`:
 
@@ -99,14 +99,14 @@ Edit `client/androidApp/build.gradle.kts`. In the `dependencies { }` block, add 
     implementation(libs.wheel.picker.compose)
 ```
 
-- [ ] **Step 4: Confirm the dependency resolves and compiles**
+- [x] **Step 4: Confirm the dependency resolves and compiles**
 
 Run: `cd client && ./gradlew :androidApp:compileDebugKotlin --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
 If this fails with a dependency resolution error or a version conflict involving `dev.chrisbanes.snapper`, stop here — do not proceed to Task 4/5 — and report the exact Gradle error back before deciding whether to pin a different snapper/compose version or fall back to building the wheel mechanics directly on `LazyColumn` + `SnapFlingBehavior` instead of this library.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/settings.gradle.kts client/gradle/libs.versions.toml client/androidApp/build.gradle.kts
