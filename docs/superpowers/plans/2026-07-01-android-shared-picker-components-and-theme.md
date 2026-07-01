@@ -123,7 +123,7 @@ git commit -m "build: add WheelPickerCompose dependency"
 
 Both files are pure constants / a thin `MaterialTheme` passthrough with no branching logic, consistent with how this codebase already leaves similar wrapper composables (`InsetSafeContent`, `LoadingActionButton`) unit-test-free and verified via broader screen tests and manual passes instead. No dedicated unit test is added for this task.
 
-- [ ] **Step 1: Create the spacing tokens file**
+- [x] **Step 1: Create the spacing tokens file**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/theme/Spacing.kt`:
 
@@ -141,7 +141,7 @@ object Spacing {
 }
 ```
 
-- [ ] **Step 2: Create the theme wrapper**
+- [x] **Step 2: Create the theme wrapper**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/ui/theme/BuzerTheme.kt`:
 
@@ -157,12 +157,12 @@ fun BuzerTheme(content: @Composable () -> Unit) {
 }
 ```
 
-- [ ] **Step 3: Compile**
+- [x] **Step 3: Compile**
 
 Run: `cd client && ./gradlew :androidApp:compileDebugKotlin --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/theme
