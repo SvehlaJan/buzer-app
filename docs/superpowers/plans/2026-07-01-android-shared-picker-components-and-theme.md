@@ -1506,7 +1506,7 @@ git commit -m "feat: use wheel pickers for deadline blocker reschedule"
 **Files:**
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`
 
-- [ ] **Step 1: Update imports**
+- [x] **Step 1: Update imports**
 
 Edit `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`. Remove:
 
@@ -1533,7 +1533,7 @@ import app.buzer.android.ui.pickers.WheelDateTimeField
 import app.buzer.android.ui.pickers.WheelDurationField
 ```
 
-- [ ] **Step 2: Replace the repair state and form fields**
+- [x] **Step 2: Replace the repair state and form fields**
 
 Replace this state block:
 
@@ -1666,7 +1666,7 @@ with:
             )
 ```
 
-- [ ] **Step 3: Delete the date/time picker dialog block**
+- [x] **Step 3: Delete the date/time picker dialog block**
 
 Delete the block at the bottom of `MorningReviewScreen` (after the `actionErrorMessage?.let { ... }` block, before the function's closing `}`) — same shape as Task 7 Step 3, referencing this file's `deadline`/`defaultDateTime`/`showDatePicker`/`showTimePicker`/`pendingDate` names:
 
@@ -1747,7 +1747,7 @@ Delete the block at the bottom of `MorningReviewScreen` (after the `actionErrorM
     }
 ```
 
-- [ ] **Step 4: Run tests and assemble**
+- [x] **Step 4: Run tests and assemble**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
@@ -1755,7 +1755,7 @@ Expected: `BUILD SUCCESSFUL`.
 Run: `cd client && ./gradlew :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt
