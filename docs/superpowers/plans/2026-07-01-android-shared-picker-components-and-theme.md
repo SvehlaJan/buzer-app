@@ -1868,33 +1868,33 @@ git commit -m "refactor: delete dead millis-conversion helpers"
 **Files:**
 - Create: `docs/handoffs/2026-07-01-android-shared-picker-components-and-theme.md`
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 2: Point the build at a local backend over LAN**
+- [x] **Step 2: Point the build at a local backend over LAN** — done via the documented deterministic lane instead: `tools/fake-backend` on 18433 reached over USB `adb reverse` (no live-Todoist side effects, no same-Wi-Fi dependency); see handoff.
 
 Since the dev machine and test device are not guaranteed to be on Tailscale, but are confirmed to be on the same local network: start the backend locally (`cd backend && npm start`, or whatever the project's existing local-run command is per `docs/handoffs/2026-06-14-local-backend-e2e-testing.md`), find the Mac's LAN IP (`ipconfig getifaddr en0` on macOS Wi-Fi, or the equivalent for the active interface), and set `BUZER_BACKEND_BASE_URL=http://<mac-lan-ip>:<port>` in `client/local.properties`.
 
-- [ ] **Step 3: Install on the connected device**
+- [x] **Step 3: Install on the connected device**
 
 Run: `cd client && ./gradlew :androidApp:installDebug --console=plain` (or the project's existing `scripts/adb-verify.sh install` helper if the device serial needs to be specified).
 Expected: install succeeds.
 
-- [ ] **Step 4: Manually verify insets on all three blocker Activities**
+- [x] **Step 4: Manually verify insets on all three blocker Activities**
 
 Trigger a start blocker, a deadline blocker, and open Morning Review (via Home's "Morning review" action) on the real device. Confirm none of the three show content under the status bar or navigation bar — this was the original gap this plan closes.
 
-- [ ] **Step 5: Manually verify the wheel pickers**
+- [x] **Step 5: Manually verify the wheel pickers**
 
 On the device: open Add Task and confirm the duration wheel (hours 0-6, minutes in 5-minute steps) and the combined date+time wheel both scroll, snap to a value, and the confirmed value appears on the field button. Trigger a deadline blocker's Reschedule flow and Morning Review's Repair flow and confirm the same for each.
 
-- [ ] **Step 6: Write the handoff**
+- [x] **Step 6: Write the handoff**
 
 Create `docs/handoffs/2026-07-01-android-shared-picker-components-and-theme.md` following the template in `docs/handoffs/README.md`, recording: the plan reference, files changed per task, every verification command and result (including the RED/GREEN evidence from Tasks 4-6), the manual insets/wheel-picker verification results from Steps 4-5, and any open issues (for example, if `WheelTextPicker`/`WheelDateTimePicker`'s actual required parameters differed from what Tasks 4-5 assumed, record what changed and why).
 
-- [ ] **Step 7: Commit the handoff**
+- [x] **Step 7: Commit the handoff**
 
 ```bash
 git add docs/handoffs/2026-07-01-android-shared-picker-components-and-theme.md
