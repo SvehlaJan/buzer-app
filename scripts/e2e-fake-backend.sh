@@ -50,8 +50,13 @@ else
   wait_for_fake_backend
 fi
 
+# CI sets BUZER_GMD_GPU (e.g. swiftshader_indirect) to force the managed-device
+# emulator GPU mode on GPU-less runners; unset locally, the flag is omitted.
+GMD_GPU_ARG="${BUZER_GMD_GPU:+-Pandroid.testoptions.manageddevices.emulator.gpu=${BUZER_GMD_GPU}}"
+
 cd "${ROOT_DIR}/client"
 ./gradlew pixel8Api34DebugAndroidTest --rerun-tasks \
+  ${GMD_GPU_ARG:+"${GMD_GPU_ARG}"} \
   -PBUZER_BACKEND_BASE_URL="${EMULATOR_BACKEND_URL}" \
   -PBUZER_BACKEND_TOKEN="${TOKEN}" \
   -PBUZER_ASSIGNEE_ME_ID="${BUZER_ASSIGNEE_ME_ID:-user-me}" \
