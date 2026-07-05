@@ -39,7 +39,7 @@ Out of scope (per spec): picker-flow Compose tests, `manual-verify.sh`, Maestro,
 **Files:**
 - Create: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Create the working branch**
+- [x] **Step 1: Create the working branch**
 
 From the repo root (`/Users/svehla/playground/buzer-app`), with a clean tree on `master`:
 
@@ -51,7 +51,7 @@ git checkout -b feature/ci-workflows
 
 Expected: `Switched to a new branch 'feature/ci-workflows'`.
 
-- [ ] **Step 2: Create the workflow file**
+- [x] **Step 2: Create the workflow file**
 
 Create `.github/workflows/ci.yml` (this also creates the `.github/workflows/` directories) with exactly this content:
 
@@ -132,7 +132,7 @@ jobs:
 
 Why these choices (context, not instructions): the Android SDK is preinstalled on `ubuntu-latest` with `ANDROID_HOME` set, so no `local.properties` is needed on CI; the `BUZER_BACKEND_*` build-config values fall back to `""` via `backendConfigValue()` in `client/androidApp/build.gradle.kts`, which compiles fine. The script names `test`, `typecheck`, `build` all exist in `backend/package.json`; `test` exists in `tools/fake-backend/package.json`.
 
-- [ ] **Step 3: Lint the workflow if actionlint is available**
+- [x] **Step 3: Lint the workflow if actionlint is available**
 
 ```bash
 command -v actionlint >/dev/null && actionlint .github/workflows/ci.yml || echo "actionlint not installed - skipping (GitHub validates on push)"
@@ -140,7 +140,7 @@ command -v actionlint >/dev/null && actionlint .github/workflows/ci.yml || echo 
 
 Expected: either no output from actionlint (clean), or the skip message. If actionlint reports errors, fix them before continuing; do not proceed with reported syntax errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/ci.yml
@@ -158,7 +158,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 Gradle Managed Devices sometimes fails to boot the emulator on GPU-less CI machines unless the GPU mode is forced to `swiftshader_indirect`. This hook lets CI set it via env without changing local behavior (locally the variable is unset, so the flag is omitted entirely).
 
-- [ ] **Step 1: Apply the edit**
+- [x] **Step 1: Apply the edit**
 
 In `scripts/e2e-fake-backend.sh`, replace exactly this block (currently the last lines of the file):
 
@@ -183,7 +183,7 @@ cd "${ROOT_DIR}/client"
 
 The remaining `-P` lines of the gradlew invocation are unchanged. Note the `${GMD_GPU_ARG:+"${GMD_GPU_ARG}"}` form is deliberate: it expands to nothing when the variable is empty and stays safe under `set -u` on macOS's bash 3.2. Do not "simplify" it to `"${GMD_GPU_ARG}"` (which would pass an empty argument to gradle and fail) or to an array (bash 3.2 + `set -u` breaks on empty arrays).
 
-- [ ] **Step 2: Syntax-check the script**
+- [x] **Step 2: Syntax-check the script**
 
 ```bash
 bash -n scripts/e2e-fake-backend.sh && echo SYNTAX_OK
@@ -191,7 +191,7 @@ bash -n scripts/e2e-fake-backend.sh && echo SYNTAX_OK
 
 Expected: `SYNTAX_OK`.
 
-- [ ] **Step 3: Verify the expansion logic in isolation**
+- [x] **Step 3: Verify the expansion logic in isolation**
 
 ```bash
 BUZER_GMD_GPU=swiftshader_indirect bash -c 'set -u; GMD_GPU_ARG="${BUZER_GMD_GPU:+-Pandroid.testoptions.manageddevices.emulator.gpu=${BUZER_GMD_GPU}}"; echo "[${GMD_GPU_ARG}]"'
@@ -205,7 +205,7 @@ Expected output, exactly two lines across the two commands:
 []
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/e2e-fake-backend.sh
@@ -221,7 +221,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 **Files:**
 - Create: `.github/workflows/emulator-e2e.yml`
 
-- [ ] **Step 1: Create the workflow file**
+- [x] **Step 1: Create the workflow file**
 
 Create `.github/workflows/emulator-e2e.yml` with exactly this content:
 
@@ -302,7 +302,7 @@ jobs:
 
 Notes for the reviewer (not instructions): the guard's 25-hour window (90000 s) gives the 24-hour cron slack for runner start jitter. Dispatch runs always set `run=true`. A skipped scheduled run ends green having consumed under a minute. The `BUZER_GMD_GPU` env feeds the hook added in Task 2.
 
-- [ ] **Step 2: Lint the workflow if actionlint is available**
+- [x] **Step 2: Lint the workflow if actionlint is available**
 
 ```bash
 command -v actionlint >/dev/null && actionlint .github/workflows/emulator-e2e.yml || echo "actionlint not installed - skipping (GitHub validates on push)"
@@ -310,7 +310,7 @@ command -v actionlint >/dev/null && actionlint .github/workflows/emulator-e2e.ym
 
 Expected: clean or the skip message. Fix any reported errors before continuing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/emulator-e2e.yml
@@ -328,7 +328,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 Use the Edit tool (not sed/awk) for both edits.
 
-- [ ] **Step 1: Replace the UI-hierarchy bullet in section 2**
+- [x] **Step 1: Replace the UI-hierarchy bullet in section 2**
 
 Replace exactly this text:
 
@@ -356,7 +356,7 @@ with:
   reading the whole thing.
 ```
 
-- [ ] **Step 2: Extend the android-cli bullet in section 5**
+- [x] **Step 2: Extend the android-cli bullet in section 5**
 
 Replace exactly this text:
 
@@ -374,7 +374,7 @@ with:
   log/dumpsys/alarm checks.
 ```
 
-- [ ] **Step 3: Sanity-check the result**
+- [x] **Step 3: Sanity-check the result**
 
 ```bash
 rg -c "android layout" docs/notes/2026-06-12-agent-token-efficient-android-testing.md
@@ -382,7 +382,7 @@ rg -c "android layout" docs/notes/2026-06-12-agent-token-efficient-android-testi
 
 Expected: `2` (one occurrence in each edited section, counting the `--diff` line as part of the same fenced block — a count of 2 or 3 is acceptable; 0 means an edit did not land).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/notes/2026-06-12-agent-token-efficient-android-testing.md
@@ -398,7 +398,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 **Files:**
 - Create: `docs/handoffs/2026-07-04-ci-workflows.md`
 
-- [ ] **Step 1: Push the branch**
+- [x] **Step 1: Push the branch**
 
 ```bash
 git push -u origin feature/ci-workflows
@@ -406,7 +406,7 @@ git push -u origin feature/ci-workflows
 
 Expected: new branch on origin. This push triggers `ci.yml` (its `push` trigger works on any branch containing the file). The emulator workflow does NOT trigger and CANNOT be dispatched yet — it is not on `master`.
 
-- [ ] **Step 2: Check gh availability**
+- [x] **Step 2: Check gh availability**
 
 ```bash
 gh auth status
@@ -416,7 +416,7 @@ If this reports you are logged in: continue to Step 3 using the `gh` commands sh
 
 If it errors (not logged in / not installed): **STOP and ask the user** to either (a) run `gh auth login` themselves in a terminal, or (b) open https://github.com/SvehlaJan/buzer-app/actions in a browser and report the run results back to you. Do not run `gh auth login` yourself; do not ask for or handle tokens. Resume once you have one of the two.
 
-- [ ] **Step 3: Verify the CI run is green**
+- [x] **Step 3: Verify the CI run is green**
 
 ```bash
 gh run list --workflow=ci.yml --branch=feature/ci-workflows --limit 3
@@ -427,7 +427,7 @@ Expected: the run completes with conclusion `success` for both jobs (`client`, `
 
 If it fails: read the failing job log (`gh run view <run-id> --log-failed`), fix the workflow or the underlying issue on this branch, commit, push, and re-verify. Do not merge a red workflow to master. If the failure is not understandable, stop and report the exact log excerpt to the user.
 
-- [ ] **Step 4: Merge to master and push**
+- [x] **Step 4: Merge to master and push**
 
 Only after Step 3 is green:
 
@@ -440,7 +440,7 @@ git push
 
 Expected: fast-forward merge, push succeeds. This push triggers `ci.yml` again on master (expected green — same code) and makes `emulator-e2e.yml` dispatchable.
 
-- [ ] **Step 5: Dispatch the emulator workflow and watch it**
+- [x] **Step 5: Dispatch the emulator workflow and watch it**
 
 ```bash
 gh workflow run emulator-e2e.yml
@@ -456,14 +456,14 @@ Known failure modes and what to do:
 - Fake backend fails to start: check the `Install fake backend dependencies` step ran (`npm ci`) and that `scripts/e2e-fake-backend.sh` was invoked from the repo root (the workflow's default working directory is the repo root; do not add a `working-directory` to that step).
 - Disk-space errors: stop and report; do not add third-party "free disk space" actions without asking.
 
-- [ ] **Step 6: Delete the feature branch**
+- [x] **Step 6: Delete the feature branch**
 
 ```bash
 git branch -d feature/ci-workflows
 git push origin --delete feature/ci-workflows
 ```
 
-- [ ] **Step 7: Write the handoff**
+- [x] **Step 7: Write the handoff**
 
 Create `docs/handoffs/2026-07-04-ci-workflows.md` following the template in `docs/handoffs/README.md` (`# Handoff: <name>`, Date, Agent, Plan, then sections: Scope, Completed, Verification, Decisions And Assumptions, Open Issues, Next Step). Record with real values from this session:
 
@@ -474,7 +474,7 @@ Create `docs/handoffs/2026-07-04-ci-workflows.md` following the template in `doc
 - Open Issues: the schedule-skip guard has not been observed on a real scheduled run yet (verifiable after one idle day); system image re-downloads each emulator run (~1–2 min, acceptable per spec).
 - Next Step: observe the first scheduled nightly run; then consider the parked follow-ups (picker-flow Compose tests, `manual-verify.sh`).
 
-- [ ] **Step 8: Tick this plan's checkboxes, commit, push**
+- [x] **Step 8: Tick this plan's checkboxes, commit, push**
 
 Update the checkboxes in `docs/superpowers/plans/2026-07-04-ci-workflows.md` for all completed steps (use the Edit tool), then:
 
