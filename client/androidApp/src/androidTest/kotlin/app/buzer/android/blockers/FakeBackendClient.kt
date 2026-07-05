@@ -89,6 +89,20 @@ class FakeBackendClient(
     }
 
     private fun request(method: String, path: String, body: String = "{}"): String {
+        // The CI emulator's guest network can drop for several seconds at a time; all
+        // control endpoints are idempotent, so ride out connectivity blips by retrying.
+        val deadline = System.currentTimeMillis() + CONNECTIVITY_RETRY_WINDOW_MILLIS
+        while (true) {
+            try {
+                return requestOnce(method, path, body)
+            } catch (error: java.io.IOException) {
+                if (System.currentTimeMillis() >= deadline) throw error
+                Thread.sleep(1_000)
+            }
+        }
+    }
+
+    private fun requestOnce(method: String, path: String, body: String): String {
         val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.connectTimeout = 5_000
@@ -111,5 +125,9 @@ class FakeBackendClient(
         } finally {
             connection.disconnect()
         }
+    }
+
+    private companion object {
+        const val CONNECTIVITY_RETRY_WINDOW_MILLIS = 20_000L
     }
 }
