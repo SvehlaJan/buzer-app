@@ -195,8 +195,9 @@ class BlockerActivityFakeBackendTest {
         try {
             ActivityScenario.launch(MainActivity::class.java)
 
-            waitForText("Refresh failed")
-            composeRule.onNodeWithText("Refresh failed").assertIsDisplayed()
+            waitForText("500")
+            composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Retry").assertIsDisplayed()
         } finally {
             fakeBackend.setFailSnapshot(false)
         }
@@ -236,7 +237,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun morningReview_repairBackendFailureHidesAndWritesErrorLog() {
+    fun morningReview_repairBackendFailureShowsErrorAndStaysOpen() {
         resetTestState()
         fakeBackend.setFailActions(true)
         try {
@@ -247,9 +248,11 @@ class BlockerActivityFakeBackendTest {
             selectDefaultRepairDeadline()
             composeRule.onNodeWithText("Save repair").performClick()
 
-            waitForActivityDestroyed(scenario)
             waitForRecordedCall("/tasks/task-invalid/reschedule")
             waitForErrorLog("action=RESCHEDULE_TASK taskId=task-invalid", "500")
+            waitForText("500")
+            composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+            assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
         }
@@ -278,7 +281,7 @@ class BlockerActivityFakeBackendTest {
     private fun waitForText(text: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             runCatching {
-                composeRule.onNodeWithText(text).assertIsDisplayed()
+                composeRule.onNodeWithText(text, substring = true).assertIsDisplayed()
             }.isSuccess
         }
     }
@@ -315,6 +318,12 @@ class BlockerActivityFakeBackendTest {
             SystemClock.sleep(100)
         }
         fail("Expected blocker activity to finish, but state was ${scenario.state}")
+    }
+
+    private fun assertActivityNotDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
+        if (scenario.state == Lifecycle.State.DESTROYED) {
+            fail("Expected blocker activity to stay open, but it was destroyed")
+        }
     }
 
     private fun waitForErrorLog(vararg fragments: String) {
