@@ -9,7 +9,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -81,7 +80,6 @@ class BlockerActivityFakeBackendTest {
 
         composeRule.onNodeWithText("Reschedule").performClick()
         selectDefaultDeadline()
-        composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
         composeRule.onNodeWithText("Save reschedule").performClick()
 
         waitForActivityDestroyed(scenario)
@@ -89,7 +87,7 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.assertRecorded(
             "/tasks/task-reschedule/reschedule",
             "durationMinutes",
-            "45",
+            "30",
             "dueDatetime"
         )
     }
@@ -121,7 +119,6 @@ class BlockerActivityFakeBackendTest {
 
             composeRule.onNodeWithText("Reschedule").performClick()
             selectDefaultDeadline()
-            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
             composeRule.onNodeWithText("Save reschedule").performClick()
 
             waitForActivityDestroyed(scenario)
@@ -226,7 +223,6 @@ class BlockerActivityFakeBackendTest {
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Repair").performClick()
         selectDefaultRepairDeadline()
-        composeRule.onNodeWithContentDescription("Repair duration minutes input").performTextInput("45")
         composeRule.onNodeWithText("Save repair").performClick()
 
         waitForActivityDestroyed(scenario)
@@ -234,7 +230,7 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.assertRecorded(
             "/tasks/task-invalid/reschedule",
             "durationMinutes",
-            "45",
+            "30",
             "dueDatetime"
         )
     }
@@ -249,7 +245,6 @@ class BlockerActivityFakeBackendTest {
             waitForText("Invalid assigned fixture")
             composeRule.onNodeWithText("Repair").performClick()
             selectDefaultRepairDeadline()
-            composeRule.onNodeWithContentDescription("Repair duration minutes input").performTextInput("45")
             composeRule.onNodeWithText("Save repair").performClick()
 
             waitForActivityDestroyed(scenario)
@@ -306,12 +301,10 @@ class BlockerActivityFakeBackendTest {
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("New deadline picker").performClick()
         composeRule.onNodeWithText("OK").performClick()
-        composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun selectDefaultRepairDeadline() {
         composeRule.onNodeWithContentDescription("Repair deadline picker").performClick()
-        composeRule.onNodeWithText("OK").performClick()
         composeRule.onNodeWithText("OK").performClick()
     }
 

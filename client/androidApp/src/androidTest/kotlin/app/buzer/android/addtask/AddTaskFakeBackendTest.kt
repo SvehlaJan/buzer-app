@@ -40,7 +40,6 @@ class AddTaskFakeBackendTest {
             waitForText("Select project")
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
             composeRule.onNodeWithText("Save task").performClick()
 
             composeRule.onNodeWithText("Project is required").assertIsDisplayed()
@@ -60,7 +59,6 @@ class AddTaskFakeBackendTest {
             selectProject("Test Shared")
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
             composeRule.onNodeWithText("Save task").performClick()
             composeRule.onNodeWithText("Assignee is required for this project").assertIsDisplayed()
 
@@ -73,7 +71,7 @@ class AddTaskFakeBackendTest {
                 "\"title\":\"Buy milk\"",
                 "\"projectId\":\"project-test\"",
                 "\"assigneeId\":\"user-me\"",
-                "\"durationMinutes\":45",
+                "\"durationMinutes\":30",
                 "dueDatetime"
             )
         } finally {
@@ -92,7 +90,6 @@ class AddTaskFakeBackendTest {
             composeRule.onAllNodesWithText("Me").assertCountEquals(0)
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Personal task")
             selectDefaultDeadline()
-            composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("30")
             composeRule.onNodeWithText("Save task").performClick()
 
             waitForRecordedCall("/tasks")
@@ -144,7 +141,6 @@ class AddTaskFakeBackendTest {
                 composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
                 composeRule.onNodeWithText("Me").performClick()
                 selectDefaultDeadline()
-                composeRule.onNodeWithContentDescription("Duration minutes input").performTextInput("45")
                 composeRule.onNodeWithText("Save task").performClick()
 
                 waitForRecordedCall("/tasks")
@@ -190,7 +186,6 @@ class AddTaskFakeBackendTest {
 
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("Deadline picker").performClick()
-        composeRule.onNodeWithText("OK").performClick()
         composeRule.onNodeWithText("OK").performClick()
     }
 
