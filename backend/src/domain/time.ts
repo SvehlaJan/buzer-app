@@ -13,7 +13,8 @@ export function computeStartAt(dueDatetime: string, durationMinutes: number): st
 
   // Todoist-native semantics (decision 2026-07-05): due.datetime IS the start of the
   // committed block. Kept as a function so the semantic boundary stays explicit and
-  // validated.
+  // validated. durationMinutes is still validated here so a duration-less task can
+  // never yield a start time.
   return parseIsoTimestamp(dueDatetime, "dueDatetime").toISOString();
 }
 

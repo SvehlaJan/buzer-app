@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../../src/domain/commitmentState.js";
-import { computeStartAt } from "../../src/domain/time.js";
-
-describe("computeStartAt", () => {
-  it("returns the due datetime unchanged (due = start of block)", () => {
-    expect(computeStartAt("2026-05-08T16:00:00Z", 45)).toBe("2026-05-08T16:00:00.000Z");
-  });
-
-  it("rejects non-positive duration", () => {
-    expect(() => computeStartAt("2026-05-08T16:00:00Z", 0)).toThrow("durationMinutes must be positive");
-  });
-
-  it("rejects invalid due datetime", () => {
-    expect(() => computeStartAt("not-a-date", 30)).toThrow("dueDatetime must be a valid ISO timestamp");
-  });
-});
 
 describe("applyAction", () => {
   it("marks planned task as started", () => {

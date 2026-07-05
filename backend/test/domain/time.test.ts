@@ -11,7 +11,7 @@ describe("computeStartAt", () => {
   });
 
   it("rejects invalid timestamps", () => {
-    expect(() => computeStartAt("nope", 30)).toThrow();
+    expect(() => computeStartAt("not-a-date", 30)).toThrow("dueDatetime must be a valid ISO timestamp");
   });
 });
 
