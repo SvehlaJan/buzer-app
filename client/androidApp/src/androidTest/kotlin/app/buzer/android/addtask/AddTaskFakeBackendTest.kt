@@ -161,6 +161,7 @@ class AddTaskFakeBackendTest {
 
         val firstScenario = ActivityScenario.launch(MainActivity::class.java)
         try {
+            waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Personal (personal)")
             composeRule.onNodeWithText("Back").performClick()
@@ -170,6 +171,7 @@ class AddTaskFakeBackendTest {
 
         val secondScenario = ActivityScenario.launch(MainActivity::class.java)
         try {
+            waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             waitForText("Test Personal")
             composeRule.onNodeWithText("Test Personal").assertIsDisplayed()
