@@ -95,11 +95,15 @@ fun AddTaskScreen(
     var errorText by remember { mutableStateOf<String?>(null) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
-    val projectFeedbackMessage = AddTaskProjectLoadFeedback.message(
-        projectsLoading = projectsLoading,
-        projects = projects,
-        projectLoadError = projectLoadError
-    )
+    val projectFeedbackMessage = if (projectLoadDialogMessage != null) {
+        null
+    } else {
+        AddTaskProjectLoadFeedback.message(
+            projectsLoading = projectsLoading,
+            projects = projects,
+            projectLoadError = null
+        )
+    }
     val submitState = AddTaskSubmitState(
         submitting = submitting,
         projectsLoading = projectsLoading,
@@ -162,7 +166,6 @@ fun AddTaskScreen(
                     error
                 )
                 val message = error.message ?: "Task creation failed"
-                errorText = message
                 submitDialogMessage = message
             } finally {
                 AppLog.debug("add_task create_finished submitting=false")
