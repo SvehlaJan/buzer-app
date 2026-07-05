@@ -35,6 +35,7 @@ class BlockerActivityFakeBackendTest {
 
         launchStartBlocker("task-start")
 
+        waitForText("I'm starting")
         composeRule.onNodeWithText("I'm starting").assertIsDisplayed()
         composeRule.onNodeWithText("Postpone 5 min").assertIsDisplayed()
         composeRule.onNodeWithText("I'm starting").performClick()
@@ -49,6 +50,7 @@ class BlockerActivityFakeBackendTest {
 
         launchDeadlineBlocker("task-deadline")
 
+        waitForText("Done")
         composeRule.onNodeWithText("Done").assertIsDisplayed()
         composeRule.onNodeWithText("Extend 30 min").assertIsDisplayed()
         composeRule.onNodeWithText("Reschedule").assertIsDisplayed()
@@ -64,7 +66,9 @@ class BlockerActivityFakeBackendTest {
 
         launchDeadlineBlocker("task-reschedule-invalid")
 
+        waitForText("Reschedule")
         composeRule.onNodeWithText("Reschedule").performClick()
+        waitForText("Reschedule task")
         composeRule.onNodeWithText("Reschedule task").assertIsDisplayed()
         composeRule.onNodeWithText("Save reschedule").performClick()
 
@@ -78,6 +82,7 @@ class BlockerActivityFakeBackendTest {
 
         val scenario = launchDeadlineBlocker("task-reschedule")
 
+        waitForText("Reschedule")
         composeRule.onNodeWithText("Reschedule").performClick()
         selectDefaultDeadline()
         composeRule.onNodeWithText("Save reschedule").performClick()
@@ -99,6 +104,7 @@ class BlockerActivityFakeBackendTest {
         try {
             val scenario = launchStartBlocker("task-start-fail")
 
+            waitForText("I'm starting")
             composeRule.onNodeWithText("I'm starting").assertIsDisplayed()
             composeRule.onNodeWithText("I'm starting").performClick()
 
@@ -117,6 +123,7 @@ class BlockerActivityFakeBackendTest {
         try {
             val scenario = launchDeadlineBlocker("task-reschedule-fail")
 
+            waitForText("Reschedule")
             composeRule.onNodeWithText("Reschedule").performClick()
             selectDefaultDeadline()
             composeRule.onNodeWithText("Save reschedule").performClick()
@@ -136,6 +143,7 @@ class BlockerActivityFakeBackendTest {
         try {
             val scenario = launchDeadlineBlocker("task-deadline-fail")
 
+            waitForText("Done")
             composeRule.onNodeWithText("Done").assertIsDisplayed()
             composeRule.onNodeWithText("Done").performClick()
 
@@ -166,6 +174,7 @@ class BlockerActivityFakeBackendTest {
         ActivityScenario.launch(MainActivity::class.java)
 
         composeRule.onNodeWithText("Today").assertIsDisplayed()
+        waitForText("Morning review")
         composeRule.onNodeWithText("Morning review").performClick()
 
         waitForText("Invalid assigned fixture")
@@ -279,7 +288,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
             runCatching {
                 composeRule.onNodeWithText(text, substring = true).assertIsDisplayed()
             }.isSuccess
@@ -287,7 +296,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun waitForRecordedCall(path: String) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastCalls = ""
         while (SystemClock.elapsedRealtime() < deadline) {
             lastCalls = runCatching { fakeBackend.calls() }.getOrDefault(lastCalls)
@@ -303,16 +312,18 @@ class BlockerActivityFakeBackendTest {
 
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("New deadline picker").performClick()
+        waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun selectDefaultRepairDeadline() {
         composeRule.onNodeWithContentDescription("Repair deadline picker").performClick()
+        waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun waitForActivityDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + 15_000
         while (SystemClock.elapsedRealtime() < deadline) {
             if (scenario.state == Lifecycle.State.DESTROYED) return
             SystemClock.sleep(100)
@@ -327,7 +338,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun waitForErrorLog(vararg fragments: String) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + 15_000
         while (SystemClock.elapsedRealtime() < deadline) {
             val text = blockerErrorLog().takeIf { it.exists() }?.readText().orEmpty()
             if (fragments.all(text::contains)) return

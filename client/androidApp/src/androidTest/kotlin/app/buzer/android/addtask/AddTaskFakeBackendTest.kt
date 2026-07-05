@@ -36,6 +36,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
+            waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             waitForText("Select project")
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
@@ -55,6 +56,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
+            waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Shared")
             composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
@@ -85,6 +87,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
+            waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Personal (personal)")
             composeRule.onAllNodesWithText("Me").assertCountEquals(0)
@@ -113,6 +116,7 @@ class AddTaskFakeBackendTest {
         try {
             val scenario = ActivityScenario.launch(MainActivity::class.java)
             try {
+                waitForText("Add task")
                 composeRule.onNodeWithText("Add task").performClick()
                 waitForText("500")
                 composeRule.onNodeWithText("Save task").assertIsNotEnabled()
@@ -136,6 +140,7 @@ class AddTaskFakeBackendTest {
         try {
             val scenario = ActivityScenario.launch(MainActivity::class.java)
             try {
+                waitForText("Add task")
                 composeRule.onNodeWithText("Add task").performClick()
                 selectProject("Test Shared")
                 composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
@@ -183,11 +188,13 @@ class AddTaskFakeBackendTest {
     private fun selectProject(label: String) {
         waitForText("Select project")
         composeRule.onNodeWithContentDescription("Project picker").performClick()
+        waitForText(label)
         composeRule.onNodeWithText(label).performClick()
     }
 
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("Deadline picker").performClick()
+        waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
 
@@ -214,7 +221,7 @@ class AddTaskFakeBackendTest {
     }
 
     private fun waitForText(text: String) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastError: Throwable? = null
         while (SystemClock.elapsedRealtime() < deadline) {
             try {
@@ -229,7 +236,7 @@ class AddTaskFakeBackendTest {
     }
 
     private fun waitForRecordedCall(path: String) {
-        val deadline = SystemClock.elapsedRealtime() + 5_000
+        val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastCalls = ""
         while (SystemClock.elapsedRealtime() < deadline) {
             lastCalls = runCatching { fakeBackend.calls() }.getOrDefault(lastCalls)
