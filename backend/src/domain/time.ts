@@ -11,8 +11,19 @@ export function computeStartAt(dueDatetime: string, durationMinutes: number): st
     throw new Error("durationMinutes must be positive");
   }
 
+  // Todoist-native semantics (decision 2026-07-05): due.datetime IS the start of the
+  // committed block. Kept as a function so the semantic boundary stays explicit and
+  // validated.
+  return parseIsoTimestamp(dueDatetime, "dueDatetime").toISOString();
+}
+
+export function computeDeadlineAt(dueDatetime: string, durationMinutes: number): string {
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+    throw new Error("durationMinutes must be positive");
+  }
+
   const due = parseIsoTimestamp(dueDatetime, "dueDatetime");
-  return new Date(due.getTime() - durationMinutes * 60_000).toISOString();
+  return new Date(due.getTime() + durationMinutes * 60_000).toISOString();
 }
 
 export function addMinutes(timestamp: string, minutes: number): string {

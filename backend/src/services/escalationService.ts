@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import type { AccountabilitySender } from "../accountability/accountabilitySender.js";
 import { buildEscalationMessage } from "../accountability/escalationMessage.js";
+import { computeDeadlineAt } from "../domain/time.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
 
 export type EscalationResult =
@@ -26,7 +27,7 @@ export class EscalationService {
     if (task === null) {
       throw Object.assign(new Error("Task not found"), { code: "task_not_found", statusCode: 404 });
     }
-    if (task.dueDatetime === null) {
+    if (task.dueDatetime === null || task.durationMinutes === null) {
       throw Object.assign(new Error("Task is missing a deadline"), {
         code: "task_missing_deadline",
         statusCode: 422
@@ -35,7 +36,7 @@ export class EscalationService {
 
     const message = buildEscalationMessage({
       taskTitle: task.title,
-      deadlineAt: task.dueDatetime,
+      deadlineAt: computeDeadlineAt(task.dueDatetime, task.durationMinutes),
       dismissCount
     });
     const id = randomUUID();
@@ -55,7 +56,7 @@ export class EscalationService {
     try {
       await this.sender.sendEscalation({
         taskTitle: task.title,
-        deadlineAt: task.dueDatetime,
+        deadlineAt: computeDeadlineAt(task.dueDatetime, task.durationMinutes),
         dismissCount,
         recipient: this.recipientId
       });

@@ -27,7 +27,7 @@ describe("TaskSnapshotService", () => {
     const service = new TaskSnapshotService(repo, "user-self");
     const snapshot = service.getSnapshot("2026-05-08T08:30:00Z");
 
-    expect(snapshot.tasks[0]?.startAt).toBe("2026-05-08T11:30:00.000Z");
+    expect(snapshot.tasks[0]?.startAt).toBe("2026-05-08T12:00:00.000Z");
     expect(snapshot.tasks[0]?.validationErrors).toEqual([]);
     expect(snapshot.scheduleVersion).toBe(1);
   });

@@ -3,8 +3,8 @@ import { applyAction } from "../../src/domain/commitmentState.js";
 import { computeStartAt } from "../../src/domain/time.js";
 
 describe("computeStartAt", () => {
-  it("subtracts duration minutes from due datetime", () => {
-    expect(computeStartAt("2026-05-08T16:00:00Z", 45)).toBe("2026-05-08T15:15:00.000Z");
+  it("returns the due datetime unchanged (due = start of block)", () => {
+    expect(computeStartAt("2026-05-08T16:00:00Z", 45)).toBe("2026-05-08T16:00:00.000Z");
   });
 
   it("rejects non-positive duration", () => {
