@@ -16,7 +16,7 @@ class AlarmPlanCalculatorTest {
                 id = "task-1",
                 dueDatetime = "2026-05-28T12:00:00Z",
                 durationMinutes = 60,
-                startAt = "2026-05-28T11:00:00Z"
+                startAt = "2026-05-28T12:00:00Z"
             )
         )
 
@@ -24,9 +24,32 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("task-1", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
-                DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
-                DesiredAlarm("task-1", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+                DesiredAlarm("task-1", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
+                DesiredAlarm("task-1", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+            ),
+            plan.alarms
+        )
+        assertTrue(plan.cancelTaskIds.isEmpty())
+    }
+
+    @Test
+    fun schedulesNoDeadlineAlarmWhenDurationIsNull() {
+        val snapshot = snapshot(
+            task(
+                id = "no-duration",
+                dueDatetime = "2026-05-28T12:00:00Z",
+                durationMinutes = null,
+                startAt = "2026-05-28T12:00:00Z"
+            )
+        )
+
+        val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T09:30:00Z")
+
+        assertEquals(
+            listOf(
+                DesiredAlarm("no-duration", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                DesiredAlarm("no-duration", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z")
             ),
             plan.alarms
         )
@@ -84,7 +107,7 @@ class AlarmPlanCalculatorTest {
                 id = "already-starting",
                 dueDatetime = "2026-05-28T12:00:00Z",
                 durationMinutes = 60,
-                startAt = "2026-05-28T11:00:00Z"
+                startAt = "2026-05-28T12:00:00Z"
             )
         )
 
@@ -92,7 +115,8 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("already-starting", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+                DesiredAlarm("already-starting", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
+                DesiredAlarm("already-starting", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             plan.alarms
         )
@@ -112,7 +136,7 @@ class AlarmPlanCalculatorTest {
         state: CommitmentState = CommitmentState.planned,
         dueDatetime: String? = "2026-05-28T12:00:00Z",
         durationMinutes: Int? = 60,
-        startAt: String? = "2026-05-28T11:00:00Z",
+        startAt: String? = "2026-05-28T12:00:00Z",
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         isAssignedToUser: Boolean = true,

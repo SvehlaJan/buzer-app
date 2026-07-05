@@ -4,6 +4,7 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 enum class DesiredAlarmKind {
@@ -72,8 +73,12 @@ object AlarmPlanCalculator {
             }
         }
 
-        if (dueAt != null && dueAt > now) {
-            alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, dueAt.toString())
+        val durationMinutes = task.durationMinutes
+        if (dueAt != null && durationMinutes != null) {
+            val deadlineAt = dueAt.plus(durationMinutes.minutes)
+            if (deadlineAt > now) {
+                alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, deadlineAt.toString())
+            }
         }
 
         return alarms
