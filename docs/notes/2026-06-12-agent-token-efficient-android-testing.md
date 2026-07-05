@@ -41,9 +41,19 @@ Ordered by leverage: the first three sections save far more tokens than adopting
   adb -s 11141FDD4002R1 shell dumpsys alarm   | rg -m 20 'app.buzer'
   adb -s 11141FDD4002R1 shell dumpsys package app.buzer.android | rg 'BootReceiver|SCHEDULE_EXACT_ALARM'
   ```
-- **UI hierarchy**: `uiautomator dump` XML is 10-50x more verbose than you need. Prefer a
-  targeted log/dumpsys assertion. If a tree is unavoidable, grep the dumped XML file for the
-  one node you care about rather than reading the whole thing.
+- **UI hierarchy / on-screen navigation**: prefer the `android` CLI
+  (`/opt/homebrew/bin/android`, `android-cli` skill) over raw dumps:
+  ```bash
+  android layout --device <serial> -p        # flat JSON: text, center, interactions, state
+  android layout --device <serial> -p --diff # only what changed since the last call
+  android screen capture -a -o /tmp/shot.png # annotated screenshot when layout misses elements
+  android screen resolve --screenshot /tmp/shot.png --string "tap #3"  # label -> coordinates
+  ```
+  A `layout` JSON dump costs a fraction of a screenshot and is machine-checkable. This
+  workflow carried the 2026-07-04 wheel-picker device verification end to end.
+  `uiautomator dump` XML is 10-50x more verbose; use it only if the `android` CLI is
+  unavailable, and grep the dumped XML file for the one node you care about rather than
+  reading the whole thing.
 - **Redirect-then-grep pattern**: the Bash tool auto-persists large output to a file, but be
   deliberate — send verbose output to `/tmp` and `rg` only what you need, so the full blob
   never enters context:
@@ -103,7 +113,9 @@ UI walking becomes frequent.
 ## 5. Skills already available
 
 - `android-cli` skill — project creation, deployment, SDK management, env diagnostics via the
-  `android` CLI tool.
+  `android` CLI tool. Also the preferred on-screen navigation workflow (`android layout` /
+  `screen capture -a` / `screen resolve`, see section 2); keep `scripts/adb-verify.sh` for
+  log/dumpsys/alarm checks.
 - `testing-setup` skill — testing strategy / harness setup for native Android (unit, UI,
   screenshot, e2e).
 - `scripts/adb-verify.sh` (added 2026-06-12) canonicalizes the low-token verification commands
