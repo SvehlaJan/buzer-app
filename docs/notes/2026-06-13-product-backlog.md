@@ -91,3 +91,46 @@ Candidate behavior:
   failures such as no network, Tailscale disconnected, backend unavailable, auth failure, or server
   errors.
 - Ensure errors are logged with endpoint/action context and visible user-facing messages are concise.
+
+## Adopt Todoist-Native Due Semantics
+
+Added: 2026-07-05 (owner decision during go-live). Priority: next after the live smoke, before
+the Home task list and the UI overhaul.
+
+Observed during go-live: Buzer treats `dueDatetime` as the hard deadline and computes
+`startAt = due - duration` (`backend/src/domain/time.ts`), while Todoist treats `due.datetime`
+as the START of a block and renders duration forward. Consequences: Buzer-created tasks show in
+the Todoist calendar as ending at deadline + duration, and Todoist-created tasks would be
+enforced a full duration earlier than the user intended.
+
+Decision: adopt Todoist-native semantics project-wide.
+
+- `due.datetime` = start of the committed block; enforcement deadline = due + duration.
+- Backend: `computeStartAt` becomes `startAt = due`; deadline computation moves to
+  `due + duration`. Alarm planner deadline-kind timing follows.
+- Android Add Task / reschedule / repair: the picker semantics change to "Start at" (or the UI
+  keeps a deadline input and computes `due = deadline - duration` before sending — decide in
+  the spec).
+- Requires a decision doc (this amends the 2026-04-30 product spec), a migration story for
+  existing mirrored tasks, and updates to every test asserting the old start/deadline math.
+
+## Home Task List
+
+Added: 2026-07-05 (owner request). Priority: after the due-semantics change, before the UI
+overhaul.
+
+Home currently shows aggregate counts plus the single soonest in-progress task. The owner wants
+an actual task list on Home so the day is visible at a glance. Supersedes/extends the remaining
+polish items in "Show Current In-Progress Task" above (remaining time, direct action routing) —
+fold those into the list design rather than doing them separately.
+
+## UI Overhaul (AI-Assisted)
+
+Added: 2026-07-05 (owner request). Priority: after the Home task list.
+
+Current UI is unstyled default Material (`BuzerTheme` is a passthrough with no color scheme,
+typography, or shape language). Plan: screenshot every screen, then run an AI-assisted redesign
+(candidates researched 2026-07-05: Google Stitch for concept generation, UX Pilot, Figma
+Make + the Figma MCP design-to-code loop; implementation target Material 3 Expressive on
+Compose). Not Anthropic-only by explicit owner preference. Sequencing note: do this after the
+due-semantics change so redesigned screens carry the corrected "Start at" language.
