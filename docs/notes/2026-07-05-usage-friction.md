@@ -62,7 +62,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
 - Proposed: back off the poll interval, cap total watcher lifetime, and log one line per
   state change instead of one per poll.
 
-### 7. No start blocker for tasks whose start is already in the past
+### 7. [FIXED 2026-07-06] No start blocker for tasks whose start is already in the past
 
 - Observed: 2026-07-06 device pass. A task created with "Start at" = now (the picker default)
   gets NO start blocker: by the time the create round-trips (Todoist -> backend poll ->
@@ -80,5 +80,7 @@ Items 1, 2, 4, 5, 6 fixed by the alarm-reliability/Todoist-semantics change merg
 2026-07-06 (`022ff35`, plan `docs/superpowers/plans/2026-07-05-alarm-reliability-and-todoist-semantics.md`,
 handoff `docs/handoffs/2026-07-05-alarm-reliability-and-todoist-semantics.md`). Device-verified:
 alarm delivered 130 ms after schedule on a locked phone; keyguard overlay skip logged; blocker
-rendered over the lock screen. Open: items 3 (refresh indicator reflow) and 7 (no start blocker
-for in-progress blocks).
+rendered over the lock screen. Item 7 fixed 2026-07-06 by the catch-up start blocker
+(`59a3a34`, strict nag policy, spec `docs/superpowers/specs/2026-07-06-catchup-start-blocker-design.md`);
+owner device-verified: a Start=now task produced an immediate blocker, "I'm starting" ended
+the nag. Open: item 3 (refresh indicator reflow — folds into the Home agenda work).
