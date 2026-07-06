@@ -6,17 +6,25 @@ Labs), **Redesign mode** with screenshot upload.
 
 ## How to run the session (~10 minutes per screen)
 
-1. New project → mobile app → Android. Use **Standard mode** (350 gens/month) for
-   exploration; save **Experimental mode** (50/month, higher quality) for refining the
-   winner.
-2. For each screen below: upload the listed screenshot, paste the **Context block** followed
-   by the screen prompt, then append ONE direction suffix (A/B/C). Generate. Repeat with the
-   other suffixes — that gives 3 directions per screen for ~6 generations total.
-3. React, don't polish: you're choosing a direction, not approving pixels. Screenshot or
-   export anything you like into `docs/design/directions/` (any filenames), and note which
-   direction won and why — one sentence is enough.
+(Updated 2026-07-06 against the live Stitch UI — mode names below match what the app
+actually shows; the earlier Standard/Experimental quota framing was stale.)
 
-## Context block (paste first, always)
+1. **Seed the project once:** "Start with your design" → paste `docs/design/DESIGN.md`
+   (written for exactly this). This gives every generation the product's design DNA
+   without re-pasting context.
+2. Keep **App** selected and the **Redesign** mode (Nano Banana Pro — "Redesign existing
+   apps or sites... Attach a screenshot"). Use **Thinking with 3.1 Pro** later to refine
+   the winning direction; **3 Flash** is handy for fast iterations and HTML export toward
+   coding agents.
+3. For each screen below: attach ONLY that screen's screenshot(s) (multiple attachments
+   are supported — don't mix screens or attach the screenshots README), paste the screen
+   prompt, append ONE direction suffix (A/B/C). Generate. Repeat with the other suffixes —
+   3 directions per screen.
+4. React, don't polish: you're choosing a direction, not approving pixels. Save anything
+   you like into `docs/design/directions/` (any filenames), and note which direction won
+   and why — one sentence is enough.
+
+## Context block (only needed if you skip the DESIGN.md seeding)
 
 > This is "Buzer", a personal Android app that enforces task commitments. It is NOT a todo
 > app — tasks come from Todoist. Buzer's screens exist for seconds-long, high-stakes
