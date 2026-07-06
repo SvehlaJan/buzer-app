@@ -61,6 +61,12 @@ object AlarmPlanCalculator {
     private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm> {
         val startAt = task.startAt?.let(Instant::parse)
         val dueAt = task.dueDatetime?.let(Instant::parse)
+        val durationMinutes = task.durationMinutes
+        val deadlineAt = if (dueAt != null && durationMinutes != null) {
+            dueAt.plus(durationMinutes.minutes)
+        } else {
+            null
+        }
         val alarms = mutableListOf<DesiredAlarm>()
 
         if (startAt != null) {
@@ -70,15 +76,21 @@ object AlarmPlanCalculator {
             }
             if (startAt > now) {
                 alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, startAt.toString())
+            } else if (
+                task.state == CommitmentState.planned &&
+                deadlineAt != null &&
+                deadlineAt > now
+            ) {
+                // Catch-up (decision 2026-07-06, spec 2026-07-06-catchup-start-blocker):
+                // a planned task whose block is already in progress still demands
+                // "I'm starting". Re-armed by every reconcile until the user acts —
+                // the strict nag policy chosen by the owner.
+                alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, now.toString())
             }
         }
 
-        val durationMinutes = task.durationMinutes
-        if (dueAt != null && durationMinutes != null) {
-            val deadlineAt = dueAt.plus(durationMinutes.minutes)
-            if (deadlineAt > now) {
-                alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, deadlineAt.toString())
-            }
+        if (deadlineAt != null && deadlineAt > now) {
+            alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, deadlineAt.toString())
         }
 
         return alarms

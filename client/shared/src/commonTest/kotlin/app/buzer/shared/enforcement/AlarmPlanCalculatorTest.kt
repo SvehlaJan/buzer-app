@@ -124,7 +124,7 @@ class AlarmPlanCalculatorTest {
     }
 
     @Test
-    fun schedulesDeadlineForInProgressBlock() {
+    fun schedulesCatchUpStartAndDeadlineForInProgressPlannedBlock() {
         val snapshot = snapshot(
             task(
                 id = "in-progress",
@@ -138,10 +138,53 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
+                DesiredAlarm("in-progress", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:30:00Z"),
                 DesiredAlarm("in-progress", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             plan.alarms
         )
+        assertTrue(plan.cancelTaskIds.isEmpty())
+    }
+
+    @Test
+    fun schedulesNoCatchUpForStartedInProgressBlock() {
+        // started = the user already acted; only the deadline alarm remains.
+        val snapshot = snapshot(
+            task(
+                id = "in-progress-started",
+                dueDatetime = "2026-05-28T12:00:00Z",
+                durationMinutes = 60,
+                startAt = "2026-05-28T12:00:00Z",
+                state = CommitmentState.started,
+                startedAt = "2026-05-28T12:05:00Z"
+            )
+        )
+
+        val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T12:30:00Z")
+
+        assertEquals(
+            listOf(
+                DesiredAlarm("in-progress-started", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+            ),
+            plan.alarms
+        )
+        assertTrue(plan.cancelTaskIds.isEmpty())
+    }
+
+    @Test
+    fun schedulesNothingForPlannedBlockFullyInThePast() {
+        val snapshot = snapshot(
+            task(
+                id = "fully-past",
+                dueDatetime = "2026-05-28T12:00:00Z",
+                durationMinutes = 60,
+                startAt = "2026-05-28T12:00:00Z"
+            )
+        )
+
+        val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T14:00:00Z")
+
+        assertTrue(plan.alarms.isEmpty())
         assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
@@ -162,7 +205,8 @@ class AlarmPlanCalculatorTest {
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         isAssignedToUser: Boolean = true,
-        validationErrors: List<String> = emptyList()
+        validationErrors: List<String> = emptyList(),
+        startedAt: String? = null
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -180,7 +224,7 @@ class AlarmPlanCalculatorTest {
             isCompleted = isCompleted,
             isDeleted = isDeleted,
             validationErrors = validationErrors,
-            startedAt = null,
+            startedAt = startedAt,
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
