@@ -36,7 +36,7 @@ class EnforcementCoordinatorTest {
             listOf(
                 scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
                 scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
-                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
         )
@@ -81,7 +81,7 @@ class EnforcementCoordinatorTest {
         assertEquals(
             listOf(
                 scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
-                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
         )
@@ -231,7 +231,7 @@ class EnforcementCoordinatorTest {
             listOf(
                 scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
                 scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
-                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T12:00:00Z")
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
         )
