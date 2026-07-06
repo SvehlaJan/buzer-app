@@ -5,7 +5,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
 
 ## Open
 
-### 1. Deadline picker defaults to now+1h; should default to now
+### 1. [FIXED 2026-07-06] Deadline picker defaults to now+1h; should default to now
 
 - Observed: 2026-07-05, first go-live session.
 - `WheelDateTimeField.startDateTimeFor()` defaults the wheel to `now.plusHours(1)`.
@@ -14,7 +14,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
   Under the old deadline semantics a "now" default would create an instantly-overdue task —
   do not fix this independently of the semantics change.
 
-### 2. Title input should capitalize sentences
+### 2. [FIXED 2026-07-06] Title input should capitalize sentences
 
 - Observed: 2026-07-05.
 - Add Task title `OutlinedTextField` lacks
@@ -30,7 +30,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
   slot or a thin progress line that doesn't shift content). Small independent fix; batch
   with item 2. If the Home task list lands first, fold this into that design instead.
 
-### 4. CRITICAL: exact alarms doze-deferred on a locked device
+### 4. [FIXED 2026-07-06] CRITICAL: exact alarms doze-deferred on a locked device
 
 - Observed: 2026-07-05 live smoke (Pixel 10, locked, stationary). Start alarm scheduled 20:57
   was still undelivered at 21:06+; a deadline alarm scheduled 21:02 delivered at 21:06:00
@@ -43,7 +43,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
   icon, which is an acceptable and arguably desirable signal for a commitment app).
   Pre-start warnings can stay on the throttled path.
 
-### 5. Overlay reports "shown" while invisible behind the keyguard
+### 5. [FIXED 2026-07-06] Overlay reports "shown" while invisible behind the keyguard
 
 - Observed: 2026-07-05 21:06:00 — `overlay_start attempted result=true` + `overlay shown`
   on a locked phone; TYPE_APPLICATION_OVERLAY does not render above the keyguard, so the
@@ -54,7 +54,7 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
 - Proposed fix: skip the overlay attempt when `KeyguardManager.isKeyguardLocked` (rely on
   the FSI activity), and revisit surface dedup once one surface acts.
 
-### 6. Overlay watcher floods logcat and polls indefinitely
+### 6. [FIXED 2026-07-06] Overlay watcher floods logcat and polls indefinitely
 
 - Observed: 2026-07-05 — the 2-3s snapshot polling of a (keyguard-invisible) overlay ran for
   an extended period, rotating the entire logcat buffer (evidence of the session was lost)
@@ -62,6 +62,23 @@ observed date, friction, proposed fix, status. Fix the top open item each mainte
 - Proposed: back off the poll interval, cap total watcher lifetime, and log one line per
   state change instead of one per poll.
 
+### 7. No start blocker for tasks whose start is already in the past
+
+- Observed: 2026-07-06 device pass. A task created with "Start at" = now (the picker default)
+  gets NO start blocker: by the time the create round-trips (Todoist -> backend poll ->
+  snapshot -> reconcile), `startAt <= now`, and `AlarmPlanCalculator` only schedules
+  START_BLOCKER when `startAt > now`. The task skips the whole start-commitment flow -
+  never enters `started` state, "I'm starting" is never asked, postponement escalation can
+  never fire. The default-to-now picker makes this the common case.
+- Proposed fix: during reconcile, a `planned` task with start <= now < deadline (block in
+  progress) should trigger an immediate start blocker (schedule at now, or fire the surface
+  directly), so committing to "start now" still demands the explicit "I'm starting".
+
 ## Fixed
 
-(nothing yet)
+Items 1, 2, 4, 5, 6 fixed by the alarm-reliability/Todoist-semantics change merged
+2026-07-06 (`022ff35`, plan `docs/superpowers/plans/2026-07-05-alarm-reliability-and-todoist-semantics.md`,
+handoff `docs/handoffs/2026-07-05-alarm-reliability-and-todoist-semantics.md`). Device-verified:
+alarm delivered 130 ms after schedule on a locked phone; keyguard overlay skip logged; blocker
+rendered over the lock screen. Open: items 3 (refresh indicator reflow) and 7 (no start blocker
+for in-progress blocks).

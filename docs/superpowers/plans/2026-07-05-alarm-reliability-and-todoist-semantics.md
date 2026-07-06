@@ -42,13 +42,13 @@
 **Files:**
 - Create: `docs/decisions/2026-07-05-todoist-native-due-semantics.md`
 
-- [ ] **Step 1: Create the branch**
+- [x] **Step 1: Create the branch**
 
 ```bash
 git checkout master && git pull && git checkout -b feature/alarm-reliability-todoist-semantics
 ```
 
-- [ ] **Step 2: Write the decision doc**
+- [x] **Step 2: Write the decision doc**
 
 Create `docs/decisions/2026-07-05-todoist-native-due-semantics.md`:
 
@@ -84,7 +84,7 @@ allow-while-idle exact alarms are doze-deferred minutes on a locked device (obse
 PRE_START_WARNING and MORNING_REVIEW stay on `setExactAndAllowWhileIdle`.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/decisions/2026-07-05-todoist-native-due-semantics.md
@@ -103,7 +103,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `backend/src/services/taskSnapshotService.ts` (call site, ~line 24-25)
 - Modify: `backend/src/services/escalationService.ts` (lines ~29, 38, 58)
 
-- [ ] **Step 1: Update the time-domain tests (RED)**
+- [x] **Step 1: Update the time-domain tests (RED)**
 
 Locate the test file asserting `computeStartAt` (expected: a `*.test.ts` next to or naming `time`). Rewrite its `computeStartAt` cases to assert identity-of-due, and add `computeDeadlineAt` cases. Replace the existing computeStartAt test block with:
 
@@ -135,12 +135,12 @@ describe("computeDeadlineAt", () => {
 
 Add `computeDeadlineAt` to the file's import from `../domain/time` (adjust the relative path to match the file's existing import of `computeStartAt`).
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd backend && npm test -- time`
 Expected: FAIL — identity case fails against the old subtraction; `computeDeadlineAt` unresolved.
 
-- [ ] **Step 3: Implement in `backend/src/domain/time.ts`**
+- [x] **Step 3: Implement in `backend/src/domain/time.ts`**
 
 Replace the whole `computeStartAt` function with:
 
@@ -168,7 +168,7 @@ export function computeDeadlineAt(dueDatetime: string, durationMinutes: number):
 
 (`parseIsoTimestamp` and `addMinutes` already exist in this file; leave them unchanged.)
 
-- [ ] **Step 4: Point the escalation message at the real deadline**
+- [x] **Step 4: Point the escalation message at the real deadline**
 
 In `backend/src/services/escalationService.ts`, both `deadlineAt: task.dueDatetime` occurrences (~lines 38 and 58) become the computed end of block. First read the file: the guard at ~line 29 already skips tasks with `dueDatetime === null`. Extend that guard to also skip `task.durationMinutes === null` (same early-return style), import `computeDeadlineAt` from `../domain/time`, and replace both occurrences:
 
@@ -184,12 +184,12 @@ with:
 
 If the surrounding types make `durationMinutes` non-null after the guard, no cast is needed; otherwise use the same narrowing pattern the file already uses for `dueDatetime`. If escalationService tests assert `deadlineAt`, update their expected values to due + duration.
 
-- [ ] **Step 5: Run the backend suite**
+- [x] **Step 5: Run the backend suite**
 
 Run: `cd backend && npm test && npm run typecheck && npm run build`
 Expected: all PASS. If any other test fails on start/deadline expectations, that test encodes the old semantics — update its expected values (start = due; deadline = due + duration) and say so in your report.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src
@@ -206,16 +206,16 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt`
 - Modify: its test (locate: `rg -ln "AlarmPlanCalculator" client/shared/src/commonTest`)
 
-- [ ] **Step 1: Update the planner test (RED)**
+- [x] **Step 1: Update the planner test (RED)**
 
 In the calculator's test file, find the case(s) asserting a DEADLINE_BLOCKER trigger equal to the task's `dueDatetime`. Update them: the deadline trigger is now `dueDatetime + durationMinutes` minutes. Add one new case: a task with `dueDatetime` set but `durationMinutes = null` produces NO deadline alarm (it cannot be computed). Keep PRE_START (start − 1h) and START (at start) expectations as they are — `startAt` values in test fixtures should equal `dueDatetime` under the new semantics; where a fixture has `startAt != dueDatetime`, set `startAt = dueDatetime` and adjust expected triggers accordingly.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest --tests '*AlarmPlanCalculator*' --console=plain`
 Expected: FAIL on the updated deadline expectations.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `AlarmPlanCalculator.kt`, add to the imports:
 
@@ -243,12 +243,12 @@ with:
         }
 ```
 
-- [ ] **Step 4: Run and verify GREEN, then the full shared suite**
+- [x] **Step 4: Run and verify GREEN, then the full shared suite**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/shared/src
@@ -266,7 +266,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 No JVM-testable seam exists for AlarmManager routing (the class is a thin system-service wrapper, consistent with the codebase's approach); verification is Task 9's on-device pass.
 
-- [ ] **Step 1: Implement**
+- [x] **Step 1: Implement**
 
 Replace the entire body of `AndroidAlarmScheduler.kt` with:
 
@@ -327,12 +327,12 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
 }
 ```
 
-- [ ] **Step 2: Compile and run unit tests**
+- [x] **Step 2: Compile and run unit tests**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`. (If a unit test fakes `AlarmScheduler`, it is interface-based and unaffected; if one asserts on `setExactAndAllowWhileIdle` for blocker kinds, update it to the new routing and note it.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidAlarmScheduler.kt
@@ -349,7 +349,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerService.kt`
 
-- [ ] **Step 1: Skip the overlay behind the keyguard**
+- [x] **Step 1: Skip the overlay behind the keyguard**
 
 In `AlarmReceiver.kt`, add imports:
 
@@ -387,7 +387,7 @@ with:
         }
 ```
 
-- [ ] **Step 2: Back off the watcher**
+- [x] **Step 2: Back off the watcher**
 
 In `OverlayBlockerService.kt`, in the companion object, replace:
 
@@ -423,12 +423,12 @@ with:
                 delay(if (attempt < WATCH_FAST_POLLS) WATCH_FAST_POLL_INTERVAL_MS else WATCH_SLOW_POLL_INTERVAL_MS)
 ```
 
-- [ ] **Step 3: Compile and unit-test**
+- [x] **Step 3: Compile and unit-test**
 
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt \
@@ -449,7 +449,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`, `BlockerScreens.kt`, `MorningReviewScreen.kt`, `HomeScreen.kt`
 
-- [ ] **Step 1: Default-now test change (RED)**
+- [x] **Step 1: Default-now test change (RED)**
 
 In `WheelDateTimeFieldTest.kt`, replace the test `defaultsToOneHourFromNowWhenNoSelection`:
 
@@ -465,7 +465,7 @@ In `WheelDateTimeFieldTest.kt`, replace the test `defaultsToOneHourFromNowWhenNo
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests '*WheelDateTimeFieldTest*' --console=plain`
 Expected: FAIL (still returns now+1h).
 
-- [ ] **Step 2: Implement default-now and the empty label**
+- [x] **Step 2: Implement default-now and the empty label**
 
 In `WheelDateTimeField.kt`:
 
@@ -474,7 +474,7 @@ In `WheelDateTimeField.kt`:
 
 Re-run the test from Step 1. Expected: PASS.
 
-- [ ] **Step 3: Validator message**
+- [x] **Step 3: Validator message**
 
 In `AddTaskFormValidator.kt`, replace exactly:
 
@@ -490,7 +490,7 @@ with:
 
 In `AddTaskFormValidatorTest.kt`, update the corresponding expected message in `rejectsMissingDeadline` (rename the test to `rejectsMissingStartTime`). Run the validator tests; expected PASS.
 
-- [ ] **Step 4: Screen copy sweep — exact string pairs**
+- [x] **Step 4: Screen copy sweep — exact string pairs**
 
 Apply with the Edit tool, one file at a time (each old string appears exactly once unless noted):
 
@@ -510,7 +510,7 @@ Apply with the Edit tool, one file at a time (each old string appears exactly on
 
 If any old string is absent or ambiguous, STOP and report what the file actually contains.
 
-- [ ] **Step 5: "Ends HH:MM" readout and title capitalization in AddTaskScreen**
+- [x] **Step 5: "Ends HH:MM" readout and title capitalization in AddTaskScreen**
 
 In `AddTaskScreen.kt`:
 
@@ -545,12 +545,12 @@ and add to that text field's parameters (alongside its existing `singleLine`/`la
 
 Simplify to a small private helper at the bottom of the file instead of the inline lambda if you prefer, but keep the exact display format `uuuu-MM-dd HH:mm` and the text prefix `Ends `. (`deadline` is the existing `DateTimeSelection?` state variable — its name is unchanged in this plan even though it now means the start.)
 
-- [ ] **Step 6: Compile and full JVM suite**
+- [x] **Step 6: Compile and full JVM suite**
 
 Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
 Expected: `BUILD SUCCESSFUL`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add client/androidApp/src
@@ -569,7 +569,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Fixture times under new semantics**
+- [x] **Step 1: Fixture times under new semantics**
 
 In `tools/fake-backend/src/fixtures.ts` (fixture `nowIso` is `2026-05-31T10:00:00.000Z`):
 
@@ -593,7 +593,7 @@ and its `startedAt: "2026-05-31T09:50:00.000Z"` → `startedAt: "2026-05-31T09:4
 
 Run: `cd tools/fake-backend && npm test` — if any test asserts the old times, update it to these values. Expected: PASS.
 
-- [ ] **Step 2: Instrumentation contentDescription sweep**
+- [x] **Step 2: Instrumentation contentDescription sweep**
 
 In BOTH androidTest files, apply exact replacements everywhere they occur:
 
@@ -603,16 +603,16 @@ In BOTH androidTest files, apply exact replacements everywhere they occur:
 
 Verify no stragglers: `rg -n "deadline picker" client/androidApp/src` (case-insensitive check: `rg -ni "deadline picker" client/androidApp/src`) — expected: no matches in main or androidTest sources.
 
-- [ ] **Step 3: Home in-progress label**
+- [x] **Step 3: Home in-progress label**
 
 If `BlockerActivityFakeBackendTest.kt` (or any androidTest) asserts the Home text `Due: ` (check: `rg -n '"Due:' client/androidApp/src/androidTest`), update those assertions to `Starts: `.
 
-- [ ] **Step 4: Run the emulator lane**
+- [x] **Step 4: Run the emulator lane**
 
 Run: `scripts/e2e-fake-backend.sh` (repo root)
 Expected: `BUILD SUCCESSFUL`, `Finished 21 tests on pixel8Api34`, 0 failed. Iterate ONLY within the two androidTest files and the fixtures file if something red remains; report NEEDS_CONTEXT if a failure implicates main-source code.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tools/fake-backend/src client/androidApp/src/androidTest
@@ -625,7 +625,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 ## Task 8: Full verification and push
 
-- [ ] **Step 1: Everything, once more, from clean**
+- [x] **Step 1: Everything, once more, from clean**
 
 ```bash
 cd backend && npm test && npm run typecheck && npm run build
@@ -636,7 +636,7 @@ cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest
 
 Expected: all PASS / `BUILD SUCCESSFUL` / 21 of 21.
 
-- [ ] **Step 2: Push the branch and check CI**
+- [x] **Step 2: Push the branch and check CI**
 
 ```bash
 git push -u origin feature/alarm-reliability-todoist-semantics
@@ -645,7 +645,7 @@ gh run watch $(gh run list --workflow=ci.yml --branch=feature/alarm-reliability-
 
 Expected: conclusion `success`. Do not merge yet — Task 9 gates the merge on the device pass.
 
-- [ ] **Step 3: Report READY_FOR_DEVICE**
+- [x] **Step 3: Report READY_FOR_DEVICE**
 
 Stop here and report status READY_FOR_DEVICE with the branch name and CI run link. Task 9 requires the owner.
 
@@ -653,13 +653,13 @@ Stop here and report status READY_FOR_DEVICE with the branch name and CI run lin
 
 ## Task 9: On-device verification, merge, handoff (OWNER REQUIRED)
 
-- [ ] **Step 1: Install the branch build on the Pixel 10** (`cd client && ./gradlew :androidApp:installDebug --console=plain` — uses the real VPS config from local.properties).
-- [ ] **Step 2: Owner creates a task starting +3 minutes** (Start at = now+3min, duration 5m) and locks the phone.
-- [ ] **Step 3: Assert on-time delivery**: the start blocker appears within ~30s of the scheduled minute. Evidence via `scripts/adb-verify.sh logcat`: `overlay_start skipped reason=keyguard_locked` followed by `start_blocker show`. The status-bar alarm icon is visible while the alarm is pending.
-- [ ] **Step 4: Owner checks Todoist calendar**: the task renders from the chosen start for its duration (no post-deadline spill).
-- [ ] **Step 5: Merge to master, push, verify CI green** (`git checkout master && git merge feature/alarm-reliability-todoist-semantics && git push`, then `gh run list --workflow=ci.yml --limit 1`). Delete the branch locally and on origin.
-- [ ] **Step 6: Handoff** at `docs/handoffs/2026-07-05-alarm-reliability-and-todoist-semantics.md` per `docs/handoffs/README.md`, recording every verification (commands, PASS/FAIL, evidence incl. device timing observed), the friction-log items closed (1, 2, 4, 5, 6 — move them to Fixed in `docs/notes/2026-07-05-usage-friction.md` in the same commit), decisions, and next step (Home task list).
-- [ ] **Step 7: Tick this plan's checkboxes, commit docs, push.**
+- [x] **Step 1: Install the branch build on the Pixel 10** (`cd client && ./gradlew :androidApp:installDebug --console=plain` — uses the real VPS config from local.properties).
+- [x] **Step 2: Owner creates a task starting +3 minutes** (Start at = now+3min, duration 5m) and locks the phone.
+- [x] **Step 3: Assert on-time delivery**: the start blocker appears within ~30s of the scheduled minute. Evidence via `scripts/adb-verify.sh logcat`: `overlay_start skipped reason=keyguard_locked` followed by `start_blocker show`. The status-bar alarm icon is visible while the alarm is pending.
+- [x] **Step 4: Owner checks Todoist calendar**: the task renders from the chosen start for its duration (no post-deadline spill).
+- [x] **Step 5: Merge to master, push, verify CI green** (`git checkout master && git merge feature/alarm-reliability-todoist-semantics && git push`, then `gh run list --workflow=ci.yml --limit 1`). Delete the branch locally and on origin.
+- [x] **Step 6: Handoff** at `docs/handoffs/2026-07-05-alarm-reliability-and-todoist-semantics.md` per `docs/handoffs/README.md`, recording every verification (commands, PASS/FAIL, evidence incl. device timing observed), the friction-log items closed (1, 2, 4, 5, 6 — move them to Fixed in `docs/notes/2026-07-05-usage-friction.md` in the same commit), decisions, and next step (Home task list).
+- [x] **Step 7: Tick this plan's checkboxes, commit docs, push.**
 
 ---
 

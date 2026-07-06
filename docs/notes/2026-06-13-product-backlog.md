@@ -120,16 +120,20 @@ Added: 2026-07-05 (owner request). Priority: after the due-semantics change, bef
 overhaul.
 
 Home currently shows aggregate counts plus the single soonest in-progress task. The owner wants
-an actual task list on Home so the day is visible at a glance. Supersedes/extends the remaining
-polish items in "Show Current In-Progress Task" above (remaining time, direct action routing) —
-fold those into the list design rather than doing them separately.
+a "today's agenda" list on Home (refined 2026-07-06 during the device pass): today's committed
+tasks in start order, with their block times and states, so the day is visible at a glance.
+Supersedes/extends the remaining polish items in "Show Current In-Progress Task" above
+(remaining time, direct action routing) — fold those into the agenda design rather than doing
+them separately.
 
 ## UI Overhaul (AI-Assisted)
 
 Added: 2026-07-05 (owner request). Priority: after the Home task list.
 
 Current UI is unstyled default Material (`BuzerTheme` is a passthrough with no color scheme,
-typography, or shape language). Plan: screenshot every screen, then run an AI-assisted redesign
+typography, or shape language). Owner emphasis (2026-07-06): ALL screens need a
+usability/UX-first redesign, with Morning Review called out as the worst offender.
+Plan: screenshot every screen, then run an AI-assisted redesign
 (candidates researched 2026-07-05: Google Stitch for concept generation, UX Pilot, Figma
 Make + the Figma MCP design-to-code loop; implementation target Material 3 Expressive on
 Compose). Not Anthropic-only by explicit owner preference. Sequencing note: do this after the
