@@ -70,8 +70,10 @@ class OverlayBlockerService : Service() {
         if (request.kind == AlarmKind.MORNING_REVIEW) return
         watcherJob?.cancel()
         watcherJob = scope.launch {
+            // ~30s of fast polling for the common quick resolution, then a calm 10s cadence;
+            // total lifetime ~8 minutes. Each poll is a full backend refresh, so cadence is cost.
             repeat(MAX_WATCH_POLLS) { attempt ->
-                delay(WATCH_POLL_INTERVAL_MS)
+                delay(if (attempt < WATCH_FAST_POLLS) WATCH_FAST_POLL_INTERVAL_MS else WATCH_SLOW_POLL_INTERVAL_MS)
                 if (controller == null) return@launch
                 try {
                     val snapshot = withTimeout(WATCH_REFRESH_TIMEOUT_MS) {
@@ -196,7 +198,9 @@ class OverlayBlockerService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 4711
         private const val ACTION_TIMEOUT_MS = 15_000L
-        private const val WATCH_POLL_INTERVAL_MS = 2_000L
+        private const val WATCH_FAST_POLL_INTERVAL_MS = 2_000L
+        private const val WATCH_SLOW_POLL_INTERVAL_MS = 10_000L
+        private const val WATCH_FAST_POLLS = 15
         private const val WATCH_REFRESH_TIMEOUT_MS = 8_000L
         private const val MAX_WATCH_POLLS = 60
 

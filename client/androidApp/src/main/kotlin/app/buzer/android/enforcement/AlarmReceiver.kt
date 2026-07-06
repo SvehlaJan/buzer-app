@@ -1,5 +1,6 @@
 package app.buzer.android.enforcement
 
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -30,11 +31,17 @@ class AlarmReceiver : BroadcastReceiver() {
 
     private fun openBlocker(context: Context, taskId: String?, kind: AlarmKind) {
         val request = OverlayBlockerRequest.fromExtras(taskId, kind.name)
-        if (request != null) {
+        val keyguardLocked =
+            context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
+        if (request == null) {
+            AppLog.warn("overlay_start skipped reason=invalid_request kind=$kind taskId=$taskId")
+        } else if (keyguardLocked) {
+            // TYPE_APPLICATION_OVERLAY does not render above the keyguard; the full-screen
+            // notification below is the lock-screen surface (observed 2026-07-05).
+            AppLog.info("overlay_start skipped reason=keyguard_locked kind=$kind taskId=$taskId")
+        } else {
             val started = OverlayBlockerServiceStarter.tryStart(context, request)
             AppLog.info("overlay_start attempted result=$started kind=$kind taskId=$taskId")
-        } else {
-            AppLog.warn("overlay_start skipped reason=invalid_request kind=$kind taskId=$taskId")
         }
         // Always post the full-screen notification fallback. Its full-screen intent is the
         // activity launch path; we no longer start the activity directly from the broadcast,
