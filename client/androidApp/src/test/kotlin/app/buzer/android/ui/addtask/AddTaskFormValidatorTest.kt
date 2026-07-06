@@ -98,9 +98,9 @@ class AddTaskFormValidatorTest {
     }
 
     @Test
-    fun rejectsMissingDeadline() {
+    fun rejectsMissingStartTime() {
         val result = AddTaskFormValidator.validate("Buy milk", assignableProject, me, null, 45, zone)
 
-        assertEquals(AddTaskFormResult.Invalid("Deadline is required"), result)
+        assertEquals(AddTaskFormResult.Invalid("Start time is required"), result)
     }
 }

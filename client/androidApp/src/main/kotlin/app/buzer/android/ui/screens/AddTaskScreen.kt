@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
@@ -230,6 +232,7 @@ fun AddTaskScreen(
             enabled = !submitState.formDisabled,
             label = { Text("Title") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { contentDescription = "Title input" }
@@ -323,7 +326,7 @@ fun AddTaskScreen(
                 deadline = it
                 errorText = null
             },
-            label = "Deadline picker",
+            label = "Start time picker",
             enabled = !submitState.formDisabled,
             modifier = Modifier.fillMaxWidth()
         )
@@ -338,6 +341,10 @@ fun AddTaskScreen(
             enabled = !submitState.formDisabled,
             modifier = Modifier.fillMaxWidth()
         )
+
+        deadline?.let { start ->
+            Text("Ends ${formatEndDateTime(start, durationMinutes)}")
+        }
 
         errorText?.let { Text(it) }
 
@@ -381,3 +388,11 @@ fun AddTaskScreen(
         )
     }
 }
+
+private val endDateTimeFormatter: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+
+private fun formatEndDateTime(start: DateTimeSelection, durationMinutes: Int): String =
+    start.date.atTime(start.hour, start.minute)
+        .plusMinutes(durationMinutes.toLong())
+        .format(endDateTimeFormatter)

@@ -124,7 +124,7 @@ fun HomeScreen(
                 state.currentInProgressTask?.let { task ->
                     Text("In progress: ${task.title}", style = MaterialTheme.typography.titleMedium)
                     task.dueDatetime?.let { dueDatetime ->
-                        Text("Due: $dueDatetime")
+                        Text("Starts: $dueDatetime")
                     }
                     if (state.inProgressCount > 1) {
                         Text("${state.inProgressCount - 1} more in progress")

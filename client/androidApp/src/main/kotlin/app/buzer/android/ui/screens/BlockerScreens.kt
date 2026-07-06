@@ -140,7 +140,7 @@ fun DeadlineBlockerScreen(
                     deadline = it
                     errorText = null
                 },
-                label = "New deadline picker",
+                label = "New start time picker",
                 enabled = !actionState.actionsDisabled,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -162,7 +162,7 @@ fun DeadlineBlockerScreen(
                 onClick = {
                     val selectedDeadline = deadline
                     if (selectedDeadline == null) {
-                        errorText = "Deadline is required"
+                        errorText = "Start time is required"
                     } else {
                         onReschedule(
                             RescheduleTaskRequest(

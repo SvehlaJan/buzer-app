@@ -115,7 +115,7 @@ fun MorningReviewScreen(
                     deadline = it
                     errorText = null
                 },
-                label = "Repair deadline picker",
+                label = "Repair start time picker",
                 enabled = !repairing && !snoozing,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -137,7 +137,7 @@ fun MorningReviewScreen(
                 onClick = {
                     val selectedDeadline = deadline
                     if (selectedDeadline == null) {
-                        errorText = "Deadline is required"
+                        errorText = "Start time is required"
                     } else {
                         onRepair(
                             task.id,

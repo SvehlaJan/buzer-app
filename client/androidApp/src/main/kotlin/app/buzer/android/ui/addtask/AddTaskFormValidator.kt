@@ -40,7 +40,7 @@ object AddTaskFormValidator {
             }
         }
         if (deadline == null) {
-            return AddTaskFormResult.Invalid("Deadline is required")
+            return AddTaskFormResult.Invalid("Start time is required")
         }
 
         return AddTaskFormResult.Valid(

@@ -26,10 +26,10 @@ class WheelDateTimeFieldTest {
     }
 
     @Test
-    fun defaultsToOneHourFromNowWhenNoSelection() {
+    fun defaultsToNowWhenNoSelection() {
         val now = LocalDateTime.of(2026, 6, 2, 9, 0)
 
-        assertEquals(LocalDateTime.of(2026, 6, 2, 10, 0), startDateTimeFor(selection = null, now = now))
+        assertEquals(now, startDateTimeFor(selection = null, now = now))
     }
 
     @Test

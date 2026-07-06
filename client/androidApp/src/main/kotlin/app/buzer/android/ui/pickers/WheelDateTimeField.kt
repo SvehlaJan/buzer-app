@@ -25,7 +25,7 @@ internal fun toLocalDateTime(selection: DateTimeSelection): LocalDateTime =
     selection.date.atTime(selection.hour, selection.minute)
 
 internal fun startDateTimeFor(selection: DateTimeSelection?, now: LocalDateTime): LocalDateTime =
-    selection?.let(::toLocalDateTime) ?: now.plusHours(1)
+    selection?.let(::toLocalDateTime) ?: now
 
 @Composable
 fun WheelDateTimeField(
@@ -42,7 +42,7 @@ fun WheelDateTimeField(
         enabled = enabled,
         modifier = modifier.semantics { contentDescription = label }
     ) {
-        Text(selection?.formatForDisplay() ?: "No deadline selected")
+        Text(selection?.formatForDisplay() ?: "No start time selected")
     }
 
     if (dialogVisible) {
