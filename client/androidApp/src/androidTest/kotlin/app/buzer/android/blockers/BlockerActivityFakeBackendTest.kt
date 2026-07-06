@@ -72,7 +72,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Reschedule task").assertIsDisplayed()
         composeRule.onNodeWithText("Save reschedule").performClick()
 
-        composeRule.onNodeWithText("Deadline is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Start time is required").assertIsDisplayed()
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
     }
 
@@ -222,7 +222,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Repair").performClick()
         composeRule.onNodeWithText("Save repair").performClick()
 
-        composeRule.onNodeWithText("Deadline is required").assertIsDisplayed()
+        composeRule.onNodeWithText("Start time is required").assertIsDisplayed()
     }
 
     @Test
@@ -311,13 +311,13 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("New deadline picker").performClick()
+        composeRule.onNodeWithContentDescription("New start time picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun selectDefaultRepairDeadline() {
-        composeRule.onNodeWithContentDescription("Repair deadline picker").performClick()
+        composeRule.onNodeWithContentDescription("Repair start time picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }

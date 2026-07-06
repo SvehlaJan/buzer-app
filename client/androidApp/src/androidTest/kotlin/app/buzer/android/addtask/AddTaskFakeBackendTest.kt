@@ -193,7 +193,7 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Deadline picker").performClick()
+        composeRule.onNodeWithContentDescription("Start time picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
