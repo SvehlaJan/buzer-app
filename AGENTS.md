@@ -152,3 +152,8 @@ If the spec, a plan, and existing code disagree:
 3. Follow the plan for implementation sequencing.
 4. Follow existing code patterns for style.
 5. If still ambiguous, document the ambiguity in a handoff and stop before making irreversible changes.
+
+## Other Notes
+
+- Never chain commands with `&&` or `;` when each individual command is already allowed by `Bash(git:*)` or similar rules. Use separate parallel Bash tool calls instead — they run concurrently and don't trigger permission prompts.
+- Always prefer to use `jq` for JSON parsing instead of `python`/`grep`/`sed`/`awk`. It is more robust and avoids brittle regexes.
