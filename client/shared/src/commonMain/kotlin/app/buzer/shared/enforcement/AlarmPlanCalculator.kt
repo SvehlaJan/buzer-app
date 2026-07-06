@@ -85,6 +85,10 @@ object AlarmPlanCalculator {
                 // a planned task whose block is already in progress still demands
                 // "I'm starting". Re-armed by every reconcile until the user acts —
                 // the strict nag policy chosen by the owner.
+                // "In progress but unstarted" is represented by `planned` today: the backend
+                // never sets the intermediate pre_start_warning/start_blocker_active/
+                // deadline_blocker_active states. If the backend ever starts advancing state
+                // on blocker fire, this guard must widen or the nag silently stops.
                 alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, now.toString())
             }
         }
