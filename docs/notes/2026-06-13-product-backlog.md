@@ -138,3 +138,17 @@ Plan: screenshot every screen, then run an AI-assisted redesign
 Make + the Figma MCP design-to-code loop; implementation target Material 3 Expressive on
 Compose). Not Anthropic-only by explicit owner preference. Sequencing note: do this after the
 due-semantics change so redesigned screens carry the corrected "Start at" language.
+
+Owner decisions (2026-07-06, after the five-phase process proposal was accepted):
+
+- Standard Material Design components over custom ones — stable M3 foundation; M3 Expressive
+  only as an optional late polish behind its experimental opt-in.
+- Dark AND light modes are required (Phase 2 builds both color schemes; dynamic-color
+  decision still open).
+- Figma is allowed but optional — owner has no paid subscription; default lane is
+  Stitch reference images + code-first iteration; Figma free tier + the Figma MCP only if a
+  screen needs pixel-level back-and-forth.
+- Codex (OpenAI, owner's existing ChatGPT subscription) is an approved alternate executor
+  for Phase 3 implementation plans — plans are engine-agnostic and AGENTS.md carries the
+  verification gates; one branch/agent at a time (use worktrees if overlapping, as the
+  earlier codex/* work did). Concept generation stays with Stitch.
