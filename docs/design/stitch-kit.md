@@ -16,10 +16,13 @@ actually shows; the earlier Standard/Experimental quota framing was stale.)
    apps or sites... Attach a screenshot"). Use **Thinking with 3.1 Pro** later to refine
    the winning direction; **3 Flash** is handy for fast iterations and HTML export toward
    coding agents.
-3. For each screen below: attach ONLY that screen's screenshot(s) (multiple attachments
-   are supported — don't mix screens or attach the screenshots README), paste the screen
+3. For each screen below: attach ONLY that screen's screenshot(s), paste the screen
    prompt, append ONE direction suffix (A/B/C). Generate. Repeat with the other suffixes —
-   3 directions per screen.
+   3 directions per screen. Attachment rule: one SCREEN per generation, but multiple
+   STATES of that screen are fine and helpful (12+13 for Morning Review; 03+07 for Add
+   Task). If a multi-state generation comes back confused, retry with just the primary
+   state and request the secondary state as a follow-up edit. Never attach the screenshots
+   README, and keep `14-overlay` out unless prompting specifically for the overlay variant.
 4. React, don't polish: you're choosing a direction, not approving pixels. Save anything
    you like into `docs/design/directions/` (any filenames), and note which direction won
    and why — one sentence is enough.
