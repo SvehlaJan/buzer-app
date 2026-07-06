@@ -123,6 +123,28 @@ class AlarmPlanCalculatorTest {
         assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
+    @Test
+    fun schedulesDeadlineForInProgressBlock() {
+        val snapshot = snapshot(
+            task(
+                id = "in-progress",
+                dueDatetime = "2026-05-28T12:00:00Z",
+                durationMinutes = 60,
+                startAt = "2026-05-28T12:00:00Z"
+            )
+        )
+
+        val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T12:30:00Z")
+
+        assertEquals(
+            listOf(
+                DesiredAlarm("in-progress", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+            ),
+            plan.alarms
+        )
+        assertTrue(plan.cancelTaskIds.isEmpty())
+    }
+
     private fun snapshot(vararg tasks: TaskSnapshotItem): TasksSnapshotResponse =
         TasksSnapshotResponse(
             scheduleVersion = 1,
