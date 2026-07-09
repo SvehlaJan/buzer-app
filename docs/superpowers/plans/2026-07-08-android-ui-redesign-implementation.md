@@ -115,6 +115,8 @@ Target UI component files:
 
 Product wording for this task is "task details." Implementation wording is `description` because Todoist's API and returned task objects use that field name. Do not add a Buzer-only task-details field or companion-owned details store; the backend stores this value only as part of the Todoist task mirror.
 
+Description must flow through both the create path and the reschedule path, because the Commitment Editor keeps details editable in Repair and Reschedule modes.
+
 **Files:**
 - Modify: `backend/src/db/schema.sql`
 - Modify: `backend/src/db/migrations.ts`
@@ -143,6 +145,10 @@ Add these assertions to the existing create/snapshot tests rather than creating 
 // backend/test/services/taskActionService.test.ts
 expect(todoist.createdTasks[0]?.description).toBe("Gate code: 2468");
 expect(repo.getByTodoistTaskId("created-1")?.description).toBe("Gate code: 2468");
+
+// reschedule path — the Todoist test double must record reschedule inputs
+expect(todoist.rescheduledTasks[0]?.description).toBe("Updated gate code: 1357");
+expect(repo.getByTodoistTaskId("rescheduled-1")?.description).toBe("Updated gate code: 1357");
 
 // backend/test/services/taskSnapshotService.test.ts
 expect(snapshot.tasks[0]?.description).toBe("Bring printed form");
@@ -199,6 +205,8 @@ When mapping Todoist tasks, set:
 description: task.description?.trim() ? task.description : null,
 ```
 
+Add `description?: string | null;` to `TodoistRescheduleInput`. In `httpTodoistAdapter.rescheduleTask`, include `description` in the `item_update` args only when the input field is present: non-blank sends the trimmed value, blank or null sends `""` to clear, and an absent field omits the key so Todoist leaves the description unchanged.
+
 - [ ] **Step 4: Add service and HTTP route support**
 
 In `backend/src/services/taskActionService.ts`, add `description: string | null;` to `CreateTaskInput`, pass normalized description into Todoist create, and upsert the returned description.
@@ -210,6 +218,8 @@ description: z.string().trim().min(1).nullable().optional()
 ```
 
 Normalize omitted values to `null` before calling `TaskActionService.create`.
+
+Extend the reschedule path in the same step: add an optional `description` to `RescheduleTaskInput` and to the reschedule body schema (`description: z.string().trim().nullable().optional()`), pass it through `TaskActionService.reschedule` into `todoist.rescheduleTask`, and update the SQLite mirror (extend `updateTaskSchedule` or add a dedicated repository update) so the mirrored description matches what was sent. Semantics: omitted field leaves the description unchanged; blank or null clears it; non-blank sets the trimmed value.
 
 In `backend/src/services/taskSnapshotService.ts`, include `description` in task snapshot items so clients can render it as task details.
 
@@ -231,7 +241,9 @@ Add to `CreateTaskRequest`:
 val description: String? = null,
 ```
 
-Keep it defaulted so existing call sites compile while UI migration is in progress.
+Add the same defaulted field to `RescheduleTaskRequest`.
+
+Keep both defaulted so existing call sites compile while UI migration is in progress.
 
 - [ ] **Step 6: Add Android validator support**
 
@@ -286,7 +298,7 @@ In `tools/fake-backend/src/fixtures.ts`, add Todoist-style `description` to at l
 description: "Bring the printed form and check opening hours."
 ```
 
-In `tools/fake-backend/src/server.test.ts`, assert that `POST /tasks` records request `description` when supplied.
+In `tools/fake-backend/src/server.test.ts`, assert that `POST /tasks` and `POST /tasks/:id/reschedule` record request `description` when supplied.
 
 - [ ] **Step 8: Verify Task 1**
 
@@ -350,8 +362,16 @@ Replace the thin `BuzerTheme` wrapper with a single Material 3 theme entry point
 ```kotlin
 @Composable
 fun BuzerTheme(content: @Composable () -> Unit) {
+    val darkTheme = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val colorScheme = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        darkTheme -> BuzerDarkColorScheme
+        else -> BuzerLightColorScheme
+    }
     MaterialTheme(
-        colorScheme = BuzerDarkColorScheme,
+        colorScheme = colorScheme,
         typography = BuzerTypography,
         shapes = BuzerShapes,
         content = content
@@ -377,6 +397,8 @@ val BuzerDarkColorScheme = darkColorScheme(
     onError = Color(0xFF690005)
 )
 ```
+
+Add `BuzerLightColorScheme` with `lightColorScheme(...)` mirroring the same roles in the light direction. It does not need polish yet, but it must exist and stay legible; `BuzerTheme` selects it for light mode below Android 12. Material You dynamic color (API 31+) is resolved only inside `BuzerTheme` — minSdk is 26, so the static schemes remain the sub-31 fallback, and a future Compose Multiplatform port falls back to them as well because dynamic color is an Android platform API.
 
 Create `BuzerShape.kt` with compact shape values:
 
@@ -405,11 +427,13 @@ object Spacing {
     val xl = 24.dp
     val xxl = 32.dp
     val screen = 16.dp
-    val fabClearance = 112.dp
+    val fabClearance = 160.dp
 }
 ```
 
-If a current screen relies on `Spacing.md = 16.dp`, update that screen in the same commit so density remains intentional.
+Remapping the existing token values is low-risk: production code currently references `Spacing` in exactly one place (`Spacing.sm` in `WheelDurationField.kt`, unchanged at 8.dp). Screens hardcode dp values today and adopt tokens during their migration tasks.
+
+`fabClearance` must clear two stacked 56dp FABs plus their gap and bottom margin so the last agenda row can scroll fully above the stack; verify the value visually in Task 6 and adjust.
 
 - [ ] **Step 3: Add base components**
 
@@ -489,14 +513,22 @@ Create `CommitmentFormattersTest.kt`:
 class CommitmentFormattersTest {
     @Test
     fun formatsBlockRangeForSameDay() {
-        val start = LocalDateTime(2026, 7, 8, 14, 30)
-        assertEquals("14:30-15:00", formatBlockRange(start, 30))
+        assertEquals("14:30-15:00", formatBlockRange(MinuteOfDay(14, 30), 30))
+    }
+
+    @Test
+    fun wrapsBlockRangeAcrossMidnight() {
+        assertEquals("23:50-00:20", formatBlockRange(MinuteOfDay(23, 50), 30))
     }
 
     @Test
     fun formatsSubmitLabelFromBlockRange() {
-        val start = LocalDateTime(2026, 7, 8, 14, 30)
-        assertEquals("Save 14:30-15:00", formatSaveLabel(start, 30))
+        assertEquals("Save 14:30-15:00", formatSaveLabel(MinuteOfDay(14, 30), 30))
+    }
+
+    @Test
+    fun saveLabelFallsBackWhenStartMissing() {
+        assertEquals("Save task", formatSaveLabel(null, 30))
     }
 
     @Test
@@ -516,12 +548,23 @@ Expected before implementation: FAIL because the formatter file does not exist.
 Create `CommitmentFormatters.kt` with:
 
 ```kotlin
-fun formatBlockRange(start: LocalDateTime, durationMinutes: Int): String {
-    val end = start.plusMinutes(durationMinutes.toLong())
-    return "${timeFormatter.format(start)}-${timeFormatter.format(end)}"
+data class MinuteOfDay(val hour: Int, val minute: Int)
+
+private const val MINUTES_PER_DAY = 24 * 60
+
+private fun formatTime(totalMinutes: Int): String {
+    val wrapped = ((totalMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+    val hour = (wrapped / 60).toString().padStart(2, '0')
+    val minute = (wrapped % 60).toString().padStart(2, '0')
+    return "$hour:$minute"
 }
 
-fun formatSaveLabel(start: LocalDateTime?, durationMinutes: Int): String =
+fun formatBlockRange(start: MinuteOfDay, durationMinutes: Int): String {
+    val startMinutes = start.hour * 60 + start.minute
+    return "${formatTime(startMinutes)}-${formatTime(startMinutes + durationMinutes)}"
+}
+
+fun formatSaveLabel(start: MinuteOfDay?, durationMinutes: Int): String =
     if (start == null) "Save task" else "Save ${formatBlockRange(start, durationMinutes)}"
 
 fun formatDurationLabel(minutes: Int): String {
@@ -535,7 +578,7 @@ fun formatDurationLabel(minutes: Int): String {
 }
 ```
 
-Use `kotlinx.datetime.LocalDateTime` in shared code, not `java.time`.
+kotlinx-datetime intentionally omits `LocalDateTime` arithmetic (its docs direct arithmetic through `Instant` plus a `TimeZone`), so these formatters use pure minute-of-day math with an explicit midnight wrap instead of any datetime library. Shared models may hold `kotlinx.datetime.LocalDateTime` as plain data, but never do arithmetic on it, and never import `java.time` in `commonMain`.
 
 - [ ] **Step 3: Add shared editor models**
 
@@ -642,6 +685,8 @@ fun saveLabelFallsBackWhenStartMissing() {
 }
 ```
 
+`commitmentSaveLabel` is a thin adapter that maps `DateTimeSelection.hour`/`minute` to the shared `MinuteOfDay` and delegates to `formatSaveLabel`.
+
 Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
@@ -747,7 +792,7 @@ git commit -m "feat: add shared commitment editor component"
 
 Update `AddTaskFakeBackendTest.kt` to assert:
 
-- The title field is a standard single-line Material text field with content description `Title input`.
+- The title field is a standard single-line Material text field. Locate it in tests by its visible label or a `Modifier.testTag("titleInput")`; do not set a `contentDescription` on an editable text field, because that overrides its TalkBack semantics.
 - Optional task details can be opened, typed into, and submitted through Todoist's `description` field.
 - Missing assignee shows `Assignee is required before saving`.
 - Save button label changes to a block range after start and duration are selected, for example `Save 14:30-15:00`.
@@ -755,7 +800,7 @@ Update `AddTaskFakeBackendTest.kt` to assert:
 
 Run: `scripts/e2e-fake-backend.sh`
 
-Expected before implementation: FAIL on the new Add Task assertions.
+Expected before implementation: FAIL on the new Add Task assertions. Running only the Add Task instrumentation class first (Gradle test filtering on the managed-device lane) is acceptable to confirm the failing assertions before paying for the full lane.
 
 - [ ] **Step 2: Replace inline Add Task layout with `CommitmentEditor`**
 
@@ -836,7 +881,7 @@ Extend `HomeScreenStateTest.kt` with tests for:
 
 ```kotlin
 @Test
-fun buildsDateFirstHeaderFromServerTime() { ... assertEquals("Wednesday", state.weekdayLabel) ... }
+fun buildsDateFirstHeaderFromDeviceClock() { ... assertEquals("Wednesday", state.weekdayLabel) ... }
 
 @Test
 fun exposesOverdueDoneAndUpcomingAgendaRows() { ... }
@@ -846,9 +891,12 @@ fun exposesCurrentBlockDoneActionModel() { ... }
 
 @Test
 fun attentionStripPrefersInvalidTasksOverHealthWarnings() { ... }
+
+@Test
+fun showsEmptyPlaceholderWhenNoTasksToday() { ... }
 ```
 
-Use fixed `serverTime = "2026-07-08T12:00:00Z"` and task fixtures with:
+Inject a fixed device clock of `2026-07-08T12:00:00Z` into the state builder — the builder takes `now` (or a clock) as a parameter and must not read the system clock internally. Use task fixtures with:
 
 - Overdue task ended at 11:00.
 - Current started task from 11:30 to 12:30.
@@ -921,6 +969,8 @@ data class HomeScreenState(
 
 Keep `HomeContentState.Loading`, `Ready`, and `Error`.
 
+Derive `weekdayLabel`, `dateLabel`, and relative labels such as `Overdue - ended 59m ago` from the injected device clock, not from snapshot server time. When `agendaRows` is empty and there is no current block, the Ready state renders the placeholder `No tasks for today`.
+
 No healthy freshness text should be emitted when `refreshInFlight == false` and `refreshError == null`.
 
 - [ ] **Step 4: Implement compact Home UI**
@@ -938,7 +988,7 @@ Render:
 
 Add `onDoneCurrentTask: (String) -> Unit` to `HomeScreen` and wire it through `BuzerApp`.
 
-The first implementation can call the existing backend done path only if it already exists in `BuzerApp` dependencies. If Home does not currently have action wiring, add a narrow injected callback and leave Activity-level backend wiring to this task, not a later task.
+`BuzerApp` currently has no action dependencies — it receives only snapshot state and refresh callbacks — so this task adds the wiring. `MainActivity` supplies `onDoneCurrentTask`, which invokes the same completion path the deadline blocker uses: `EnforcementCoordinator.completeTask(taskId)` obtained via `EnforcementDependencies.coordinator(context)`, followed by a snapshot refresh. The coordinator already owns Todoist completion, local state update, and enforcement reconciliation; do not add a separate fire-and-forget HTTP call from the composable layer.
 
 - [ ] **Step 5: Verify Task 6**
 
@@ -1049,7 +1099,7 @@ In `DeadlineBlockerScreen`, use `BlockerSurface` for action mode. Actions remain
 - `Extend 30m`
 - `Reschedule`
 
-When `Reschedule` is tapped, route to `CommitmentEditor` in `CommitmentEditorMode.Reschedule` instead of the inline wheel layout. Title editing remains disabled unless the caller later supplies editability.
+When `Reschedule` is tapped, route to `CommitmentEditor` in `CommitmentEditorMode.Reschedule` instead of the inline wheel layout. Title editing remains disabled unless the caller later supplies editability. Task details are editable in reschedule mode, prefilled from Todoist `description`, and submitted through `RescheduleTaskRequest.description`.
 
 - [ ] **Step 6: Update instrumentation tests**
 
@@ -1124,7 +1174,7 @@ When a task is being repaired, render `CommitmentEditor` with:
 
 - `mode = CommitmentEditorMode.Repair`
 - title editing disabled
-- task details shown from Todoist `description`
+- task details editable, prefilled from Todoist `description`, and submitted through the reschedule request
 - project/assignee slots as read-only receipt content when available
 - Start and Duration wheels active
 - submit label from block range
@@ -1166,6 +1216,8 @@ git commit -m "feat: redesign morning review cards"
 **Files:**
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerService.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequest.kt`
+- Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/BlockerOverlayController.kt`
+- Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay/OverlayComposeHost.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt` or create overlay instrumentation if more appropriate
 
@@ -1182,9 +1234,18 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Render compact `BlockerSurface` in overlay**
+- [ ] **Step 2: Add a Compose host for the service overlay window**
 
-Use the same `BlockerUiModel` creation path as Start blocker.
+`BlockerOverlayController` currently builds classic `TextView`/`Button` views added via `WindowManager.addView`. A `ComposeView` cannot render in that window as-is: it requires ViewTree owners that Activities normally provide. Create `OverlayComposeHost`, a small helper that wraps `ComposeView` and attaches its own owners:
+
+- Implement `LifecycleOwner` and `SavedStateRegistryOwner`, attached with `setViewTreeLifecycleOwner` and `setViewTreeSavedStateRegistryOwner` before the view is added to the window.
+- Drive the lifecycle to `RESUMED` when the view is attached and `DESTROYED` when it is removed, and dispose the composition on removal.
+
+If this proves unstable on the target device (rendering, input, or lifecycle crashes), stop and report instead of layering workarounds; the approved fallback is restyling the classic views with theme tokens.
+
+- [ ] **Step 3: Render compact `BlockerSurface` in overlay**
+
+Replace the `TextView`/`Button` layout in `BlockerOverlayController` with `OverlayComposeHost` rendering compact `BlockerSurface` wrapped in `BuzerTheme`. Use the same `BlockerUiModel` creation path as Start blocker.
 
 Render it as a compact bottom sheet over the existing overlay scrim. Keep actions:
 
@@ -1193,7 +1254,7 @@ Render it as a compact bottom sheet over the existing overlay scrim. Keep action
 
 The overlay remains lower priority than full-screen blockers. Do not add new product rules.
 
-- [ ] **Step 3: Verify Task 9**
+- [ ] **Step 4: Verify Task 9**
 
 Run:
 
@@ -1212,7 +1273,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay client/androidApp/src/androidTest
@@ -1305,8 +1366,11 @@ git commit -m "fix: polish redesigned UI states"
 Run:
 
 ```bash
-rg -n "Save task|Save reschedule|Save repair|Add committed task|Deadline blocker|Start blocker|No invalid tasks|left after this task|last updated|\\bnow\\b" client/androidApp/src/main/kotlin/app/buzer/android
+rg -n "Save task|Save reschedule|Save repair|Add committed task|Deadline blocker|Start blocker|No invalid tasks|left after this task|last updated" client/androidApp/src/main/kotlin/app/buzer/android
+rg -n '"[^"]*\bnow\b[^"]*"' client/androidApp/src/main/kotlin/app/buzer/android
 ```
+
+The second command restricts the `now` check to string literals so `now()` calls and comments do not flood the output.
 
 Expected: Only intentional labels remain. `Start blocker` and `Deadline blocker` may remain in debug launcher names, but production visible strings should use approved copy.
 

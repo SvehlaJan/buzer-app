@@ -23,14 +23,16 @@ Treat task details as Todoist-owned visible task data, not companion enforcement
 
 Add Todoist `description` as a first-class optional mirrored field across:
 
-- Todoist adapter input/output mirrors.
+- Todoist adapter input/output mirrors, for both task creation and reschedule (`item_update`).
 - Backend SQLite `todoist_tasks`.
 - Backend task snapshot responses.
-- Shared Kotlin DTOs.
-- Fake backend fixtures and assertions.
-- Add Task request payload.
-- Add Task UI.
+- Backend create and reschedule request schemas and services.
+- Shared Kotlin DTOs, including `CreateTaskRequest` and `RescheduleTaskRequest`.
+- Fake backend fixtures and assertions, for both `POST /tasks` and `POST /tasks/:id/reschedule`.
+- Add Task, Morning Review repair, and Deadline reschedule UI, all through the shared Commitment Editor.
 - Task detail display in Home, blockers, overlay, and Morning Review.
+
+Task details are editable everywhere the Commitment Editor appears, not only in Add Task. Repair and Reschedule persist edits through the reschedule path so a description change made while fixing an invalid task or moving a deadline is not silently dropped.
 
 Normalize blank task details to `null` at the app/backend boundary where practical. Preserve non-blank text after trimming outer whitespace.
 
@@ -53,4 +55,5 @@ This keeps validation, migrations, and Todoist sync behavior inspectable. A gene
 - The redesign has one early cross-stack phase before UI components can render Todoist task details end to end.
 - Existing databases need a migration guard that adds `todoist_tasks.description`.
 - Existing Kotlin tests constructing `TaskSnapshotItem` need either a default value or named-field update.
+- The reschedule request/service/adapter path grows a `description` field alongside `dueDatetime`/`durationMinutes`, with clear semantics: omitted leaves it unchanged, blank or null clears it, non-blank sets it.
 - The UI can later add attachments or subtasks without changing the `CommitmentEditor` layout contract if those details are represented through typed extension sections.

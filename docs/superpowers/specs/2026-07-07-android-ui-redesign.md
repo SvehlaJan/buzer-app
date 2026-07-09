@@ -36,8 +36,8 @@ Use Material 3 with light customization:
 
 - Standard Material 3 components wherever practical.
 - Roboto / platform Material typography, with standard Material text fields and buttons.
-- Dynamic-tonal dark-first palette based on the selected soft blue-grey direction.
-- Light theme must remain first-class, but the first implementation can establish dark tokens before completing light-token polish.
+- Dark-first soft blue-grey Material 3 palette, shipped together with a basic light palette from the first theme task. `BuzerTheme` follows the system dark/light setting from day one; light polish can lag, but light absence cannot.
+- Material You dynamic color on Android 12+ (API 31+), resolved only inside `BuzerTheme`, with the static soft blue-grey palettes as the fallback below API 31 (minSdk is 26). Dynamic color is an Android platform API, so a future Compose Multiplatform port falls back to the static palettes.
 - Rounded Material surfaces, restrained tonal contrast, and one primary accent for committed action.
 - No ornamental gradients, illustrations, gamification, mascots, or decorative animations.
 - Text and state must remain legible without color alone.
@@ -57,13 +57,15 @@ Create one shared commitment editor pattern used by:
 The editor includes:
 
 - Standard single-line Material title text field where title editing is relevant.
-- Optional description collapsed by default. When opened, it becomes a text field for details, links, or acceptance notes.
+- Optional description collapsed by default. When opened, it becomes a text field for details, links, or acceptance notes. The description is editable in all editor modes: Add Task persists it through task creation, and Repair/Reschedule persist it through the reschedule path.
 - Receipt summary with project, assignee, start, duration, and computed end.
 - Separate Start wheel and Duration wheel.
 - Computed submit label using the selected block range, for example `Save 14:30-15:00`.
 - Inline validation for required fields.
 
 Changing start or duration immediately updates the receipt and submit label.
+
+Block ranges that cross midnight wrap the end time, for example `23:50-00:20`.
 
 ### Blocker Surface
 
@@ -93,7 +95,7 @@ Home uses one compact attention strip near the top for issues requiring action. 
 - Backend unreachable / stale data.
 - WhatsApp disconnected.
 
-If multiple issues exist, show the highest priority issue or a compact count such as `3 issues need attention`. Tapping routes to the relevant place when possible:
+Issue priority, highest first: invalid tasks, exact alarm or notification permission issues, backend unreachable / stale data, WhatsApp disconnected. If multiple issues exist, show the highest priority issue or a compact count such as `3 issues need attention`; tapping the multi-issue strip routes to the highest priority issue's destination. Tapping routes to the relevant place when possible:
 
 - Invalid tasks open Morning Review.
 - Health issues may open a lightweight detail sheet or remain informational if no dedicated flow exists.
@@ -113,6 +115,8 @@ Layout:
 - Current block hero when a block is in progress.
 - Timeline agenda list for overdue, upcoming, and done tasks.
 - Icon-only vertical FAB stack for Add Task and Morning Review.
+
+Home derives "today", the date header, and relative labels such as `Overdue - ended 59m ago` from the device clock, injected as a clock parameter in state-builder tests — not from snapshot server time. When the agenda has no tasks for the day and no block is in progress, show a plain placeholder: `No tasks for today`.
 
 Current block hero:
 

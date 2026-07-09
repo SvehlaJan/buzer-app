@@ -53,12 +53,12 @@ Do not create all files at once if a phase does not use them. The package map is
 
 Required token groups:
 
-- Color scheme: dark-first soft blue-grey Material 3 palette, with light palette parity.
+- Color scheme: dark-first soft blue-grey Material 3 palette, shipped with a basic (not yet polished) light palette from the first theme task, so light mode is never simply absent.
 - Typography: platform Material typography with small adjustments only where needed for compact density.
 - Shape: Material shapes with restrained radii; repeated cards and panels should stay at or below 8dp radius unless a Material component supplies a larger default.
 - Spacing: existing `Spacing` object may grow, but screens must stop hardcoding common repeated spacing values.
 
-Use dynamic color only behind a single decision point. If runtime dynamic color is added later, it should feed `BuzerTheme`, not individual screens.
+Material You dynamic color is used on Android 12+ (API 31+), resolved only inside `BuzerTheme` via `dynamicDarkColorScheme`/`dynamicLightColorScheme`. Below API 31 (minSdk is 26), `BuzerTheme` falls back to the static soft blue-grey dark/light schemes. No screen resolves dynamic color itself. Because dynamic color is an Android platform API, a future Compose Multiplatform desktop/web port uses the static schemes instead.
 
 ## Shared Components
 
@@ -87,11 +87,11 @@ Responsibility:
 
 - Shared schedule editor for Add Task, Morning Review repair, and Deadline reschedule.
 - Standard single-line title field when title editing is enabled.
-- Collapsed optional task details field backed by Todoist's existing `description` field.
+- Collapsed optional task details field backed by Todoist's existing `description` field, editable in every mode. Add Task persists it through task creation; Repair and Reschedule persist it through the reschedule path, which mirrors the updated description back into the Todoist task.
 - Project and assignee controls.
 - Separate Start and Duration wheel fields.
 - Receipt summary.
-- Computed primary submit label, such as `Save 14:30-15:00`.
+- Computed primary submit label, such as `Save 14:30-15:00`, using pure minute-of-day arithmetic with an explicit midnight wrap (`23:50-00:20`) rather than `kotlinx.datetime.LocalDateTime` arithmetic, which that library intentionally omits.
 
 It should take a pure `CommitmentEditorState` plus callbacks. It should not call the backend directly.
 
@@ -102,6 +102,8 @@ Responsibility:
 - Shared visual structure for Start blocker, Deadline blocker, and compact overlay.
 - Eyebrow, title, schedule window, optional task details, and action panel.
 - No navigation or backend calls.
+
+The compact overlay renders this same Compose component inside `OverlayBlockerService`'s window, not a parallel classic-view layout. Because a bare `ComposeView` cannot render inside a service-owned `WindowManager` overlay, a small `OverlayComposeHost` supplies the `LifecycleOwner`/`SavedStateRegistryOwner` that `ComposeView` needs and drives the lifecycle across attach/detach. If that approach proves unstable on-device, the approved fallback is restyling the existing classic `TextView`/`Button` overlay layout with theme tokens instead of forcing Compose into the service window.
 
 ### `TaskDetailsBlock`
 
