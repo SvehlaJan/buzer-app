@@ -8,24 +8,43 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.enforcement.EnforcementRefreshRunner
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.ui.BuzerApp
+import app.buzer.android.ui.HomeDoneActionHandler
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
     private var homeRefreshInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
-    private val refreshRunner: EnforcementRefreshRunner by lazy {
-        EnforcementRefreshRunner(lifecycleScope, ::reportRefreshFailure, AppLog::debug)
+    private val homeActionHandler: HomeDoneActionHandler by lazy {
+        HomeDoneActionHandler(
+            refreshSnapshot = {
+                val coordinator = requireCoordinator("snapshot refresh")
+                SnapshotReducer.reduce(coordinator.refreshAndReconcile())
+            },
+            completeTask = { taskId ->
+                val coordinator = coordinator
+                    ?: return@HomeDoneActionHandler CoordinatorActionResult.FailedAndHidden("Task completion failed")
+                coordinator.completeTask(taskId)
+            },
+            latestSnapshot = {
+                coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)
+            },
+            applySnapshot = { snapshotViewState = it },
+            setStatusMessage = { homeRefreshError = it },
+            setRefreshInFlight = { homeRefreshInFlight = it },
+            reportRefreshFailure = ::reportRefreshFailure
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +69,7 @@ class MainActivity : ComponentActivity() {
                 homeRefreshInFlight = homeRefreshInFlight,
                 homeRefreshError = homeRefreshError,
                 onRetryHomeRefresh = ::refreshEnforcement,
+                onDoneCurrentTask = ::completeCurrentTask,
                 onTaskCreated = ::refreshEnforcement
             )
         }
@@ -61,30 +81,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshEnforcement() {
-        val coordinator = coordinator ?: run {
-            AppLog.debug("main refresh skipped reason=no_coordinator")
-            homeRefreshInFlight = false
-            homeRefreshError = "Refresh failed"
-            return
-        }
         AppLog.debug("main refresh requested")
-        refreshRunner.refresh(
-            onStarted = {
-                homeRefreshInFlight = true
-                homeRefreshError = null
-            }
-        ) {
-            try {
-                val snapshot = coordinator.refreshAndReconcile()
-                snapshotViewState = SnapshotReducer.reduce(snapshot)
-                homeRefreshError = null
-                AppLog.debug(
-                    "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
-                        "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
-                )
-            } finally {
-                homeRefreshInFlight = false
-            }
+        lifecycleScope.launch {
+            homeActionHandler.refresh()
+            AppLog.debug(
+                "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
+                    "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
+            )
         }
     }
 
@@ -97,4 +100,17 @@ class MainActivity : ComponentActivity() {
             message = error.message ?: "snapshot refresh failed"
         )
     }
+
+    private fun completeCurrentTask(taskId: String) {
+        AppLog.info("main current_done_clicked taskId=$taskId")
+        lifecycleScope.launch {
+            homeActionHandler.completeCurrentTask(taskId)
+        }
+    }
+
+    private fun requireCoordinator(action: String): EnforcementCoordinator =
+        coordinator ?: run {
+            AppLog.debug("main refresh skipped reason=no_coordinator action=$action")
+            throw IllegalStateException("Refresh failed")
+        }
 }

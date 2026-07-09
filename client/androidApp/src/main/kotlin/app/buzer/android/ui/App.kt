@@ -18,6 +18,7 @@ import app.buzer.android.ui.screens.HomeScreenState
 import app.buzer.android.ui.screens.buildHomeScreenState
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotViewState
+import java.time.OffsetDateTime
 
 private enum class AppSection {
     Home,
@@ -31,7 +32,9 @@ fun BuzerApp(
     homeRefreshInFlight: Boolean = false,
     homeRefreshError: String? = null,
     onRetryHomeRefresh: () -> Unit = {},
-    onTaskCreated: () -> Unit = {}
+    onDoneCurrentTask: (String) -> Unit = {},
+    onTaskCreated: () -> Unit = {},
+    nowProvider: () -> OffsetDateTime = { OffsetDateTime.now() }
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         val context = LocalContext.current
@@ -45,9 +48,9 @@ fun BuzerApp(
         val homeState = buildBuzerHomeState(
             snapshot = snapshot,
             homeRefreshInFlight = homeRefreshInFlight,
-            homeRefreshError = homeRefreshError
+            homeRefreshError = homeRefreshError,
+            now = nowProvider()
         )
-
         Column(modifier = Modifier.fillMaxSize()) {
             when (section) {
                 AppSection.Home -> HomeScreen(
@@ -58,6 +61,7 @@ fun BuzerApp(
                     onMorningReview = {
                         openMorningReview()
                     },
+                    onDoneCurrentTask = onDoneCurrentTask,
                     onRetryRefresh = onRetryHomeRefresh,
                     state = homeState
                 )
@@ -74,10 +78,12 @@ fun BuzerApp(
 internal fun buildBuzerHomeState(
     snapshot: SnapshotViewState?,
     homeRefreshInFlight: Boolean,
-    homeRefreshError: String?
+    homeRefreshError: String?,
+    now: OffsetDateTime
 ): HomeScreenState =
     buildHomeScreenState(
         snapshot = snapshot,
         refreshInFlight = homeRefreshInFlight,
-        refreshError = homeRefreshError
+        refreshError = homeRefreshError,
+        now = now
     )

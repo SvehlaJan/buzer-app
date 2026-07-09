@@ -39,8 +39,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             waitForText("Select project")
             enterTitle("Buy milk")
             selectDefaultDeadline()
@@ -59,8 +58,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             selectProject("Test Shared")
             enterTitle("Buy milk")
             selectDefaultDeadline()
@@ -90,8 +88,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             selectProject("Test Personal (personal)")
             composeRule.onAllNodesWithText("Me").assertCountEquals(0)
             enterTitle("Personal task")
@@ -119,8 +116,7 @@ class AddTaskFakeBackendTest {
         try {
             val scenario = ActivityScenario.launch(MainActivity::class.java)
             try {
-                waitForText("Add task")
-                composeRule.onNodeWithText("Add task").performClick()
+                openAddTaskFromHome()
                 waitForText("500")
                 composeRule.onNodeWithText("Save task").assertIsNotEnabled()
 
@@ -143,8 +139,7 @@ class AddTaskFakeBackendTest {
         try {
             val scenario = ActivityScenario.launch(MainActivity::class.java)
             try {
-                waitForText("Add task")
-                composeRule.onNodeWithText("Add task").performClick()
+                openAddTaskFromHome()
                 selectProject("Test Shared")
                 enterTitle("Buy milk")
                 composeRule.onNodeWithText("Me").performClick()
@@ -169,8 +164,7 @@ class AddTaskFakeBackendTest {
 
         val firstScenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             selectProject("Test Personal (personal)")
             composeRule.onNodeWithText("Cancel").performClick()
         } finally {
@@ -179,8 +173,7 @@ class AddTaskFakeBackendTest {
 
         val secondScenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             waitForText("Test Personal")
             composeRule.onNodeWithText("Test Personal").assertIsDisplayed()
         } finally {
@@ -194,8 +187,7 @@ class AddTaskFakeBackendTest {
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForText("Add task")
-            composeRule.onNodeWithText("Add task").performClick()
+            openAddTaskFromHome()
             selectProject("Test Shared")
             enterTitle("Buy milk")
             composeRule.onNodeWithText("Details").performClick()
@@ -222,6 +214,12 @@ class AddTaskFakeBackendTest {
 
     private fun enterTitle(title: String) {
         composeRule.onNodeWithTag("titleInput").performTextInput(title)
+    }
+
+    private fun openAddTaskFromHome() {
+        waitForContentDescription("Add task")
+        composeRule.onNodeWithContentDescription("Add task").performClick()
+        waitForText("Add task")
     }
 
     private fun selectProject(label: String) {
@@ -310,6 +308,21 @@ class AddTaskFakeBackendTest {
             }
         }
         throw AssertionError("Expected text containing $text", lastError)
+    }
+
+    private fun waitForContentDescription(contentDescription: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastError: Throwable? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                composeRule.onNodeWithContentDescription(contentDescription).assertIsDisplayed()
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(100)
+            }
+        }
+        throw AssertionError("Expected contentDescription $contentDescription", lastError)
     }
 
     private fun waitForRecordedCall(path: String) {

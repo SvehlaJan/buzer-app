@@ -875,7 +875,7 @@ git commit -m "feat: migrate add task to commitment editor"
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt` if Home navigation assertions live there
 - Modify or create Home instrumentation coverage if a dedicated file exists after test inspection
 
-- [ ] **Step 1: Add Home state tests for agenda rows**
+- [x] **Step 1: Add Home state tests for agenda rows**
 
 Extend `HomeScreenStateTest.kt` with tests for:
 
@@ -907,7 +907,7 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Add shared Home timeline models**
+- [x] **Step 2: Add shared Home timeline models**
 
 Create `HomeTimelineModels.kt`:
 
@@ -950,7 +950,7 @@ enum class HomeAttentionAction {
 
 Keep time calculations pure and covered in tests.
 
-- [ ] **Step 3: Update Home state builder**
+- [x] **Step 3: Update Home state builder**
 
 Replace count-first `HomeScreenState` with:
 
@@ -973,7 +973,7 @@ Derive `weekdayLabel`, `dateLabel`, and relative labels such as `Overdue - ended
 
 No healthy freshness text should be emitted when `refreshInFlight == false` and `refreshError == null`.
 
-- [ ] **Step 4: Implement compact Home UI**
+- [x] **Step 4: Implement compact Home UI**
 
 Use `BuzerScaffold(bottomClearance = Spacing.fabClearance)`.
 
@@ -990,7 +990,7 @@ Add `onDoneCurrentTask: (String) -> Unit` to `HomeScreen` and wire it through `B
 
 `BuzerApp` currently has no action dependencies — it receives only snapshot state and refresh callbacks — so this task adds the wiring. `MainActivity` supplies `onDoneCurrentTask`, which invokes the same completion path the deadline blocker uses: `EnforcementCoordinator.completeTask(taskId)` obtained via `EnforcementDependencies.coordinator(context)`, followed by a snapshot refresh. The coordinator already owns Todoist completion, local state update, and enforcement reconciliation; do not add a separate fire-and-forget HTTP call from the composable layer.
 
-- [ ] **Step 5: Verify Task 6**
+- [x] **Step 5: Verify Task 6**
 
 Run:
 
@@ -1009,7 +1009,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS. If the lane has no Home current-block Done assertion, add one in this task before accepting the pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/ui/home client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt client/androidApp/src/androidTest

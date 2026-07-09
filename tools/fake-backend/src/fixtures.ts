@@ -1,4 +1,7 @@
 export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
+  const now = new Date(nowIso);
+  const isoAt = (deltaMinutes: number) => new Date(now.getTime() + deltaMinutes * 60_000).toISOString();
+
   return {
     scheduleVersion: 1,
     serverTime: nowIso,
@@ -12,9 +15,9 @@ export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
         projectId: "project-test",
         assigneeId: "user-me",
         creatorId: "user-me",
-        dueDatetime: "2026-05-31T10:30:00.000Z",
+        dueDatetime: isoAt(120),
         durationMinutes: 30,
-        startAt: "2026-05-31T10:30:00.000Z",
+        startAt: isoAt(120),
         state: "planned",
         isAssignedToUser: true,
         isCreatedByUser: true,
@@ -35,16 +38,16 @@ export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
         projectId: "project-test",
         assigneeId: "user-me",
         creatorId: "user-me",
-        dueDatetime: "2026-05-31T09:40:00.000Z",
-        durationMinutes: 15,
-        startAt: "2026-05-31T09:40:00.000Z",
+        dueDatetime: isoAt(-30),
+        durationMinutes: 60,
+        startAt: isoAt(-30),
         state: "started",
         isAssignedToUser: true,
         isCreatedByUser: true,
         isCompleted: false,
         isDeleted: false,
         validationErrors: [],
-        startedAt: "2026-05-31T09:41:00.000Z",
+        startedAt: isoAt(-29),
         startDismissCount: 0,
         deadlineExtensionCount: 0,
         escalationSentAt: null,

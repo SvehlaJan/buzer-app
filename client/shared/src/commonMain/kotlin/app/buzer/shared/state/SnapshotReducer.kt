@@ -13,7 +13,13 @@ data class SnapshotViewState(
     val activeBlockers: List<TaskSnapshotItem>,
     val inProgressTasks: List<TaskSnapshotItem>,
     val startingToday: List<TaskSnapshotItem>,
-    val healthWarnings: List<HealthStatus>
+    val healthWarnings: List<HealthStatus>,
+    val tasks: List<TaskSnapshotItem> = (
+        invalidTasks +
+            activeBlockers +
+            inProgressTasks +
+            startingToday
+        ).distinctBy { it.id }
 )
 
 object SnapshotReducer {
@@ -33,7 +39,8 @@ object SnapshotReducer {
             startingToday = visibleTasks.filter {
                 it.state == CommitmentState.planned && it.startAt?.isoDatePrefix() == serverDate
             },
-            healthWarnings = snapshot.health.filter { it.level != HealthLevel.ok }
+            healthWarnings = snapshot.health.filter { it.level != HealthLevel.ok },
+            tasks = snapshot.tasks.filterNot { it.isDeleted }
         )
     }
 }

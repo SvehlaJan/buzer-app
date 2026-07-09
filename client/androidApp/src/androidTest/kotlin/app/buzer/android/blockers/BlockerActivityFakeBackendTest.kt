@@ -173,28 +173,40 @@ class BlockerActivityFakeBackendTest {
 
         ActivityScenario.launch(MainActivity::class.java)
 
-        composeRule.onNodeWithText("Today").assertIsDisplayed()
-        waitForText("Morning review")
-        composeRule.onNodeWithText("Morning review").performClick()
+        waitForContentDescription("Morning review")
+        composeRule.onNodeWithContentDescription("Morning review").performClick()
 
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
     }
 
     @Test
-    fun homeScreenShowsLatestSnapshotCounts() {
+    fun homeScreenShowsTimelineAgendaAndFabStack() {
         resetTestState()
 
         ActivityScenario.launch(MainActivity::class.java)
 
-        waitForText("Invalid: 1")
-        composeRule.onNodeWithText("Active blockers: 0").assertIsDisplayed()
-        composeRule.onNodeWithText("Starting today: 1").assertIsDisplayed()
-        composeRule.onNodeWithText("Health warnings: 0").assertIsDisplayed()
-        composeRule.onNodeWithText("Add task").assertIsDisplayed()
-        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        waitForAnyText("Deadline blocker fixture")
+        waitForAnyText("remaining")
+        composeRule.onNodeWithText("Start blocker fixture").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Add task").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Morning review").assertIsDisplayed()
         composeRule.onAllNodesWithText("Start blocker").assertCountEquals(0)
         composeRule.onAllNodesWithText("Deadline blocker").assertCountEquals(0)
+    }
+
+    @Test
+    fun homeCurrentBlockDoneCallsFakeBackend() {
+        resetTestState()
+
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Deadline blocker fixture")
+        composeRule.onNodeWithText("Done").assertIsDisplayed()
+        composeRule.onNodeWithText("Done").performClick()
+
+        waitForRecordedCall("/tasks/task-deadline/done")
+        fakeBackend.assertRecorded("/tasks/task-deadline/done")
     }
 
     @Test
@@ -291,6 +303,22 @@ class BlockerActivityFakeBackendTest {
         composeRule.waitUntil(timeoutMillis = 15_000) {
             runCatching {
                 composeRule.onNodeWithText(text, substring = true).assertIsDisplayed()
+            }.isSuccess
+        }
+    }
+
+    private fun waitForAnyText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.onAllNodesWithText(text, substring = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun waitForContentDescription(contentDescription: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            runCatching {
+                composeRule.onNodeWithContentDescription(contentDescription).assertIsDisplayed()
             }.isSuccess
         }
     }

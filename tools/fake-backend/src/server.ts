@@ -46,7 +46,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     if (failSnapshot) {
       return reply.code(500).send({ error: "forced_snapshot_failure" });
     }
-    return fixedSnapshot();
+    return fixedSnapshot(new Date().toISOString());
   });
 
   app.get("/projects", async (_request, reply) => {
