@@ -12,7 +12,18 @@ data class AddTaskAssigneeOption(
 
 sealed interface AddTaskFormResult {
     data class Valid(val request: CreateTaskRequest) : AddTaskFormResult
-    data class Invalid(val message: String) : AddTaskFormResult
+    data class Invalid(
+        val message: String,
+        val field: AddTaskInvalidField? = null
+    ) : AddTaskFormResult
+}
+
+enum class AddTaskInvalidField {
+    Title,
+    Project,
+    Assignee,
+    Start,
+    Duration
 }
 
 object AddTaskFormValidator {
@@ -27,21 +38,27 @@ object AddTaskFormValidator {
     ): AddTaskFormResult {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isEmpty()) {
-            return AddTaskFormResult.Invalid("Title is required")
+            return AddTaskFormResult.Invalid("Title is required", AddTaskInvalidField.Title)
         }
         if (selectedProject == null) {
-            return AddTaskFormResult.Invalid("Project is required")
+            return AddTaskFormResult.Invalid("Project is required", AddTaskInvalidField.Project)
         }
         if (selectedProject.canAssignTasks) {
             if (selectedAssignee == null) {
-                return AddTaskFormResult.Invalid("Assignee is required for this project")
+                return AddTaskFormResult.Invalid(
+                    "Assignee is required for this project",
+                    AddTaskInvalidField.Assignee
+                )
             }
             if (selectedAssignee.id.isBlank()) {
-                return AddTaskFormResult.Invalid("${selectedAssignee.label} assignee ID is not configured")
+                return AddTaskFormResult.Invalid(
+                    "${selectedAssignee.label} assignee ID is not configured",
+                    AddTaskInvalidField.Assignee
+                )
             }
         }
         if (deadline == null) {
-            return AddTaskFormResult.Invalid("Start time is required")
+            return AddTaskFormResult.Invalid("Start time is required", AddTaskInvalidField.Start)
         }
 
         return AddTaskFormResult.Valid(

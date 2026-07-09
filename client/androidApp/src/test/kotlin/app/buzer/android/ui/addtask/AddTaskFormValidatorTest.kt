@@ -98,21 +98,30 @@ class AddTaskFormValidatorTest {
     fun rejectsBlankTitle() {
         val result = AddTaskFormValidator.validate("", assignableProject, me, deadline, 45, zone)
 
-        assertEquals(AddTaskFormResult.Invalid("Title is required"), result)
+        assertEquals(
+            AddTaskFormResult.Invalid("Title is required", AddTaskInvalidField.Title),
+            result
+        )
     }
 
     @Test
     fun rejectsMissingProject() {
         val result = AddTaskFormValidator.validate("Buy milk", null, me, deadline, 45, zone)
 
-        assertEquals(AddTaskFormResult.Invalid("Project is required"), result)
+        assertEquals(
+            AddTaskFormResult.Invalid("Project is required", AddTaskInvalidField.Project),
+            result
+        )
     }
 
     @Test
     fun rejectsMissingAssigneeForAssignableProject() {
         val result = AddTaskFormValidator.validate("Buy milk", assignableProject, null, deadline, 45, zone)
 
-        assertEquals(AddTaskFormResult.Invalid("Assignee is required for this project"), result)
+        assertEquals(
+            AddTaskFormResult.Invalid("Assignee is required for this project", AddTaskInvalidField.Assignee),
+            result
+        )
     }
 
     @Test
@@ -126,13 +135,19 @@ class AddTaskFormValidatorTest {
             zoneId = zone
         )
 
-        assertEquals(AddTaskFormResult.Invalid("Me assignee ID is not configured"), result)
+        assertEquals(
+            AddTaskFormResult.Invalid("Me assignee ID is not configured", AddTaskInvalidField.Assignee),
+            result
+        )
     }
 
     @Test
     fun rejectsMissingStartTime() {
         val result = AddTaskFormValidator.validate("Buy milk", assignableProject, me, null, 45, zone)
 
-        assertEquals(AddTaskFormResult.Invalid("Start time is required"), result)
+        assertEquals(
+            AddTaskFormResult.Invalid("Start time is required", AddTaskInvalidField.Start),
+            result
+        )
     }
 }

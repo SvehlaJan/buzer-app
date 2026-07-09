@@ -505,7 +505,7 @@ git commit -m "feat: add Buzer UI theme primitives"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 
-- [ ] **Step 1: Add shared formatter tests**
+- [x] **Step 1: Add shared formatter tests**
 
 Create `CommitmentFormattersTest.kt`:
 
@@ -543,7 +543,7 @@ Run: `cd client && ./gradlew :shared:testAndroidHostTest --console=plain`
 
 Expected before implementation: FAIL because the formatter file does not exist.
 
-- [ ] **Step 2: Implement shared formatters**
+- [x] **Step 2: Implement shared formatters**
 
 Create `CommitmentFormatters.kt` with:
 
@@ -580,7 +580,7 @@ fun formatDurationLabel(minutes: Int): String {
 
 kotlinx-datetime intentionally omits `LocalDateTime` arithmetic (its docs direct arithmetic through `Instant` plus a `TimeZone`), so these formatters use pure minute-of-day math with an explicit midnight wrap instead of any datetime library. Shared models may hold `kotlinx.datetime.LocalDateTime` as plain data, but never do arithmetic on it, and never import `java.time` in `commonMain`.
 
-- [ ] **Step 3: Add shared editor models**
+- [x] **Step 3: Add shared editor models**
 
 Create `CommitmentEditorModels.kt`:
 
@@ -614,7 +614,7 @@ data class CommitmentEditorValidation(
 
 Keep this model UI-agnostic. It must not import Compose, Android, or `java.time`.
 
-- [ ] **Step 4: Update validator to return field-level validation**
+- [x] **Step 4: Update validator to return field-level validation**
 
 Extend `AddTaskFormResult.Invalid` so it can carry a field key while preserving the current message-based behavior:
 
@@ -639,7 +639,7 @@ Update existing tests to assert the field for missing assignee:
 assertEquals(AddTaskInvalidField.Assignee, result.field)
 ```
 
-- [ ] **Step 5: Verify Task 3**
+- [x] **Step 5: Verify Task 3**
 
 Run:
 
@@ -650,7 +650,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/ui/commitment client/shared/src/commonTest/kotlin/app/buzer/shared/ui/commitment client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask
