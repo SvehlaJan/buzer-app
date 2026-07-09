@@ -355,7 +355,7 @@ git commit -m "feat: add Todoist task details support"
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/components/BuzerFields.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt`
 
-- [ ] **Step 1: Expand theme tokens**
+- [x] **Step 1: Expand theme tokens**
 
 Replace the thin `BuzerTheme` wrapper with a single Material 3 theme entry point:
 
@@ -414,7 +414,7 @@ val BuzerShapes = Shapes(
 
 Create `BuzerTypography.kt` by delegating to `Typography()` with no custom font dependency.
 
-- [ ] **Step 2: Expand spacing tokens**
+- [x] **Step 2: Expand spacing tokens**
 
 Extend `Spacing.kt`:
 
@@ -435,7 +435,7 @@ Remapping the existing token values is low-risk: production code currently refer
 
 `fabClearance` must clear two stacked 56dp FABs plus their gap and bottom margin so the last agenda row can scroll fully above the stack; verify the value visually in Task 6 and adjust.
 
-- [ ] **Step 3: Add base components**
+- [x] **Step 3: Add base components**
 
 Create `BuzerScaffold.kt`:
 
@@ -472,11 +472,11 @@ Create `BuzerButtons.kt` with `PrimaryActionButton`, `SecondaryActionButton`, an
 
 Create `BuzerFields.kt` with a thin `BuzerSingleLineTextField` wrapper around `OutlinedTextField` to standardize single-line title fields.
 
-- [ ] **Step 4: Restyle status components with theme tokens**
+- [x] **Step 4: Restyle status components with theme tokens**
 
 Update `WarningStatus`, `BlockingLoadingState`, `BlockingErrorState`, `LoadingActionButton`, and `ErrorAlertDialog` to use `Spacing`, Material 3 text styles, and the new color scheme. Keep their public signatures stable to avoid widening this task.
 
-- [ ] **Step 5: Verify Task 2**
+- [x] **Step 5: Verify Task 2**
 
 Run:
 
@@ -487,7 +487,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/theme client/androidApp/src/main/kotlin/app/buzer/android/ui/components client/androidApp/src/main/kotlin/app/buzer/android/ui/status/StatusComponents.kt

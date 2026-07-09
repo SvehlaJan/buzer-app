@@ -14,13 +14,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import app.buzer.android.ui.theme.BuzerTheme
+import app.buzer.android.ui.theme.Spacing
 
 @Composable
 fun InsetSafeContent(
@@ -50,11 +51,15 @@ fun ComponentActivity.setBuzerContent(content: @Composable () -> Unit) {
 fun InlineLoadingStatus(message: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         CircularProgressIndicator()
-        Text(message)
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
@@ -64,14 +69,27 @@ fun WarningStatus(
     onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = MaterialTheme.shapes.medium
     ) {
-        Text(message, color = MaterialTheme.colorScheme.error)
-        if (onRetry != null) {
-            OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
-                Text("Retry")
+        Column(
+            modifier = Modifier.padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (onRetry != null) {
+                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Retry",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }
@@ -82,8 +100,8 @@ fun BlockingLoadingState(message: String, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(Spacing.screen),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         InlineLoadingStatus(message)
@@ -99,8 +117,8 @@ fun BlockingErrorState(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(Spacing.screen),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         WarningStatus(message = message, onRetry = onRetry)
@@ -121,7 +139,10 @@ fun LoadingActionButton(
         enabled = enabled && !loading,
         modifier = modifier
     ) {
-        Text(if (loading) loadingLabel else label)
+        Text(
+            text = if (loading) loadingLabel else label,
+            style = MaterialTheme.typography.labelLarge
+        )
     }
 }
 
@@ -135,18 +156,34 @@ fun ErrorAlertDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
         confirmButton = {
             if (retryLabel != null && onRetry != null) {
                 TextButton(onClick = onRetry) {
-                    Text(retryLabel)
+                    Text(
+                        text = retryLabel,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Dismiss")
+                Text(
+                    text = "Dismiss",
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     )

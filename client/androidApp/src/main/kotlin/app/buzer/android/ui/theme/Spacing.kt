@@ -5,7 +5,10 @@ import androidx.compose.ui.unit.dp
 object Spacing {
     val xs = 4.dp
     val sm = 8.dp
-    val md = 16.dp
-    val lg = 24.dp
-    val xl = 32.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 24.dp
+    val xxl = 32.dp
+    val screen = 16.dp
+    val fabClearance = 160.dp
 }
