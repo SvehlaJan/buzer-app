@@ -26,6 +26,7 @@ export class FakeTodoistAdapter implements TodoistAdapter {
       task: {
         todoistTaskId: `created-${this.createdTasks.length}`,
         title: input.title,
+        description: input.description ?? null,
         projectId: input.projectId,
         assigneeId: input.assigneeId,
         creatorId: "user-self",

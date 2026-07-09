@@ -10,6 +10,7 @@ import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js"
 interface TodoistApiTask {
   id: string;
   content?: string;
+  description?: string | null;
   project_id?: string | null;
   responsible_uid?: string | null;
   assignee_id?: string | number | null;
@@ -85,6 +86,9 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     if (input.assigneeId !== null) {
       body.assignee_id = parseTodoistNumericId(input.assigneeId);
     }
+    if (input.description !== null && input.description !== undefined && input.description.trim().length > 0) {
+      body.description = input.description.trim();
+    }
 
     const response = await this.request<TodoistApiTask>("/tasks", {
       method: "POST",
@@ -100,11 +104,17 @@ export class HttpTodoistAdapter implements TodoistAdapter {
   }
 
   async rescheduleTask(input: TodoistRescheduleInput): Promise<void> {
-    await this.command(randomUUID(), "item_update", {
+    const args: Record<string, unknown> = {
       id: input.todoistTaskId,
       due: { datetime: input.dueDatetime },
       duration: { amount: input.durationMinutes, unit: "minute" }
-    });
+    };
+    if ("description" in input) {
+      args.description = input.description === null || input.description === undefined || input.description.trim().length === 0
+        ? ""
+        : input.description.trim();
+    }
+    await this.command(randomUUID(), "item_update", args);
   }
 
   private async command(uuid: string, type: string, args: Record<string, unknown>, tempId?: string): Promise<SyncResponse> {
@@ -160,6 +170,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     return {
       todoistTaskId: String(task.id),
       title: task.content ?? "",
+      description: task.description?.trim() ? task.description : null,
       projectId: task.project_id ?? null,
       assigneeId: stringifyNullable(task.responsible_uid ?? task.assignee_id ?? null),
       creatorId: stringifyNullable(task.added_by_uid ?? task.assigned_by_uid ?? task.user_id ?? null),

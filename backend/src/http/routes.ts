@@ -17,11 +17,13 @@ const createTaskBody = z.object({
   projectId: z.string().min(1),
   assigneeId: nullableString,
   dueDatetime: nullableString,
-  durationMinutes: nullablePositiveInt
+  durationMinutes: nullablePositiveInt,
+  description: z.string().trim().min(1).nullable().optional()
 });
 const rescheduleBody = z.object({
   dueDatetime: z.string().min(1),
-  durationMinutes: z.number().int().positive()
+  durationMinutes: z.number().int().positive(),
+  description: z.string().trim().nullable().optional()
 });
 const deviceCheckInBody = z.object({
   deviceId: z.string().min(1),
@@ -120,6 +122,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     );
     return service.create({
       ...body,
+      description: body.description ?? null,
       creatorId: options.currentUserId,
       now: new Date().toISOString()
     });
@@ -191,7 +194,15 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       options.currentUserId,
       options.escalationService ?? null
     );
-    await service.reschedule(id, { ...body, now: new Date().toISOString() });
+    const descriptionPatch = Object.prototype.hasOwnProperty.call(body, "description")
+      ? { description: body.description ?? null }
+      : {};
+    await service.reschedule(id, {
+      dueDatetime: body.dueDatetime,
+      durationMinutes: body.durationMinutes,
+      ...descriptionPatch,
+      now: new Date().toISOString()
+    });
     return { ok: true };
   });
 

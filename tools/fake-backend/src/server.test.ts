@@ -25,6 +25,9 @@ test("snapshot returns deterministic tasks", async (t) => {
   const body = response.json();
   assert.equal(body.scheduleVersion, 1);
   assert.equal(body.tasks.length, 3);
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-start").description, "Bring the printed form and check opening hours.");
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-deadline").description, "Share the final numbers before closing the block.");
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-invalid").description, "Clarify the missing commitment fields.");
 });
 
 test("actions are recorded", async (t) => {
@@ -55,7 +58,8 @@ test("create task is recorded", async (t) => {
       projectId: "project-test",
       assigneeId: "user-me",
       dueDatetime: "2026-06-02T16:30:00Z",
-      durationMinutes: 45
+      durationMinutes: 45,
+      description: "Gate code: 2468"
     }
   });
 
@@ -68,6 +72,28 @@ test("create task is recorded", async (t) => {
   const calls = await app.inject({ method: "GET", url: "/__calls" });
   assert.equal(calls.json().calls[0].path, "/tasks");
   assert.equal(calls.json().calls[0].body.title, "Buy milk");
+  assert.equal(calls.json().calls[0].body.description, "Gate code: 2468");
+});
+
+test("reschedule task records description when supplied", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/tasks/task-start/reschedule",
+    headers: { authorization: "Bearer test-token" },
+    payload: {
+      dueDatetime: "2026-06-02T17:00:00Z",
+      durationMinutes: 60,
+      description: "Updated gate code: 1357"
+    }
+  });
+  assert.equal(response.statusCode, 204);
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls[0].path, "/tasks/task-start/reschedule");
+  assert.equal(calls.json().calls[0].body.description, "Updated gate code: 1357");
 });
 
 test("projects are returned for add-task screen", async (t) => {

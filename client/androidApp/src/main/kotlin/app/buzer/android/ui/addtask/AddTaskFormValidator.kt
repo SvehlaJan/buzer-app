@@ -22,7 +22,8 @@ object AddTaskFormValidator {
         selectedAssignee: AddTaskAssigneeOption?,
         deadline: DateTimeSelection?,
         durationMinutes: Int,
-        zoneId: ZoneId = ZoneId.systemDefault()
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        description: String = ""
     ): AddTaskFormResult {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isEmpty()) {
@@ -46,6 +47,7 @@ object AddTaskFormValidator {
         return AddTaskFormResult.Valid(
             CreateTaskRequest(
                 title = trimmedTitle,
+                description = description.normalizedOptionalText(),
                 projectId = selectedProject.id,
                 assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
                 dueDatetime = deadline.toIsoInstantString(zoneId),
@@ -53,4 +55,7 @@ object AddTaskFormValidator {
             )
         )
     }
+
+    private fun String.normalizedOptionalText(): String? =
+        trim().takeIf { it.isNotEmpty() }
 }

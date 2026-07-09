@@ -13,6 +13,7 @@ export interface CreateTaskInput {
   assigneeId: string | null;
   dueDatetime: string | null;
   durationMinutes: number | null;
+  description: string | null;
   creatorId: string;
   now: string;
 }
@@ -20,6 +21,7 @@ export interface CreateTaskInput {
 export interface RescheduleTaskInput {
   dueDatetime: string;
   durationMinutes: number;
+  description?: string | null;
   now: string;
 }
 
@@ -93,6 +95,7 @@ export class TaskActionService {
 
     const created = await this.todoist.createTask({
       title: input.title,
+      description: normalizeOptionalText(input.description),
       projectId: input.projectId,
       assigneeId: input.assigneeId,
       dueDatetime,
@@ -118,6 +121,7 @@ export class TaskActionService {
       id,
       todoistTaskId: created.todoistTaskId,
       title: created.task.title,
+      description: created.task.description,
       projectId: created.task.projectId,
       assigneeId: created.task.assigneeId,
       creatorId: created.task.creatorId ?? input.creatorId,
@@ -195,13 +199,18 @@ export class TaskActionService {
 
   async reschedule(taskId: string, input: RescheduleTaskInput): Promise<void> {
     const task = this.requireTask(taskId);
+    const descriptionWasProvided = "description" in input;
+    const normalizedDescription = descriptionWasProvided
+      ? normalizeOptionalText(input.description ?? null)
+      : undefined;
     await this.todoist.rescheduleTask({
       todoistTaskId: task.todoistTaskId,
       dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes
+      durationMinutes: input.durationMinutes,
+      ...(descriptionWasProvided ? { description: input.description ?? null } : {})
     });
     const tx = this.db.transaction(() => {
-      this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now);
+      this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now, normalizedDescription);
       this.tasks.updateCommitmentState(taskId, {
         state: "planned",
         lastSnoozedAt: null,
@@ -275,6 +284,7 @@ function sameDueDatetime(actual: string | null, expected: string): boolean {
 
 interface TaskWithTodoistFields {
   title: string;
+  description: string | null;
   projectId: string | null;
   assigneeId: string | null;
   creatorId: string | null;
@@ -283,4 +293,8 @@ interface TaskWithTodoistFields {
   completedAt: string | null;
   deletedAt: string | null;
   rawJson: unknown;
+}
+
+function normalizeOptionalText(value: string | null): string | null {
+  return value?.trim().length ? value.trim() : null;
 }

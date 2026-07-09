@@ -126,6 +126,7 @@ describe("HTTP routes", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Exercise",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "user-self",
@@ -235,6 +236,133 @@ describe("HTTP routes", () => {
     expect(adapter.createdTasks[0]?.assigneeId).toBeNull();
   });
 
+  it("passes trimmed create descriptions to Todoist", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Family errand",
+        projectId: "project-family",
+        assigneeId: "user-self",
+        dueDatetime: "2026-06-13T12:00:00Z",
+        durationMinutes: 30,
+        description: "  Gate code: 2468  "
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(adapter.createdTasks[0]?.description).toBe("Gate code: 2468");
+  });
+
+  it("rejects blank create descriptions", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Family errand",
+        projectId: "project-family",
+        assigneeId: "user-self",
+        dueDatetime: "2026-06-13T12:00:00Z",
+        durationMinutes: 30,
+        description: "   "
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("passes reschedule descriptions through with omitted, null, blank, and set semantics", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Repair task",
+      description: "Original details",
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-05-08T18:00:00Z",
+      durationMinutes: 60,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+    const auth = { authorization: "Bearer secret" };
+
+    await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/reschedule",
+      headers: auth,
+      payload: { dueDatetime: "2026-05-08T19:00:00Z", durationMinutes: 45 }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/reschedule",
+      headers: auth,
+      payload: { dueDatetime: "2026-05-08T20:00:00Z", durationMinutes: 50, description: null }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/reschedule",
+      headers: auth,
+      payload: { dueDatetime: "2026-05-08T21:00:00Z", durationMinutes: 55, description: "   " }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/reschedule",
+      headers: auth,
+      payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  " }
+    });
+    await app.close();
+
+    expect(adapter.reschedules.map((reschedule) => reschedule.description)).toEqual([undefined, null, "", "Updated gate code: 1357"]);
+    expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Updated gate code: 1357");
+  });
+
   it("sends escalation through postpone route on second start postpone", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -243,6 +371,7 @@ describe("HTTP routes", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Send invoice",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "user-self",

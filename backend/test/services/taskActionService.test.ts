@@ -14,6 +14,7 @@ function insertCommittedTask(repo: TaskRepository): void {
     id: "task-1",
     todoistTaskId: "todoist-1",
     title: "Send invoice",
+    description: null,
     projectId: null,
     assigneeId: "user-self",
     creatorId: "user-self",
@@ -83,6 +84,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Loose commitment",
+      description: null,
       projectId: "project-family",
       assigneeId: "user-self",
       dueDatetime: null,
@@ -118,6 +120,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Unassigned task",
+      description: null,
       projectId: "project-family",
       assigneeId: null,
       dueDatetime: "2026-05-08T12:00:00Z",
@@ -141,6 +144,7 @@ describe("TaskActionService", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Exercise",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "user-self",
@@ -172,6 +176,7 @@ describe("TaskActionService", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Exercise",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "user-self",
@@ -202,6 +207,7 @@ describe("TaskActionService", () => {
     await service.reschedule("task-1", {
       dueDatetime: "2026-05-08T19:00:00Z",
       durationMinutes: 45,
+      description: "Updated gate code: 1357",
       now: "2026-05-08T17:10:00Z"
     });
     await service.done("task-1", "2026-05-08T19:00:00Z");
@@ -211,6 +217,7 @@ describe("TaskActionService", () => {
       assigneeId: "user-self",
       dueDatetime: "2026-05-09T12:00:00Z",
       durationMinutes: 30,
+      description: "Gate code: 2468",
       creatorId: "user-self",
       now: "2026-05-08T19:05:00Z"
     });
@@ -227,10 +234,14 @@ describe("TaskActionService", () => {
     expect(adapter.reschedules[0]).toEqual({
       todoistTaskId: "todoist-1",
       dueDatetime: "2026-05-08T19:00:00Z",
-      durationMinutes: 45
+      durationMinutes: 45,
+      description: "Updated gate code: 1357"
     });
+    expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Updated gate code: 1357");
+    expect(adapter.createdTasks[0]?.description).toBe("Gate code: 2468");
     expect(created.todoistTaskId).toBe("created-1");
     expect(repo.getByTodoistTaskId("created-1")?.title).toBe("New task");
+    expect(repo.getByTodoistTaskId("created-1")?.description).toBe("Gate code: 2468");
   });
 
   it("sends escalation on second start postpone", async () => {
@@ -322,6 +333,7 @@ describe("TaskActionService", () => {
 
     const created = await service.create({
       title: "Personal strict task",
+      description: null,
       projectId: "project-personal",
       assigneeId: null,
       dueDatetime: "2026-06-13T12:00:00Z",
@@ -335,7 +347,8 @@ describe("TaskActionService", () => {
       projectId: "project-personal",
       assigneeId: null,
       dueDatetime: "2026-06-13T12:00:00Z",
-      durationMinutes: 30
+      durationMinutes: 30,
+      description: null
     });
     expect(taskRepo.getById(created.id)).toMatchObject({
       assigneeId: null,
@@ -364,6 +377,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Shared task",
+      description: null,
       projectId: "project-family",
       assigneeId: null,
       dueDatetime: "2026-06-13T12:00:00Z",
@@ -398,6 +412,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Personal task",
+      description: null,
       projectId: "project-personal",
       assigneeId: "user-self",
       dueDatetime: "2026-06-13T12:00:00Z",
@@ -433,6 +448,7 @@ describe("TaskActionService", () => {
       task: {
         todoistTaskId: "created-1",
         title: "Personal strict task",
+        description: null,
         projectId: "project-personal",
         assigneeId: "someone",
         creatorId: "user-self",
@@ -448,6 +464,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Personal strict task",
+      description: null,
       projectId: "project-personal",
       assigneeId: null,
       dueDatetime: "2026-06-13T12:00:00Z",
@@ -485,6 +502,7 @@ describe("TaskActionService", () => {
       task: {
         todoistTaskId: "created-1",
         title: "Personal strict task",
+        description: null,
         projectId: "project-personal",
         assigneeId: null,
         creatorId: "user-self",
@@ -500,6 +518,7 @@ describe("TaskActionService", () => {
 
     const created = await service.create({
       title: "Personal strict task",
+      description: null,
       projectId: "project-personal",
       assigneeId: null,
       dueDatetime: "2026-06-13T12:00:00.927Z",
@@ -532,6 +551,7 @@ describe("TaskActionService", () => {
 
     await expect(service.create({
       title: "Assigned-away task",
+      description: null,
       projectId: "project-family",
       assigneeId: "someone-else",
       dueDatetime: "2026-06-13T12:00:00Z",

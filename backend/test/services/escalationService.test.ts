@@ -14,6 +14,7 @@ describe("EscalationService", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Book dentist",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "user-self",

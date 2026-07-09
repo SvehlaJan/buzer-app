@@ -13,6 +13,7 @@ create table if not exists todoist_tasks (
   id text primary key,
   todoist_task_id text not null unique,
   title text not null,
+  description text,
   project_id text,
   assignee_id text,
   creator_id text,

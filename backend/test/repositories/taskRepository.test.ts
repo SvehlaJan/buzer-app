@@ -14,6 +14,7 @@ describe("TaskRepository", () => {
       id: "local-task-1",
       todoistTaskId: "todoist-1",
       title: "Write report",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",

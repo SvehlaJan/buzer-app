@@ -4,6 +4,7 @@ export interface TodoistTaskUpsert {
   id: string;
   todoistTaskId: string;
   title: string;
+  description: string | null;
   projectId: string | null;
   assigneeId: string | null;
   creatorId: string | null;
@@ -32,6 +33,7 @@ const taskWithCommitmentSelect = `
     t.id,
     t.todoist_task_id as todoistTaskId,
     t.title,
+    t.description,
     t.project_id as projectId,
     t.assignee_id as assigneeId,
     t.creator_id as creatorId,
@@ -57,17 +59,22 @@ export class TaskRepository {
   constructor(private readonly db: Database.Database) {}
 
   upsertTodoistTask(task: TodoistTaskUpsert): void {
+    const taskParams = {
+      ...task,
+      description: task.description ?? null
+    };
     const tx = this.db.transaction(() => {
       this.db.prepare(`
         insert into todoist_tasks (
-          id, todoist_task_id, title, project_id, assignee_id, creator_id,
+          id, todoist_task_id, title, description, project_id, assignee_id, creator_id,
           due_datetime, duration_minutes, completed_at, deleted_at, raw_json, updated_at
         ) values (
-          @id, @todoistTaskId, @title, @projectId, @assigneeId, @creatorId,
+          @id, @todoistTaskId, @title, @description, @projectId, @assigneeId, @creatorId,
           @dueDatetime, @durationMinutes, @completedAt, @deletedAt, @rawJson, @updatedAt
         )
         on conflict(todoist_task_id) do update set
           title = excluded.title,
+          description = excluded.description,
           project_id = excluded.project_id,
           assignee_id = excluded.assignee_id,
           creator_id = excluded.creator_id,
@@ -77,7 +84,7 @@ export class TaskRepository {
           deleted_at = excluded.deleted_at,
           raw_json = excluded.raw_json,
           updated_at = excluded.updated_at
-      `).run(task);
+      `).run(taskParams);
 
       this.db.prepare(`
         insert into commitment_states (
@@ -89,7 +96,7 @@ export class TaskRepository {
         on conflict(task_id) do update set
           commitment_owner_id = coalesce(commitment_states.commitment_owner_id, excluded.commitment_owner_id)
       `).run({
-        ...task,
+        ...taskParams,
         commitmentOwnerId: task.commitmentOwnerId ?? null
       });
     });
@@ -169,12 +176,28 @@ export class TaskRepository {
     this.db.prepare(`update commitment_states set ${sets.join(", ")} where task_id = @id`).run(params);
   }
 
-  updateTaskSchedule(id: string, dueDatetime: string, durationMinutes: number, updatedAt: string): void {
+  updateTaskSchedule(
+    id: string,
+    dueDatetime: string,
+    durationMinutes: number,
+    updatedAt: string,
+    description?: string | null
+  ): void {
+    const sets = [
+      "due_datetime = @dueDatetime",
+      "duration_minutes = @durationMinutes",
+      "updated_at = @updatedAt"
+    ];
+    const params: Record<string, string | number | null> = { id, dueDatetime, durationMinutes, updatedAt };
+    if (description !== undefined) {
+      sets.push("description = @description");
+      params.description = description;
+    }
     this.db.prepare(`
       update todoist_tasks
-      set due_datetime = ?, duration_minutes = ?, updated_at = ?
-      where id = ?
-    `).run(dueDatetime, durationMinutes, updatedAt, id);
+      set ${sets.join(", ")}
+      where id = @id
+    `).run(params);
   }
 
   markCompleted(id: string, completedAt: string): void {

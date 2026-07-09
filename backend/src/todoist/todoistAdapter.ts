@@ -8,6 +8,7 @@ export interface TodoistSyncResult {
 
 export interface TodoistCreateTaskInput {
   title: string;
+  description?: string | null;
   projectId: string | null;
   assigneeId: string | null;
   dueDatetime: string | null;
@@ -23,6 +24,7 @@ export interface TodoistRescheduleInput {
   todoistTaskId: string;
   dueDatetime: string;
   durationMinutes: number;
+  description?: string | null;
 }
 
 export interface TodoistAdapter {

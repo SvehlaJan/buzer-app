@@ -18,6 +18,7 @@ describe("TodoistSyncService", () => {
       tasks: [{
         todoistTaskId: "todoist-1",
         title: "Pick up parcel",
+        description: "Bring printed form",
         projectId: null,
         assigneeId: "user-self",
         creatorId: "wife",
@@ -34,6 +35,7 @@ describe("TodoistSyncService", () => {
     await service.syncOnce();
 
     expect(repo.getByTodoistTaskId("todoist-1")?.title).toBe("Pick up parcel");
+    expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Bring printed form");
     const token = db.prepare("select sync_token as syncToken from todoist_sync_state where id = 1").get() as { syncToken: string };
     expect(token.syncToken).toBe("next-token");
   });
@@ -46,6 +48,7 @@ describe("TodoistSyncService", () => {
       id: "completed-local",
       todoistTaskId: "todoist-completed",
       title: "Finish report",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -60,6 +63,7 @@ describe("TodoistSyncService", () => {
       id: "deleted-local",
       todoistTaskId: "todoist-deleted",
       title: "Old errand",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -78,6 +82,7 @@ describe("TodoistSyncService", () => {
         {
           todoistTaskId: "todoist-completed",
           title: "Finish report",
+          description: null,
           projectId: null,
           assigneeId: "user-self",
           creatorId: "wife",
@@ -91,6 +96,7 @@ describe("TodoistSyncService", () => {
         {
           todoistTaskId: "todoist-deleted",
           title: "Old errand",
+          description: null,
           projectId: null,
           assigneeId: "user-self",
           creatorId: "wife",

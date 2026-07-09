@@ -1,6 +1,7 @@
 export interface TodoistTaskMirror {
   todoistTaskId: string;
   title: string;
+  description: string | null;
   projectId: string | null;
   assigneeId: string | null;
   creatorId: string | null;

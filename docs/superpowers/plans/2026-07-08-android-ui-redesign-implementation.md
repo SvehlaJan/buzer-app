@@ -137,7 +137,7 @@ Description must flow through both the create path and the reschedule path, beca
 - Modify: `tools/fake-backend/src/server.ts`
 - Modify: `tools/fake-backend/src/server.test.ts`
 
-- [ ] **Step 1: Add backend failing tests for Todoist description mirroring**
+- [x] **Step 1: Add backend failing tests for Todoist description mirroring**
 
 Add these assertions to the existing create/snapshot tests rather than creating broad new test files:
 
@@ -161,7 +161,7 @@ Run: `cd backend && npm test`
 
 Expected before implementation: FAIL with missing `description` property or missing SQLite mirror column.
 
-- [ ] **Step 2: Add backend schema and repository support**
+- [x] **Step 2: Add backend schema and repository support**
 
 In `backend/src/db/schema.sql`, add `description text,` immediately after `title text not null,`. This column mirrors Todoist's field; it is not Buzer-owned enforcement metadata.
 
@@ -173,7 +173,7 @@ In `backend/src/db/migrations.ts`, add this guard after the existing `commitment
 
 In `backend/src/repositories/taskRepository.ts`, add `description: string | null;` to `TodoistTaskUpsert`, select `t.description`, insert/update `description`, and include it in `TaskWithCommitment`.
 
-- [ ] **Step 3: Add Todoist adapter description pass-through**
+- [x] **Step 3: Add Todoist adapter description pass-through**
 
 In `backend/src/todoist/todoistTypes.ts`, add:
 
@@ -207,7 +207,7 @@ description: task.description?.trim() ? task.description : null,
 
 Add `description?: string | null;` to `TodoistRescheduleInput`. In `httpTodoistAdapter.rescheduleTask`, include `description` in the `item_update` args only when the input field is present: non-blank sends the trimmed value, blank or null sends `""` to clear, and an absent field omits the key so Todoist leaves the description unchanged.
 
-- [ ] **Step 4: Add service and HTTP route support**
+- [x] **Step 4: Add service and HTTP route support**
 
 In `backend/src/services/taskActionService.ts`, add `description: string | null;` to `CreateTaskInput`, pass normalized description into Todoist create, and upsert the returned description.
 
@@ -225,7 +225,7 @@ In `backend/src/services/taskSnapshotService.ts`, include `description` in task 
 
 In `backend/src/services/todoistSyncService.ts`, pass `description: task.description` into repository upserts.
 
-- [ ] **Step 5: Add shared Kotlin DTO support**
+- [x] **Step 5: Add shared Kotlin DTO support**
 
 In `client/shared/src/commonMain/kotlin/app/buzer/shared/model/TaskModels.kt`, add:
 
@@ -245,7 +245,7 @@ Add the same defaulted field to `RescheduleTaskRequest`.
 
 Keep both defaulted so existing call sites compile while UI migration is in progress.
 
-- [ ] **Step 6: Add Android validator support**
+- [x] **Step 6: Add Android validator support**
 
 In `AddTaskFormValidator.validate`, add a `description: String = ""` parameter and pass a normalized value to `CreateTaskRequest`. UI labels should say `Details`; the DTO field should remain `description` to match Todoist:
 
@@ -290,7 +290,7 @@ fun omitsBlankOptionalDescription() {
 }
 ```
 
-- [ ] **Step 7: Update fake backend fixtures and assertions**
+- [x] **Step 7: Update fake backend fixtures and assertions**
 
 In `tools/fake-backend/src/fixtures.ts`, add Todoist-style `description` to at least one active task, one deadline task, and one invalid task. Use concrete examples:
 
@@ -300,7 +300,7 @@ description: "Bring the printed form and check opening hours."
 
 In `tools/fake-backend/src/server.test.ts`, assert that `POST /tasks` and `POST /tasks/:id/reschedule` record request `description` when supplied.
 
-- [ ] **Step 8: Verify Task 1**
+- [x] **Step 8: Verify Task 1**
 
 Run:
 
@@ -331,7 +331,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend client tools/fake-backend

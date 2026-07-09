@@ -63,6 +63,38 @@ class AddTaskFormValidatorTest {
     }
 
     @Test
+    fun trimsOptionalDescriptionIntoCreateRequest() {
+        val result = AddTaskFormValidator.validate(
+            title = "Buy milk",
+            description = "  Gate code: 2468  ",
+            selectedProject = assignableProject,
+            selectedAssignee = me,
+            deadline = deadline,
+            durationMinutes = 45,
+            zoneId = zone
+        )
+
+        assertTrue(result is AddTaskFormResult.Valid)
+        assertEquals("Gate code: 2468", result.request.description)
+    }
+
+    @Test
+    fun omitsBlankOptionalDescription() {
+        val result = AddTaskFormValidator.validate(
+            title = "Buy milk",
+            description = "   ",
+            selectedProject = assignableProject,
+            selectedAssignee = me,
+            deadline = deadline,
+            durationMinutes = 45,
+            zoneId = zone
+        )
+
+        assertTrue(result is AddTaskFormResult.Valid)
+        assertEquals(null, result.request.description)
+    }
+
+    @Test
     fun rejectsBlankTitle() {
         val result = AddTaskFormValidator.validate("", assignableProject, me, deadline, 45, zone)
 

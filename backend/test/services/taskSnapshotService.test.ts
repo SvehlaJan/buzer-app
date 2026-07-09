@@ -13,6 +13,7 @@ describe("TaskSnapshotService", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Prepare lunch",
+      description: "Bring printed form",
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -28,6 +29,7 @@ describe("TaskSnapshotService", () => {
     const snapshot = service.getSnapshot("2026-05-08T08:30:00Z");
 
     expect(snapshot.tasks[0]?.startAt).toBe("2026-05-08T12:00:00.000Z");
+    expect(snapshot.tasks[0]?.description).toBe("Bring printed form");
     expect(snapshot.tasks[0]?.validationErrors).toEqual([]);
     expect(snapshot.scheduleVersion).toBe(1);
   });
@@ -40,6 +42,7 @@ describe("TaskSnapshotService", () => {
       id: "task-1",
       todoistTaskId: "todoist-1",
       title: "Loose task",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -66,6 +69,7 @@ describe("TaskSnapshotService", () => {
       id: "task-completed",
       todoistTaskId: "todoist-completed",
       title: "Completed loose task",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -80,6 +84,7 @@ describe("TaskSnapshotService", () => {
       id: "task-deleted",
       todoistTaskId: "todoist-deleted",
       title: "Deleted loose task",
+      description: null,
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
@@ -107,6 +112,7 @@ describe("TaskSnapshotService", () => {
       id: "task-personal",
       todoistTaskId: "todoist-personal",
       title: "Personal strict task",
+      description: null,
       projectId: "project-personal",
       assigneeId: null,
       creatorId: "user-self",
@@ -138,6 +144,7 @@ describe("TaskSnapshotService", () => {
       id: "task-unassigned",
       todoistTaskId: "todoist-unassigned",
       title: "Loose personal task",
+      description: null,
       projectId: "project-personal",
       assigneeId: null,
       creatorId: "user-self",
@@ -169,6 +176,7 @@ describe("TaskSnapshotService", () => {
       id: "task-reassigned",
       todoistTaskId: "todoist-reassigned",
       title: "Reassigned personal task",
+      description: null,
       projectId: "project-personal",
       assigneeId: "someone-else",
       creatorId: "user-self",

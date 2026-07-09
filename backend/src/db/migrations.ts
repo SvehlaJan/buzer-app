@@ -11,6 +11,7 @@ export function migrate(db: Database.Database): void {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf8");
   db.exec(schema);
   ensureColumn(db, "commitment_states", "commitment_owner_id", "text");
+  ensureColumn(db, "todoist_tasks", "description", "text");
   db.prepare("insert or ignore into schema_migrations (version, applied_at) values (?, ?)").run(1, new Date().toISOString());
 }
 

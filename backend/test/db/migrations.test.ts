@@ -19,7 +19,7 @@ describe("migrate", () => {
     ]);
   });
 
-  it("adds project mirror and commitment owner columns to an existing database", () => {
+  it("adds project mirror, commitment owner, and task description columns to an existing database", () => {
     const db = new Database(":memory:");
     db.exec(`
       create table schema_migrations (version integer primary key, applied_at text not null);
@@ -54,8 +54,10 @@ describe("migrate", () => {
     migrate(db);
 
     const commitmentColumns = db.prepare("pragma table_info(commitment_states)").all() as Array<{ name: string }>;
+    const taskColumns = db.prepare("pragma table_info(todoist_tasks)").all() as Array<{ name: string }>;
     const tables = db.prepare("select name from sqlite_master where type = 'table'").all() as Array<{ name: string }>;
     expect(commitmentColumns.map((column) => column.name)).toContain("commitment_owner_id");
+    expect(taskColumns.map((column) => column.name)).toContain("description");
     expect(tables.map((table) => table.name)).toContain("todoist_projects");
   });
 });

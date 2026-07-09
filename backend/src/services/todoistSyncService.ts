@@ -42,6 +42,7 @@ export class TodoistSyncService {
           id,
           todoistTaskId: task.todoistTaskId,
           title: task.title,
+          description: task.description,
           projectId: task.projectId,
           assigneeId: task.assigneeId,
           creatorId: task.creatorId,

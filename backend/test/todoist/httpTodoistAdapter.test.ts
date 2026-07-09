@@ -11,6 +11,7 @@ describe("HttpTodoistAdapter", () => {
       id: "todoist-created",
       content: "Pay bill",
       project_id: "project-1",
+      description: "Bring invoice copy",
       responsible_uid: "43186358",
       due: { datetime: "2026-05-08T16:00:00Z" },
       duration: { amount: 30, unit: "minute" },
@@ -24,7 +25,8 @@ describe("HttpTodoistAdapter", () => {
       projectId: "project-1",
       assigneeId: "43186358",
       dueDatetime: "2026-05-08T16:00:00Z",
-      durationMinutes: 30
+      durationMinutes: 30,
+      description: "  Bring invoice copy  "
     });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://todoist.test/api/v1/tasks");
@@ -35,14 +37,16 @@ describe("HttpTodoistAdapter", () => {
       assignee_id: 43186358,
       due_datetime: "2026-05-08T16:00:00Z",
       duration: 30,
-      duration_unit: "minute"
+      duration_unit: "minute",
+      description: "Bring invoice copy"
     });
     expect(created.task).toMatchObject({
       todoistTaskId: "todoist-created",
       projectId: "project-1",
       assigneeId: "43186358",
       dueDatetime: "2026-05-08T16:00:00Z",
-      durationMinutes: 30
+      durationMinutes: 30,
+      description: "Bring invoice copy"
     });
   });
 
@@ -121,12 +125,63 @@ describe("HttpTodoistAdapter", () => {
       projectId: null,
       assigneeId: null,
       dueDatetime: null,
-      durationMinutes: null
+      durationMinutes: null,
+      description: "   "
     });
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       content: "Inbox task"
     });
+  });
+
+  it("reschedules without description when omitted", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.rescheduleTask({
+      todoistTaskId: "todoist-1",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30
+    });
+
+    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: Record<string, unknown> }>;
+    expect(commands[0]?.args).not.toHaveProperty("description");
+  });
+
+  it("reschedule trims, sets, and clears descriptions", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.rescheduleTask({
+      todoistTaskId: "todoist-1",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 30,
+      description: "  Updated gate code: 1357  "
+    });
+    await adapter.rescheduleTask({
+      todoistTaskId: "todoist-1",
+      dueDatetime: "2026-05-08T17:00:00Z",
+      durationMinutes: 45,
+      description: "   "
+    });
+    await adapter.rescheduleTask({
+      todoistTaskId: "todoist-1",
+      dueDatetime: "2026-05-08T18:00:00Z",
+      durationMinutes: 60,
+      description: null
+    });
+
+    const descriptions = fetchMock.mock.calls.map((call) => {
+      const body = new URLSearchParams(String(call[1]?.body));
+      const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: { description?: string } }>;
+      return commands[0]?.args.description;
+    });
+    expect(descriptions).toEqual(["Updated gate code: 1357", "", ""]);
   });
 
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
