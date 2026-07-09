@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,26 +24,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
+import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
+import app.buzer.android.ui.components.CommitmentEditor
+import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.pickers.WheelDateTimeField
-import app.buzer.android.ui.pickers.WheelDurationField
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
-import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.ui.commitment.CommitmentEditorMode
+import app.buzer.shared.ui.commitment.CommitmentEditorValidation
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +94,9 @@ fun AddTaskScreen(
     var selectedAssignee by remember { mutableStateOf<AddTaskAssigneeOption?>(null) }
     var deadline by remember { mutableStateOf<DateTimeSelection?>(null) }
     var durationMinutes by remember { mutableStateOf(30) }
+    var description by remember { mutableStateOf("") }
+    var descriptionExpanded by remember { mutableStateOf(false) }
+    var invalidField by remember { mutableStateOf<AddTaskInvalidField?>(null) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
@@ -188,14 +191,23 @@ fun AddTaskScreen(
                 selectedProject,
                 selectedAssignee,
                 deadline,
-                durationMinutes
+                durationMinutes,
+                description = description
             )
         ) {
             is AddTaskFormResult.Invalid -> {
                 AppLog.warn("add_task validation_failed message=${result.message}")
-                errorText = result.message
+                errorText = if (result.field == AddTaskInvalidField.Assignee) {
+                    "Assignee is required before saving"
+                } else {
+                    result.message
+                }
+                invalidField = result.field
             }
-            is AddTaskFormResult.Valid -> submitRequest(result.request)
+            is AddTaskFormResult.Valid -> {
+                invalidField = null
+                submitRequest(result.request)
+            }
         }
     }
 
@@ -222,62 +234,10 @@ fun AddTaskScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Add committed task")
-        OutlinedTextField(
-            value = title,
-            onValueChange = {
-                title = it
-                errorText = null
-            },
-            enabled = !submitState.formDisabled,
-            label = { Text("Title") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "Title input" }
-        )
+        Text("Add task")
 
         if (projectsLoading) {
             InlineLoadingStatus("Loading projects...")
-        }
-
-        Box(modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                onClick = { projectMenuExpanded = true },
-                enabled = !submitState.formDisabled && !projectsLoading && projects.isNotEmpty(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { contentDescription = "Project picker" }
-            ) {
-                Text(
-                    when {
-                        projectsLoading -> "Loading projects..."
-                        selectedProject != null -> selectedProject!!.name
-                        else -> "Select project"
-                    }
-                )
-            }
-            DropdownMenu(
-                expanded = projectMenuExpanded,
-                onDismissRequest = { projectMenuExpanded = false }
-            ) {
-                projects.forEach { project ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(if (project.canAssignTasks) project.name else "${project.name} (personal)")
-                        },
-                        onClick = {
-                            selectedProject = project
-                            selectedAssignee = null
-                            persistProjectId(project.id)
-                            projectMenuExpanded = false
-                            errorText = null
-                        },
-                        enabled = !submitState.formDisabled
-                    )
-                }
-            }
         }
 
         projectFeedbackMessage?.let { message ->
@@ -291,78 +251,80 @@ fun AddTaskScreen(
             }
         }
 
-        if (selectedProject?.canAssignTasks == true) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                assigneeOptions.forEach { option ->
-                    val selected = selectedAssignee == option
-                    val label = if (selected) "${option.label} selected" else option.label
-                    if (selected) {
-                        Button(
-                            onClick = { selectedAssignee = option },
-                            enabled = !submitState.formDisabled,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(label)
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = {
-                                selectedAssignee = option
-                                errorText = null
-                            },
-                            enabled = !submitState.formDisabled,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(label)
-                        }
-                    }
-                }
-            }
-        }
-
-        WheelDateTimeField(
-            selection = deadline,
-            onSelectionChange = {
+        CommitmentEditor(
+            mode = CommitmentEditorMode.AddTask,
+            title = title,
+            onTitleChange = {
+                title = it
+                errorText = null
+                invalidField = null
+            },
+            titleEditable = true,
+            description = description,
+            onDescriptionChange = { description = it },
+            descriptionExpanded = descriptionExpanded,
+            onDescriptionExpandedChange = { descriptionExpanded = it },
+            projectContent = {
+                ProjectSelector(
+                    selectedProject = selectedProject,
+                    projects = projects,
+                    projectsLoading = projectsLoading,
+                    projectMenuExpanded = projectMenuExpanded,
+                    onProjectMenuExpandedChange = { projectMenuExpanded = it },
+                    onProjectSelected = { project ->
+                        selectedProject = project
+                        selectedAssignee = null
+                        persistProjectId(project.id)
+                        projectMenuExpanded = false
+                        errorText = null
+                        invalidField = null
+                    },
+                    enabled = !submitState.formDisabled && !projectsLoading && projects.isNotEmpty()
+                )
+            },
+            assigneeContent = {
+                AssigneeSelector(
+                    selectedProject = selectedProject,
+                    assigneeOptions = assigneeOptions,
+                    selectedAssignee = selectedAssignee,
+                    onAssigneeSelected = { option ->
+                        selectedAssignee = option
+                        errorText = null
+                        invalidField = null
+                    },
+                    enabled = !submitState.formDisabled
+                )
+            },
+            start = deadline,
+            onStartChange = {
                 deadline = it
                 errorText = null
+                invalidField = null
             },
-            label = "Start time picker",
-            enabled = !submitState.formDisabled,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        WheelDurationField(
-            minutes = durationMinutes,
-            onMinutesChange = {
+            durationMinutes = durationMinutes,
+            onDurationChange = {
                 durationMinutes = it
                 errorText = null
+                invalidField = null
             },
-            label = "Duration minutes input",
+            validation = CommitmentEditorValidation(
+                bannerMessage = errorText,
+                titleError = "Required".takeIf { invalidField == AddTaskInvalidField.Title },
+                projectError = "Required".takeIf { invalidField == AddTaskInvalidField.Project },
+                assigneeError = "Required".takeIf { invalidField == AddTaskInvalidField.Assignee },
+                startError = "Required".takeIf { invalidField == AddTaskInvalidField.Start },
+                durationError = "Required".takeIf { invalidField == AddTaskInvalidField.Duration }
+            ),
+            submitting = submitting,
             enabled = !submitState.formDisabled,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        deadline?.let { start ->
-            Text("Ends ${formatEndDateTime(start, durationMinutes)}")
-        }
-
-        errorText?.let { Text(it) }
-
-        LoadingActionButton(
-            label = "Save task",
+            submitEnabled = submitState.saveEnabled,
+            submitLabel = commitmentSaveLabel(deadline, durationMinutes),
             loadingLabel = "Saving...",
-            loading = submitting,
-            onClick = { validateAndSubmit() },
-            enabled = submitState.saveEnabled,
+            onSubmit = { validateAndSubmit() },
+            onCancel = onBack,
+            titleModifier = Modifier.testTag("titleInput"),
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedButton(
-            onClick = onBack,
-            enabled = !submitState.formDisabled,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Back")
-        }
     }
 
     projectLoadDialogMessage?.let { message ->
@@ -389,10 +351,83 @@ fun AddTaskScreen(
     }
 }
 
-private val endDateTimeFormatter: java.time.format.DateTimeFormatter =
-    java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+@Composable
+private fun ProjectSelector(
+    selectedProject: ProjectItem?,
+    projects: List<ProjectItem>,
+    projectsLoading: Boolean,
+    projectMenuExpanded: Boolean,
+    onProjectMenuExpandedChange: (Boolean) -> Unit,
+    onProjectSelected: (ProjectItem) -> Unit,
+    enabled: Boolean
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { onProjectMenuExpandedChange(true) },
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Project picker" }
+        ) {
+            Text(
+                when {
+                    projectsLoading -> "Loading projects..."
+                    selectedProject != null -> selectedProject.name
+                    else -> "Select project"
+                }
+            )
+        }
+        DropdownMenu(
+            expanded = projectMenuExpanded,
+            onDismissRequest = { onProjectMenuExpandedChange(false) }
+        ) {
+            projects.forEach { project ->
+                DropdownMenuItem(
+                    text = {
+                        Text(if (project.canAssignTasks) project.name else "${project.name} (personal)")
+                    },
+                    onClick = { onProjectSelected(project) },
+                    enabled = enabled
+                )
+            }
+        }
+    }
+}
 
-private fun formatEndDateTime(start: DateTimeSelection, durationMinutes: Int): String =
-    start.date.atTime(start.hour, start.minute)
-        .plusMinutes(durationMinutes.toLong())
-        .format(endDateTimeFormatter)
+@Composable
+private fun AssigneeSelector(
+    selectedProject: ProjectItem?,
+    assigneeOptions: List<AddTaskAssigneeOption>,
+    selectedAssignee: AddTaskAssigneeOption?,
+    onAssigneeSelected: (AddTaskAssigneeOption) -> Unit,
+    enabled: Boolean
+) {
+    if (selectedProject?.canAssignTasks != true) {
+        Text("Not required")
+        return
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        assigneeOptions.forEach { option ->
+            val selected = selectedAssignee == option
+            val label = if (selected) "${option.label} selected" else option.label
+            if (selected) {
+                Button(
+                    onClick = { onAssigneeSelected(option) },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(label)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onAssigneeSelected(option) },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(label)
+                }
+            }
+        }
+    }
+}

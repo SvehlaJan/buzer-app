@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -39,9 +40,9 @@ class AddTaskFakeBackendTest {
             waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             waitForText("Select project")
-            composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+            enterTitle("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save task").performClick()
+            composeRule.onNodeWithText("Save ", substring = true).performClick()
 
             composeRule.onNodeWithText("Project is required").assertIsDisplayed()
             assertNoRecordedCall("/tasks")
@@ -59,13 +60,13 @@ class AddTaskFakeBackendTest {
             waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Shared")
-            composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+            enterTitle("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save task").performClick()
-            composeRule.onNodeWithText("Assignee is required for this project").assertIsDisplayed()
+            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            composeRule.onNodeWithText("Assignee is required before saving").assertIsDisplayed()
 
             composeRule.onNodeWithText("Me").performClick()
-            composeRule.onNodeWithText("Save task").performClick()
+            composeRule.onNodeWithText("Save ", substring = true).performClick()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -91,9 +92,9 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Personal (personal)")
             composeRule.onAllNodesWithText("Me").assertCountEquals(0)
-            composeRule.onNodeWithContentDescription("Title input").performTextInput("Personal task")
+            enterTitle("Personal task")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save task").performClick()
+            composeRule.onNodeWithText("Save ", substring = true).performClick()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -143,13 +144,13 @@ class AddTaskFakeBackendTest {
                 waitForText("Add task")
                 composeRule.onNodeWithText("Add task").performClick()
                 selectProject("Test Shared")
-                composeRule.onNodeWithContentDescription("Title input").performTextInput("Buy milk")
+                enterTitle("Buy milk")
                 composeRule.onNodeWithText("Me").performClick()
                 selectDefaultDeadline()
-                composeRule.onNodeWithText("Save task").performClick()
+                composeRule.onNodeWithText("Save ", substring = true).performClick()
 
                 waitForRecordedCall("/tasks")
-                composeRule.onNodeWithText("Add committed task").assertIsDisplayed()
+                composeRule.onNodeWithText("Add task").assertIsDisplayed()
                 composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
                 composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
             } finally {
@@ -169,7 +170,7 @@ class AddTaskFakeBackendTest {
             waitForText("Add task")
             composeRule.onNodeWithText("Add task").performClick()
             selectProject("Test Personal (personal)")
-            composeRule.onNodeWithText("Back").performClick()
+            composeRule.onNodeWithText("Cancel").performClick()
         } finally {
             firstScenario.close()
         }
@@ -185,6 +186,44 @@ class AddTaskFakeBackendTest {
         }
     }
 
+    @Test
+    fun addTask_optionalDetailsAreSubmittedAsDescription() {
+        resetTestState()
+
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForText("Add task")
+            composeRule.onNodeWithText("Add task").performClick()
+            selectProject("Test Shared")
+            enterTitle("Buy milk")
+            composeRule.onNodeWithText("Details").performClick()
+            waitForText("Details")
+            composeRule.onNodeWithText("Details").performTextInput("Gate code: 2468")
+            composeRule.onNodeWithText("Me").performClick()
+            selectDefaultDeadline()
+            waitForText("Save ")
+            composeRule.onNodeWithText("Save ", substring = true).assertIsDisplayed()
+            composeRule.onNodeWithText("Save ", substring = true).performClick()
+
+            waitForRecordedCall("/tasks")
+            fakeBackend.assertRecorded(
+                "/tasks",
+                "\"title\":\"Buy milk\"",
+                "\"description\":\"Gate code: 2468\"",
+                "\"projectId\":\"project-test\"",
+                "\"assigneeId\":\"user-me\"",
+                "\"durationMinutes\":30",
+                "dueDatetime"
+            )
+        } finally {
+            scenario.close()
+        }
+    }
+
+    private fun enterTitle(title: String) {
+        composeRule.onNodeWithTag("titleInput").performTextInput(title)
+    }
+
     private fun selectProject(label: String) {
         waitForText("Select project")
         composeRule.onNodeWithContentDescription("Project picker").performClick()
@@ -193,7 +232,7 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Start time picker").performClick()
+        composeRule.onNodeWithContentDescription("Start picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }

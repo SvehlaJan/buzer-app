@@ -51,10 +51,12 @@ fun CommitmentEditor(
     validation: CommitmentEditorValidation,
     submitting: Boolean,
     enabled: Boolean,
+    submitEnabled: Boolean = enabled,
     submitLabel: String,
     loadingLabel: String,
     onSubmit: () -> Unit,
     onCancel: () -> Unit,
+    titleModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -77,7 +79,7 @@ fun CommitmentEditor(
                 enabled = enabled && !submitting,
                 isError = validation.titleError != null,
                 supportingText = validation.titleError,
-                modifier = Modifier.fillMaxWidth()
+                modifier = titleModifier.fillMaxWidth()
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
@@ -154,7 +156,7 @@ fun CommitmentEditor(
                 loadingLabel = loadingLabel,
                 loading = submitting,
                 onClick = onSubmit,
-                enabled = enabled,
+                enabled = submitEnabled,
                 modifier = Modifier.weight(1f)
             )
         }

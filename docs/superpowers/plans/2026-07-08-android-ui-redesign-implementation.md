@@ -788,7 +788,7 @@ git commit -m "feat: add shared commitment editor component"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
 
-- [ ] **Step 1: Add instrumentation expectations for final Add Task behavior**
+- [x] **Step 1: Add instrumentation expectations for final Add Task behavior**
 
 Update `AddTaskFakeBackendTest.kt` to assert:
 
@@ -802,7 +802,7 @@ Run: `scripts/e2e-fake-backend.sh`
 
 Expected before implementation: FAIL on the new Add Task assertions. Running only the Add Task instrumentation class first (Gradle test filtering on the managed-device lane) is acceptable to confirm the failing assertions before paying for the full lane.
 
-- [ ] **Step 2: Replace inline Add Task layout with `CommitmentEditor`**
+- [x] **Step 2: Replace inline Add Task layout with `CommitmentEditor`**
 
 Keep the existing project loading, project menu, assignee options, submit dialog, and retry behavior. Remove only the duplicated field/wheel/receipt layout.
 
@@ -829,7 +829,7 @@ invalidField = result.field
 
 Pass field-level errors into `CommitmentEditorValidation`.
 
-- [ ] **Step 3: Keep Add Task compact**
+- [x] **Step 3: Keep Add Task compact**
 
 Use simple header text `Add task`. Remove `Add committed task`.
 
@@ -837,7 +837,7 @@ Do not expand the task details field by default. It opens only when the user tap
 
 Project and assignee controls remain compact and live inside the shared editor slots.
 
-- [ ] **Step 4: Verify Task 5**
+- [x] **Step 4: Verify Task 5**
 
 Run:
 
@@ -856,7 +856,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt
