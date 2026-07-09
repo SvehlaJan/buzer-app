@@ -21,6 +21,10 @@ Task: Task 5, "Migrate Add Task To CommitmentEditor"
 - `docs/superpowers/plans/2026-07-08-android-ui-redesign-implementation.md`
 - `docs/handoffs/2026-07-09-add-task-commitment-editor.md`
 
+Follow-up spec-review fix:
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
+- `docs/handoffs/2026-07-09-add-task-commitment-editor.md`
+
 ## Commands And Results
 
 Verification:
@@ -68,6 +72,26 @@ Verification:
 - Result: PASS
 - Evidence: No whitespace errors.
 
+Verification:
+- Command: `cd client && ./gradlew :androidApp:compileDebugAndroidTestKotlin --console=plain`
+- Result: PASS
+- Evidence: Build successful after adding the range-label helper that reads Compose text semantics.
+
+Verification:
+- Command: `scripts/e2e-fake-backend.sh`
+- Result: FAIL (RED, expected follow-up)
+- Evidence: With a temporary local mutation of Add Task's submit label back to `Save task`, `AddTaskFakeBackendTest.addTask_optionalDetailsAreSubmittedAsDescription` failed with `Expected exactly one save button label matching Save \d{2}:\d{2}-\d{2}:\d{2}. Found save labels: [Save task]`. The temporary mutation was reverted before final verification.
+
+Verification:
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: Build successful; debug unit tests passed/up-to-date and `assembleDebug` completed.
+
+Verification:
+- Command: `scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: Managed `pixel8Api34DebugAndroidTest` finished 22 tests with 0 skipped and 0 failed after restoring the computed save label.
+
 ## Manual Verification
 
 - Confirmed Add Task no longer renders `Add committed task` and uses simple header text `Add task`.
@@ -75,6 +99,7 @@ Verification:
 - Confirmed details start collapsed, can be opened with `Details`, and the fake backend receives the supplied Todoist `description`.
 - Confirmed missing shared-project assignee shows `Assignee is required before saving`.
 - Confirmed save label changes to a computed range after start is selected and duration is 30 minutes.
+- Follow-up spec review fix: strengthened Add Task instrumentation to require exactly one visible save label matching `Save \d{2}:\d{2}-\d{2}:\d{2}` after selecting a start time, and to click that exact label instead of any `Save ` prefix.
 - Confirmed project loading, retry, project menu, assignee buttons, persisted project selection, submit failure dialog, retry save, and `runSuccessfulAddTaskCreate` flow remain covered by the Add Task fake-backend tests.
 
 ## Known Failures Or Skipped Checks

@@ -2,6 +2,8 @@ package app.buzer.android.addtask
 
 import android.content.Context
 import android.os.SystemClock
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -42,7 +44,7 @@ class AddTaskFakeBackendTest {
             waitForText("Select project")
             enterTitle("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            clickSaveBlockRange()
 
             composeRule.onNodeWithText("Project is required").assertIsDisplayed()
             assertNoRecordedCall("/tasks")
@@ -62,11 +64,11 @@ class AddTaskFakeBackendTest {
             selectProject("Test Shared")
             enterTitle("Buy milk")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            clickSaveBlockRange()
             composeRule.onNodeWithText("Assignee is required before saving").assertIsDisplayed()
 
             composeRule.onNodeWithText("Me").performClick()
-            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -94,7 +96,7 @@ class AddTaskFakeBackendTest {
             composeRule.onAllNodesWithText("Me").assertCountEquals(0)
             enterTitle("Personal task")
             selectDefaultDeadline()
-            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -147,7 +149,7 @@ class AddTaskFakeBackendTest {
                 enterTitle("Buy milk")
                 composeRule.onNodeWithText("Me").performClick()
                 selectDefaultDeadline()
-                composeRule.onNodeWithText("Save ", substring = true).performClick()
+                clickSaveBlockRange()
 
                 waitForRecordedCall("/tasks")
                 composeRule.onNodeWithText("Add task").assertIsDisplayed()
@@ -201,9 +203,7 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithText("Details").performTextInput("Gate code: 2468")
             composeRule.onNodeWithText("Me").performClick()
             selectDefaultDeadline()
-            waitForText("Save ")
-            composeRule.onNodeWithText("Save ", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithText("Save ", substring = true).performClick()
+            clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -235,6 +235,44 @@ class AddTaskFakeBackendTest {
         composeRule.onNodeWithContentDescription("Start picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
+    }
+
+    private fun clickSaveBlockRange() {
+        val label = waitForSaveBlockRangeLabel()
+        composeRule.onNodeWithText(label).performClick()
+    }
+
+    private fun waitForSaveBlockRangeLabel(): String {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastLabels = emptyList<String>()
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lastLabels = saveLabels()
+            val matchingLabels = lastLabels.filter { it.matches(saveBlockRangeLabelPattern) }
+            if (matchingLabels.size == 1) {
+                val label = matchingLabels.single()
+                composeRule.onNodeWithText(label).assertIsDisplayed()
+                return label
+            }
+            SystemClock.sleep(100)
+        }
+        fail(
+            "Expected exactly one save button label matching " +
+                "${saveBlockRangeLabelPattern.pattern}. Found save labels: $lastLabels"
+        )
+        error("unreachable")
+    }
+
+    private fun saveLabels(): List<String> =
+        composeRule.onAllNodesWithText("Save ", substring = true)
+            .fetchSemanticsNodes()
+            .flatMap { node ->
+                node.config.getOrNull(SemanticsProperties.Text)
+                    .orEmpty()
+                    .map { it.text }
+            }
+
+    companion object {
+        private val saveBlockRangeLabelPattern = Regex("""Save \d{2}:\d{2}-\d{2}:\d{2}""")
     }
 
     private fun resetTestState() {
