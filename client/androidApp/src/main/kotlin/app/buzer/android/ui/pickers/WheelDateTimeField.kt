@@ -33,14 +33,16 @@ fun WheelDateTimeField(
     onSelectionChange: (DateTimeSelection) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    contentDescription: String = label,
+    dialogTitle: String = label
 ) {
     var dialogVisible by remember { mutableStateOf(false) }
 
     OutlinedButton(
         onClick = { dialogVisible = true },
         enabled = enabled,
-        modifier = modifier.semantics { contentDescription = label }
+        modifier = modifier.semantics { this.contentDescription = contentDescription }
     ) {
         Text(selection?.formatForDisplay() ?: "No start time selected")
     }
@@ -51,7 +53,7 @@ fun WheelDateTimeField(
 
         AlertDialog(
             onDismissRequest = { dialogVisible = false },
-            title = { Text(label) },
+            title = { Text(dialogTitle) },
             text = {
                 WheelDateTimePicker(
                     startDateTime = start,

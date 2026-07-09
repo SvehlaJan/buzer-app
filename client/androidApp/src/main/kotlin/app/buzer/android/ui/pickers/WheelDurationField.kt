@@ -50,14 +50,16 @@ fun WheelDurationField(
     onMinutesChange: (Int) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    contentDescription: String = label,
+    dialogTitle: String = label
 ) {
     var dialogVisible by remember { mutableStateOf(false) }
 
     OutlinedButton(
         onClick = { dialogVisible = true },
         enabled = enabled,
-        modifier = modifier.semantics { contentDescription = label }
+        modifier = modifier.semantics { this.contentDescription = contentDescription }
     ) {
         Text(formatDuration(minutes))
     }
@@ -69,7 +71,7 @@ fun WheelDurationField(
 
         AlertDialog(
             onDismissRequest = { dialogVisible = false },
-            title = { Text(label) },
+            title = { Text(dialogTitle) },
             text = {
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     WheelTextPicker(

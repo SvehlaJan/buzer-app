@@ -668,7 +668,7 @@ git commit -m "feat: add commitment editor models"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers/WheelDurationField.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/components/CommitmentEditorStateTest.kt`
 
-- [ ] **Step 1: Add pure Android adapter tests for editor labels**
+- [x] **Step 1: Add pure Android adapter tests for editor labels**
 
 Create `CommitmentEditorStateTest.kt` with tests for:
 
@@ -691,7 +691,7 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Add `TaskDetailsBlock`**
+- [x] **Step 2: Add `TaskDetailsBlock`**
 
 Create a composable that accepts:
 
@@ -711,7 +711,7 @@ Behavior:
 - Clamp to three lines when collapsed.
 - Show a small `TextButton` labeled `More` or `Less` when text is long enough to need expansion.
 
-- [ ] **Step 3: Add `CommitmentEditor`**
+- [x] **Step 3: Add `CommitmentEditor`**
 
 Create a composable with this shape:
 
@@ -752,7 +752,7 @@ Use:
 - A receipt section showing Project, Assignee, Start, Duration, and Ends.
 - `LoadingActionButton` for the primary submit button.
 
-- [ ] **Step 4: Keep wheel fields accessible**
+- [x] **Step 4: Keep wheel fields accessible**
 
 Update wheel labels to user-facing labels:
 
@@ -761,7 +761,7 @@ Update wheel labels to user-facing labels:
 
 Do not include internal labels like `WHEELS`, `EDIT BLOCK`, or test-only wording in visible UI.
 
-- [ ] **Step 5: Verify Task 4**
+- [x] **Step 5: Verify Task 4**
 
 Run:
 
@@ -772,7 +772,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/components client/androidApp/src/main/kotlin/app/buzer/android/ui/pickers client/androidApp/src/test/kotlin/app/buzer/android/ui/components
