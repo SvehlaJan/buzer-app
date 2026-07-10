@@ -1027,7 +1027,7 @@ git commit -m "feat: redesign home agenda"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Add blocker UI model tests**
+- [x] **Step 1: Add blocker UI model tests**
 
 Create tests that verify:
 
@@ -1041,7 +1041,7 @@ Run: `cd client && ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUn
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Create shared blocker models**
+- [x] **Step 2: Create shared blocker models**
 
 Create `BlockerUiModels.kt`:
 
@@ -1062,7 +1062,7 @@ data class BlockerUiModel(
 )
 ```
 
-- [ ] **Step 3: Create `BlockerSurface`**
+- [x] **Step 3: Create `BlockerSurface`**
 
 `BlockerSurface` accepts `BlockerUiModel`, optional warning, action state, and an action-panel slot:
 
@@ -1079,7 +1079,7 @@ fun BlockerSurface(
 
 Use `TaskDetailsBlock` for description.
 
-- [ ] **Step 4: Migrate Start blocker**
+- [x] **Step 4: Migrate Start blocker**
 
 In `StartBlockerScreen`, replace its screen shell with `BlockerSurface`.
 
@@ -1091,7 +1091,7 @@ Actions remain:
 
 Keep `showBack` only for debug/dev contexts. Production full-screen blocker should pass `showBack = false`.
 
-- [ ] **Step 5: Migrate Deadline blocker and reschedule entry**
+- [x] **Step 5: Migrate Deadline blocker and reschedule entry**
 
 In `DeadlineBlockerScreen`, use `BlockerSurface` for action mode. Actions remain:
 
@@ -1101,7 +1101,7 @@ In `DeadlineBlockerScreen`, use `BlockerSurface` for action mode. Actions remain
 
 When `Reschedule` is tapped, route to `CommitmentEditor` in `CommitmentEditorMode.Reschedule` instead of the inline wheel layout. Title editing remains disabled unless the caller later supplies editability. Task details are editable in reschedule mode, prefilled from Todoist `description`, and submitted through `RescheduleTaskRequest.description`.
 
-- [ ] **Step 6: Update instrumentation tests**
+- [x] **Step 6: Update instrumentation tests**
 
 Update `BlockerActivityFakeBackendTest.kt` to assert:
 
@@ -1110,7 +1110,7 @@ Update `BlockerActivityFakeBackendTest.kt` to assert:
 - Reschedule shows separate Start and Duration pickers and computed save label.
 - Action failure still shows retry dialog.
 
-- [ ] **Step 7: Verify Task 7**
+- [x] **Step 7: Verify Task 7**
 
 Run:
 
@@ -1129,7 +1129,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/ui/blockers client/androidApp/src/main/kotlin/app/buzer/android/ui/components/BlockerSurface.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers

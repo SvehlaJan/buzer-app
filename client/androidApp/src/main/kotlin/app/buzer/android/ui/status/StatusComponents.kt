@@ -152,10 +152,15 @@ fun ErrorAlertDialog(
     message: String,
     onDismiss: () -> Unit,
     retryLabel: String? = null,
-    onRetry: (() -> Unit)? = null
+    onRetry: (() -> Unit)? = null,
+    dismissLabel: String? = "Dismiss"
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (dismissLabel != null) {
+                onDismiss()
+            }
+        },
         title = {
             Text(
                 text = title,
@@ -178,12 +183,14 @@ fun ErrorAlertDialog(
                 }
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "Dismiss",
-                    style = MaterialTheme.typography.labelLarge
-                )
+        dismissButton = dismissLabel?.let { label ->
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     )

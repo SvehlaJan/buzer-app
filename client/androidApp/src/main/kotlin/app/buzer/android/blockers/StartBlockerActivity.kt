@@ -10,12 +10,18 @@ import app.buzer.android.enforcement.AlarmIntentFactory
 import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.StartBlockerScreen
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.ui.blockers.BlockerKind
+import app.buzer.shared.ui.blockers.buildBlockerUiModel
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -25,9 +31,10 @@ class StartBlockerActivity : ComponentActivity() {
     private var actionInFlight = false
     private var checking by mutableStateOf(true)
     private var warningMessage by mutableStateOf<String?>(null)
+    private var blockerModel by mutableStateOf(buildBlockerUiModel(BlockerKind.Start, null))
     private var actionState by mutableStateOf<BlockerActionState>(BlockerActionState.Idle)
     private var errorMessage by mutableStateOf<String?>(null)
-    private var lastAction: (suspend () -> Unit)? = null
+    private var lastAction: (suspend () -> CoordinatorActionResult)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,7 +78,9 @@ class StartBlockerActivity : ComponentActivity() {
         showBlocker(coordinator, taskId)
         lifecycleScope.launch {
             try {
-                coordinator.loadLatestSnapshot()
+                coordinator.loadLatestSnapshot()?.let { snapshot ->
+                    updateModelFromSnapshot(snapshot, taskId)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -87,6 +96,7 @@ class StartBlockerActivity : ComponentActivity() {
                 val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
                     coordinator.refreshAndReconcile()
                 }
+                refreshedSnapshot?.let { updateModelFromSnapshot(it, taskId) }
                 if (
                     refreshedSnapshot != null &&
                     BlockerTaskSnapshotGate.shouldHideAfterRefresh(
@@ -127,6 +137,7 @@ class StartBlockerActivity : ComponentActivity() {
         AppLog.debug("start_blocker show taskId=$taskId")
         setBuzerContent {
             StartBlockerScreen(
+                model = blockerModel,
                 onStart = {
                     AppLog.info("start_blocker start_clicked taskId=$taskId")
                     runActionOnce("Starting...") { coordinator.startTask(taskId) }
@@ -153,7 +164,16 @@ class StartBlockerActivity : ComponentActivity() {
         }
     }
 
-    private fun runActionOnce(label: String, action: suspend () -> Unit) {
+    private fun updateModelFromSnapshot(snapshot: TasksSnapshotResponse, taskId: String) {
+        val task = snapshot.findTask(taskId)
+        blockerModel = buildBlockerUiModel(
+            kind = BlockerKind.Start,
+            task = task,
+            timeZoneId = ZoneId.systemDefault().id
+        )
+    }
+
+    private fun runActionOnce(label: String, action: suspend () -> CoordinatorActionResult) {
         if (actionInFlight) {
             AppLog.debug("start_blocker action ignored reason=in_flight")
             return
@@ -163,8 +183,13 @@ class StartBlockerActivity : ComponentActivity() {
         lastAction = action
         lifecycleScope.launch {
             try {
-                action()
-                finish()
+                when (val result = action()) {
+                    CoordinatorActionResult.Success -> finish()
+                    is CoordinatorActionResult.FailedAndHidden -> {
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -184,3 +209,6 @@ class StartBlockerActivity : ComponentActivity() {
         const val BLOCKER_REFRESH_TIMEOUT_MILLIS = 5_000L
     }
 }
+
+private fun TasksSnapshotResponse.findTask(taskId: String): TaskSnapshotItem? =
+    tasks.firstOrNull { it.id == taskId }
