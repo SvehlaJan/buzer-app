@@ -2,32 +2,43 @@ package app.buzer.android.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import app.buzer.android.ui.components.BuzerPanel
+import app.buzer.android.ui.components.CommitmentEditor
+import app.buzer.android.ui.components.TaskDetailsBlock
+import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.pickers.WheelDateTimeField
-import app.buzer.android.ui.pickers.WheelDurationField
 import app.buzer.android.ui.status.BlockingErrorState
 import app.buzer.android.ui.status.BlockingLoadingState
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.status.WarningStatus
+import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.ui.commitment.CommitmentEditorMode
+import app.buzer.shared.ui.commitment.CommitmentEditorValidation
+import java.time.Instant
+import java.time.ZoneId
 
 sealed interface MorningReviewContentState {
     data object Loading : MorningReviewContentState
@@ -49,6 +60,96 @@ fun buildMorningReviewContentState(
         else -> MorningReviewContentState.Ready()
     }
 
+data class MorningReviewReadyState(
+    val headerText: String,
+    val headerProgressText: String?,
+    val warning: String?,
+    val refreshing: Boolean,
+    val cards: List<MorningReviewTaskCardState>,
+    val actionLabels: List<String>
+)
+
+data class MorningReviewTaskCardState(
+    val task: TaskSnapshotItem,
+    val title: String,
+    val problemText: String,
+    val description: String?,
+    val repairActionLabel: String = "Repair",
+    val snoozeActionLabel: String = "Snooze",
+    val progressText: String? = null
+) {
+    fun allText(): String =
+        listOfNotNull(title, problemText, description, repairActionLabel, snoozeActionLabel, progressText)
+            .joinToString(" ")
+}
+
+data class MorningReviewRepairEditorState(
+    val mode: CommitmentEditorMode,
+    val titleEditable: Boolean,
+    val title: String,
+    val description: String,
+    val projectLabel: String?,
+    val assigneeLabel: String?,
+    val start: DateTimeSelection?,
+    val durationMinutes: Int,
+    val submitLabel: String
+)
+
+fun buildMorningReviewReadyState(
+    invalidTasks: List<TaskSnapshotItem>,
+    warning: String?,
+    refreshing: Boolean
+): MorningReviewReadyState {
+    val count = invalidTasks.size
+    return MorningReviewReadyState(
+        headerText = if (count == 0) {
+            "All commitments are valid"
+        } else {
+            "$count ${if (count == 1) "task needs" else "tasks need"} attention"
+        },
+        headerProgressText = count.takeIf { it > 0 }?.let { "$it unresolved" },
+        warning = warning,
+        refreshing = refreshing,
+        cards = invalidTasks.map { task ->
+            MorningReviewTaskCardState(
+                task = task,
+                title = task.title,
+                problemText = plainLanguageProblem(task.validationErrors),
+                description = task.description?.trim()?.takeIf { it.isNotEmpty() }
+            )
+        },
+        actionLabels = if (count == 0) listOf("Done") else emptyList()
+    )
+}
+
+fun buildMorningReviewRepairEditorState(
+    task: TaskSnapshotItem,
+    start: DateTimeSelection?,
+    durationMinutes: Int
+): MorningReviewRepairEditorState =
+    MorningReviewRepairEditorState(
+        mode = CommitmentEditorMode.Repair,
+        titleEditable = false,
+        title = task.title,
+        description = task.description.orEmpty(),
+        projectLabel = task.projectId,
+        assigneeLabel = task.assigneeId,
+        start = start,
+        durationMinutes = durationMinutes,
+        submitLabel = commitmentSaveLabel(start, durationMinutes)
+    )
+
+private fun plainLanguageProblem(validationErrors: List<String>): String {
+    val errors = validationErrors.toSet()
+    return when {
+        "missing_due_datetime" in errors && "missing_duration" in errors -> "No start time or duration set"
+        "missing_due_datetime" in errors -> "No start time set"
+        "missing_duration" in errors -> "No duration set"
+        validationErrors.isEmpty() -> "Commitment details need repair"
+        else -> validationErrors.joinToString(", ") { it.replace('_', ' ') }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MorningReviewScreen(
@@ -66,9 +167,17 @@ fun MorningReviewScreen(
     onRetryRefresh: () -> Unit = {}
 ) {
     var repairingTask by remember { mutableStateOf<TaskSnapshotItem?>(null) }
-    var deadline by remember(repairingTask?.id) { mutableStateOf<DateTimeSelection?>(null) }
+    var start by remember(repairingTask?.id) {
+        mutableStateOf(repairingTask?.initialRepairStartSelection())
+    }
     var durationMinutes by remember(repairingTask?.id) {
         mutableStateOf(repairingTask?.durationMinutes ?: 30)
+    }
+    var description by remember(repairingTask?.id) {
+        mutableStateOf(repairingTask?.description.orEmpty())
+    }
+    var descriptionExpanded by remember(repairingTask?.id) {
+        mutableStateOf(false)
     }
     var errorText by remember(repairingTask?.id) { mutableStateOf<String?>(null) }
 
@@ -76,11 +185,9 @@ fun MorningReviewScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        Text("Morning review")
-
         when (val state = contentState) {
             MorningReviewContentState.Loading -> {
                 BlockingLoadingState("Loading morning review...")
@@ -91,8 +198,15 @@ fun MorningReviewScreen(
                 return@Column
             }
             is MorningReviewContentState.Ready -> {
-                if (state.refreshing) InlineLoadingStatus("Refreshing...")
-                state.warning?.let { WarningStatus(it, onRetry = onRetryRefresh) }
+                val readyState = buildMorningReviewReadyState(
+                    invalidTasks = invalidTasks,
+                    warning = state.warning,
+                    refreshing = state.refreshing
+                )
+                MorningReviewHeader(
+                    state = readyState,
+                    onRetryRefresh = onRetryRefresh
+                )
             }
         }
 
@@ -104,63 +218,66 @@ fun MorningReviewScreen(
                 onSnooze = onSnooze,
                 onBack = onBack,
                 showBack = showBack,
-                snoozing = snoozing
+                snoozing = snoozing,
+                contentState = contentState
             )
         } else {
-            Text("Repair task")
-            Text(task.title)
-            WheelDateTimeField(
-                selection = deadline,
-                onSelectionChange = {
-                    deadline = it
+            val editorState = buildMorningReviewRepairEditorState(task, start, durationMinutes)
+            CommitmentEditor(
+                mode = editorState.mode,
+                title = editorState.title,
+                onTitleChange = {},
+                titleEditable = editorState.titleEditable,
+                description = description,
+                onDescriptionChange = { description = it },
+                descriptionExpanded = descriptionExpanded,
+                onDescriptionExpandedChange = { descriptionExpanded = it },
+                projectContent = { ReceiptText(editorState.projectLabel ?: "Not available") },
+                assigneeContent = { ReceiptText(editorState.assigneeLabel ?: "Not available") },
+                start = start,
+                onStartChange = {
+                    start = it
                     errorText = null
                 },
-                label = "Repair start time picker",
-                enabled = !repairing && !snoozing,
-                modifier = Modifier.fillMaxWidth()
-            )
-            WheelDurationField(
-                minutes = durationMinutes,
-                onMinutesChange = {
+                durationMinutes = durationMinutes,
+                onDurationChange = {
                     durationMinutes = it
                     errorText = null
                 },
-                label = "Repair duration minutes input",
+                validation = CommitmentEditorValidation(
+                    bannerMessage = errorText,
+                    titleError = null,
+                    projectError = null,
+                    assigneeError = null,
+                    startError = errorText?.let { "Required" },
+                    durationError = null
+                ),
+                submitting = repairing,
                 enabled = !repairing && !snoozing,
-                modifier = Modifier.fillMaxWidth()
-            )
-            errorText?.let { Text(it) }
-            LoadingActionButton(
-                label = "Save repair",
+                submitLabel = editorState.submitLabel,
                 loadingLabel = "Saving...",
-                loading = repairing,
-                onClick = {
-                    val selectedDeadline = deadline
-                    if (selectedDeadline == null) {
+                onSubmit = {
+                    val selectedStart = start
+                    if (selectedStart == null) {
                         errorText = "Start time is required"
                     } else {
                         onRepair(
                             task.id,
-                            RescheduleTaskRequest(
-                                dueDatetime = selectedDeadline.toIsoInstantString(),
-                                durationMinutes = durationMinutes
+                            rescheduleRequestFromEditorStart(
+                                start = selectedStart,
+                                durationMinutes = durationMinutes,
+                                initialDescription = task.description,
+                                editedDescription = description
                             )
                         )
                     }
                 },
-                enabled = !repairing && !snoozing,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedButton(
-                onClick = {
+                onCancel = {
                     repairingTask = null
                     errorText = null
                 },
-                enabled = !repairing && !snoozing,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel")
-            }
+            )
         }
     }
 
@@ -176,46 +293,145 @@ fun MorningReviewScreen(
 }
 
 @Composable
+private fun MorningReviewHeader(
+    state: MorningReviewReadyState,
+    onRetryRefresh: () -> Unit
+) {
+    BuzerPanel {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            Text(
+                text = state.headerText,
+                style = MaterialTheme.typography.headlineSmall
+            )
+            state.headerProgressText?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (state.refreshing) InlineLoadingStatus("Refreshing...")
+            state.warning?.let { WarningStatus(it, onRetry = onRetryRefresh) }
+        }
+    }
+}
+
+@Composable
 private fun MorningReviewTaskList(
     invalidTasks: List<TaskSnapshotItem>,
     onRepair: (TaskSnapshotItem) -> Unit,
     onSnooze: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean,
-    snoozing: Boolean
+    snoozing: Boolean,
+    contentState: MorningReviewContentState
 ) {
-    if (invalidTasks.isEmpty()) {
-        Text("No invalid tasks")
+    val readyState = (contentState as? MorningReviewContentState.Ready)?.let {
+        buildMorningReviewReadyState(
+            invalidTasks = invalidTasks,
+            warning = it.warning,
+            refreshing = it.refreshing
+        )
+    } ?: buildMorningReviewReadyState(invalidTasks, warning = null, refreshing = false)
+
+    if (readyState.cards.isEmpty()) {
+        Button(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Done")
+        }
     } else {
-        invalidTasks.forEach { task ->
-            Text(task.title)
-            if (task.validationErrors.isNotEmpty()) {
-                Text(task.validationErrors.joinToString(", "))
-            }
-            OutlinedButton(
-                onClick = { onRepair(task) },
-                enabled = !snoozing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Repair")
-            }
+        readyState.cards.forEach { card ->
+            MorningReviewRepairCard(
+                state = card,
+                onRepair = { onRepair(card.task) },
+                onSnooze = onSnooze,
+                snoozing = snoozing
+            )
         }
     }
 
-    LoadingActionButton(
-        label = "Snooze 5 min",
-        loadingLabel = "Snoozing...",
-        loading = snoozing,
-        onClick = onSnooze,
-        modifier = Modifier.fillMaxWidth()
-    )
     if (showBack) {
-        OutlinedButton(
+        TextButton(
             onClick = onBack,
-            enabled = !snoozing,
-            modifier = Modifier.fillMaxWidth()
+            enabled = !snoozing
         ) {
             Text("Back")
         }
     }
+}
+
+@Composable
+private fun MorningReviewRepairCard(
+    state: MorningReviewTaskCardState,
+    onRepair: () -> Unit,
+    onSnooze: () -> Unit,
+    snoozing: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text(
+                text = state.title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = state.problemText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TaskDetailsBlock(description = state.description)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                LoadingActionButton(
+                    label = state.repairActionLabel,
+                    loadingLabel = "Repairing...",
+                    loading = false,
+                    onClick = onRepair,
+                    enabled = !snoozing,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = onSnooze,
+                    enabled = !snoozing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(state.snoozeActionLabel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceiptText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+private fun TaskSnapshotItem.initialRepairStartSelection(): DateTimeSelection? {
+    val instantText = startAt
+        ?: dueDatetime?.takeIf { durationMinutes != null }
+    val instant = runCatching { instantText?.let(Instant::parse) }.getOrNull() ?: return null
+    val startInstant = if (startAt == null) {
+        instant.minusSeconds((durationMinutes ?: return null).toLong() * 60)
+    } else {
+        instant
+    }
+    val local = startInstant.atZone(ZoneId.systemDefault()).toLocalDateTime()
+    return DateTimeSelection(
+        date = local.toLocalDate(),
+        hour = local.hour,
+        minute = local.minute
+    )
 }

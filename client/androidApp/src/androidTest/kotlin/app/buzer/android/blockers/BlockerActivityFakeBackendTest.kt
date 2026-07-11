@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.core.app.ActivityScenario
@@ -198,10 +199,13 @@ class BlockerActivityFakeBackendTest {
 
         launchMorningReview()
 
-        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        composeRule.onNodeWithText("1 task needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("1 unresolved").assertIsDisplayed()
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
-        composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
+        composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
+        composeRule.onNodeWithText("Clarify the missing commitment fields.").assertIsDisplayed()
+        composeRule.onAllNodesWithText("left after this task", substring = true).assertCountEquals(0)
     }
 
     @Test
@@ -214,7 +218,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithContentDescription("Morning review").performClick()
 
         waitForText("Invalid assigned fixture")
-        composeRule.onNodeWithText("missing_due_datetime, missing_duration").assertIsDisplayed()
+        composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
     }
 
     @Test
@@ -269,7 +273,10 @@ class BlockerActivityFakeBackendTest {
 
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Repair").performClick()
-        composeRule.onNodeWithText("Save repair").performClick()
+        waitForContentDescription("Start picker")
+        composeRule.onNodeWithContentDescription("Start picker").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Duration picker").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Save task").performScrollTo().performClick()
 
         composeRule.onNodeWithText("Start time is required").assertIsDisplayed()
     }
@@ -281,8 +288,14 @@ class BlockerActivityFakeBackendTest {
 
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Repair").performClick()
-        selectDefaultRepairDeadline()
-        composeRule.onNodeWithText("Save repair").performClick()
+        waitForContentDescription("Start picker")
+        composeRule.onNodeWithContentDescription("Start picker").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Duration picker").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("More").performScrollTo().performClick()
+        composeRule.onNodeWithText("Details").performTextInput(" Updated repair note")
+        selectDefaultDeadline()
+        val saveLabel = waitForComputedSaveLabel()
+        composeRule.onNodeWithText(saveLabel).performClick()
 
         waitForActivityDestroyed(scenario)
         waitForRecordedCall("/tasks/task-invalid/reschedule")
@@ -290,7 +303,9 @@ class BlockerActivityFakeBackendTest {
             "/tasks/task-invalid/reschedule",
             "durationMinutes",
             "30",
-            "dueDatetime"
+            "dueDatetime",
+            "description",
+            "Updated repair note"
         )
     }
 
@@ -303,13 +318,15 @@ class BlockerActivityFakeBackendTest {
 
             waitForText("Invalid assigned fixture")
             composeRule.onNodeWithText("Repair").performClick()
-            selectDefaultRepairDeadline()
-            composeRule.onNodeWithText("Save repair").performClick()
+            selectDefaultDeadline()
+            val saveLabel = waitForComputedSaveLabel()
+            composeRule.onNodeWithText(saveLabel).performClick()
 
             waitForRecordedCall("/tasks/task-invalid/reschedule")
             waitForErrorLog("action=RESCHEDULE_TASK taskId=task-invalid", "500")
-            waitForText("500")
-            composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+            waitForText("Action failed")
+            composeRule.onNodeWithText("Retry").assertIsDisplayed()
+            composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
             assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
@@ -322,7 +339,7 @@ class BlockerActivityFakeBackendTest {
         val scenario = launchMorningReview()
 
         waitForText("Invalid assigned fixture")
-        composeRule.onNodeWithText("Snooze 5 min").performClick()
+        composeRule.onNodeWithText("Snooze").performClick()
 
         waitForActivityDestroyed(scenario)
         waitForRecordedCall("/review/dismiss")
@@ -397,12 +414,6 @@ class BlockerActivityFakeBackendTest {
 
     private fun selectDefaultDeadline() {
         composeRule.onNodeWithContentDescription("Start picker").performClick()
-        waitForText("OK")
-        composeRule.onNodeWithText("OK").performClick()
-    }
-
-    private fun selectDefaultRepairDeadline() {
-        composeRule.onNodeWithContentDescription("Repair start time picker").performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }

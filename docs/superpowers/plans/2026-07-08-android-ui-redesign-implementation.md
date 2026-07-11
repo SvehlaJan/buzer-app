@@ -1145,7 +1145,7 @@ git commit -m "feat: unify blocker surfaces"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Add Morning Review state tests**
+- [x] **Step 1: Add Morning Review state tests**
 
 Tests must cover:
 
@@ -1160,7 +1160,7 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Replace list/repair duplication**
+- [x] **Step 2: Replace list/repair duplication**
 
 Keep `MorningReviewContentState` but change rendered ready content:
 
@@ -1179,11 +1179,11 @@ When a task is being repaired, render `CommitmentEditor` with:
 - Start and Duration wheels active
 - submit label from block range
 
-- [ ] **Step 3: Keep action failure behavior**
+- [x] **Step 3: Keep action failure behavior**
 
 Do not hide action errors inline. Continue to use `ErrorAlertDialog` with retry for repair and snooze failures.
 
-- [ ] **Step 4: Verify Task 8**
+- [x] **Step 4: Verify Task 8**
 
 Run:
 
@@ -1202,7 +1202,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt
