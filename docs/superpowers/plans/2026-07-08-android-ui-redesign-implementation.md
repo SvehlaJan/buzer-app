@@ -1293,7 +1293,7 @@ git commit -m "feat: reuse blocker surface in overlay"
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
 - Modify relevant JVM and instrumentation tests touched by visible state behavior
 
-- [ ] **Step 1: Add stale/error behavior tests**
+- [x] **Step 1: Add stale/error behavior tests**
 
 Ensure tests cover:
 
@@ -1307,11 +1307,11 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL if any behavior is missing.
 
-- [ ] **Step 2: Normalize status components**
+- [x] **Step 2: Normalize status components**
 
 Use `AttentionStrip` for compact warnings and `ErrorAlertDialog` for failed user actions. Avoid adding screen-specific warning rows unless the message is unique to that screen.
 
-- [ ] **Step 3: Accessibility pass**
+- [x] **Step 3: Accessibility pass**
 
 Add or verify content descriptions:
 
@@ -1323,7 +1323,7 @@ Add or verify content descriptions:
 
 Verify long text cannot overlap buttons. Clamp or expand task title/details intentionally.
 
-- [ ] **Step 4: Verify Task 10**
+- [x] **Step 4: Verify Task 10**
 
 Run:
 
@@ -1342,7 +1342,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/ui client/androidApp/src/test/kotlin/app/buzer/android/ui client/androidApp/src/androidTest

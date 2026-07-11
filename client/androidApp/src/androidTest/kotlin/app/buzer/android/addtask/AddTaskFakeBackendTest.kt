@@ -149,7 +149,10 @@ class AddTaskFakeBackendTest {
                 waitForRecordedCall("/tasks")
                 composeRule.onNodeWithText("Add task").assertIsDisplayed()
                 composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
-                composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
+                composeRule.onNodeWithText("Task was not saved").assertIsDisplayed()
+                composeRule.onNodeWithText("Retry").assertIsDisplayed()
+                composeRule.onAllNodesWithText("500", substring = true).assertCountEquals(1)
+                composeRule.onAllNodesWithText("System error", substring = true).assertCountEquals(0)
             } finally {
                 scenario.close()
             }

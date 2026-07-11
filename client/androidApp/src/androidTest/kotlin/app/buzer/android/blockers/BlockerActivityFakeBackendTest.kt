@@ -244,7 +244,8 @@ class BlockerActivityFakeBackendTest {
 
         waitForAnyText("Deadline blocker fixture")
         composeRule.onNodeWithText("Done").assertIsDisplayed()
-        composeRule.onNodeWithText("Done").performClick()
+        composeRule.onNodeWithContentDescription("Finish current task").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Finish current task").performClick()
 
         waitForRecordedCall("/tasks/task-deadline/done")
         fakeBackend.assertRecorded("/tasks/task-deadline/done")

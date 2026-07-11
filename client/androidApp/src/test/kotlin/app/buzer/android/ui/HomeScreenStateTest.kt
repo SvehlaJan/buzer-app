@@ -13,6 +13,7 @@ import app.buzer.shared.ui.home.HomeAttentionAction
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -87,6 +88,9 @@ class HomeScreenStateTest {
 
         assertEquals(HomeContentState.Ready, state.contentState)
         assertEquals("Refresh failed. Showing last known tasks.", state.statusMessage)
+        val attention = assertNotNull(state.attention)
+        assertEquals("Backend refresh needs attention", attention.message)
+        assertEquals(HomeAttentionAction.RetryRefresh, attention.action)
     }
 
     @Test
@@ -274,6 +278,7 @@ class HomeScreenStateTest {
         assertEquals("11:30-12:30", currentBlock.blockWindow)
         assertEquals("30m remaining", currentBlock.remainingLabel)
         assertEquals("Cover release risk", currentBlock.description)
+        assertEquals("Finish current task", currentBlock.doneContentDescription)
         assertEquals(
             listOf(HomeAgendaRowState.Current),
             state.agendaRows.map { it.state }
@@ -339,6 +344,16 @@ class HomeScreenStateTest {
         )
 
         assertNull(state.statusMessage)
+        assertNull(state.attention)
+        val visibleStateText = listOfNotNull(state.statusMessage, state.attention?.message)
+            .joinToString(" ")
+            .lowercase()
+        listOf("now", "last updated", "refresh").forEach { forbidden ->
+            assertFalse(
+                visibleStateText.contains(forbidden),
+                "Healthy Home state should not expose permanent freshness text: $forbidden"
+            )
+        }
     }
 
     private fun task(

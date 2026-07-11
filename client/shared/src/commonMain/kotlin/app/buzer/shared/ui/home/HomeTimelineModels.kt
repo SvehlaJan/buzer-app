@@ -21,7 +21,8 @@ data class HomeCurrentBlock(
     val title: String,
     val blockWindow: String,
     val remainingLabel: String,
-    val description: String?
+    val description: String?,
+    val doneContentDescription: String = "Finish current task"
 )
 
 data class HomeAttention(

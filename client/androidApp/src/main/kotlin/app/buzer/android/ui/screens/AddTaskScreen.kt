@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
+import app.buzer.android.ui.addtask.AddTaskFailurePresentation
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
 import app.buzer.android.ui.addtask.AddTaskInvalidField
@@ -338,11 +339,12 @@ fun AddTaskScreen(
     }
 
     submitDialogMessage?.let { message ->
+        val presentation = AddTaskFailurePresentation.fromSaveFailure(message)
         ErrorAlertDialog(
-            title = "Task was not saved",
-            message = message,
+            title = presentation.dialogTitle,
+            message = presentation.dialogMessage,
             onDismiss = { submitDialogMessage = null },
-            retryLabel = "Retry Save",
+            retryLabel = presentation.retryLabel,
             onRetry = {
                 submitDialogMessage = null
                 validateAndSubmit()

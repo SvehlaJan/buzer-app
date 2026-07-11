@@ -1,5 +1,7 @@
 package app.buzer.android.ui.status
 
+import app.buzer.android.ui.components.AttentionStrip
+import app.buzer.android.ui.components.AttentionStripModel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -13,8 +15,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,30 +69,14 @@ fun WarningStatus(
     onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Column(
-            modifier = Modifier.padding(Spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (onRetry != null) {
-                OutlinedButton(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Retry",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-        }
-    }
+    AttentionStrip(
+        model = AttentionStripModel(
+            message = message,
+            actionLabel = "Retry".takeIf { onRetry != null }
+        ),
+        modifier = modifier,
+        onAction = onRetry
+    )
 }
 
 @Composable
