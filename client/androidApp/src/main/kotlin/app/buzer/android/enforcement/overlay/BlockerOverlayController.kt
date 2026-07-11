@@ -1,44 +1,60 @@
 package app.buzer.android.enforcement.overlay
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
-import app.buzer.android.enforcement.AlarmKind
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import app.buzer.android.ui.components.BlockerSurface
+import app.buzer.android.ui.theme.BuzerTheme
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.ui.blockers.buildBlockerUiModel
+import java.time.ZoneId
 
 /** Action a user can take from the blocker overlay. */
-enum class OverlayAction { START, POSTPONE, COMPLETE, EXTEND, OPEN_FULL, DISMISS }
+enum class OverlayAction { START, POSTPONE }
 
-/**
- * Hosts the full-screen blocker overlay via [WindowManager] using a native view tree
- * (no Compose, to keep service lifecycle simple). The overlay draws above most foreground apps
- * with [WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY]; it is not a security boundary and
- * cannot cover system UI or the keyguard.
- */
-class BlockerOverlayController(private val context: Context) {
+internal interface OverlayHostHandle {
+    val view: View
+
+    fun setContent(content: @Composable () -> Unit) = Unit
+
+    fun markAttached()
+
+    fun destroy()
+}
+
+internal interface OverlayWindow {
+    fun add(host: OverlayHostHandle)
+
+    fun remove(host: OverlayHostHandle)
+}
+
+private class WindowManagerOverlayWindow(context: Context) : OverlayWindow {
     private val windowManager = context.getSystemService(WindowManager::class.java)
-    private var view: View? = null
 
-    fun show(request: OverlayBlockerRequest, onAction: (OverlayAction) -> Unit) {
-        if (view != null) return
-        val root = buildView(request, onAction)
-        windowManager.addView(root, layoutParams())
-        view = root
-        AppLog.info("overlay shown kind=${request.kind} taskId=${request.taskId}")
+    override fun add(host: OverlayHostHandle) {
+        windowManager.addView(host.view, layoutParams())
     }
 
-    fun remove() {
-        val current = view ?: return
-        runCatching { windowManager.removeView(current) }
-            .onFailure { AppLog.warn("overlay remove failed ${it.message}") }
-        view = null
-        AppLog.info("overlay dismissed")
+    override fun remove(host: OverlayHostHandle) {
+        windowManager.removeView(host.view)
     }
 
     private fun layoutParams(): WindowManager.LayoutParams =
@@ -47,74 +63,115 @@ class BlockerOverlayController(private val context: Context) {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-            PixelFormat.OPAQUE
+            PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.CENTER }
+}
 
-    private fun buildView(request: OverlayBlockerRequest, onAction: (OverlayAction) -> Unit): View {
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#F2202124"))
-            setPadding(dp(32), dp(48), dp(32), dp(48))
+/**
+ * Hosts the compact blocker overlay via [WindowManager]. The overlay draws above most foreground apps
+ * with [WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY]; it is not a security boundary and
+ * cannot cover system UI or the keyguard.
+ */
+class BlockerOverlayController internal constructor(
+    private val window: OverlayWindow,
+    private val hostFactory: () -> OverlayHostHandle
+) {
+    private var view: View? = null
+    private var host: OverlayHostHandle? = null
+
+    constructor(context: Context) : this(
+        window = WindowManagerOverlayWindow(context),
+        hostFactory = { OverlayComposeHost(context) }
+    )
+
+    internal val isShowing: Boolean
+        get() = host != null
+
+    fun show(request: OverlayBlockerRequest, onAction: (OverlayAction) -> Unit): Boolean {
+        if (host != null) return true
+        val overlayHost = hostFactory()
+        overlayHost.setContent {
+            CompactOverlayBlocker(request = request, onAction = onAction)
         }
-        root.addView(
-            TextView(context).apply {
-                text = titleFor(request.kind)
-                setTextColor(Color.WHITE)
-                textSize = 26f
-                gravity = Gravity.CENTER
-            }
-        )
-        root.addView(
-            TextView(context).apply {
-                text = summaryFor(request.kind)
-                setTextColor(Color.parseColor("#CCFFFFFF"))
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setPadding(0, dp(16), 0, dp(32))
-            }
-        )
-        actionsFor(request.kind).forEach { (label, action) ->
-            root.addView(
-                Button(context).apply {
-                    text = label
-                    setOnClickListener { onAction(action) }
-                    layoutParams = LinearLayout.LayoutParams(dp(240), dp(56))
-                        .apply { topMargin = dp(12) }
+        return runCatching {
+            window.add(overlayHost)
+            overlayHost.markAttached()
+            host = overlayHost
+            view = overlayHost.view
+            AppLog.info("overlay shown kind=${request.kind} taskId=${request.taskId}")
+            true
+        }.getOrElse { error ->
+            runCatching { overlayHost.destroy() }
+                .onFailure { destroyError ->
+                    AppLog.warn("overlay host destroy after add failure failed ${destroyError.message}")
                 }
+            host = null
+            view = null
+            AppLog.warn(
+                "overlay show failed kind=${request.kind} taskId=${request.taskId} " +
+                    "message=${error.message ?: error::class.simpleName}"
             )
+            false
         }
-        return root
     }
 
-    private fun titleFor(kind: AlarmKind): String = when (kind) {
-        AlarmKind.START_BLOCKER -> "Start your task"
-        AlarmKind.DEADLINE_BLOCKER -> "Task deadline"
-        AlarmKind.MORNING_REVIEW -> "Morning review"
-        AlarmKind.PRE_START_WARNING -> "Task starts soon"
+    fun remove() {
+        val current = host ?: return
+        runCatching { window.remove(current) }
+            .onFailure { AppLog.warn("overlay remove failed ${it.message}") }
+        current.destroy()
+        host = null
+        view = null
+        AppLog.info("overlay dismissed")
     }
+}
 
-    private fun summaryFor(kind: AlarmKind): String = when (kind) {
-        AlarmKind.START_BLOCKER -> "A committed task is due to start now."
-        AlarmKind.DEADLINE_BLOCKER -> "Your committed task has reached its deadline."
-        AlarmKind.MORNING_REVIEW -> "Review your commitments for today."
-        AlarmKind.PRE_START_WARNING -> "A committed task starts soon."
+@Composable
+private fun CompactOverlayBlocker(
+    request: OverlayBlockerRequest,
+    onAction: (OverlayAction) -> Unit
+) {
+    val model = buildBlockerUiModel(
+        kind = request.blockerKind,
+        task = request.toTaskSnapshotItem(),
+        timeZoneId = ZoneId.systemDefault().id
+    )
+    BuzerTheme {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.72f))
+                .safeDrawingPadding()
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+        ) {
+            BlockerSurface(
+                model = model,
+                warningMessage = null,
+                checking = false,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+            ) {
+                Button(
+                    onClick = { onAction(OverlayAction.START) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "I'm starting",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+                OutlinedButton(
+                    onClick = { onAction(OverlayAction.POSTPONE) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Postpone 5 min",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        }
     }
-
-    private fun actionsFor(kind: AlarmKind): List<Pair<String, OverlayAction>> = when (kind) {
-        AlarmKind.START_BLOCKER -> listOf(
-            "Start now" to OverlayAction.START,
-            "Postpone 5 min" to OverlayAction.POSTPONE
-        )
-        AlarmKind.DEADLINE_BLOCKER -> listOf(
-            "Done" to OverlayAction.COMPLETE,
-            "Extend 30 min" to OverlayAction.EXTEND,
-            "Open full blocker" to OverlayAction.OPEN_FULL
-        )
-        AlarmKind.MORNING_REVIEW -> listOf("Dismiss" to OverlayAction.DISMISS)
-        AlarmKind.PRE_START_WARNING -> emptyList()
-    }
-
-    private fun dp(value: Int): Int =
-        (value * context.resources.displayMetrics.density).toInt()
 }

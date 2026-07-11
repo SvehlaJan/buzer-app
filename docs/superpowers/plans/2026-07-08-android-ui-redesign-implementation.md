@@ -1221,7 +1221,7 @@ git commit -m "feat: redesign morning review cards"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt` or create overlay instrumentation if more appropriate
 
-- [ ] **Step 1: Add overlay model tests**
+- [x] **Step 1: Add overlay model tests**
 
 Update `OverlayBlockerRequestTest.kt` so overlay requests carry:
 
@@ -1234,7 +1234,7 @@ Run: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Add a Compose host for the service overlay window**
+- [x] **Step 2: Add a Compose host for the service overlay window**
 
 `BlockerOverlayController` currently builds classic `TextView`/`Button` views added via `WindowManager.addView`. A `ComposeView` cannot render in that window as-is: it requires ViewTree owners that Activities normally provide. Create `OverlayComposeHost`, a small helper that wraps `ComposeView` and attaches its own owners:
 
@@ -1243,7 +1243,7 @@ Expected before implementation: FAIL.
 
 If this proves unstable on the target device (rendering, input, or lifecycle crashes), stop and report instead of layering workarounds; the approved fallback is restyling the classic views with theme tokens.
 
-- [ ] **Step 3: Render compact `BlockerSurface` in overlay**
+- [x] **Step 3: Render compact `BlockerSurface` in overlay**
 
 Replace the `TextView`/`Button` layout in `BlockerOverlayController` with `OverlayComposeHost` rendering compact `BlockerSurface` wrapped in `BuzerTheme`. Use the same `BlockerUiModel` creation path as Start blocker.
 
@@ -1254,7 +1254,7 @@ Render it as a compact bottom sheet over the existing overlay scrim. Keep action
 
 The overlay remains lower priority than full-screen blockers. Do not add new product rules.
 
-- [ ] **Step 4: Verify Task 9**
+- [x] **Step 4: Verify Task 9**
 
 Run:
 
@@ -1273,7 +1273,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/overlay client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay client/androidApp/src/androidTest

@@ -8,9 +8,6 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import app.buzer.android.blockers.BlockerTaskSnapshotGate
-import app.buzer.android.blockers.DeadlineBlockerActivity
-import app.buzer.android.enforcement.AlarmIntentFactory
-import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
@@ -57,9 +54,15 @@ class OverlayBlockerService : Service() {
             return START_NOT_STICKY
         }
 
+        val enrichedRequest = request.withTask(coordinator.loadLatestSnapshot()?.tasks?.firstOrNull { it.id == request.taskId })
         val controller = BlockerOverlayController(this).also { this.controller = it }
-        controller.show(request) { action -> handleAction(action, request, coordinator) }
-        startResolutionWatcher(request, coordinator)
+        val shown = controller.show(enrichedRequest) { action -> handleAction(action, enrichedRequest, coordinator) }
+        if (!shown) {
+            this.controller = null
+            stopOverlay()
+            return START_NOT_STICKY
+        }
+        startResolutionWatcher(enrichedRequest, coordinator)
         return START_NOT_STICKY
     }
 
@@ -67,7 +70,6 @@ class OverlayBlockerService : Service() {
         request: OverlayBlockerRequest,
         coordinator: EnforcementCoordinator
     ) {
-        if (request.kind == AlarmKind.MORNING_REVIEW) return
         watcherJob?.cancel()
         watcherJob = scope.launch {
             // ~30s of fast polling for the common quick resolution, then a calm 10s cadence;
@@ -111,11 +113,6 @@ class OverlayBlockerService : Service() {
         coordinator: EnforcementCoordinator
     ) {
         AppLog.info("overlay_action action=$action kind=${request.kind} taskId=${request.taskId}")
-        if (action == OverlayAction.OPEN_FULL) {
-            launchFullBlocker(request)
-            stopOverlay()
-            return
-        }
         if (actionInFlight) {
             AppLog.debug("overlay_action ignored reason=in_flight")
             return
@@ -130,10 +127,6 @@ class OverlayBlockerService : Service() {
                     when (action) {
                         OverlayAction.START -> coordinator.startTask(request.taskId)
                         OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId)
-                        OverlayAction.COMPLETE -> coordinator.completeTask(request.taskId)
-                        OverlayAction.EXTEND -> coordinator.extendTask(request.taskId)
-                        OverlayAction.DISMISS -> coordinator.dismissMorningReview()
-                        OverlayAction.OPEN_FULL -> Unit
                     }
                 }
             } catch (timeout: TimeoutCancellationException) {
@@ -146,15 +139,6 @@ class OverlayBlockerService : Service() {
                 stopOverlay()
             }
         }
-    }
-
-    private fun launchFullBlocker(request: OverlayBlockerRequest) {
-        val intent = Intent(this, DeadlineBlockerActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(AlarmIntentFactory.EXTRA_TASK_ID, request.taskId)
-        }
-        runCatching { startActivity(intent) }
-            .onFailure { AppLog.warn("overlay_service open_full failed ${it.message}") }
     }
 
     private fun startForegroundCompat() {
