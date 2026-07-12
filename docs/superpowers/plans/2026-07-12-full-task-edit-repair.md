@@ -65,5 +65,5 @@
 - [x] Run shared/client JVM tests relevant to models and Morning Review.
 - [x] Run backend and fake-backend tests.
 - [x] Skip `scripts/e2e-fake-backend.sh` and document that manual testing was requested.
-- [ ] Install debug build to connected device. Blocked: `adb devices` showed no attached devices.
-- [ ] Write handoff, commit, push.
+- [x] Install debug build to connected device.
+- [x] Write handoff, commit, push.

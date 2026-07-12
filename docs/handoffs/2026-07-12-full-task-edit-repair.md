@@ -44,16 +44,27 @@ Task: Full edit flow for Morning Review repair, plus post-overhaul crash/theme/l
 - Result: SKIPPED
 - Evidence: user explicitly requested leaving e2e tests for now and doing manual testing.
 
-- Command: `adb devices`
-- Result: BLOCKED
-- Evidence: output showed no attached devices, so debug APK install could not be completed from this session.
+- Command: `adb -s 56061FDCR005J0 install -r client/androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+- Result: PASS
+- Evidence: `Performing Streamed Install` followed by `Success`.
+
+- Command: `adb -s 56061FDCR005J0 shell monkey -p app.buzer.android 1`
+- Result: PASS
+- Evidence: app launched and `pidof app.buzer.android` returned `29587`.
+
+- Command: `adb -s 56061FDCR005J0 logcat -d -b crash -v time`
+- Result: PASS
+- Evidence: crash buffer was empty after launch.
+
+- Command: `BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh logcat 180`
+- Result: PASS
+- Evidence: app fetched `http://100.105.180.34:18432/tasks/snapshot` with `200 OK`, saved schedule version 5, and logged no fatal exception.
 
 ## Known Issues
 
-- The installed-device step is pending until an Android device is attached.
-- Live backend must be deployed from this branch before manually testing task edit save on the device; otherwise the installed app will call a route the deployed backend may not know yet.
+- Live backend was deployed and verified by the user before final device install.
 - The full managed-device e2e lane was intentionally skipped for this iteration per user request.
 
 ## Next Recommended Step
 
-Push the branch, deploy the VPS backend with `BUZER_DEPLOY_BRANCH=feature/android-ui-task-details /home/skclaw/buzer-app/scripts/deploy-vps.sh`, then attach the device and install `client/androidApp/build/outputs/apk/debug/androidApp-debug.apk` for manual testing.
+Manually test the Morning Review edit flow on the device: open an invalid task, change title/details/project/assignee/time/duration, save, and confirm the task leaves the invalid list after refresh.
