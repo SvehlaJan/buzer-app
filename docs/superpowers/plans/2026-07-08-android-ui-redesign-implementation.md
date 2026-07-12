@@ -1361,7 +1361,7 @@ git commit -m "fix: polish redesigned UI states"
 - Update: `docs/design/android-ui-redesign-component-library.md` if the final component names differ.
 - Create or update: `docs/handoffs/2026-07-08-android-ui-redesign-implementation.md`
 
-- [ ] **Step 1: Search for duplicated or obsolete UI fragments**
+- [x] **Step 1: Search for duplicated or obsolete UI fragments**
 
 Run:
 
@@ -1374,7 +1374,7 @@ The second command restricts the `now` check to string literals so `now()` calls
 
 Expected: Only intentional labels remain. `Start blocker` and `Deadline blocker` may remain in debug launcher names, but production visible strings should use approved copy.
 
-- [ ] **Step 2: Search for unused old reschedule parser**
+- [x] **Step 2: Search for unused old reschedule parser**
 
 Run:
 
@@ -1384,7 +1384,7 @@ rg -n "RescheduleInputParser|parseDuration|durationText" client/androidApp/src
 
 Expected: If `RescheduleInputParser` has no real callers, delete it and its test in the same commit.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 Run:
 
@@ -1423,7 +1423,7 @@ scripts/e2e-fake-backend.sh
 
 Expected: PASS with all managed-device instrumentation tests passing.
 
-- [ ] **Step 4: Manual screenshot and device sanity check**
+- [x] **Step 4: Manual screenshot and device sanity check**
 
 Use the deterministic fake backend and capture or visually inspect:
 
@@ -1436,7 +1436,7 @@ Use the deterministic fake backend and capture or visually inspect:
 
 Document exact evidence in the handoff.
 
-- [ ] **Step 5: Final handoff**
+- [x] **Step 5: Final handoff**
 
 Create or update `docs/handoffs/2026-07-08-android-ui-redesign-implementation.md` with:
 
@@ -1454,7 +1454,7 @@ Assumptions:
 Next recommended step:
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client backend tools/fake-backend docs/design/android-ui-redesign-component-library.md docs/handoffs/2026-07-08-android-ui-redesign-implementation.md

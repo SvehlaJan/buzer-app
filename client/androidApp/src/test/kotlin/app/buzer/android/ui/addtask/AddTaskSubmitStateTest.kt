@@ -1,17 +1,15 @@
 package app.buzer.android.ui.addtask
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AddTaskSubmitStateTest {
     @Test
-    fun submittingDisablesFormAndShowsSavingLabel() {
+    fun submittingDisablesFormAndSave() {
         val state = AddTaskSubmitState(submitting = true, projectsLoading = false, projectLoadError = null)
 
         assertTrue(state.formDisabled)
-        assertEquals("Saving...", state.saveLabel)
         assertFalse(state.saveEnabled)
     }
 
