@@ -33,7 +33,7 @@ class BlockerUiModelsTest {
             kind = BlockerKind.Start,
             task = taskSnapshot(
                 startAt = "2026-07-10T08:05:00Z",
-                dueDatetime = "2026-07-10T08:50:00Z",
+                dueDatetime = "2026-07-10T08:05:00Z",
                 durationMinutes = 45
             )
         )
@@ -42,12 +42,12 @@ class BlockerUiModelsTest {
     }
 
     @Test
-    fun blockWindowFallsBackToDeadlineMinusDurationWhenStartAtIsMissing() {
+    fun blockWindowUsesDueDatetimeAsStartWhenStartAtIsMissing() {
         val model = buildBlockerUiModel(
             kind = BlockerKind.Deadline,
             task = taskSnapshot(
                 startAt = null,
-                dueDatetime = "2026-07-10T08:50:00Z",
+                dueDatetime = "2026-07-10T08:05:00Z",
                 durationMinutes = 45
             )
         )
@@ -61,7 +61,7 @@ class BlockerUiModelsTest {
             kind = BlockerKind.Start,
             task = taskSnapshot(
                 startAt = "2026-03-29T00:30:00Z",
-                dueDatetime = "2026-03-29T01:30:00Z",
+                dueDatetime = "2026-03-29T00:30:00Z",
                 durationMinutes = 60
             ),
             timeZoneId = "Europe/Berlin"
@@ -87,7 +87,7 @@ class BlockerUiModelsTest {
 
     private fun taskSnapshot(
         startAt: String? = "2026-07-10T09:35:00Z",
-        dueDatetime: String? = "2026-07-10T10:05:00Z",
+        dueDatetime: String? = "2026-07-10T09:35:00Z",
         durationMinutes: Int? = 30,
         description: String? = null
     ): TaskSnapshotItem =

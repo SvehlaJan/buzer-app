@@ -69,7 +69,7 @@ class BlockerActionStateTest {
     }
 
     @Test
-    fun rescheduleRequestUsesEditorStartPlusDurationAsDeadline() {
+    fun rescheduleRequestUsesEditorStartAsTodoistDueDatetime() {
         val request = rescheduleRequestFromEditorStart(
             start = DateTimeSelection(
                 date = LocalDate.of(2026, 7, 10),
@@ -82,7 +82,7 @@ class BlockerActionStateTest {
             zoneId = ZoneOffset.UTC
         )
 
-        assertEquals("2026-07-10T08:50:00Z", request.dueDatetime)
+        assertEquals("2026-07-10T08:05:00Z", request.dueDatetime)
         assertEquals(45, request.durationMinutes)
         assertEquals(RescheduleTaskRequest.DescriptionUpdate.Set, request.descriptionUpdate)
     }

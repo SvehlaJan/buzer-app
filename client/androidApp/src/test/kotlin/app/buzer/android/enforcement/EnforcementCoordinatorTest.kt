@@ -34,8 +34,8 @@ class EnforcementCoordinatorTest {
         assertEquals(1, store.saved?.scheduleVersion)
         assertEquals(
             listOf(
-                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
-                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
                 scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
@@ -80,7 +80,8 @@ class EnforcementCoordinatorTest {
         assertEquals(listOf("task-1"), scheduler.cancelledAll)
         assertEquals(
             listOf(
-                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
                 scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
@@ -229,8 +230,8 @@ class EnforcementCoordinatorTest {
         assertEquals(listOf("task-1"), scheduler.cancelledAll)
         assertEquals(
             listOf(
-                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T10:00:00Z"),
-                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
                 scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
             ),
             scheduler.scheduled
@@ -260,7 +261,7 @@ class EnforcementCoordinatorTest {
             creatorId = "user-self",
             dueDatetime = "2026-05-28T12:00:00Z",
             durationMinutes = 60,
-            startAt = "2026-05-28T11:00:00Z",
+            startAt = "2026-05-28T12:00:00Z",
             state = state,
             isAssignedToUser = true,
             isCreatedByUser = true,

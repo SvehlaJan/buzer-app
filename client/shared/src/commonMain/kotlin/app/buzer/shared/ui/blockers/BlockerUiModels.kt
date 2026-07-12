@@ -53,12 +53,11 @@ private fun formatBlockWindow(
     task: TaskSnapshotItem?,
     timeZoneId: String
 ): String {
-    val dueDatetime = task?.dueDatetime ?: return "Schedule unavailable"
-    val durationMinutes = task.durationMinutes ?: return "Schedule unavailable"
-    val end = runCatching { Instant.parse(dueDatetime) }.getOrNull() ?: return "Schedule unavailable"
-    val start = task.startAt
-        ?.let { value -> runCatching { Instant.parse(value) }.getOrNull() }
-        ?: end.minus(durationMinutes.minutes)
+    val item = task ?: return "Schedule unavailable"
+    val dueDatetime = item.dueDatetime ?: item.startAt ?: return "Schedule unavailable"
+    val durationMinutes = item.durationMinutes ?: return "Schedule unavailable"
+    val start = runCatching { Instant.parse(dueDatetime) }.getOrNull() ?: return "Schedule unavailable"
+    val end = start.plus(durationMinutes.minutes)
     val timeZone = runCatching { TimeZone.of(timeZoneId) }.getOrDefault(TimeZone.UTC)
     return "${formatTime(start, timeZone)}-${formatTime(end, timeZone)} - " +
         "${formatDurationLabel(durationMinutes)} block"

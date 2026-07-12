@@ -101,3 +101,88 @@ Verification:
 
 - Run the normal final review/PR process for the branch.
 - Before release, manually smoke-test the compact overlay on a device with overlay permission enabled.
+
+## Final Whole-Branch Review Fix - 2026-07-12
+
+The final whole-branch review found two P1 regressions against
+`docs/decisions/2026-07-05-todoist-native-due-semantics.md`: blocker reschedule sent
+`start + duration` as Todoist `dueDatetime`, and blocker schedule-window formatting
+treated Todoist `dueDatetime` as block end. Fixed both so Todoist `dueDatetime` is the
+block start and the enforcement deadline is `dueDatetime + durationMinutes`.
+
+Files changed:
+- `client/shared/src/commonMain/kotlin/app/buzer/shared/ui/blockers/BlockerUiModels.kt`
+- `client/shared/src/commonMain/kotlin/app/buzer/shared/time/ScheduleCalculator.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`
+- `client/shared/src/commonTest/kotlin/app/buzer/shared/time/ScheduleCalculatorTest.kt`
+- `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/blockers/BlockerUiModelsTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/overlay/OverlayBlockerRequestTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGateTest.kt`
+- `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientJsonTest.kt`
+- `client/shared/src/commonTest/kotlin/app/buzer/shared/state/SnapshotDiagnosticsTest.kt`
+- `client/shared/src/commonTest/kotlin/app/buzer/shared/state/SnapshotReducerTest.kt`
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: FAIL, expected RED before production fix
+- Evidence: `BlockerUiModelsTest` failed 3 assertions for block-window formatting after tests were changed to expect `dueDatetime` as start.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: Focused shared host and Android JVM suites completed successfully after production fix and fixture cleanup.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest --tests app.buzer.shared.time.ScheduleCalculatorTest --console=plain`
+- Result: FAIL, expected RED before production fix
+- Evidence: `ScheduleCalculatorTest.treatsTodoistDueDatetimeAsBlockStart` failed while `computeStartAt` still subtracted duration.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest --tests app.buzer.shared.time.ScheduleCalculatorTest --console=plain`
+- Result: PASS
+- Evidence: Focused shared calculator test passed after `computeStartAt` returned Todoist due as the block start.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: Backend Vitest suite passed 16 files and 65 tests.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: Backend TypeScript check completed with `tsc -p tsconfig.json --noEmit`.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: Backend production build completed and copied `schema.sql` into `dist/db`.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: Fake backend Node test suite passed 16 tests, 0 failed.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: Client shared host tests, Android JVM tests, and debug APK build completed successfully.
+
+Verification:
+- Command: `scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: Managed `pixel8Api34DebugAndroidTest` finished 24 tests with 0 skipped and 0 failed. Existing `libandroidx.graphics.path.so` strip warning appeared; packaging and tests passed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: No whitespace errors were reported.
+
+Known failures or skipped checks:
+- No automated verification failed for the final review fix.
+- Direct overlay service-owned `TYPE_APPLICATION_OVERLAY` rendering remains a manual smoke test because the deterministic e2e lane does not grant or operate `SYSTEM_ALERT_WINDOW`.
+
+Next recommended step:
+- Push the branch and check the push-triggered CI run before claiming release readiness.

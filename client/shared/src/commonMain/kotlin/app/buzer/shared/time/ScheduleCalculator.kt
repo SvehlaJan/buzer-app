@@ -7,7 +7,7 @@ object ScheduleCalculator {
     fun computeStartAt(dueDatetime: String, durationMinutes: Int): String {
         require(durationMinutes > 0) { "durationMinutes must be positive" }
         val due = Instant.parse(dueDatetime)
-        return due.minus(durationMinutes.minutes).toString()
+        return due.toString()
     }
 
     fun extendDeadlineByThirtyMinutes(dueDatetime: String): String {

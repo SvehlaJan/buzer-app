@@ -94,7 +94,7 @@ class BlockerTaskSnapshotGateTest {
             creatorId = "user-self",
             dueDatetime = "2026-05-28T12:00:00Z",
             durationMinutes = 60,
-            startAt = "2026-05-28T11:00:00Z",
+            startAt = "2026-05-28T12:00:00Z",
             state = state,
             isAssignedToUser = true,
             isCreatedByUser = true,

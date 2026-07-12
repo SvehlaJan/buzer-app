@@ -50,7 +50,7 @@ class SnapshotDiagnosticsTest {
             creatorId = "self",
             dueDatetime = "2026-06-02T22:00:00Z",
             durationMinutes = 60,
-            startAt = "2026-06-02T21:00:00Z",
+            startAt = "2026-06-02T22:00:00Z",
             state = state,
             isAssignedToUser = true,
             isCreatedByUser = true,

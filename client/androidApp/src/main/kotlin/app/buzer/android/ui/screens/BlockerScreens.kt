@@ -289,7 +289,6 @@ fun rescheduleRequestFromEditorStart(
     zoneId: ZoneId = ZoneId.systemDefault()
 ): RescheduleTaskRequest {
     val dueDatetime = start.date.atTime(start.hour, start.minute)
-        .plusMinutes(durationMinutes.toLong())
         .atZone(zoneId)
         .toInstant()
         .toString()

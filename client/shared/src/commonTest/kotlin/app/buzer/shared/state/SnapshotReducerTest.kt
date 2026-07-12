@@ -50,7 +50,7 @@ class SnapshotReducerTest {
             projectId = null,
             assigneeId = "self",
             creatorId = "self",
-            dueDatetime = "2026-05-08T08:00:00Z",
+            dueDatetime = startAt,
             durationMinutes = 30,
             startAt = startAt,
             state = state,

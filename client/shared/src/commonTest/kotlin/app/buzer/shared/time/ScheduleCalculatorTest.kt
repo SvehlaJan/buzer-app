@@ -6,9 +6,9 @@ import kotlin.test.assertFailsWith
 
 class ScheduleCalculatorTest {
     @Test
-    fun computesStartAtFromDeadlineAndDuration() {
+    fun treatsTodoistDueDatetimeAsBlockStart() {
         assertEquals(
-            "2026-05-08T15:15:00Z",
+            "2026-05-08T16:00:00Z",
             ScheduleCalculator.computeStartAt("2026-05-08T16:00:00Z", 45)
         )
     }

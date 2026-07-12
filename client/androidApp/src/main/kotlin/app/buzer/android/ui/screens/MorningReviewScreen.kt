@@ -420,15 +420,9 @@ private fun ReceiptText(text: String) {
 }
 
 private fun TaskSnapshotItem.initialRepairStartSelection(): DateTimeSelection? {
-    val instantText = startAt
-        ?: dueDatetime?.takeIf { durationMinutes != null }
+    val instantText = startAt ?: dueDatetime
     val instant = runCatching { instantText?.let(Instant::parse) }.getOrNull() ?: return null
-    val startInstant = if (startAt == null) {
-        instant.minusSeconds((durationMinutes ?: return null).toLong() * 60)
-    } else {
-        instant
-    }
-    val local = startInstant.atZone(ZoneId.systemDefault()).toLocalDateTime()
+    val local = instant.atZone(ZoneId.systemDefault()).toLocalDateTime()
     return DateTimeSelection(
         date = local.toLocalDate(),
         hour = local.hour,

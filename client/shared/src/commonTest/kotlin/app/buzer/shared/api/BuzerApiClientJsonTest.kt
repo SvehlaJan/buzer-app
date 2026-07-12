@@ -103,7 +103,7 @@ class BuzerApiClientJsonTest {
                   "creatorId": "wife",
                   "dueDatetime": "2026-06-13T12:00:00Z",
                   "durationMinutes": 30,
-                  "startAt": "2026-06-13T11:30:00Z",
+                  "startAt": "2026-06-13T12:00:00Z",
                   "state": "planned",
                   "isAssignedToUser": true,
                   "isCreatedByUser": false,

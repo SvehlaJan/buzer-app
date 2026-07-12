@@ -17,7 +17,7 @@ class OverlayBlockerRequestTest {
             kindName = "START_BLOCKER",
             title = "Pay apartment deposit",
             description = "Use the saved IBAN and attach receipt.",
-            dueDatetime = "2026-07-11T10:30:00Z",
+            dueDatetime = "2026-07-11T10:00:00Z",
             durationMinutes = 30,
             startAt = "2026-07-11T10:00:00Z"
         )
@@ -27,7 +27,7 @@ class OverlayBlockerRequestTest {
         assertEquals("task-1", request?.taskId)
         assertEquals("Pay apartment deposit", request?.title)
         assertEquals("Use the saved IBAN and attach receipt.", request?.description)
-        assertEquals("2026-07-11T10:30:00Z", request?.dueDatetime)
+        assertEquals("2026-07-11T10:00:00Z", request?.dueDatetime)
         assertEquals(30, request?.durationMinutes)
         assertEquals("2026-07-11T10:00:00Z", request?.startAt)
     }
@@ -57,7 +57,7 @@ class OverlayBlockerRequestTest {
             taskId = "task-1",
             title = "Pay apartment deposit",
             description = "Use the saved IBAN and attach receipt.",
-            dueDatetime = "2026-07-11T10:30:00Z",
+            dueDatetime = "2026-07-11T10:00:00Z",
             durationMinutes = 30,
             startAt = "2026-07-11T10:00:00Z"
         )
@@ -78,7 +78,7 @@ class OverlayBlockerRequestTest {
             task(
                 title = "Pay apartment deposit",
                 description = "Use the saved IBAN and attach receipt.",
-                dueDatetime = "2026-07-11T10:30:00Z",
+                dueDatetime = "2026-07-11T10:00:00Z",
                 durationMinutes = 30,
                 startAt = "2026-07-11T10:00:00Z"
             )
@@ -86,7 +86,7 @@ class OverlayBlockerRequestTest {
 
         assertEquals("Pay apartment deposit", enriched.title)
         assertEquals("Use the saved IBAN and attach receipt.", enriched.description)
-        assertEquals("2026-07-11T10:30:00Z", enriched.dueDatetime)
+        assertEquals("2026-07-11T10:00:00Z", enriched.dueDatetime)
         assertEquals(30, enriched.durationMinutes)
         assertEquals("2026-07-11T10:00:00Z", enriched.startAt)
     }
