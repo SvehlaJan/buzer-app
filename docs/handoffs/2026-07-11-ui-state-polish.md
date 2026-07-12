@@ -29,6 +29,11 @@ Plan/task/steps attempted: Task 10 only. No Task 11 cleanup, dead-code removal, 
 - `docs/superpowers/plans/2026-07-08-android-ui-redesign-implementation.md`
 - `docs/handoffs/2026-07-11-ui-state-polish.md`
 
+SPEC REVIEW fix update, 2026-07-12:
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
+- `docs/handoffs/2026-07-11-ui-state-polish.md`
+
 ## Commands Run And Results
 
 Verification:
@@ -86,10 +91,37 @@ Verification:
 - Result: PASS
 - Evidence: No whitespace errors.
 
+SPEC REVIEW fix update, 2026-07-12:
+
+Verification:
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
+- Result: FAIL (RED, expected)
+- Evidence: `HomeScreenStateTest.keepsExistingDataVisibleWithSingleStaleWarningAfterRefreshFailure` and `HomeScreenStateTest.appHomeStateUsesSingleAttentionForStaleWarningAfterRefreshFailure` failed because cached refresh failure still populated both `statusMessage` and `attention`.
+
+Verification:
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --console=plain`
+- Result: PASS
+- Evidence: Debug unit tests passed after routing cached Home refresh failure through `HomeAttention` only and leaving `statusMessage` for `Refreshing...`.
+
+Verification:
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+- Result: PASS
+- Evidence: Debug unit tests and `assembleDebug` completed successfully after the SPEC REVIEW fix.
+
+Verification:
+- Command: `scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: Managed `pixel8Api34DebugAndroidTest` finished 24 tests with 0 skipped and 0 failed. Existing `libandroidx.graphics.path.so` strip warning was emitted; packaging and tests continued successfully.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: No whitespace errors after the SPEC REVIEW fix.
+
 ## Manual Verification
 
 - Confirmed no cached Home snapshot plus refresh error is modeled as blocking error with retry through existing `BlockingErrorState`.
-- Confirmed cached Home snapshot plus refresh error remains `Ready`, emits `Refresh failed. Showing last known tasks.`, and exposes retry attention.
+- Confirmed cached Home snapshot plus refresh error remains `Ready` and exposes exactly one retryable attention strip with `Refresh failed. Showing last known tasks.`; `statusMessage` stays `null` for that failure.
 - Confirmed healthy Home state emits no `now`, `last updated`, or permanent refresh/freshness status text.
 - Confirmed Add Task create failures are presented through `ErrorAlertDialog` with `Task was not saved`, `Retry`, and no inline system-error presentation.
 - Confirmed Home icon-only FABs still expose `Add task` and `Morning review`.
@@ -109,6 +141,7 @@ Verification:
 - Keeping `WarningStatus` as a compatibility wrapper around `AttentionStrip` satisfies the status normalization without forcing unrelated screen rewrites.
 - The shared `HomeCurrentBlock.doneContentDescription` default is the right contract for the Home current-block early completion action.
 - Changing Add Task save retry copy from `Retry Save` to `Retry` is acceptable under the Task 10 requirement for a retry dialog and aligns with the other action-error dialogs.
+- SPEC REVIEW fix update: Cached Home refresh failure should use the established Home `attention` route, while `statusMessage` remains reserved for active `Refreshing...` inline status.
 
 ## Next Recommended Step
 

@@ -110,7 +110,6 @@ fun buildHomeScreenState(
         contentState = HomeContentState.Ready,
         statusMessage = when {
             refreshInFlight -> "Refreshing..."
-            refreshError != null -> "Refresh failed. Showing last known tasks."
             else -> null
         },
         attention = buildAttention(snapshot, refreshError),
@@ -410,7 +409,11 @@ private fun buildAttention(
         return HomeAttention(permissionIssue.message, HomeAttentionAction.ShowHealthDetail)
     }
 
-    if (refreshError != null || snapshot.healthWarnings.any { it.key.contains("backend", ignoreCase = true) }) {
+    if (refreshError != null) {
+        return HomeAttention("Refresh failed. Showing last known tasks.", HomeAttentionAction.RetryRefresh)
+    }
+
+    if (snapshot.healthWarnings.any { it.key.contains("backend", ignoreCase = true) }) {
         return HomeAttention("Backend refresh needs attention", HomeAttentionAction.RetryRefresh)
     }
 

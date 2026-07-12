@@ -68,7 +68,7 @@ class HomeScreenStateTest {
     }
 
     @Test
-    fun keepsExistingDataVisibleWithStaleWarningAfterRefreshFailure() {
+    fun keepsExistingDataVisibleWithSingleStaleWarningAfterRefreshFailure() {
         val snapshot = SnapshotViewState(
             scheduleVersion = 2,
             serverTime = "2026-05-08T07:00:00Z",
@@ -87,9 +87,9 @@ class HomeScreenStateTest {
         )
 
         assertEquals(HomeContentState.Ready, state.contentState)
-        assertEquals("Refresh failed. Showing last known tasks.", state.statusMessage)
+        assertNull(state.statusMessage)
         val attention = assertNotNull(state.attention)
-        assertEquals("Backend refresh needs attention", attention.message)
+        assertEquals("Refresh failed. Showing last known tasks.", attention.message)
         assertEquals(HomeAttentionAction.RetryRefresh, attention.action)
     }
 
@@ -107,7 +107,7 @@ class HomeScreenStateTest {
     }
 
     @Test
-    fun appHomeStateUsesDerivedStaleWarningAfterRefreshFailure() {
+    fun appHomeStateUsesSingleAttentionForStaleWarningAfterRefreshFailure() {
         val snapshot = SnapshotViewState(
             scheduleVersion = 2,
             serverTime = "2026-05-08T07:00:00Z",
@@ -126,7 +126,10 @@ class HomeScreenStateTest {
         )
 
         assertEquals(HomeContentState.Ready, state.contentState)
-        assertEquals("Refresh failed. Showing last known tasks.", state.statusMessage)
+        assertNull(state.statusMessage)
+        val attention = assertNotNull(state.attention)
+        assertEquals("Refresh failed. Showing last known tasks.", attention.message)
+        assertEquals(HomeAttentionAction.RetryRefresh, attention.action)
     }
 
     @Test
