@@ -363,6 +363,66 @@ describe("HTTP routes", () => {
     expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Updated gate code: 1357");
   });
 
+  it("updates full task edit payload through update route", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Old title",
+      description: null,
+      projectId: "project-family",
+      assigneeId: "user-self",
+      creatorId: "user-wife",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T10:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/update",
+      headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Edited task",
+        description: "  Updated details  ",
+        projectId: "project-family",
+        assigneeId: "user-self",
+        dueDatetime: "2026-05-08T19:00:00Z",
+        durationMinutes: 45
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(adapter.updates[0]).toMatchObject({
+      title: "Edited task",
+      description: "Updated details",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T19:00:00Z",
+      durationMinutes: 45
+    });
+  });
+
   it("sends escalation through postpone route on second start postpone", async () => {
     const db = new Database(":memory:");
     migrate(db);

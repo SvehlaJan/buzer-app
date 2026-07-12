@@ -27,9 +27,20 @@ export interface TodoistRescheduleInput {
   description?: string | null;
 }
 
+export interface TodoistUpdateTaskInput {
+  todoistTaskId: string;
+  title: string;
+  description: string | null;
+  projectId: string;
+  assigneeId: string | null;
+  dueDatetime: string;
+  durationMinutes: number;
+}
+
 export interface TodoistAdapter {
   sync(syncToken: string): Promise<TodoistSyncResult>;
   createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult>;
   completeTask(todoistTaskId: string): Promise<void>;
   rescheduleTask(input: TodoistRescheduleInput): Promise<void>;
+  updateTask(input: TodoistUpdateTaskInput): Promise<void>;
 }

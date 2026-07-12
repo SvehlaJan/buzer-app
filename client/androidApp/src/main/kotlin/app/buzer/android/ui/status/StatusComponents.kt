@@ -4,22 +4,25 @@ import app.buzer.android.ui.components.AttentionStrip
 import app.buzer.android.ui.components.AttentionStripModel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import app.buzer.android.ui.theme.BuzerTheme
 import app.buzer.android.ui.theme.Spacing
 
@@ -38,10 +41,16 @@ fun InsetSafeContent(
 }
 
 fun ComponentActivity.setBuzerContent(content: @Composable () -> Unit) {
+    enableEdgeToEdge()
     setContent {
         BuzerTheme {
-            InsetSafeContent {
-                content()
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                InsetSafeContent {
+                    content()
+                }
             }
         }
     }
@@ -50,14 +59,18 @@ fun ComponentActivity.setBuzerContent(content: @Composable () -> Unit) {
 @Composable
 fun InlineLoadingStatus(message: String, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator()
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
         Text(
             text = message,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
     }

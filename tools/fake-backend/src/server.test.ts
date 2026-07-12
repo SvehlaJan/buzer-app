@@ -24,10 +24,14 @@ test("snapshot returns deterministic tasks", async (t) => {
   assert.equal(response.statusCode, 200);
   const body = response.json();
   assert.equal(body.scheduleVersion, 1);
-  assert.equal(body.tasks.length, 3);
+  assert.equal(body.tasks.length, 4);
   assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-start").description, "Bring the printed form and check opening hours.");
   assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-deadline").description, "Share the final numbers before closing the block.");
   assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-invalid").description, "Clarify the missing commitment fields.");
+  assert.match(
+    body.tasks.find((task: { id: string }) => task.id === "task-floating-time").dueDatetime,
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
+  );
 });
 
 test("actions are recorded", async (t) => {
@@ -94,6 +98,32 @@ test("reschedule task records description when supplied", async (t) => {
   const calls = await app.inject({ method: "GET", url: "/__calls" });
   assert.equal(calls.json().calls[0].path, "/tasks/task-start/reschedule");
   assert.equal(calls.json().calls[0].body.description, "Updated gate code: 1357");
+});
+
+test("update task records full editable payload", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/tasks/task-invalid/update",
+    headers: { authorization: "Bearer test-token" },
+    payload: {
+      title: "Edited task",
+      description: "Updated details",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      dueDatetime: "2026-06-02T17:00:00Z",
+      durationMinutes: 45
+    }
+  });
+  assert.equal(response.statusCode, 204);
+
+  const calls = await app.inject({ method: "GET", url: "/__calls" });
+  assert.equal(calls.json().calls[0].path, "/tasks/task-invalid/update");
+  assert.equal(calls.json().calls[0].body.title, "Edited task");
+  assert.equal(calls.json().calls[0].body.projectId, "project-test");
+  assert.equal(calls.json().calls[0].body.assigneeId, "user-me");
 });
 
 test("projects are returned for add-task screen", async (t) => {

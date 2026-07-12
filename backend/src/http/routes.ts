@@ -25,6 +25,14 @@ const rescheduleBody = z.object({
   durationMinutes: z.number().int().positive(),
   description: z.string().trim().nullable().optional()
 });
+const updateTaskBody = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().trim().nullable().optional(),
+  projectId: z.string().min(1),
+  assigneeId: nullableString,
+  dueDatetime: z.string().min(1),
+  durationMinutes: z.number().int().positive()
+});
 const deviceCheckInBody = z.object({
   deviceId: z.string().min(1),
   appVersion: z.string().min(1),
@@ -201,6 +209,29 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       dueDatetime: body.dueDatetime,
       durationMinutes: body.durationMinutes,
       ...descriptionPatch,
+      now: new Date().toISOString()
+    });
+    return { ok: true };
+  });
+
+  app.post("/tasks/:id/update", async (request) => {
+    const { id } = taskIdParams.parse(request.params);
+    const body = updateTaskBody.parse(request.body);
+    const service = new TaskActionService(
+      options.db,
+      new TaskRepository(options.db),
+      new ProjectRepository(options.db),
+      options.todoist,
+      options.currentUserId,
+      options.escalationService ?? null
+    );
+    await service.update(id, {
+      title: body.title,
+      description: body.description ?? null,
+      projectId: body.projectId,
+      assigneeId: body.assigneeId,
+      dueDatetime: body.dueDatetime,
+      durationMinutes: body.durationMinutes,
       now: new Date().toISOString()
     });
     return { ok: true };

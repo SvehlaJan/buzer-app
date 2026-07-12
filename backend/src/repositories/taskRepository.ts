@@ -200,6 +200,38 @@ export class TaskRepository {
     `).run(params);
   }
 
+  updateTaskFields(
+    id: string,
+    values: {
+      title: string;
+      description: string | null;
+      projectId: string;
+      assigneeId: string | null;
+      dueDatetime: string;
+      durationMinutes: number;
+      updatedAt: string;
+      commitmentOwnerId: string | null;
+    }
+  ): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set
+        title = @title,
+        description = @description,
+        project_id = @projectId,
+        assignee_id = @assigneeId,
+        due_datetime = @dueDatetime,
+        duration_minutes = @durationMinutes,
+        updated_at = @updatedAt
+      where id = @id
+    `).run({ id, ...values });
+    this.db.prepare(`
+      update commitment_states
+      set commitment_owner_id = @commitmentOwnerId, updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, commitmentOwnerId: values.commitmentOwnerId, updatedAt: values.updatedAt });
+  }
+
   markCompleted(id: string, completedAt: string): void {
     this.db.prepare(`
       update todoist_tasks

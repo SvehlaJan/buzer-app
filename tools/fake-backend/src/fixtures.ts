@@ -1,6 +1,7 @@
 export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
   const now = new Date(nowIso);
   const isoAt = (deltaMinutes: number) => new Date(now.getTime() + deltaMinutes * 60_000).toISOString();
+  const floatingIsoAt = (deltaMinutes: number) => isoAt(deltaMinutes).replace(/\.\d{3}Z$/, "");
 
   return {
     scheduleVersion: 1,
@@ -70,6 +71,29 @@ export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
         isCompleted: false,
         isDeleted: false,
         validationErrors: ["missing_due_datetime", "missing_duration"],
+        startedAt: null,
+        startDismissCount: 0,
+        deadlineExtensionCount: 0,
+        escalationSentAt: null,
+        updatedAt: nowIso
+      },
+      {
+        id: "task-floating-time",
+        todoistTaskId: "todoist-task-floating-time",
+        title: "Floating datetime fixture",
+        description: "Todoist can return local datetimes without an offset.",
+        projectId: "project-test",
+        assigneeId: "user-me",
+        creatorId: "user-me",
+        dueDatetime: floatingIsoAt(180),
+        durationMinutes: 30,
+        startAt: floatingIsoAt(180),
+        state: "planned",
+        isAssignedToUser: true,
+        isCreatedByUser: true,
+        isCompleted: false,
+        isDeleted: false,
+        validationErrors: [],
         startedAt: null,
         startDismissCount: 0,
         deadlineExtensionCount: 0,

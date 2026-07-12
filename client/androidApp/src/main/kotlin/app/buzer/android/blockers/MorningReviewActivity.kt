@@ -18,8 +18,8 @@ import app.buzer.android.ui.screens.MorningReviewScreen
 import app.buzer.android.ui.screens.buildMorningReviewContentState
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotDiagnostics
 import app.buzer.shared.state.SnapshotReducer
 import kotlinx.coroutines.CancellationException
@@ -114,7 +114,7 @@ class MorningReviewActivity : ComponentActivity() {
         fun runRepair(
             currentCoordinator: EnforcementCoordinator,
             taskId: String,
-            request: RescheduleTaskRequest
+            request: UpdateTaskRequest
         ) {
             repairing = true
             actionErrorMessage = null
@@ -122,7 +122,7 @@ class MorningReviewActivity : ComponentActivity() {
             lifecycleScope.launch {
                 try {
                     AppLog.info("morning_review repair start taskId=$taskId duration=${request.durationMinutes}")
-                    when (val result = currentCoordinator.rescheduleTask(taskId, request)) {
+                    when (val result = currentCoordinator.updateTask(taskId, request)) {
                         CoordinatorActionResult.Success -> {
                             invalidTasks = invalidTasks.filterNot { it.id == taskId }
                             AppLog.info(

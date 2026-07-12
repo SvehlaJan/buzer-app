@@ -89,6 +89,16 @@ data class CreateTaskRequest(
     val durationMinutes: Int
 )
 
+@Serializable
+data class UpdateTaskRequest(
+    val title: String,
+    val description: String? = null,
+    val projectId: String,
+    val assigneeId: String? = null,
+    val dueDatetime: String,
+    val durationMinutes: Int
+)
+
 @Serializable(with = RescheduleTaskRequestSerializer::class)
 data class RescheduleTaskRequest(
     val dueDatetime: String,

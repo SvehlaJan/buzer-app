@@ -116,7 +116,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
         selectDefaultDeadline()
         val saveLabel = waitForComputedSaveLabel()
-        composeRule.onNodeWithText(saveLabel).performClick()
+        composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
 
         waitForActivityDestroyed(scenario)
         waitForRecordedCall("/tasks/task-reschedule/reschedule")
@@ -160,7 +160,7 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
             selectDefaultDeadline()
             val saveLabel = waitForComputedSaveLabel()
-            composeRule.onNodeWithText(saveLabel).performClick()
+            composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
 
             waitForRecordedCall("/tasks/task-reschedule-fail/reschedule")
             waitForErrorLog("action=RESCHEDULE_TASK taskId=task-reschedule-fail", "500")
@@ -230,6 +230,7 @@ class BlockerActivityFakeBackendTest {
         waitForAnyText("Deadline blocker fixture")
         waitForAnyText("remaining")
         composeRule.onNodeWithText("Start blocker fixture").assertIsDisplayed()
+        waitForAnyText("Floating datetime fixture")
         composeRule.onNodeWithContentDescription("Add task").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Morning review").assertIsDisplayed()
         composeRule.onAllNodesWithText("Start blocker").assertCountEquals(0)
@@ -296,7 +297,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Details").performTextInput(" Updated repair note")
         selectDefaultDeadline()
         val saveLabel = waitForComputedSaveLabel()
-        composeRule.onNodeWithText(saveLabel).performClick()
+        composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
 
         waitForActivityDestroyed(scenario)
         waitForRecordedCall("/tasks/task-invalid/reschedule")
@@ -321,13 +322,13 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText("Repair").performClick()
             selectDefaultDeadline()
             val saveLabel = waitForComputedSaveLabel()
-            composeRule.onNodeWithText(saveLabel).performClick()
+            composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
 
             waitForRecordedCall("/tasks/task-invalid/reschedule")
             waitForErrorLog("action=RESCHEDULE_TASK taskId=task-invalid", "500")
             waitForText("Action failed")
-            composeRule.onNodeWithText("Retry").assertIsDisplayed()
-            composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
+            waitForAnyText("Retry")
+            waitForAnyText("Dismiss")
             assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
@@ -414,7 +415,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Start picker").performClick()
+        composeRule.onNodeWithContentDescription("Start picker").performScrollTo().performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }

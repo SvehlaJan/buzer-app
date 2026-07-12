@@ -6,6 +6,7 @@ import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.UpdateTaskRequest
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -302,6 +303,7 @@ class EnforcementCoordinatorTest {
         }
         override suspend fun extendTask(id: String) = Unit
         override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) = Unit
+        override suspend fun updateTask(id: String, request: UpdateTaskRequest) = Unit
         override suspend fun dismissMorningReview() {
             if (failDismissMorningReview) error("backend unavailable")
         }

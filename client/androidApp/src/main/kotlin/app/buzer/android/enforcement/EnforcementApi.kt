@@ -3,6 +3,7 @@ package app.buzer.android.enforcement
 import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.UpdateTaskRequest
 
 interface EnforcementApi {
     suspend fun getSnapshot(): TasksSnapshotResponse
@@ -11,6 +12,7 @@ interface EnforcementApi {
     suspend fun completeTask(id: String)
     suspend fun extendTask(id: String)
     suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest)
+    suspend fun updateTask(id: String, request: UpdateTaskRequest)
     suspend fun dismissMorningReview()
 }
 
@@ -35,6 +37,10 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
 
     override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) {
         client.rescheduleTask(id, request)
+    }
+
+    override suspend fun updateTask(id: String, request: UpdateTaskRequest) {
+        client.updateTask(id, request)
     }
 
     override suspend fun dismissMorningReview() {

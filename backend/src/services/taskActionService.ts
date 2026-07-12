@@ -25,6 +25,16 @@ export interface RescheduleTaskInput {
   now: string;
 }
 
+export interface UpdateTaskInput {
+  title: string;
+  description: string | null;
+  projectId: string;
+  assigneeId: string | null;
+  dueDatetime: string;
+  durationMinutes: number;
+  now: string;
+}
+
 export class TaskActionService {
   constructor(
     private readonly db: Database.Database,
@@ -213,6 +223,70 @@ export class TaskActionService {
       this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now, normalizedDescription);
       this.tasks.updateCommitmentState(taskId, {
         state: "planned",
+        lastSnoozedAt: null,
+        incrementScheduleVersion: true,
+        updatedAt: input.now
+      });
+    });
+    tx();
+  }
+
+  async update(taskId: string, input: UpdateTaskInput): Promise<void> {
+    const task = this.requireTask(taskId);
+    const project = this.projects.getActiveByTodoistProjectId(input.projectId);
+    if (project === null) {
+      throw Object.assign(new Error("Project not found"), {
+        code: "project_not_found",
+        statusCode: 404
+      });
+    }
+
+    const normalizedTitle = input.title.trim();
+    const normalizedDescription = normalizeOptionalText(input.description);
+    const errors: string[] = [];
+    if (normalizedTitle.length === 0) {
+      errors.push("title_required");
+    }
+    if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
+      errors.push("duration_must_be_positive_minutes");
+    }
+    if (project.canAssignTasks && input.assigneeId === null) {
+      errors.push("assignee_required_for_assignable_project");
+    }
+    if (!project.canAssignTasks && input.assigneeId !== null) {
+      errors.push("assignee_not_supported_for_project");
+    }
+    if (errors.length > 0) {
+      throw Object.assign(new Error("Task validation failed"), {
+        code: "task_validation_failed",
+        statusCode: 422,
+        details: { errors }
+      });
+    }
+
+    await this.todoist.updateTask({
+      todoistTaskId: task.todoistTaskId,
+      title: normalizedTitle,
+      description: normalizedDescription,
+      projectId: input.projectId,
+      assigneeId: project.canAssignTasks ? input.assigneeId : null,
+      dueDatetime: input.dueDatetime,
+      durationMinutes: input.durationMinutes
+    });
+    const tx = this.db.transaction(() => {
+      this.tasks.updateTaskFields(taskId, {
+        title: normalizedTitle,
+        description: normalizedDescription,
+        projectId: input.projectId,
+        assigneeId: project.canAssignTasks ? input.assigneeId : null,
+        dueDatetime: input.dueDatetime,
+        durationMinutes: input.durationMinutes,
+        updatedAt: input.now,
+        commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
+      });
+      this.tasks.updateCommitmentState(taskId, {
+        state: "planned",
+        startedAt: null,
         lastSnoozedAt: null,
         incrementScheduleVersion: true,
         updatedAt: input.now

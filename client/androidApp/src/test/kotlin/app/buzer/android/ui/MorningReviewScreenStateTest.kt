@@ -1,10 +1,12 @@
 package app.buzer.android.ui
 
 import app.buzer.android.ui.screens.MorningReviewContentState
+import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.screens.buildMorningReviewReadyState
 import app.buzer.android.ui.screens.buildMorningReviewRepairEditorState
 import app.buzer.android.ui.screens.buildMorningReviewContentState
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import kotlin.test.Test
@@ -96,7 +98,7 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
-    fun repairEditorUsesSharedRepairModeWithReadonlyTaskContext() {
+    fun repairEditorUsesSharedEditModeWithResolvedProjectAndAssigneeLabels() {
         val state = buildMorningReviewRepairEditorState(
             task = invalidTask(
                 id = "task-invalid",
@@ -105,13 +107,25 @@ class MorningReviewScreenStateTest {
                 durationMinutes = null
             ),
             start = null,
-            durationMinutes = 30
+            durationMinutes = 30,
+            projects = listOf(
+                ProjectItem(
+                    id = "project-1",
+                    name = "Family",
+                    canAssignTasks = true,
+                    shared = true,
+                    isInboxProject = false
+                )
+            ),
+            assigneeOptions = listOf(AddTaskAssigneeOption(label = "Me", id = "user-1"))
         )
 
         assertEquals(CommitmentEditorMode.Repair, state.mode)
-        assertFalse(state.titleEditable)
+        assertEquals(true, state.titleEditable)
         assertEquals("Renew parking permit", state.title)
         assertEquals("Bring the printed form.", state.description)
+        assertEquals("Family", state.projectLabel)
+        assertEquals("Me", state.assigneeLabel)
         assertEquals(30, state.durationMinutes)
         assertEquals("Save task", state.submitLabel)
     }

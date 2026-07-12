@@ -5,6 +5,7 @@ import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.UpdateTaskRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
@@ -82,6 +83,13 @@ class BuzerApiClient(
 
     suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest) {
         httpClient.post("$baseUrl/tasks/$id/reschedule") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    suspend fun updateTask(id: String, request: UpdateTaskRequest) {
+        httpClient.post("$baseUrl/tasks/$id/update") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }

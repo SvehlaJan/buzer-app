@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.time.Duration
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -421,9 +422,14 @@ private fun buildAttention(
     return whatsappIssue?.let { HomeAttention(it.message, HomeAttentionAction.ShowHealthDetail) }
 }
 
-private fun parseTaskTime(value: String, offset: java.time.ZoneOffset): OffsetDateTime =
-    runCatching { OffsetDateTime.parse(value).withOffsetSameInstant(offset) }
-        .getOrElse { OffsetDateTime.parse(value.substringBefore('[')).withOffsetSameInstant(offset) }
+private fun parseTaskTime(value: String, offset: java.time.ZoneOffset): OffsetDateTime? {
+    val normalized = value.substringBefore('[')
+    return runCatching { OffsetDateTime.parse(normalized).withOffsetSameInstant(offset) }
+        .getOrElse {
+            runCatching { LocalDateTime.parse(normalized).atOffset(offset) }
+                .getOrNull()
+        }
+}
 
 private fun durationLabel(duration: Duration): String {
     val minutes = duration.toMinutes().coerceAtLeast(0)

@@ -1,9 +1,12 @@
 package app.buzer.android.ui.blockers
 
+import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.screens.descriptionAwareRescheduleRequest
 import app.buzer.android.ui.screens.rescheduleRequestFromEditorStart
+import app.buzer.android.ui.screens.updateTaskRequestFromEditorStart
+import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RescheduleTaskRequest
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -85,5 +88,35 @@ class BlockerActionStateTest {
         assertEquals("2026-07-10T08:05:00Z", request.dueDatetime)
         assertEquals(45, request.durationMinutes)
         assertEquals(RescheduleTaskRequest.DescriptionUpdate.Set, request.descriptionUpdate)
+    }
+
+    @Test
+    fun updateTaskRequestUsesAllEditedTodoistFields() {
+        val request = updateTaskRequestFromEditorStart(
+            title = " Edited title ",
+            description = " Updated details ",
+            selectedProject = ProjectItem(
+                id = "project-family",
+                name = "Family",
+                canAssignTasks = true,
+                shared = true,
+                isInboxProject = false
+            ),
+            selectedAssignee = AddTaskAssigneeOption(label = "Me", id = "user-me"),
+            start = DateTimeSelection(
+                date = LocalDate.of(2026, 7, 10),
+                hour = 8,
+                minute = 5
+            ),
+            durationMinutes = 45,
+            zoneId = ZoneOffset.UTC
+        )
+
+        assertEquals("Edited title", request.title)
+        assertEquals("Updated details", request.description)
+        assertEquals("project-family", request.projectId)
+        assertEquals("user-me", request.assigneeId)
+        assertEquals("2026-07-10T08:05:00Z", request.dueDatetime)
+        assertEquals(45, request.durationMinutes)
     }
 }

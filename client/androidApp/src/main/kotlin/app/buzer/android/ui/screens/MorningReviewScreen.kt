@@ -16,16 +16,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import app.buzer.android.tasks.AddTaskDependencies
+import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.components.BuzerPanel
 import app.buzer.android.ui.components.CommitmentEditor
 import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.status.BlockingErrorState
 import app.buzer.android.ui.status.BlockingLoadingState
 import app.buzer.android.ui.status.ErrorAlertDialog
@@ -33,12 +38,15 @@ import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.theme.Spacing
-import app.buzer.shared.model.RescheduleTaskRequest
+import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import app.buzer.shared.ui.commitment.CommitmentEditorValidation
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 sealed interface MorningReviewContentState {
     data object Loading : MorningReviewContentState
@@ -125,19 +133,44 @@ fun buildMorningReviewReadyState(
 fun buildMorningReviewRepairEditorState(
     task: TaskSnapshotItem,
     start: DateTimeSelection?,
-    durationMinutes: Int
+    durationMinutes: Int,
+    projects: List<ProjectItem> = emptyList(),
+    assigneeOptions: List<AddTaskAssigneeOption> = emptyList()
 ): MorningReviewRepairEditorState =
     MorningReviewRepairEditorState(
         mode = CommitmentEditorMode.Repair,
-        titleEditable = false,
+        titleEditable = true,
         title = task.title,
         description = task.description.orEmpty(),
-        projectLabel = task.projectId,
-        assigneeLabel = task.assigneeId,
+        projectLabel = projects.firstOrNull { it.id == task.projectId }?.name ?: task.projectId,
+        assigneeLabel = assigneeOptions.firstOrNull { it.id == task.assigneeId }?.label ?: task.assigneeId,
         start = start,
         durationMinutes = durationMinutes,
         submitLabel = commitmentSaveLabel(start, durationMinutes)
     )
+
+fun updateTaskRequestFromEditorStart(
+    title: String,
+    description: String,
+    selectedProject: ProjectItem,
+    selectedAssignee: AddTaskAssigneeOption?,
+    start: DateTimeSelection,
+    durationMinutes: Int,
+    zoneId: ZoneId = ZoneId.systemDefault()
+): UpdateTaskRequest {
+    val dueDatetime = start.date.atTime(start.hour, start.minute)
+        .atZone(zoneId)
+        .toInstant()
+        .toString()
+    return UpdateTaskRequest(
+        title = title.trim(),
+        description = description.trim().takeIf { it.isNotEmpty() },
+        projectId = selectedProject.id,
+        assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
+        dueDatetime = dueDatetime,
+        durationMinutes = durationMinutes
+    )
+}
 
 private fun plainLanguageProblem(validationErrors: List<String>): String {
     val errors = validationErrors.toSet()
@@ -155,7 +188,7 @@ private fun plainLanguageProblem(validationErrors: List<String>): String {
 fun MorningReviewScreen(
     invalidTasks: List<TaskSnapshotItem> = emptyList(),
     onBack: () -> Unit,
-    onRepair: (String, RescheduleTaskRequest) -> Unit = { _, _ -> },
+    onRepair: (String, UpdateTaskRequest) -> Unit = { _, _ -> },
     onSnooze: () -> Unit = {},
     showBack: Boolean = true,
     contentState: MorningReviewContentState = MorningReviewContentState.Ready(),
@@ -164,9 +197,37 @@ fun MorningReviewScreen(
     actionErrorMessage: String? = null,
     onDismissActionError: () -> Unit = {},
     onRetryAction: () -> Unit = {},
-    onRetryRefresh: () -> Unit = {}
+    onRetryRefresh: () -> Unit = {},
+    assigneeOptions: List<AddTaskAssigneeOption> = AddTaskDependencies.assigneeOptions(),
+    loadProjects: (suspend () -> List<ProjectItem>)? = null,
+    refreshProjects: (suspend () -> List<ProjectItem>)? = null
 ) {
+    val scope = rememberCoroutineScope()
+    val projectRepository = remember(loadProjects, refreshProjects) {
+        if (loadProjects == null || refreshProjects == null) {
+            AddTaskDependencies.projectRepository()
+        } else {
+            null
+        }
+    }
+    val loadProjectList = loadProjects ?: projectRepository!!::loadProjectsOnce
+    val refreshProjectList = refreshProjects ?: projectRepository!!::refreshProjects
+    var projects by remember { mutableStateOf<List<ProjectItem>>(emptyList()) }
+    var projectsLoading by remember { mutableStateOf(true) }
+    var projectLoadError by remember { mutableStateOf<String?>(null) }
     var repairingTask by remember { mutableStateOf<TaskSnapshotItem?>(null) }
+    var title by remember(repairingTask?.id) {
+        mutableStateOf(repairingTask?.title.orEmpty())
+    }
+    var selectedProject by remember(repairingTask?.id) {
+        mutableStateOf<ProjectItem?>(null)
+    }
+    var projectMenuExpanded by remember(repairingTask?.id) {
+        mutableStateOf(false)
+    }
+    var selectedAssignee by remember(repairingTask?.id) {
+        mutableStateOf<AddTaskAssigneeOption?>(null)
+    }
     var start by remember(repairingTask?.id) {
         mutableStateOf(repairingTask?.initialRepairStartSelection())
     }
@@ -180,6 +241,42 @@ fun MorningReviewScreen(
         mutableStateOf(false)
     }
     var errorText by remember(repairingTask?.id) { mutableStateOf<String?>(null) }
+    var invalidField by remember(repairingTask?.id) { mutableStateOf<AddTaskInvalidField?>(null) }
+
+    fun retryProjects() {
+        scope.launch {
+            projectsLoading = true
+            projectLoadError = null
+            try {
+                projects = refreshProjectList()
+            } catch (error: Exception) {
+                AppLog.error("morning_review projects refresh_failed type=${error::class.simpleName} message=${error.message}", error)
+                projectLoadError = error.message ?: "Project loading failed"
+            } finally {
+                projectsLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        projectsLoading = true
+        projectLoadError = null
+        try {
+            projects = loadProjectList()
+        } catch (error: Exception) {
+            AppLog.error("morning_review projects load_failed type=${error::class.simpleName} message=${error.message}", error)
+            projectLoadError = error.message ?: "Project loading failed"
+        } finally {
+            projectsLoading = false
+        }
+    }
+
+    LaunchedEffect(repairingTask?.id, projects) {
+        val task = repairingTask ?: return@LaunchedEffect
+        title = task.title
+        selectedProject = projects.firstOrNull { it.id == task.projectId }
+        selectedAssignee = assigneeOptions.firstOrNull { it.id == task.assigneeId }
+    }
 
     Column(
         modifier = Modifier
@@ -222,59 +319,124 @@ fun MorningReviewScreen(
                 contentState = contentState
             )
         } else {
-            val editorState = buildMorningReviewRepairEditorState(task, start, durationMinutes)
+            projectLoadError?.let { WarningStatus("Projects did not load: $it", onRetry = { retryProjects() }) }
+            val editorState = buildMorningReviewRepairEditorState(
+                task = task,
+                start = start,
+                durationMinutes = durationMinutes,
+                projects = projects,
+                assigneeOptions = assigneeOptions
+            )
             CommitmentEditor(
                 mode = editorState.mode,
-                title = editorState.title,
-                onTitleChange = {},
+                title = title,
+                onTitleChange = {
+                    title = it
+                    errorText = null
+                    invalidField = null
+                },
                 titleEditable = editorState.titleEditable,
                 description = description,
-                onDescriptionChange = { description = it },
+                onDescriptionChange = {
+                    description = it
+                    errorText = null
+                },
                 descriptionExpanded = descriptionExpanded,
                 onDescriptionExpandedChange = { descriptionExpanded = it },
-                projectContent = { ReceiptText(editorState.projectLabel ?: "Not available") },
-                assigneeContent = { ReceiptText(editorState.assigneeLabel ?: "Not available") },
+                projectContent = {
+                    ProjectSelector(
+                        selectedProject = selectedProject,
+                        projects = projects,
+                        projectsLoading = projectsLoading,
+                        projectMenuExpanded = projectMenuExpanded,
+                        onProjectMenuExpandedChange = { projectMenuExpanded = it },
+                        onProjectSelected = { project ->
+                            selectedProject = project
+                            selectedAssignee = null
+                            projectMenuExpanded = false
+                            errorText = null
+                            invalidField = null
+                        },
+                        enabled = !repairing && !snoozing && !projectsLoading && projects.isNotEmpty()
+                    )
+                },
+                assigneeContent = {
+                    AssigneeSelector(
+                        selectedProject = selectedProject,
+                        assigneeOptions = assigneeOptions,
+                        selectedAssignee = selectedAssignee,
+                        onAssigneeSelected = { option ->
+                            selectedAssignee = option
+                            errorText = null
+                            invalidField = null
+                        },
+                        enabled = !repairing && !snoozing
+                    )
+                },
                 start = start,
                 onStartChange = {
                     start = it
                     errorText = null
+                    invalidField = null
                 },
                 durationMinutes = durationMinutes,
                 onDurationChange = {
                     durationMinutes = it
                     errorText = null
+                    invalidField = null
                 },
                 validation = CommitmentEditorValidation(
                     bannerMessage = errorText,
-                    titleError = null,
-                    projectError = null,
-                    assigneeError = null,
-                    startError = errorText?.let { "Required" },
+                    titleError = "Required".takeIf { invalidField == AddTaskInvalidField.Title },
+                    projectError = "Required".takeIf { invalidField == AddTaskInvalidField.Project },
+                    assigneeError = "Required".takeIf { invalidField == AddTaskInvalidField.Assignee },
+                    startError = "Required".takeIf { invalidField == AddTaskInvalidField.Start },
                     durationError = null
                 ),
                 submitting = repairing,
                 enabled = !repairing && !snoozing,
+                submitEnabled = !repairing && !snoozing && !projectsLoading && projectLoadError == null,
                 submitLabel = editorState.submitLabel,
                 loadingLabel = "Saving...",
                 onSubmit = {
                     val selectedStart = start
-                    if (selectedStart == null) {
-                        errorText = "Start time is required"
-                    } else {
-                        onRepair(
-                            task.id,
-                            rescheduleRequestFromEditorStart(
-                                start = selectedStart,
-                                durationMinutes = durationMinutes,
-                                initialDescription = task.description,
-                                editedDescription = description
-                            )
-                        )
-                    }
-                },
+                    val project = selectedProject
+                    when {
+                        title.trim().isEmpty() -> {
+                            errorText = "Title is required"
+                            invalidField = AddTaskInvalidField.Title
+                        }
+                        project == null -> {
+                            errorText = "Project is required"
+                            invalidField = AddTaskInvalidField.Project
+                        }
+                        project.canAssignTasks && selectedAssignee == null -> {
+                            errorText = "Assignee is required before saving"
+                            invalidField = AddTaskInvalidField.Assignee
+                        }
+                        selectedStart == null -> {
+                            errorText = "Start time is required"
+                            invalidField = AddTaskInvalidField.Start
+                        }
+                        else -> {
+                            onRepair(
+                                task.id,
+                                updateTaskRequestFromEditorStart(
+                                    title = title,
+                                    description = description,
+                                    selectedProject = project,
+                                    selectedAssignee = selectedAssignee,
+                                    start = selectedStart,
+                                    durationMinutes = durationMinutes
+	                                )
+	                            )
+	                    }
+	                }
+	            },
                 onCancel = {
                     repairingTask = null
                     errorText = null
+                    invalidField = null
                 },
                 modifier = Modifier.fillMaxWidth()
             )

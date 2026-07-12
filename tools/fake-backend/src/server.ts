@@ -119,6 +119,15 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     });
   }
 
+  app.post("/tasks/:id/update", async (request, reply) => {
+    await maybeDelay();
+    record("POST", request.url, request.body ?? null);
+    if (failActions) {
+      return reply.code(500).send({ error: "forced_failure" });
+    }
+    return reply.code(204).send();
+  });
+
   app.post("/review/dismiss", async (request, reply) => {
     await maybeDelay();
     record("POST", request.url, request.body ?? null);

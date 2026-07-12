@@ -5,6 +5,7 @@ import app.buzer.shared.enforcement.AlarmPlanCalculator
 import app.buzer.shared.enforcement.DesiredAlarmKind
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotDiagnostics
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -99,6 +100,15 @@ class EnforcementCoordinator(
             scheduleStartRetry = false
         ) {
             api.rescheduleTask(taskId, request)
+        }
+
+    suspend fun updateTask(taskId: String, request: UpdateTaskRequest): CoordinatorActionResult =
+        runBackendAction(
+            action = BlockerAction.RESCHEDULE_TASK,
+            taskId = taskId,
+            scheduleStartRetry = false
+        ) {
+            api.updateTask(taskId, request)
         }
 
     suspend fun dismissMorningReview(): CoordinatorActionResult =

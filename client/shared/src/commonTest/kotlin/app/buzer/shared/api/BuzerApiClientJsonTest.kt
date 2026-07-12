@@ -4,6 +4,7 @@ import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.UpdateTaskRequest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -48,6 +49,27 @@ class BuzerApiClientJsonTest {
 
         assertContains(createBody, """"description":"Gate code: 2468"""")
         assertContains(rescheduleBody, """"description":"Updated gate code: 1357"""")
+    }
+
+    @Test
+    fun updateTaskRequestEncodesAllEditableTodoistFields() {
+        val body = buzerApiJson.encodeToString(
+            UpdateTaskRequest(
+                title = "Edited task",
+                description = "Updated details",
+                projectId = "project-family",
+                assigneeId = "user-me",
+                dueDatetime = "2026-06-13T13:00:00Z",
+                durationMinutes = 45
+            )
+        )
+
+        assertContains(body, """"title":"Edited task"""")
+        assertContains(body, """"description":"Updated details"""")
+        assertContains(body, """"projectId":"project-family"""")
+        assertContains(body, """"assigneeId":"user-me"""")
+        assertContains(body, """"dueDatetime":"2026-06-13T13:00:00Z"""")
+        assertContains(body, """"durationMinutes":45""")
     }
 
     @Test

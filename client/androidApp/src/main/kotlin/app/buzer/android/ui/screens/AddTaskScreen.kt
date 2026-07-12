@@ -354,7 +354,7 @@ fun AddTaskScreen(
 }
 
 @Composable
-private fun ProjectSelector(
+fun ProjectSelector(
     selectedProject: ProjectItem?,
     projects: List<ProjectItem>,
     projectsLoading: Boolean,
@@ -397,7 +397,7 @@ private fun ProjectSelector(
 }
 
 @Composable
-private fun AssigneeSelector(
+fun AssigneeSelector(
     selectedProject: ProjectItem?,
     assigneeOptions: List<AddTaskAssigneeOption>,
     selectedAssignee: AddTaskAssigneeOption?,

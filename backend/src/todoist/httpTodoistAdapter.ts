@@ -3,6 +3,7 @@ import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
   TodoistRescheduleInput,
+  TodoistUpdateTaskInput,
   TodoistSyncResult
 } from "./todoistAdapter.js";
 import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
@@ -114,6 +115,19 @@ export class HttpTodoistAdapter implements TodoistAdapter {
         ? ""
         : input.description.trim();
     }
+    await this.command(randomUUID(), "item_update", args);
+  }
+
+  async updateTask(input: TodoistUpdateTaskInput): Promise<void> {
+    const args: Record<string, unknown> = {
+      id: input.todoistTaskId,
+      content: input.title.trim(),
+      description: input.description?.trim() ?? "",
+      project_id: input.projectId,
+      responsible_uid: input.assigneeId ?? "",
+      due: { datetime: input.dueDatetime },
+      duration: { amount: input.durationMinutes, unit: "minute" }
+    };
     await this.command(randomUUID(), "item_update", args);
   }
 

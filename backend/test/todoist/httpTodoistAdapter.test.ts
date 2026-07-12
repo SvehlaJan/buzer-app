@@ -184,6 +184,36 @@ describe("HttpTodoistAdapter", () => {
     expect(descriptions).toEqual(["Updated gate code: 1357", "", ""]);
   });
 
+  it("updates all editable task fields through sync item_update", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.updateTask({
+      todoistTaskId: "todoist-1",
+      title: "Edited task",
+      description: "  Updated details  ",
+      projectId: "project-family",
+      assigneeId: "43186358",
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 45
+    });
+
+    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ type: string; args: Record<string, unknown> }>;
+    expect(commands[0]?.type).toBe("item_update");
+    expect(commands[0]?.args).toEqual({
+      id: "todoist-1",
+      content: "Edited task",
+      description: "Updated details",
+      project_id: "project-family",
+      responsible_uid: "43186358",
+      due: { datetime: "2026-05-08T16:00:00Z" },
+      duration: { amount: 45, unit: "minute" }
+    });
+  });
+
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_token: "next-token",

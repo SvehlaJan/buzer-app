@@ -177,6 +177,32 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun acceptsFloatingTodoistDatetimeWithoutOffset() {
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 2,
+            serverTime = "2026-05-08T07:00:00Z",
+            invalidTasks = emptyList(),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = listOf(
+                task(
+                    "floating-time",
+                    title = "Floating Todoist time",
+                    dueDatetime = "2026-07-08T14:00:00",
+                    durationMinutes = 30
+                )
+            ),
+            healthWarnings = emptyList()
+        )
+
+        val state = buildHomeScreenState(snapshot, now = FIXED_NOW)
+
+        assertEquals(listOf("floating-time"), state.agendaRows.map { it.taskId })
+        assertEquals("14:00-14:30", state.agendaRows.single().timeLabel)
+        assertEquals(HomeAgendaRowState.Upcoming, state.agendaRows.single().state)
+    }
+
+    @Test
     fun exposesDoneAgendaRowsFromReducerOutput() {
         val reduced = SnapshotReducer.reduce(
             TasksSnapshotResponse(

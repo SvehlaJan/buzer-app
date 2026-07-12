@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -45,7 +46,7 @@ class AddTaskFakeBackendTest {
             selectDefaultDeadline()
             clickSaveBlockRange()
 
-            composeRule.onNodeWithText("Project is required").assertIsDisplayed()
+            composeRule.onNodeWithText("Project is required").performScrollTo().assertIsDisplayed()
             assertNoRecordedCall("/tasks")
         } finally {
             scenario.close()
@@ -63,7 +64,7 @@ class AddTaskFakeBackendTest {
             enterTitle("Buy milk")
             selectDefaultDeadline()
             clickSaveBlockRange()
-            composeRule.onNodeWithText("Assignee is required before saving").assertIsDisplayed()
+            composeRule.onNodeWithText("Assignee is required before saving").performScrollTo().assertIsDisplayed()
 
             composeRule.onNodeWithText("Me").performClick()
             clickSaveBlockRange()
@@ -149,8 +150,8 @@ class AddTaskFakeBackendTest {
                 waitForRecordedCall("/tasks")
                 composeRule.onNodeWithText("Add task").assertIsDisplayed()
                 composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
-                composeRule.onNodeWithText("Task was not saved").assertIsDisplayed()
-                composeRule.onNodeWithText("Retry").assertIsDisplayed()
+                composeRule.onNodeWithText("Task was not saved").performScrollTo().assertIsDisplayed()
+                composeRule.onNodeWithText("Retry").performScrollTo().assertIsDisplayed()
                 composeRule.onAllNodesWithText("500", substring = true).assertCountEquals(1)
                 composeRule.onAllNodesWithText("System error", substring = true).assertCountEquals(0)
             } finally {
@@ -233,14 +234,14 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Start picker").performClick()
+        composeRule.onNodeWithContentDescription("Start picker").performScrollTo().performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun clickSaveBlockRange() {
         val label = waitForSaveBlockRangeLabel()
-        composeRule.onNodeWithText(label).performClick()
+        composeRule.onNodeWithText(label).performScrollTo().performClick()
     }
 
     private fun waitForSaveBlockRangeLabel(): String {
@@ -250,9 +251,7 @@ class AddTaskFakeBackendTest {
             lastLabels = saveLabels()
             val matchingLabels = lastLabels.filter { it.matches(saveBlockRangeLabelPattern) }
             if (matchingLabels.size == 1) {
-                val label = matchingLabels.single()
-                composeRule.onNodeWithText(label).assertIsDisplayed()
-                return label
+                return matchingLabels.single()
             }
             SystemClock.sleep(100)
         }

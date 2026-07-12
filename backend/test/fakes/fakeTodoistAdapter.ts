@@ -3,6 +3,7 @@ import type {
   TodoistCreateTaskInput,
   TodoistCreateTaskResult,
   TodoistRescheduleInput,
+  TodoistUpdateTaskInput,
   TodoistSyncResult
 } from "../../src/todoist/todoistAdapter.js";
 
@@ -13,6 +14,7 @@ export class FakeTodoistAdapter implements TodoistAdapter {
   createResults: TodoistCreateTaskResult[] = [];
   completedTaskIds: string[] = [];
   reschedules: TodoistRescheduleInput[] = [];
+  updates: TodoistUpdateTaskInput[] = [];
 
   async sync(syncToken: string): Promise<TodoistSyncResult> {
     this.syncTokens.push(syncToken);
@@ -46,5 +48,9 @@ export class FakeTodoistAdapter implements TodoistAdapter {
 
   async rescheduleTask(input: TodoistRescheduleInput): Promise<void> {
     this.reschedules.push(input);
+  }
+
+  async updateTask(input: TodoistUpdateTaskInput): Promise<void> {
+    this.updates.push(input);
   }
 }

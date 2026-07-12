@@ -244,6 +244,70 @@ describe("TaskActionService", () => {
     expect(repo.getByTodoistTaskId("created-1")?.description).toBe("Gate code: 2468");
   });
 
+  it("updates all editable Todoist fields and resets commitment planning", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Old title",
+      description: "Old details",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      creatorId: "user-wife",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-05-08T10:00:00Z"
+    });
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, repo, projectRepo, adapter, "user-self");
+
+    await service.update("task-1", {
+      title: "Edited task",
+      description: " Updated details ",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T19:00:00Z",
+      durationMinutes: 45,
+      now: "2026-05-08T17:10:00Z"
+    });
+
+    expect(adapter.updates[0]).toEqual({
+      todoistTaskId: "todoist-1",
+      title: "Edited task",
+      description: "Updated details",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T19:00:00Z",
+      durationMinutes: 45
+    });
+    expect(repo.getById("task-1")).toMatchObject({
+      title: "Edited task",
+      description: "Updated details",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      dueDatetime: "2026-05-08T19:00:00Z",
+      durationMinutes: 45,
+      state: "planned"
+    });
+  });
+
   it("sends escalation on second start postpone", async () => {
     const db = new Database(":memory:");
     migrate(db);
