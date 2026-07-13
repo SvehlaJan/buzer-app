@@ -100,7 +100,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 
   app.get("/tasks/snapshot", async () => {
     const repo = new TaskRepository(options.db);
-    const service = new TaskSnapshotService(repo, options.currentUserId);
+    const service = new TaskSnapshotService(repo, new ProjectRepository(options.db), options.currentUserId);
     return service.getSnapshot(new Date().toISOString());
   });
 

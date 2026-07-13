@@ -1,17 +1,29 @@
 import { computeStartAt } from "../domain/time.js";
 import { validateTaskStrictness } from "../domain/taskValidation.js";
+import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
 
 export class TaskSnapshotService {
   constructor(
     private readonly tasks: TaskRepository,
+    private readonly projects: ProjectRepository,
     private readonly currentUserId: string
   ) {}
 
   getSnapshot(serverTime: string) {
     const rows = this.tasks.listAll();
+    const projectsById = new Map(
+      this.projects.listActive().map((project) => [project.todoistProjectId, project])
+    );
     const items = rows.map((task) => {
-      const isCompanionOwnedByUser = task.assigneeId === null && task.commitmentOwnerId === this.currentUserId;
+      const project = task.projectId === null ? null : projectsById.get(task.projectId) ?? null;
+      const isCurrentUserPersonalProjectTask =
+        task.assigneeId === null &&
+        task.creatorId === this.currentUserId &&
+        project?.canAssignTasks === false;
+      const isCompanionOwnedByUser =
+        task.assigneeId === null &&
+        (task.commitmentOwnerId === this.currentUserId || isCurrentUserPersonalProjectTask);
       const isAssignedToUser = task.assigneeId === this.currentUserId || isCompanionOwnedByUser;
       const validation = validateTaskStrictness({
         title: task.title,
