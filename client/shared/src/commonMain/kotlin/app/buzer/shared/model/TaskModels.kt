@@ -42,6 +42,7 @@ data class TaskSnapshotItem(
     val assigneeId: String?,
     val creatorId: String?,
     val dueDatetime: String?,
+    val dueDate: String? = null,
     val durationMinutes: Int?,
     val startAt: String?,
     val state: CommitmentState,

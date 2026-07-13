@@ -2,13 +2,18 @@ package app.buzer.android.ui
 
 import app.buzer.android.ui.screens.MorningReviewContentState
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
+import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.screens.buildMorningReviewReadyState
 import app.buzer.android.ui.screens.buildMorningReviewRepairEditorState
+import app.buzer.android.ui.screens.buildMorningReviewRepairValidation
 import app.buzer.android.ui.screens.buildMorningReviewContentState
+import app.buzer.android.ui.screens.initialRepairStartDraft
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -106,7 +111,7 @@ class MorningReviewScreenStateTest {
                 description = "Bring the printed form.",
                 durationMinutes = null
             ),
-            start = null,
+            start = DateTimeDraftSelection.Empty,
             durationMinutes = 30,
             projects = listOf(
                 ProjectItem(
@@ -131,6 +136,41 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
+    fun repairEditorPreservesDateOnlyTodoistDueDate() {
+        val draft = invalidTask(
+            id = "task-date-only",
+            dueDate = "2026-07-13",
+            validationErrors = listOf("missing_due_datetime")
+        ).initialRepairStartDraft()
+
+        assertEquals(LocalDate.of(2026, 7, 13), draft.date)
+        assertNull(draft.hour)
+        assertNull(draft.minute)
+        assertEquals("2026-07-13", draft.dateLabel)
+        assertEquals("No time", draft.timeLabel)
+    }
+
+    @Test
+    fun repairValidationRunsImmediatelyForMissingStartTime() {
+        val validation = buildMorningReviewRepairValidation(
+            title = "Renew parking permit",
+            selectedProject = ProjectItem(
+                id = "project-1",
+                name = "Family",
+                canAssignTasks = true,
+                shared = true,
+                isInboxProject = false
+            ),
+            selectedAssignee = AddTaskAssigneeOption(label = "Me", id = "user-1"),
+            start = DateTimeDraftSelection(date = LocalDate.of(2026, 7, 13), hour = null, minute = null)
+        )
+
+        assertEquals("Start time is required", validation.bannerMessage)
+        assertEquals("Required", validation.startError)
+        assertEquals(AddTaskInvalidField.Start, validation.firstInvalidField)
+    }
+
+    @Test
     fun allClearStateShowsConfirmationAndSingleDoneAction() {
         val state = buildMorningReviewReadyState(
             invalidTasks = emptyList(),
@@ -148,7 +188,9 @@ class MorningReviewScreenStateTest {
         title: String = "Invalid task $id",
         description: String? = null,
         validationErrors: List<String> = listOf("missing_due_datetime"),
-        durationMinutes: Int? = null
+        durationMinutes: Int? = null,
+        dueDatetime: String? = null,
+        dueDate: String? = null
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -158,7 +200,8 @@ class MorningReviewScreenStateTest {
             projectId = "project-1",
             assigneeId = "user-1",
             creatorId = "user-2",
-            dueDatetime = null,
+            dueDatetime = dueDatetime,
+            dueDate = dueDate,
             durationMinutes = durationMinutes,
             startAt = null,
             state = CommitmentState.invalid,

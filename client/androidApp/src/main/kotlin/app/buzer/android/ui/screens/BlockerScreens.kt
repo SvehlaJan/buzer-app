@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.semantics
 import app.buzer.android.ui.components.BlockerSurface
 import app.buzer.android.ui.components.CommitmentEditor
 import app.buzer.android.ui.components.commitmentSaveLabel
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.LoadingActionButton
@@ -123,7 +124,7 @@ fun DeadlineBlockerScreen(
     }
 
     var rescheduleVisible by remember { mutableStateOf(false) }
-    var deadline by remember(model.title, model.blockWindow) { mutableStateOf<DateTimeSelection?>(null) }
+    var deadline by remember(model.title, model.blockWindow) { mutableStateOf(DateTimeDraftSelection.Empty) }
     var durationMinutes by remember { mutableStateOf(30) }
     var errorText by remember { mutableStateOf<String?>(null) }
     val initialDescription = remember(model.description) { model.description.orEmpty() }
@@ -172,10 +173,10 @@ fun DeadlineBlockerScreen(
                 submitting = actionState is BlockerActionState.Loading,
                 enabled = !actionState.actionsDisabled,
                 submitEnabled = !actionState.actionsDisabled,
-                submitLabel = commitmentSaveLabel(deadline, durationMinutes),
+                submitLabel = commitmentSaveLabel(deadline.toSelection(), durationMinutes),
                 loadingLabel = actionState.loadingLabel ?: "Rescheduling...",
                 onSubmit = {
-                    val selectedStart = deadline
+                    val selectedStart = deadline.toSelection()
                     if (selectedStart == null) {
                         errorText = "Start time is required"
                     } else {

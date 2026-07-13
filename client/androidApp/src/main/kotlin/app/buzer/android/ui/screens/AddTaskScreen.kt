@@ -39,7 +39,7 @@ import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.CommitmentEditor
 import app.buzer.android.ui.components.commitmentSaveLabel
-import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.shared.diagnostics.AppLog
@@ -93,7 +93,7 @@ fun AddTaskScreen(
     var selectedProject by remember { mutableStateOf<ProjectItem?>(null) }
     var projectMenuExpanded by remember { mutableStateOf(false) }
     var selectedAssignee by remember { mutableStateOf<AddTaskAssigneeOption?>(null) }
-    var deadline by remember { mutableStateOf<DateTimeSelection?>(null) }
+    var deadline by remember { mutableStateOf(DateTimeDraftSelection.Empty) }
     var durationMinutes by remember { mutableStateOf(30) }
     var description by remember { mutableStateOf("") }
     var descriptionExpanded by remember { mutableStateOf(false) }
@@ -184,14 +184,14 @@ fun AddTaskScreen(
         if (submitting) return
         AppLog.info(
             "add_task submit_clicked titleLength=${title.length} project=${selectedProject?.id} assignee=${selectedAssignee?.id} " +
-                "deadline=${deadline?.formatForDisplay()} durationInput=$durationMinutes"
+                "deadline=${deadline.receiptLabel} durationInput=$durationMinutes"
         )
         when (
             val result = AddTaskFormValidator.validate(
                 title,
                 selectedProject,
                 selectedAssignee,
-                deadline,
+                deadline.toSelection(),
                 durationMinutes,
                 description = description
             )
@@ -319,7 +319,7 @@ fun AddTaskScreen(
             submitting = submitting,
             enabled = !submitState.formDisabled,
             submitEnabled = submitState.saveEnabled,
-            submitLabel = commitmentSaveLabel(deadline, durationMinutes),
+            submitLabel = commitmentSaveLabel(deadline.toSelection(), durationMinutes),
             loadingLabel = "Saving...",
             onSubmit = { validateAndSubmit() },
             onCancel = onBack,

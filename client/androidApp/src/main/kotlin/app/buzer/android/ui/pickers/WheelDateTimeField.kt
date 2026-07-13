@@ -1,5 +1,8 @@
 package app.buzer.android.ui.pickers
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -14,9 +17,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.android.ui.theme.Spacing
 import com.commandiron.wheel_picker_compose.WheelDateTimePicker
 import java.time.LocalDateTime
+import java.time.LocalTime
 
 internal fun toDateTimeSelection(dateTime: LocalDateTime): DateTimeSelection =
     DateTimeSelection(date = dateTime.toLocalDate(), hour = dateTime.hour, minute = dateTime.minute)
@@ -27,10 +33,21 @@ internal fun toLocalDateTime(selection: DateTimeSelection): LocalDateTime =
 internal fun startDateTimeFor(selection: DateTimeSelection?, now: LocalDateTime): LocalDateTime =
     selection?.let(::toLocalDateTime) ?: now
 
+internal fun startDateTimeForDraft(selection: DateTimeDraftSelection, now: LocalDateTime): LocalDateTime {
+    val date = selection.date ?: now.toLocalDate()
+    val hour = selection.hour ?: now.hour
+    val minute = selection.minute ?: now.minute
+    return LocalDateTime.of(date, LocalTime.of(hour, minute))
+}
+
+internal fun dateButtonLabel(selection: DateTimeDraftSelection): String = selection.dateLabel
+
+internal fun timeButtonLabel(selection: DateTimeDraftSelection): String = selection.timeLabel
+
 @Composable
 fun WheelDateTimeField(
-    selection: DateTimeSelection?,
-    onSelectionChange: (DateTimeSelection) -> Unit,
+    selection: DateTimeDraftSelection,
+    onSelectionChange: (DateTimeDraftSelection) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -39,16 +56,30 @@ fun WheelDateTimeField(
 ) {
     var dialogVisible by remember { mutableStateOf(false) }
 
-    OutlinedButton(
-        onClick = { dialogVisible = true },
-        enabled = enabled,
-        modifier = modifier.semantics { this.contentDescription = contentDescription }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { this.contentDescription = contentDescription },
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        Text(selection?.formatForDisplay() ?: "No start time selected")
+        OutlinedButton(
+            onClick = { dialogVisible = true },
+            enabled = enabled,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(dateButtonLabel(selection))
+        }
+        OutlinedButton(
+            onClick = { dialogVisible = true },
+            enabled = enabled,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(timeButtonLabel(selection))
+        }
     }
 
     if (dialogVisible) {
-        val start = remember(selection) { startDateTimeFor(selection, LocalDateTime.now()) }
+        val start = remember(selection) { startDateTimeForDraft(selection, LocalDateTime.now()) }
         var pending by remember { mutableStateOf(start) }
 
         AlertDialog(
@@ -66,7 +97,7 @@ fun WheelDateTimeField(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onSelectionChange(toDateTimeSelection(pending))
+                        onSelectionChange(DateTimeDraftSelection.fromSelection(toDateTimeSelection(pending)))
                         dialogVisible = false
                     }
                 ) {

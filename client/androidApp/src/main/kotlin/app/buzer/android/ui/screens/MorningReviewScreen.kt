@@ -29,6 +29,7 @@ import app.buzer.android.ui.components.BuzerPanel
 import app.buzer.android.ui.components.CommitmentEditor
 import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.components.commitmentSaveLabel
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.status.BlockingErrorState
@@ -45,6 +46,8 @@ import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import app.buzer.shared.ui.commitment.CommitmentEditorValidation
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.launch
 
@@ -98,10 +101,29 @@ data class MorningReviewRepairEditorState(
     val description: String,
     val projectLabel: String?,
     val assigneeLabel: String?,
-    val start: DateTimeSelection?,
+    val start: DateTimeDraftSelection,
     val durationMinutes: Int,
     val submitLabel: String
 )
+
+data class MorningReviewRepairValidation(
+    val bannerMessage: String?,
+    val titleError: String?,
+    val projectError: String?,
+    val assigneeError: String?,
+    val startError: String?,
+    val firstInvalidField: AddTaskInvalidField?
+) {
+    fun asCommitmentEditorValidation(): CommitmentEditorValidation =
+        CommitmentEditorValidation(
+            bannerMessage = bannerMessage,
+            titleError = titleError,
+            projectError = projectError,
+            assigneeError = assigneeError,
+            startError = startError,
+            durationError = null
+        )
+}
 
 fun buildMorningReviewReadyState(
     invalidTasks: List<TaskSnapshotItem>,
@@ -132,7 +154,7 @@ fun buildMorningReviewReadyState(
 
 fun buildMorningReviewRepairEditorState(
     task: TaskSnapshotItem,
-    start: DateTimeSelection?,
+    start: DateTimeDraftSelection,
     durationMinutes: Int,
     projects: List<ProjectItem> = emptyList(),
     assigneeOptions: List<AddTaskAssigneeOption> = emptyList()
@@ -146,8 +168,39 @@ fun buildMorningReviewRepairEditorState(
         assigneeLabel = assigneeOptions.firstOrNull { it.id == task.assigneeId }?.label ?: task.assigneeId,
         start = start,
         durationMinutes = durationMinutes,
-        submitLabel = commitmentSaveLabel(start, durationMinutes)
+        submitLabel = commitmentSaveLabel(start.toSelection(), durationMinutes)
     )
+
+fun buildMorningReviewRepairValidation(
+    title: String,
+    selectedProject: ProjectItem?,
+    selectedAssignee: AddTaskAssigneeOption?,
+    start: DateTimeDraftSelection
+): MorningReviewRepairValidation {
+    val invalidField = when {
+        title.trim().isEmpty() -> AddTaskInvalidField.Title
+        selectedProject == null -> AddTaskInvalidField.Project
+        selectedProject.canAssignTasks && selectedAssignee == null -> AddTaskInvalidField.Assignee
+        start.toSelection() == null -> AddTaskInvalidField.Start
+        else -> null
+    }
+    val message = when (invalidField) {
+        AddTaskInvalidField.Title -> "Title is required"
+        AddTaskInvalidField.Project -> "Project is required"
+        AddTaskInvalidField.Assignee -> "Assignee is required before saving"
+        AddTaskInvalidField.Start -> "Start time is required"
+        AddTaskInvalidField.Duration,
+        null -> null
+    }
+    return MorningReviewRepairValidation(
+        bannerMessage = message,
+        titleError = "Required".takeIf { invalidField == AddTaskInvalidField.Title },
+        projectError = "Required".takeIf { invalidField == AddTaskInvalidField.Project },
+        assigneeError = "Required".takeIf { invalidField == AddTaskInvalidField.Assignee },
+        startError = "Required".takeIf { invalidField == AddTaskInvalidField.Start },
+        firstInvalidField = invalidField
+    )
+}
 
 fun updateTaskRequestFromEditorStart(
     title: String,
@@ -229,7 +282,7 @@ fun MorningReviewScreen(
         mutableStateOf<AddTaskAssigneeOption?>(null)
     }
     var start by remember(repairingTask?.id) {
-        mutableStateOf(repairingTask?.initialRepairStartSelection())
+        mutableStateOf(repairingTask?.initialRepairStartDraft() ?: DateTimeDraftSelection.Empty)
     }
     var durationMinutes by remember(repairingTask?.id) {
         mutableStateOf(repairingTask?.durationMinutes ?: 30)
@@ -241,7 +294,6 @@ fun MorningReviewScreen(
         mutableStateOf(false)
     }
     var errorText by remember(repairingTask?.id) { mutableStateOf<String?>(null) }
-    var invalidField by remember(repairingTask?.id) { mutableStateOf<AddTaskInvalidField?>(null) }
 
     fun retryProjects() {
         scope.launch {
@@ -333,7 +385,6 @@ fun MorningReviewScreen(
                 onTitleChange = {
                     title = it
                     errorText = null
-                    invalidField = null
                 },
                 titleEditable = editorState.titleEditable,
                 description = description,
@@ -355,7 +406,6 @@ fun MorningReviewScreen(
                             selectedAssignee = null
                             projectMenuExpanded = false
                             errorText = null
-                            invalidField = null
                         },
                         enabled = !repairing && !snoozing && !projectsLoading && projects.isNotEmpty()
                     )
@@ -368,7 +418,6 @@ fun MorningReviewScreen(
                         onAssigneeSelected = { option ->
                             selectedAssignee = option
                             errorText = null
-                            invalidField = null
                         },
                         enabled = !repairing && !snoozing
                     )
@@ -377,66 +426,55 @@ fun MorningReviewScreen(
                 onStartChange = {
                     start = it
                     errorText = null
-                    invalidField = null
                 },
                 durationMinutes = durationMinutes,
                 onDurationChange = {
                     durationMinutes = it
                     errorText = null
-                    invalidField = null
                 },
-                validation = CommitmentEditorValidation(
-                    bannerMessage = errorText,
-                    titleError = "Required".takeIf { invalidField == AddTaskInvalidField.Title },
-                    projectError = "Required".takeIf { invalidField == AddTaskInvalidField.Project },
-                    assigneeError = "Required".takeIf { invalidField == AddTaskInvalidField.Assignee },
-                    startError = "Required".takeIf { invalidField == AddTaskInvalidField.Start },
-                    durationError = null
-                ),
+                validation = buildMorningReviewRepairValidation(
+                    title = title,
+                    selectedProject = selectedProject,
+                    selectedAssignee = selectedAssignee,
+                    start = start
+                ).let { validation ->
+                    validation.asCommitmentEditorValidation().copy(
+                        bannerMessage = errorText ?: validation.bannerMessage
+                    )
+                },
                 submitting = repairing,
                 enabled = !repairing && !snoozing,
                 submitEnabled = !repairing && !snoozing && !projectsLoading && projectLoadError == null,
                 submitLabel = editorState.submitLabel,
                 loadingLabel = "Saving...",
                 onSubmit = {
-                    val selectedStart = start
+                    val selectedStart = start.toSelection()
                     val project = selectedProject
-                    when {
-                        title.trim().isEmpty() -> {
-                            errorText = "Title is required"
-                            invalidField = AddTaskInvalidField.Title
-                        }
-                        project == null -> {
-                            errorText = "Project is required"
-                            invalidField = AddTaskInvalidField.Project
-                        }
-                        project.canAssignTasks && selectedAssignee == null -> {
-                            errorText = "Assignee is required before saving"
-                            invalidField = AddTaskInvalidField.Assignee
-                        }
-                        selectedStart == null -> {
-                            errorText = "Start time is required"
-                            invalidField = AddTaskInvalidField.Start
-                        }
-                        else -> {
-                            onRepair(
-                                task.id,
-                                updateTaskRequestFromEditorStart(
-                                    title = title,
-                                    description = description,
-                                    selectedProject = project,
-                                    selectedAssignee = selectedAssignee,
-                                    start = selectedStart,
-                                    durationMinutes = durationMinutes
-	                                )
-	                            )
-	                    }
-	                }
-	            },
+                    val validation = buildMorningReviewRepairValidation(
+                        title = title,
+                        selectedProject = project,
+                        selectedAssignee = selectedAssignee,
+                        start = start
+                    )
+                    if (validation.firstInvalidField != null) {
+                        errorText = validation.bannerMessage
+                    } else if (project != null && selectedStart != null) {
+                        onRepair(
+                            task.id,
+                            updateTaskRequestFromEditorStart(
+                                title = title,
+                                description = description,
+                                selectedProject = project,
+                                selectedAssignee = selectedAssignee,
+                                start = selectedStart,
+                                durationMinutes = durationMinutes
+                            )
+                        )
+                    }
+                },
                 onCancel = {
                     repairingTask = null
                     errorText = null
-                    invalidField = null
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -581,13 +619,36 @@ private fun ReceiptText(text: String) {
     )
 }
 
-private fun TaskSnapshotItem.initialRepairStartSelection(): DateTimeSelection? {
+fun TaskSnapshotItem.initialRepairStartDraft(): DateTimeDraftSelection {
     val instantText = startAt ?: dueDatetime
-    val instant = runCatching { instantText?.let(Instant::parse) }.getOrNull() ?: return null
-    val local = instant.atZone(ZoneId.systemDefault()).toLocalDateTime()
-    return DateTimeSelection(
-        date = local.toLocalDate(),
-        hour = local.hour,
-        minute = local.minute
-    )
+    return instantText?.toDateTimeDraftSelection()
+        ?: dueDate?.toDateTimeDraftSelection()
+        ?: DateTimeDraftSelection.Empty
+}
+
+private fun String.toDateTimeDraftSelection(): DateTimeDraftSelection {
+    runCatching {
+        val local = Instant.parse(this).atZone(ZoneId.systemDefault()).toLocalDateTime()
+        return DateTimeDraftSelection(
+            date = local.toLocalDate(),
+            hour = local.hour,
+            minute = local.minute
+        )
+    }
+    runCatching {
+        val local = LocalDateTime.parse(this)
+        return DateTimeDraftSelection(
+            date = local.toLocalDate(),
+            hour = local.hour,
+            minute = local.minute
+        )
+    }
+    runCatching {
+        return DateTimeDraftSelection(
+            date = LocalDate.parse(this),
+            hour = null,
+            minute = null
+        )
+    }
+    return DateTimeDraftSelection.Empty
 }

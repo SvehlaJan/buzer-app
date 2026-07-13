@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.pickers.WheelDateTimeField
 import app.buzer.android.ui.pickers.WheelDurationField
@@ -44,8 +45,8 @@ fun CommitmentEditor(
     onDescriptionExpandedChange: (Boolean) -> Unit,
     projectContent: @Composable () -> Unit,
     assigneeContent: @Composable () -> Unit,
-    start: DateTimeSelection?,
-    onStartChange: (DateTimeSelection) -> Unit,
+    start: DateTimeDraftSelection,
+    onStartChange: (DateTimeDraftSelection) -> Unit,
     durationMinutes: Int,
     onDurationChange: (Int) -> Unit,
     validation: CommitmentEditorValidation,
@@ -227,7 +228,7 @@ private fun ReceiptSection(
     assigneeContent: @Composable () -> Unit,
     projectError: String?,
     assigneeError: String?,
-    start: DateTimeSelection?,
+    start: DateTimeDraftSelection,
     durationMinutes: Int
 ) {
     Column(
@@ -241,9 +242,9 @@ private fun ReceiptSection(
         ValidationText(projectError)
         ReceiptSlotRow(label = "Assignee", content = assigneeContent)
         ValidationText(assigneeError)
-        ReceiptTextRow(label = "Start", value = start?.formatForDisplay() ?: "Not set")
+        ReceiptTextRow(label = "Start", value = start.receiptLabel)
         ReceiptTextRow(label = "Duration", value = formatDurationLabel(durationMinutes))
-        ReceiptTextRow(label = "Ends", value = start?.let { formatEndForReceipt(it, durationMinutes) } ?: "Not set")
+        ReceiptTextRow(label = "Ends", value = start.toSelection()?.let { formatEndForReceipt(it, durationMinutes) } ?: "Not set")
         HorizontalDivider()
     }
 }

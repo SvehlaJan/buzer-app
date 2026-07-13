@@ -51,6 +51,7 @@ export class TaskSnapshotService {
         assigneeId: task.assigneeId,
         creatorId: task.creatorId,
         dueDatetime: task.dueDatetime,
+        dueDate: extractDateOnlyDueDate(task.rawJson),
         durationMinutes: task.durationMinutes,
         startAt,
         state: terminalState ?? (validation.valid ? task.state : "invalid"),
@@ -74,4 +75,22 @@ export class TaskSnapshotService {
       health: []
     };
   }
+}
+
+function extractDateOnlyDueDate(rawJson: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || !("due" in parsed)) {
+    return null;
+  }
+  const due = (parsed as { due?: unknown }).due;
+  if (typeof due !== "object" || due === null || !("date" in due)) {
+    return null;
+  }
+  const date = (due as { date?: unknown }).date;
+  return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }

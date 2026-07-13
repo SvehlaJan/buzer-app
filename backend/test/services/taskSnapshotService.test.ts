@@ -62,6 +62,38 @@ describe("TaskSnapshotService", () => {
     expect(snapshot.tasks[0]?.validationErrors).toEqual(["due_datetime_required", "duration_required"]);
   });
 
+  it("exposes Todoist date-only due dates without satisfying exact-time validation", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-date-only",
+      todoistTaskId: "todoist-date-only",
+      title: "Date-only task",
+      description: null,
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "wife",
+      dueDatetime: null,
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: JSON.stringify({ due: { date: "2026-07-13" } }),
+      updatedAt: "2026-07-13T06:00:00Z"
+    });
+
+    const service = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self");
+    const snapshot = service.getSnapshot("2026-07-13T06:30:00Z");
+
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "task-date-only",
+      dueDatetime: null,
+      dueDate: "2026-07-13",
+      state: "invalid",
+      validationErrors: ["due_datetime_required"]
+    });
+  });
+
   it("returns completed and deleted terminal states ahead of validation errors", () => {
     const db = new Database(":memory:");
     migrate(db);
