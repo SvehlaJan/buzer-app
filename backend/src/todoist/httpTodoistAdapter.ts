@@ -124,10 +124,12 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       content: input.title.trim(),
       description: input.description?.trim() ?? "",
       project_id: input.projectId,
-      responsible_uid: input.assigneeId ?? "",
       due: { datetime: input.dueDatetime },
       duration: { amount: input.durationMinutes, unit: "minute" }
     };
+    if (input.assigneeId !== null) {
+      args.responsible_uid = input.assigneeId;
+    }
     await this.command(randomUUID(), "item_update", args);
   }
 

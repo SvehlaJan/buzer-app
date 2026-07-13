@@ -214,6 +214,27 @@ describe("HttpTodoistAdapter", () => {
     });
   });
 
+  it("omits responsible_uid when updating a task without an assignee", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.updateTask({
+      todoistTaskId: "todoist-1",
+      title: "Personal task",
+      description: null,
+      projectId: "project-personal",
+      assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z",
+      durationMinutes: 45
+    });
+
+    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: Record<string, unknown> }>;
+    expect(commands[0]?.args).not.toHaveProperty("responsible_uid");
+  });
+
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_token: "next-token",
