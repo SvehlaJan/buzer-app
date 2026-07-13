@@ -7,6 +7,7 @@ import { TaskActionService } from "../services/taskActionService.js";
 import { TaskSnapshotService } from "../services/taskSnapshotService.js";
 import type { BuildServerOptions } from "../server.js";
 import { requireBearerToken } from "./auth.js";
+import { API_PREFIX } from "./prefix.js";
 
 const taskIdParams = z.object({ id: z.string().min(1) });
 const nullableString = z.string().min(1).nullish().transform((value) => value ?? null);
@@ -73,7 +74,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   });
 
   app.addHook("preHandler", async (request) => {
-    if (request.url === "/health") {
+    if (request.routeOptions.url === `${API_PREFIX}/health`) {
       return;
     }
 

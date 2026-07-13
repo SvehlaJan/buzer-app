@@ -7,6 +7,7 @@ import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
 import { buildServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
+import { API_PREFIX } from "../../src/http/prefix.js";
 
 describe("HTTP routes", () => {
   it("returns database health without auth token", async () => {
@@ -14,7 +15,7 @@ describe("HTTP routes", () => {
     migrate(db);
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
 
-    const response = await app.inject({ method: "GET", url: "/health" });
+    const response = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
     await app.close();
 
     expect(response.statusCode).toBe(200);
@@ -39,7 +40,7 @@ describe("HTTP routes", () => {
       escalationService
     });
 
-    const response = await app.inject({ method: "GET", url: "/health" });
+    const response = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
     await app.close();
 
     expect(response.statusCode).toBe(200);
@@ -60,7 +61,7 @@ describe("HTTP routes", () => {
     migrate(db);
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
 
-    const response = await app.inject({ method: "GET", url: "/tasks/snapshot" });
+    const response = await app.inject({ method: "GET", url: `${API_PREFIX}/tasks/snapshot` });
     await app.close();
 
     expect(response.statusCode).toBe(401);
@@ -73,7 +74,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/tasks/snapshot",
+      url: `${API_PREFIX}/tasks/snapshot`,
       headers: { authorization: "Bearer secret" }
     });
     await app.close();
@@ -101,7 +102,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/projects",
+      url: `${API_PREFIX}/projects`,
       headers: { authorization: "Bearer secret" }
     });
     await app.close();
@@ -141,11 +142,11 @@ describe("HTTP routes", () => {
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
     const auth = { authorization: "Bearer secret" };
 
-    const start = await app.inject({ method: "POST", url: "/tasks/task-1/start", headers: auth });
-    const extend = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth });
+    const start = await app.inject({ method: "POST", url: `${API_PREFIX}/tasks/task-1/start`, headers: auth });
+    const extend = await app.inject({ method: "POST", url: `${API_PREFIX}/tasks/task-1/extend`, headers: auth });
     const checkIn = await app.inject({
       method: "POST",
-      url: "/device/check-in",
+      url: `${API_PREFIX}/device/check-in`,
       headers: auth,
       payload: {
         deviceId: "android-1",
@@ -181,7 +182,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/tasks",
+      url: `${API_PREFIX}/tasks`,
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Loose commitment",
@@ -221,7 +222,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/tasks",
+      url: `${API_PREFIX}/tasks`,
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Personal strict task",
@@ -256,7 +257,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/tasks",
+      url: `${API_PREFIX}/tasks`,
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Family errand",
@@ -293,7 +294,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/tasks",
+      url: `${API_PREFIX}/tasks`,
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Family errand",
@@ -335,25 +336,25 @@ describe("HTTP routes", () => {
 
     await app.inject({
       method: "POST",
-      url: "/tasks/task-1/reschedule",
+      url: `${API_PREFIX}/tasks/task-1/reschedule`,
       headers: auth,
       payload: { dueDatetime: "2026-05-08T19:00:00Z", durationMinutes: 45 }
     });
     await app.inject({
       method: "POST",
-      url: "/tasks/task-1/reschedule",
+      url: `${API_PREFIX}/tasks/task-1/reschedule`,
       headers: auth,
       payload: { dueDatetime: "2026-05-08T20:00:00Z", durationMinutes: 50, description: null }
     });
     await app.inject({
       method: "POST",
-      url: "/tasks/task-1/reschedule",
+      url: `${API_PREFIX}/tasks/task-1/reschedule`,
       headers: auth,
       payload: { dueDatetime: "2026-05-08T21:00:00Z", durationMinutes: 55, description: "   " }
     });
     await app.inject({
       method: "POST",
-      url: "/tasks/task-1/reschedule",
+      url: `${API_PREFIX}/tasks/task-1/reschedule`,
       headers: auth,
       payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  " }
     });
@@ -399,7 +400,7 @@ describe("HTTP routes", () => {
 
     const response = await app.inject({
       method: "POST",
-      url: "/tasks/task-1/update",
+      url: `${API_PREFIX}/tasks/task-1/update`,
       headers: { authorization: "Bearer secret" },
       payload: {
         title: "Edited task",
@@ -453,12 +454,31 @@ describe("HTTP routes", () => {
     });
     const auth = { authorization: "Bearer secret" };
 
-    await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
-    const response = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
+    await app.inject({ method: "POST", url: `${API_PREFIX}/tasks/task-1/postpone-start`, headers: auth });
+    const response = await app.inject({ method: "POST", url: `${API_PREFIX}/tasks/task-1/postpone-start`, headers: auth });
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ escalationTriggered: true });
     expect(sender.sent).toHaveLength(1);
+  });
+
+  it("serves routes only under the API prefix", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+
+    const prefixed = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
+    const unprefixed = await app.inject({ method: "GET", url: "/health" });
+    const unprefixedApi = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(prefixed.statusCode).toBe(200);
+    expect(unprefixed.statusCode).toBe(404);
+    expect(unprefixedApi.statusCode).toBe(404);
   });
 });
