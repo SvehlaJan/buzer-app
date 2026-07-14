@@ -2,7 +2,7 @@
 
 Date: 2026-06-09
 
-The MVP backend deploys manually on the Tailscale-only VPS. The VPS is reachable from the tailnet as:
+The backend deploys manually on the VPS. The public API entry point is Tailscale Funnel at `https://oc-vps.taila50381.ts.net/buzer`; the VPS itself is reachable from the tailnet as:
 
 ```text
 oc-vps.taila50381.ts.net
@@ -18,7 +18,7 @@ Current live deployment shape:
 - SQLite data volume: `buzer-app_buzer-data`
 - WhatsApp session volume: `buzer-app_buzer-whatsapp`
 
-The backend is intentionally available only on the Tailscale/private network for MVP.
+The backend is intentionally exposed to the public internet **only** through Tailscale Funnel (`https://oc-vps.taila50381.ts.net/buzer`, TLS terminated by `tailscaled`). Docker binds the backend to `127.0.0.1:18432` (Funnel forwarding target) and `100.105.180.34:18432` (direct tailnet fallback). Nothing listens on the public interface; `ufw` stays `default deny (incoming)`. See `docs/superpowers/specs/2026-07-13-backend-internet-exposure-design.md` for the full design, including why Docker-published `0.0.0.0` ports bypass `ufw` (verified: `sudo iptables -t nat -L DOCKER -n` shows a DNAT rule for any destination when a port is published to `0.0.0.0`).
 
 ## Repository Files
 
@@ -45,17 +45,12 @@ WHATSAPP_RECIPIENT_ID=replace-with-chat-id
 WHATSAPP_DRY_RUN=true
 WHATSAPP_SESSION_PATH=./whatsapp-sessions
 WHATSAPP_CLIENT_ID=buzer
-
-# Compose/deploy settings
-BUZER_HOST_PORT=18432
-BUZER_CONTAINER_PORT=18432
-BUZER_BIND_HOST=0.0.0.0
 ```
 
 Use a long random Android API token:
 
 ```bash
-openssl rand -base64 48
+openssl rand -hex 32
 ```
 
 ## Manual Deploy
@@ -72,7 +67,7 @@ The deploy script:
 - fetches `origin/master`
 - resets the local checkout to `origin/master`
 - rebuilds and restarts `buzer-backend`
-- waits for `/health`
+- waits for `/buzer/health`
 - prints recent backend logs if health does not pass
 
 This script is allowed to overwrite local repository changes in `/home/skclaw/buzer-app`. Runtime data stays in Docker named volumes unless the volumes are explicitly removed.
@@ -82,29 +77,34 @@ This script is allowed to overwrite local repository changes in `/home/skclaw/bu
 From the VPS:
 
 ```bash
-curl --fail http://127.0.0.1:18432/health
+curl --fail http://127.0.0.1:18432/buzer/health
 ```
 
-From a Tailscale-connected machine:
+From a Tailscale-connected machine (direct fallback, bypasses Funnel):
 
 ```bash
-curl --fail http://oc-vps.taila50381.ts.net:18432/health
+curl --fail http://100.105.180.34:18432/buzer/health
 ```
 
-Expected shape:
+From anywhere (public path through Funnel):
+
+```bash
+curl --fail https://oc-vps.taila50381.ts.net/buzer/health
+```
+
+Unauthenticated expected shape (trimmed on purpose — no `checks` detail for the public internet):
 
 ```json
 {
   "ok": true,
   "service": "buzer-backend",
-  "timestamp": "2026-06-09T20:00:00.000Z",
-  "checks": {
-    "database": "ok"
-  }
+  "timestamp": "2026-07-13T20:00:00.000Z"
 }
 ```
 
-`/health` is unauthenticated. Application API routes remain protected by bearer auth.
+With a valid `Authorization: Bearer <ANDROID_API_TOKEN>` header the response additionally contains `checks` (database, WhatsApp connection status).
+
+`/buzer/health` is unauthenticated but trimmed; all other `/buzer/*` routes require bearer auth. A global per-IP rate limit (60 req/min) applies behind `trustProxy` — the compose network subnet is pinned to `172.28.0.0/16` to match, so do not change one without the other.
 
 ## Operational Commands
 
@@ -182,7 +182,7 @@ cd /home/skclaw/buzer-app
 git fetch origin
 git checkout <known-good-commit>
 docker compose up -d --build --remove-orphans
-curl --fail http://127.0.0.1:18432/health
+curl --fail http://127.0.0.1:18432/buzer/health
 ```
 
 After rollback, switch back to `master` before the next normal deploy:
@@ -190,3 +190,24 @@ After rollback, switch back to `master` before the next normal deploy:
 ```bash
 git checkout master
 ```
+
+## Internet Exposure (Tailscale Funnel)
+
+One-time host setup (already applied; recorded for rebuilds):
+
+```bash
+# Boot-order safety: Docker may start the container before tailscale0 has its
+# address; without this, the 100.105.180.34 port bind fails at boot and Docker
+# restart policies do not reliably retry start-time bind failures.
+echo 'net.ipv4.ip_nonlocal_bind=1' | sudo tee /etc/sysctl.d/99-tailscale-bind.conf
+sudo sysctl -p /etc/sysctl.d/99-tailscale-bind.conf
+
+# Funnel mapping (persists across reboots in tailscaled state):
+sudo tailscale funnel --bg --set-path /buzer 18432
+```
+
+Tailnet prerequisites (admin console, one-time): MagicDNS enabled, HTTPS certificates enabled, `funnel` node attribute on `oc-vps` in the tailnet policy file.
+
+Funnel does not strip the `/buzer` mount path (tailscale/tailscale#6571), so the backend serves all routes under `/buzer` natively. Any additional service exposed on this hostname must likewise own its path prefix, or use public ports 8443/10000, or run its own tailscale sidecar node.
+
+`fail2ban` is deliberately not installed: SSH is accepted only on `tailscale0`, so it could only ban tailnet peers.

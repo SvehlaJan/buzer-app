@@ -12,6 +12,15 @@ Status: Initial contract for MVP planning
 - IDs exposed to Android are backend IDs plus Todoist IDs when useful for diagnostics.
 - Errors use a stable machine-readable `code`.
 
+## Base URL
+
+All paths in this contract are relative to a base URL that already includes the `/buzer` prefix — the backend serves every route under it (Tailscale Funnel does not strip its path mount):
+
+- Production (public, HTTPS via Tailscale Funnel): `https://oc-vps.taila50381.ts.net/buzer`
+- Tailnet fallback (dev-machine `curl` only, plain HTTP): `http://100.105.180.34:18432/buzer`
+
+Example: the snapshot endpoint below is `GET https://oc-vps.taila50381.ts.net/buzer/tasks/snapshot`. Clients must never assume the API lives at the host root.
+
 ## Core Types
 
 ```ts

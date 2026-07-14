@@ -2,7 +2,7 @@
 
 Date: 2026-06-09
 
-The VPS is intentionally reachable only inside the Tailscale network. A normal GitHub-hosted Actions runner cannot SSH to `oc-vps.taila50381.ts.net` unless the workflow first joins the tailnet.
+SSH to the VPS is reachable only inside the Tailscale network (the backend HTTP API is separately exposed to the public internet via Tailscale Funnel at `https://oc-vps.taila50381.ts.net/buzer` — see `docs/notes/vps-deployment.md`). A normal GitHub-hosted Actions runner cannot SSH to `oc-vps.taila50381.ts.net` unless the workflow first joins the tailnet, so everything below still applies to deploys.
 
 For MVP, deployment remains manual through:
 
