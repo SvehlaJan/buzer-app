@@ -6,7 +6,7 @@ import { TaskRepository } from "../repositories/taskRepository.js";
 import { TaskActionService } from "../services/taskActionService.js";
 import { TaskSnapshotService } from "../services/taskSnapshotService.js";
 import type { BuildServerOptions } from "../server.js";
-import { requireBearerToken } from "./auth.js";
+import { isBearerTokenValid, requireBearerToken } from "./auth.js";
 import { API_PREFIX } from "./prefix.js";
 
 const taskIdParams = z.object({ id: z.string().min(1) });
@@ -41,7 +41,9 @@ const deviceCheckInBody = z.object({
 });
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions): void {
-  app.get("/health", async (_request, reply) => {
+  app.get("/health", async (request, reply) => {
+    const authenticated = isBearerTokenValid(request, options.androidApiToken);
+    const timestamp = new Date().toISOString();
     const checks: {
       database: "ok" | "failed";
       whatsapp?: { connected: boolean; detail: string };
@@ -54,22 +56,23 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       reply.status(503).send({
         ok: false,
         service: "buzer-backend",
-        timestamp: new Date().toISOString(),
-        checks,
-        message: error instanceof Error ? error.message : "Database health check failed"
+        timestamp,
+        ...(authenticated
+          ? { checks, message: error instanceof Error ? error.message : "Database health check failed" }
+          : {})
       });
       return;
     }
 
-    if (options.escalationService !== null && options.escalationService !== undefined) {
+    if (authenticated && options.escalationService !== null && options.escalationService !== undefined) {
       checks.whatsapp = await options.escalationService.getHealth();
     }
 
     return {
       ok: true,
       service: "buzer-backend",
-      timestamp: new Date().toISOString(),
-      checks
+      timestamp,
+      ...(authenticated ? { checks } : {})
     };
   });
 

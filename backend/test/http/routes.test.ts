@@ -10,7 +10,7 @@ import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 import { API_PREFIX } from "../../src/http/prefix.js";
 
 describe("HTTP routes", () => {
-  it("returns database health without auth token", async () => {
+  it("returns trimmed health without auth token", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
@@ -19,14 +19,14 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
+    expect(response.json()).toEqual({
       ok: true,
       service: "buzer-backend",
-      checks: { database: "ok" }
+      timestamp: expect.any(String)
     });
   });
 
-  it("returns WhatsApp health when escalation service is configured", async () => {
+  it("returns WhatsApp health with auth token when escalation service is configured", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -40,7 +40,11 @@ describe("HTTP routes", () => {
       escalationService
     });
 
-    const response = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
+    const response = await app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/health`,
+      headers: { authorization: "Bearer secret" }
+    });
     await app.close();
 
     expect(response.statusCode).toBe(200);
@@ -53,6 +57,44 @@ describe("HTTP routes", () => {
           detail: "dry-run"
         }
       }
+    });
+  });
+
+  it("trims the 503 health response without auth token", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+    db.close();
+
+    const response = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      ok: false,
+      service: "buzer-backend",
+      timestamp: expect.any(String)
+    });
+  });
+
+  it("includes failure detail in the 503 health response with auth token", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+    db.close();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/health`,
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      checks: { database: "failed" },
+      message: expect.any(String)
     });
   });
 
