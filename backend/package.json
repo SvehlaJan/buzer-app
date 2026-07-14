@@ -12,6 +12,7 @@
     "migrate": "tsx src/db/migrations.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "10.3.0",
     "@fastify/sensible": "6.0.4",
     "better-sqlite3": "12.10.0",
     "dotenv": "17.4.2",

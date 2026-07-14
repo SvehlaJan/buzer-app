@@ -3,6 +3,7 @@ import "dotenv/config";
 import { DryRunSender } from "./accountability/dryRunSender.js";
 import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
+import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
 import { API_PREFIX } from "./http/prefix.js";
 import { registerRoutes } from "./http/routes.js";
@@ -20,13 +21,29 @@ export interface BuildServerOptions {
   androidApiToken: string;
   todoist: TodoistAdapter;
   escalationService?: EscalationService | null;
+  rateLimit?: { max: number; timeWindowMs: number };
 }
 
 export function buildServer(options: BuildServerOptions) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: false,
+    // Trust only loopback and the compose network (pinned to 172.28.0.0/16 in
+    // docker-compose.yml) so X-Forwarded-For set by tailscaled is honored while
+    // direct tailnet peers cannot spoof it.
+    trustProxy: ["127.0.0.0/8", "172.28.0.0/16"]
+  });
+  app.register(rateLimit, {
+    max: options.rateLimit?.max ?? 60,
+    timeWindow: options.rateLimit?.timeWindowMs ?? 60_000
+  });
   app.register(async (scope) => {
     registerRoutes(scope, options);
   }, { prefix: API_PREFIX });
+  app.after(() => {
+    app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
+      reply.status(404).send({ code: "not_found", message: "Not Found" });
+    });
+  });
   return app;
 }
 
