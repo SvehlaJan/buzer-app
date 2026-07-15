@@ -1,6 +1,8 @@
 # Handoff: Backend Internet Exposure Implementation
 
 Date: 2026-07-14
+
+> **Correction (2026-07-15):** this handoff's `/buzer/health`-prefixed references below reflect the design as it stood at merge time, before live deployment revealed Funnel strips its mount path (the backend's `/buzer` prefix was reverted). See `docs/decisions/2026-07-15-funnel-strips-path-prefix.md`. Left otherwise unedited as a historical record of what was verified at the time.
 Plan: `docs/superpowers/plans/2026-07-13-backend-internet-exposure.md`
 Spec: `docs/superpowers/specs/2026-07-13-backend-internet-exposure-design.md`
 Task: Execute the full implementation plan (Tasks 0-9) via `superpowers:subagent-driven-development` — close the accidental public backend exposure and replace it with an intentional one via Tailscale Funnel under a `/buzer` path prefix.
