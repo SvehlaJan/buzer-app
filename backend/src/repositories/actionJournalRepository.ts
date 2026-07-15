@@ -105,6 +105,16 @@ export class ActionJournalRepository {
     return row === undefined ? null : mapJournalRow(row);
   }
 
+  hasDispatchedCommand(actionId: string): boolean {
+    const row = this.db.prepare(`
+      select 1 as present
+      from task_action_commands
+      where action_id = ? and status in ('sent', 'confirmed')
+      limit 1
+    `).get(actionId) as { present: number } | undefined;
+    return row !== undefined;
+  }
+
   reserveCommand(input: ReserveCommandInput): ActionCommandReservation {
     const tx = this.db.transaction((): ActionCommandReservation => {
       const existing = this.getCommand(input.actionId, input.stepKey);

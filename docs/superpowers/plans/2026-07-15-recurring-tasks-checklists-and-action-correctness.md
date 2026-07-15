@@ -453,16 +453,16 @@ type OccurrenceDecision =
 - Create: `backend/test/services/rootTaskMutex.test.ts`
 - Create: `backend/test/services/taskActionCoordinator.test.ts`
 
-- [ ] Write failing mutex tests proving same-root operations execute in submission order, different-root operations may overlap, rejection releases the queue, and completed roots are removed from the lock map.
-- [ ] Implement an in-process per-root promise queue. Keep SQLite as the durable journal; the mutex is only the single-process Todoist race guard.
-- [ ] Write failing coordinator tests for first reservation, same-action replay, different-payload reuse rejection, same-action retry after process-like reconstruction, ambiguous Todoist timeout, sync failure after Todoist success, completed response replay, and two-phone distinct postponements.
-- [ ] Fingerprint a canonical JSON object containing action type and parsed domain payload with SHA-256. Do not fingerprint HTTP headers. Do not log or persist descriptions outside the existing mirrored task content and compact durable result required by the product.
-- [ ] Implement `TaskActionCoordinator.execute` in this order: reserve/replay journal, lock root, synchronize, validate readiness/revisions/occurrence, reserve command IDs before sending, execute domain action, synchronize and verify, store compact response, then return. A replayed completed action returns its stored response without incrementing counters or sending Todoist commands.
-- [ ] On successful Todoist response followed by sync failure, mark journal and root `reconciliation_pending` and return the HTTP-layer pending result. On retry, synchronize first; if the effect is present, confirm without resending. If the earlier send timed out ambiguously, reuse the persisted command UUID only after synchronization proves the effect absent.
-- [ ] Add `DomainError` factories for `stale_task`, `stale_child`, `stale_occurrence`, `action_id_reused`, `reconciliation_pending`, `unsupported_hierarchy`, `children_incomplete`, and `activity_log_full`, including current snapshot context where the contract requires it.
-- [ ] Run `npm test -- test/services/rootTaskMutex.test.ts test/services/taskActionCoordinator.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: coordinate idempotent task actions"`.
+- [x] Write failing mutex tests proving same-root operations execute in submission order, different-root operations may overlap, rejection releases the queue, and completed roots are removed from the lock map.
+- [x] Implement an in-process per-root promise queue. Keep SQLite as the durable journal; the mutex is only the single-process Todoist race guard.
+- [x] Write failing coordinator tests for first reservation, same-action replay, different-payload reuse rejection, same-action retry after process-like reconstruction, ambiguous Todoist timeout, sync failure after Todoist success, completed response replay, and two-phone distinct postponements.
+- [x] Fingerprint a canonical JSON object containing action type and parsed domain payload with SHA-256. Do not fingerprint HTTP headers. Do not log or persist descriptions outside the existing mirrored task content and compact durable result required by the product.
+- [x] Implement `TaskActionCoordinator.execute` in this order: reserve/replay journal, lock root, synchronize, validate readiness/revisions/occurrence, reserve command IDs before sending, execute domain action, synchronize and verify, store compact response, then return. A replayed completed action returns its stored response without incrementing counters or sending Todoist commands.
+- [x] On successful Todoist response followed by sync failure, mark journal and root `reconciliation_pending` and return the HTTP-layer pending result. On retry, synchronize first; if the effect is present, confirm without resending. If the earlier send timed out ambiguously, reuse the persisted command UUID only after synchronization proves the effect absent.
+- [x] Add `DomainError` factories for `stale_task`, `stale_child`, `stale_occurrence`, `action_id_reused`, `reconciliation_pending`, `unsupported_hierarchy`, `children_incomplete`, and `activity_log_full`, including current snapshot context where the contract requires it.
+- [x] Run `npm test -- test/services/rootTaskMutex.test.ts test/services/taskActionCoordinator.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: coordinate idempotent task actions"`.
 
 ## Task 7: Implement Checklist Creation, Editing, And Focused Check Actions
 

@@ -257,6 +257,20 @@ describe("TaskRepository", () => {
       mirrorRevision: 3
     });
   });
+
+  it("confirms a root after an action reconciliation retry", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(taskUpsert({ id: "pending-local", todoistTaskId: "pending-todoist" }));
+    repo.markOccurrenceReconciliationPending("pending-local", "2026-07-15T10:30:00Z");
+
+    repo.confirmOccurrenceReconciliation("pending-local", "2026-07-15T10:31:00Z");
+
+    expect(repo.getById("pending-local")).toMatchObject({
+      reconciliationStatus: "confirmed"
+    });
+  });
 });
 
 describe("DeviceRepository", () => {

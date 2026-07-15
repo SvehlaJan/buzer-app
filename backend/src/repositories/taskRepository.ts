@@ -314,6 +314,14 @@ export class TaskRepository {
     `).run({ id, updatedAt });
   }
 
+  confirmOccurrenceReconciliation(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set reconciliation_status = 'confirmed', updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
   leaveOccurrenceOwnership(id: string, updatedAt: string): void {
     this.db.prepare(`
       update commitment_states
