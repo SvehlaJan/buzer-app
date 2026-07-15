@@ -136,7 +136,7 @@ describe("HttpTodoistAdapter", () => {
 
   it("reschedules without description when omitted", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: { "reschedule-command": "ok" }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -153,7 +153,11 @@ describe("HttpTodoistAdapter", () => {
 
   it("reschedule trims, sets, and clears descriptions", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: {
+        "reschedule-set": "ok",
+        "reschedule-blank": "ok",
+        "reschedule-clear": "ok"
+      }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -186,7 +190,7 @@ describe("HttpTodoistAdapter", () => {
 
   it("moves projects separately before updating editable task fields", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: { "legacy-move": "ok", "legacy-update": "ok" }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -226,7 +230,7 @@ describe("HttpTodoistAdapter", () => {
 
   it("explicitly clears responsible_uid when updating a task without an assignee", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: { "legacy-unassign": "ok" }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -491,7 +495,11 @@ describe("HttpTodoistAdapter", () => {
 
   it("makes item_update due and assignment mutations explicit without accepting project moves", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: {
+        "update-preserve": "ok",
+        "update-clear": "ok",
+        "update-replace": "ok"
+      }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -562,7 +570,12 @@ describe("HttpTodoistAdapter", () => {
 
   it("emits dedicated move, close, uncomplete, and delete commands with caller UUIDs", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {}
+      sync_status: {
+        "move-command": "ok",
+        "close-command": "ok",
+        "uncomplete-command": "ok",
+        "delete-command": "ok"
+      }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
 
@@ -664,6 +677,26 @@ describe("HttpTodoistAdapter", () => {
     expect(message).toContain("delete-failure");
     expect(message).toContain("item_delete");
     expect(message).toContain("invalid item");
+    expect(message).not.toContain("super-secret-token");
+    expect(message.toLowerCase()).not.toContain("authorization");
+  });
+
+  it("rejects a command response that omits the caller UUID status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    const error = await adapter.itemDelete({
+      commandUuid: "missing-status-command",
+      todoistTaskId: "todoist-1"
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain("missing-status-command");
+    expect(message).toContain("item_delete");
+    expect(message).toContain("missing_status");
     expect(message).not.toContain("super-secret-token");
     expect(message.toLowerCase()).not.toContain("authorization");
   });
