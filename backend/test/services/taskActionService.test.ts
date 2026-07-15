@@ -244,7 +244,11 @@ describe("TaskActionService", () => {
       updatedAt: "2026-07-15T09:00:00Z"
     });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, projects, adapter, "user-self");
+    const synchronize = vi.fn(async () => undefined);
+    const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+      rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+    });
 
     await service.create({
       title: "Daily review",
@@ -275,6 +279,99 @@ describe("TaskActionService", () => {
       duration: { amount: 30, unit: "minute" }
     })]);
     expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("reuses an action-aware root create command UUID and temp ID after an ambiguous send", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    class TimeoutOnceAdapter extends FakeTodoistAdapter {
+      timeout = true;
+
+      override async itemAdd(input: Parameters<FakeTodoistAdapter["itemAdd"]>[0]) {
+        if (this.timeout) {
+          this.itemAdds.push(input);
+          throw new Error("ambiguous create timeout");
+        }
+        return super.itemAdd(input);
+      }
+    }
+    const adapter = new TimeoutOnceAdapter();
+    const synchronize = vi.fn(async () => undefined);
+    const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+      rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+    });
+    const input = {
+      title: "Daily review", description: null, projectId: "project-family", assigneeId: "user-self",
+      dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30, recurrencePreset: "daily" as const,
+      timeZone: "Europe/Bratislava", checklist: [], actionId: "create-retry", deviceId: "phone-a",
+      creatorId: "user-self", now: "2026-07-15T09:00:00Z"
+    };
+
+    await expect(service.create(input)).rejects.toThrow("ambiguous create timeout");
+    adapter.timeout = false;
+    await service.create(input);
+
+    expect(adapter.itemAdds).toHaveLength(2);
+    expect(adapter.itemAdds[1]).toMatchObject({
+      commandUuid: adapter.itemAdds[0]?.commandUuid,
+      tempId: adapter.itemAdds[0]?.tempId
+    });
+    expect(db.prepare(`select temp_id as tempId from task_action_commands where action_id = ? and step_key = 'item_add'`)
+      .get("create-retry")).toMatchObject({ tempId: adapter.itemAdds[0]?.tempId });
+  });
+
+  it("replays an interrupted action-aware checklist create without skipping its unfinished child", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    class ChildTimeoutOnceAdapter extends FakeTodoistAdapter {
+      timeoutChild = true;
+
+      override async itemAdd(input: Parameters<FakeTodoistAdapter["itemAdd"]>[0]) {
+        if (input.kind === "child" && this.timeoutChild) {
+          this.itemAdds.push(input);
+          throw new Error("ambiguous child create timeout");
+        }
+        return super.itemAdd(input);
+      }
+    }
+    const adapter = new ChildTimeoutOnceAdapter();
+    const synchronize = vi.fn(async () => undefined);
+    const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+      rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+    });
+    const input = {
+      title: "Daily review", description: null, projectId: "project-family", assigneeId: "user-self",
+      dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30, recurrencePreset: "daily" as const,
+      timeZone: "Europe/Bratislava", checklist: [{ title: "Review agenda" }], actionId: "create-child-retry",
+      deviceId: "phone-a", creatorId: "user-self", now: "2026-07-15T09:00:00Z"
+    };
+
+    await expect(service.create(input)).rejects.toThrow("ambiguous child create timeout");
+    adapter.timeoutChild = false;
+    await service.create(input);
+
+    expect(adapter.itemAdds.filter((item) => item.kind === "root")).toHaveLength(1);
+    const childAdds = adapter.itemAdds.filter((item) => item.kind === "child");
+    expect(childAdds).toHaveLength(2);
+    expect(childAdds[1]).toMatchObject({
+      commandUuid: childAdds[0]?.commandUuid,
+      tempId: childAdds[0]?.tempId
+    });
+    expect(repo.listAll().filter((task) => task.parentId !== null)).toHaveLength(1);
   });
 
   it("extends a one-time commitment without moving its Todoist block start", async () => {
@@ -544,6 +641,53 @@ describe("TaskActionService", () => {
     expect(repo.getById("task-1")).toMatchObject({
       state: "started", startedAt: "2026-07-15T09:00:00Z", occurrenceKey: "occurrence-1"
     });
+  });
+
+  it("replays an action-aware project edit without repeating its confirmed move step", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    for (const todoistProjectId of ["project-old", "project-new"]) {
+      projects.upsertProject({
+        todoistProjectId, name: todoistProjectId, shared: true, canAssignTasks: true,
+        isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+      });
+    }
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: null, projectId: "project-old", assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: null
+    });
+    class InterruptingAdapter extends FakeTodoistAdapter {
+      failUpdate = true;
+      override async itemUpdate(input: Parameters<FakeTodoistAdapter["itemUpdate"]>[0]): Promise<void> {
+        if (this.failUpdate) throw new Error("interrupted after move");
+        return super.itemUpdate(input);
+      }
+    }
+    const adapter = new InterruptingAdapter();
+    const synchronize = vi.fn(async () => undefined);
+    const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+      rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+    });
+    const input = {
+      title: "Renamed invoice", description: "", projectId: "project-new", assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
+      actionId: "move-edit", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    };
+
+    await expect(service.update("task-1", input)).rejects.toThrow("interrupted after move");
+    adapter.failUpdate = false;
+    await service.update("task-1", input);
+
+    expect(adapter.itemMoves).toHaveLength(1);
+    expect(adapter.itemUpdates).toHaveLength(1);
   });
 
   it("sends escalation on second start postpone", async () => {

@@ -505,18 +505,18 @@ type ChildMutation =
 - Modify: `backend/test/todoist/httpTodoistAdapter.test.ts`
 
 - [ ] Add failing tests proving root create maps recurrence on the backend; metadata-only edit preserves lifecycle/occurrence; schedule edit rotates; custom recurrence schedule edit is rejected; project move and field update use separate journal steps; explicit unassignment sends null; leaving ownership cancels enforcement; returning creates a fresh occurrence; and partial move/update recovery executes only the unfinished step.
-- [ ] Update create input to include `recurrencePreset`, `timeZone`, child drafts, `actionId`, and `deviceId`. Validate a real IANA time zone, a supported preset, and 0-30 children. Keep recurrence rule construction server-side.
-- [ ] Update edit input to include expected task revision, expected occurrence key, root-field changes, supported/custom recurrence replacement intent, and explicit child mutations. Reconstruct the full description through `TaskDescriptionCodec` so ordinary edits cannot overwrite managed activity.
-- [ ] Classify root edits before mutation. Title, description, project, assignee, and checklist-only changes preserve lifecycle while ownership remains. Start, duration, or recurrence changes replan and rotate. `item_move` and `item_update` use distinct durable step keys, then sync verifies root and direct children share the authoritative project.
+- [x] Update create input to include `recurrencePreset`, `timeZone`, child drafts, `actionId`, and `deviceId`. Validate a real IANA time zone, a supported preset, and 0-30 children. Keep recurrence rule construction server-side.
+- [x] Update edit input to include expected task revision, expected occurrence key, root-field changes, supported/custom recurrence replacement intent, and explicit child mutations. Reconstruct the full description through `TaskDescriptionCodec` so ordinary edits cannot overwrite managed activity.
+- [x] Classify root edits before mutation. Title, description, project, assignee, and checklist-only changes preserve lifecycle while ownership remains. Start, duration, or recurrence changes replan and rotate. `item_move` and `item_update` use distinct durable step keys, then sync verifies root and direct children share the authoritative project.
 - [ ] Add failing Done tests for incomplete children, stale external child state corrected by pre-action sync, unsupported hierarchy, one-time `item_close`, recurring `item_update_date_complete` with hard-coded reset, terminal old occurrence, immediate next-occurrence sync, and pending recurring completion.
-- [ ] Implement Done exactly in the approved order: reserve/lock, sync tree, validate expected occurrence/hierarchy/all checked, issue one-time or recurring command, prevent further old-occurrence actions, sync, rotate recurring state from Todoist authority, and return the snapshot.
+- [x] Implement Done exactly in the approved order: reserve/lock, sync tree, validate expected occurrence/hierarchy/all checked, issue one-time or recurring command, prevent further old-occurrence actions, sync, rotate recurring state from Todoist authority, and return the snapshot.
 - [ ] Add failing reschedule tests proving supported recurrence/time zone is preserved, Never remains one-time, custom recurrence rejects schedule mutation, and a schedule generation change rotates the occurrence.
 - [ ] Add failing extension tests proving recurring tasks reject, one-time due remains byte-for-byte unchanged, duration increases by 30, one audit line is appended once, retry does not duplicate, new intentional action appends a second line, state becomes/remains started, counters/schedule version advance only after sync confirmation, and description overflow sends no Todoist command.
-- [ ] Implement Extend as one `item_update` with duration and reconstructed description while omitting due. Use task timezone or UTC for the audit timestamp and keep the occurrence key unchanged.
-- [ ] Assert create, edit, check, uncheck, start, postpone, reschedule, Done, project move, and assignment changes do not append managed activity entries. The MVP activity log records extension events only.
-- [ ] Run `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "fix: make task actions occurrence safe"`.
+- [x] Implement Extend as one `item_update` with duration and reconstructed description while omitting due. Use task timezone or UTC for the audit timestamp and keep the occurrence key unchanged.
+- [x] Assert create, edit, check, uncheck, start, postpone, reschedule, Done, project move, and assignment changes do not append managed activity entries. The MVP activity log records extension events only.
+- [x] Run `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "fix: make task actions occurrence safe"`.
 
 ## Task 9: Publish The Nested Snapshot And Authenticated Mutation Routes
 

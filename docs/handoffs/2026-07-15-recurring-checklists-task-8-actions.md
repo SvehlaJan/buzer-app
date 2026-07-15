@@ -17,8 +17,9 @@ Branch: `feature/recurring-checklists-task3`
 ## Files Changed
 
 - `backend/src/services/taskActionService.ts`
+- `backend/src/services/taskActionCoordinator.ts`
 - `backend/test/services/taskActionService.test.ts`
-- `backend/test/services/taskActionCoordinator.test.ts`
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
 - `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
 
 ## Required Reads And Research
@@ -95,3 +96,82 @@ Verification:
 ## Next Recommended Step
 
 Resolve the controller-approved remaining Task 8 root-action coordinator wiring and migrate the five route test expectations together with Task 9 HTTP action schemas. Do not treat the current branch as fully Task 8 complete until the full backend suite is green.
+
+## Coordinator-Wiring Follow-up
+
+- Action-aware root create, edit, done, reschedule, and extend calls now use `TaskActionCoordinator` command contexts. A caller that supplies either action metadata field must supply both; those calls reject unless server-scoped `rootActions` coordination is present. Metadata-free calls remain the deliberately narrow Task 9 compatibility bridge.
+- Root creation can reserve its durable action before Todoist assigns a root item ID. The coordinator now supports this bounded absent-root phase, and the root is added before post-command effect confirmation.
+- Action-aware edits reserve `item_move` and `item_update` as separate durable steps. An interruption after the move recovers without repeating the move and sends only the unfinished update.
+- Done now re-reads and validates the root tree inside the coordinator execution closure, after its authoritative pre-command synchronization. This prevents stale direct-child state from being used as the completion gate.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts`
+- Result: PASS
+- Evidence: 44 tests passed, including action-aware root creation and an interrupted move/update service replay.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+- Result: PASS
+- Evidence: 3 files, 63 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: TypeScript exited 0.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: production build and schema copy completed.
+
+Verification:
+- Command: `npm test`
+- Result: FAIL (expected, unchanged Task 9 migration boundary)
+- Evidence: exactly five `test/http/routes.test.ts` legacy-array assertions failed; all other 277 tests passed. The failures are `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, and `updates full task edit payload through update route`.
+
+## Checkpoint Completion Follow-up
+
+- Preserved the prior uncommitted coordinator wiring and verified it before edits: root create/edit/done/reschedule/extend use the action-aware coordinator when supplied action/device metadata, reserve durable action records under the root mutex, and reserve independent `item_move` and `item_update` steps.
+- Corrected a concrete action-aware create recovery flaw found with new RED tests. Root and checklist-child `temp_id` values now derive deterministically from the action ID and step key, are persisted in `task_action_commands`, and are reused together with the persisted command UUID after an ambiguous send.
+- Corrected a second recovery flaw: a root that exists after a successful root add no longer falsely confirms a create action while an interrupted checklist-child add remains unfinished. Replay restores the confirmed root command result and dispatches only the missing child step.
+- Updated only the Task 8 plan checkboxes for implemented service behavior and passing focused/typecheck gates. The four unchecked Task 8 scenario-test checklist items remain intentionally visible because their full enumerated matrices were not added in this checkpoint.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts`
+- Result: PASS
+- Evidence: 27 tests passed, including RED→GREEN recovery coverage for root and child `temp_id` replay.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+- Result: PASS
+- Evidence: 3 files, 65 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: production TypeScript build and schema copy completed.
+
+Verification:
+- Command: `npm test`
+- Result: FAIL (known Task 9 boundary only)
+- Evidence: 279/284 tests passed. Exactly five unchanged `backend/test/http/routes.test.ts` assertions inspect the retired fake-adapter `createdTasks`, `reschedules`, or `updates` arrays; routes returned HTTP 200 and were not changed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+Manual verification:
+- Inspected the preserved journal entries during the new recovery tests: `item_add` and `child_add:0` retain their persisted UUID/temp-ID identity across retry; confirmed steps are not sent again.
+
+Assumptions and remaining concerns:
+- Task 9 owns route schema/metadata parsing and migration of the five HTTP legacy-array assertions; no route, route-test, or fake compatibility mirroring was changed here.
+- Task 8's exhaustive scenario-test bullets for every listed Done/reschedule/extend/ownership permutation remain unchecked in the plan, even though the service behavior and focused coverage above are present. Add those matrices only if Task 8 is reopened; do not let them expand into Task 9 route work.
+
+Next recommended step:
+- Begin Task 9's authenticated route/schema migration, including the five legacy FakeTodoistAdapter assertion updates, from this committed checkpoint.

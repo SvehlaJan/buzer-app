@@ -46,6 +46,8 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   expectedTaskRevision?: string;
   actionType: string;
   payload: TPayload;
+  /** Root creation is journaled before Todoist assigns the root ID, so no local row exists yet. */
+  allowRootAbsent?: boolean;
   validate?: (root: CoordinatorRoot) => void;
   isEffectPresent?: (root: CoordinatorRoot, context: TaskActionEffectContext) => boolean;
   /** Builds the replay response after an external command is confirmed by a later sync. */
@@ -119,7 +121,7 @@ export class TaskActionCoordinator {
 
       const isReplay = reservation.kind === "replay";
       await this.options.sync.syncOnce();
-      let root = this.requireRoot(action.rootTaskId);
+      let root = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
       const effectContext = this.effectContext(action.actionId);
       const effect = this.effectStatus(action, root, effectContext);
 
@@ -141,7 +143,7 @@ export class TaskActionCoordinator {
 
       if (current.status === "reconciliation_pending" && effect === "absent") {
         this.options.roots.confirmOccurrenceReconciliation(action.rootTaskId, this.now());
-        root = this.requireRoot(action.rootTaskId);
+        root = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
       }
 
       try {
@@ -183,7 +185,7 @@ export class TaskActionCoordinator {
         return this.markPending(action, action.compactResponse(response), error);
       }
 
-      const confirmedRoot = this.requireRoot(action.rootTaskId);
+      const confirmedRoot = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
       if (sentCommand && this.effectStatus(action, confirmedRoot) !== "present") {
         return this.markPending(action, action.compactResponse(response), new Error("todoist_effect_not_confirmed"));
       }
@@ -216,9 +218,17 @@ export class TaskActionCoordinator {
     action.validate?.(root);
   }
 
-  private requireRoot(rootTaskId: string): CoordinatorRoot {
+  private requireRoot(rootTaskId: string, allowAbsent = false): CoordinatorRoot {
     const root = this.options.roots.getById(rootTaskId);
     if (root === null) {
+      if (allowAbsent) {
+        return {
+          id: rootTaskId,
+          mirrorRevision: 0,
+          occurrenceKey: null,
+          reconciliationStatus: "confirmed"
+        };
+      }
       throw DomainError.staleTask({ taskId: rootTaskId, snapshot: null });
     }
     return root;
