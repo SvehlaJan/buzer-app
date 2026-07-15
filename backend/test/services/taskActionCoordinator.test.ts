@@ -172,6 +172,38 @@ describe("TaskActionCoordinator", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
+  it("recovers a partially completed project move by issuing only the unfinished field update", async () => {
+    const { coordinator, db } = createCoordinator();
+    const move = vi.fn(async () => undefined);
+    let effectPresent = false;
+    const update = vi.fn(async () => { effectPresent = true; });
+    const request = action({
+      actionType: "edit_task",
+      payload: { projectId: "project-new", title: "Renamed" },
+      isEffectPresent: () => effectPresent,
+      execute: async (context) => {
+        await context.executeCommand("item_move", move);
+        throw new Error("interrupted after move");
+      }
+    });
+
+    await expect(coordinator.execute(request)).rejects.toThrow("interrupted after move");
+    const replay = await coordinator.execute({
+      ...request,
+      execute: async (context) => {
+        await context.executeCommand("item_move", move);
+        await context.executeCommand("item_update", update);
+        return { snoozedUntil: "2026-07-15T09:05:00Z" };
+      }
+    });
+
+    expect(replay).toEqual({ kind: "completed", response: { snoozedUntil: "2026-07-15T09:05:00Z" } });
+    expect(move).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledOnce();
+    expect(command(db, "action-1", "item_move")).toMatchObject({ status: "confirmed" });
+    expect(command(db, "action-1", "item_update")).toMatchObject({ status: "confirmed" });
+  });
+
   it("reuses a persisted command UUID after an ambiguous Todoist timeout only once sync shows the effect absent", async () => {
     const { coordinator, db } = createCoordinator();
     const sentUuids: string[] = [];

@@ -2,6 +2,9 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { validateTaskStrictness } from "../domain/taskValidation.js";
 import { addMinutes } from "../domain/time.js";
+import { appendExtension, decodeTaskDescription, reconstructTaskDescription } from "../domain/taskDescriptionCodec.js";
+import { describeRecurrence, translateRecurrencePreset, type RecurrencePreset } from "../domain/taskRecurrence.js";
+import { recurrenceFingerprint } from "./occurrenceReconciler.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
@@ -25,6 +28,11 @@ export interface CreateTaskInput {
   dueDatetime: string | null;
   durationMinutes: number | null;
   description: string | null;
+  recurrencePreset?: RecurrencePreset;
+  timeZone?: string;
+  checklist?: ReadonlyArray<{ title: string; description?: string | null }>;
+  actionId?: string;
+  deviceId?: string;
   creatorId: string;
   now: string;
 }
@@ -43,6 +51,13 @@ export interface UpdateTaskInput {
   assigneeId: string | null;
   dueDatetime: string;
   durationMinutes: number;
+  recurrencePreset?: RecurrencePreset;
+  timeZone?: string;
+  expectedTaskRevision?: string;
+  expectedOccurrenceKey?: string;
+  actionId?: string;
+  deviceId?: string;
+  checklistMutations?: ChecklistMutationRequest["mutations"];
   now: string;
 }
 
@@ -144,26 +159,41 @@ export class TaskActionService {
       });
     }
 
-    const created = await this.todoist.createTask({
+    const recurrencePreset = input.recurrencePreset ?? "never";
+    const timeZone = input.timeZone ?? "UTC";
+    const checklist = input.checklist ?? [];
+    if (!isIanaTimeZone(timeZone)) {
+      errors.push("time_zone_invalid");
+    }
+    if (checklist.length > 30) {
+      errors.push("too_many_children");
+    }
+    if (errors.length > 0) {
+      throw Object.assign(new Error("Task validation failed"), {
+        code: "task_validation_failed",
+        statusCode: 422,
+        details: { errors }
+      });
+    }
+    const recurrence = translateRecurrencePreset({ preset: recurrencePreset, selectedStart: dueDatetime, timeZone });
+    const rootTempId = randomUUID();
+    const created = await this.todoist.itemAdd({
+      kind: "root",
+      commandUuid: input.actionId ?? randomUUID(),
+      tempId: rootTempId,
       title: input.title,
       description: normalizeOptionalText(input.description),
       projectId: input.projectId,
       assigneeId: input.assigneeId,
-      dueDatetime,
-      durationMinutes
+      due: recurrence === null
+        ? { kind: "replace", datetime: dueDatetime, string: null, lang: null, timezone: null }
+        : { kind: "replace", datetime: dueDatetime, ...recurrence },
+      duration: { amount: durationMinutes, unit: "minute" }
     });
-    const verificationErrors = verifyCreatedTask({
-      task: created.task,
-      expectedProjectId: input.projectId,
-      expectedAssigneeId: input.assigneeId,
-      expectedDueDatetime: dueDatetime,
-      expectedDurationMinutes: durationMinutes
-    });
-    if (verificationErrors.length > 0) {
-      throw Object.assign(new Error("Todoist create verification failed"), {
+    if (created.todoistTaskId === null) {
+      throw Object.assign(new Error("Todoist did not return a root task ID"), {
         code: "todoist_create_verification_failed",
-        statusCode: 422,
-        details: { errors: verificationErrors, todoistTaskId: created.todoistTaskId }
+        statusCode: 422
       });
     }
 
@@ -171,28 +201,55 @@ export class TaskActionService {
     this.tasks.upsertTodoistTask({
       id,
       todoistTaskId: created.todoistTaskId,
-      title: created.task.title,
-      description: created.task.description,
-      projectId: created.task.projectId,
-      parentId: created.task.parentId,
-      childOrder: created.task.childOrder,
-      assigneeId: created.task.assigneeId,
-      creatorId: created.task.creatorId ?? input.creatorId,
-      dueDate: created.task.dueDate,
-      dueDatetime: created.task.dueDatetime,
-      dueString: created.task.dueString,
-      dueLang: created.task.dueLang,
-      dueTimezone: created.task.dueTimezone,
-      isRecurring: created.task.isRecurring,
-      durationAmount: created.task.durationAmount,
-      durationUnit: created.task.durationUnit,
-      durationMinutes: created.task.durationMinutes,
-      completedAt: created.task.completedAt,
-      deletedAt: created.task.deletedAt,
-      rawJson: JSON.stringify(created.task.rawJson),
+      title: input.title,
+      description: normalizeOptionalText(input.description),
+      projectId: input.projectId,
+      parentId: null,
+      childOrder: null,
+      assigneeId: input.assigneeId,
+      creatorId: input.creatorId,
+      dueDate: dueDatetime,
+      dueDatetime,
+      dueString: recurrence?.string ?? null,
+      dueLang: recurrence?.lang ?? null,
+      dueTimezone: recurrence?.timezone ?? null,
+      isRecurring: recurrence !== null,
+      durationAmount: durationMinutes,
+      durationUnit: "minute",
+      durationMinutes,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: JSON.stringify({ id: created.todoistTaskId }),
       updatedAt: input.now,
       commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
     });
+    for (const [childOrder, child] of checklist.entries()) {
+      const childTitle = child.title.trim();
+      if (childTitle.length === 0) {
+        throw Object.assign(new Error("Checklist item title is required"), { code: "child_title_required", statusCode: 422 });
+      }
+      const childCreated = await this.todoist.itemAdd({
+        kind: "child",
+        commandUuid: randomUUID(),
+        tempId: randomUUID(),
+        title: childTitle,
+        description: normalizeOptionalText(child.description ?? null),
+        projectId: input.projectId,
+        parentTodoistTaskId: created.todoistTaskId
+      });
+      if (childCreated.todoistTaskId !== null) {
+        this.tasks.createChecklistChild({
+          id: randomUUID(),
+          todoistTaskId: childCreated.todoistTaskId,
+          parentTodoistTaskId: created.todoistTaskId,
+          projectId: input.projectId,
+          title: childTitle,
+          description: normalizeOptionalText(child.description ?? null),
+          childOrder,
+          updatedAt: input.now
+        });
+      }
+    }
     return { id, todoistTaskId: created.todoistTaskId };
   }
 
@@ -210,7 +267,35 @@ export class TaskActionService {
   async done(taskId: string, now: string): Promise<void> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
-    await this.todoist.completeTask(task.todoistTaskId, randomUUID());
+    if (task.completedAt !== null || task.deletedAt !== null || task.state === "completed" || task.state === "deleted") {
+      throw Object.assign(new Error("Task occurrence is no longer current"), {
+        code: "stale_occurrence",
+        statusCode: 409
+      });
+    }
+    const all = this.tasks.listAll();
+    const children = all.filter((candidate) => candidate.parentId === task.todoistTaskId && candidate.deletedAt === null);
+    const hasGrandchild = all.some((candidate) => children.some((child) => child.todoistTaskId === candidate.parentId));
+    const invalidChild = children.some((child) =>
+      child.dueDatetime !== null || child.dueDate !== null || child.durationMinutes !== null || child.isRecurring || child.assigneeId !== null
+    );
+    if (hasGrandchild || invalidChild || children.length > 30) {
+      throw Object.assign(new Error("Task hierarchy is not supported"), {
+        code: "unsupported_hierarchy",
+        statusCode: 422
+      });
+    }
+    if (children.some((child) => child.completedAt === null)) {
+      throw Object.assign(new Error("Complete every checklist item first"), {
+        code: "children_incomplete",
+        statusCode: 422
+      });
+    }
+    if (task.isRecurring) {
+      await this.todoist.itemUpdateDateComplete({ commandUuid: randomUUID(), task });
+      return;
+    }
+    await this.todoist.itemClose({ commandUuid: randomUUID(), todoistTaskId: task.todoistTaskId });
     const tx = this.db.transaction(() => {
       this.tasks.markCompleted(taskId, now);
       this.tasks.updateCommitmentState(taskId, {
@@ -243,14 +328,41 @@ export class TaskActionService {
   async extend(taskId: string, now: string): Promise<void> {
     this.assertMirrorReady();
     const task = this.requireSchedulableTask(taskId);
-    const newDue = addMinutes(task.dueDatetime, 30);
-    await this.todoist.rescheduleTask({
+    if (task.isRecurring) {
+      throw Object.assign(new Error("Recurring commitments cannot be extended"), {
+        code: "recurring_extension_unsupported",
+        statusCode: 422
+      });
+    }
+    const newDuration = task.durationMinutes + 30;
+    let description: string;
+    try {
+      description = appendExtension({
+        description: task.description,
+        timestamp: now,
+        timeZone: task.dueTimezone,
+        oldDurationMinutes: task.durationMinutes,
+        newDurationMinutes: newDuration
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "activity_log_full") {
+        throw Object.assign(new Error("Activity log has reached its description limit"), {
+          code: "activity_log_full",
+          statusCode: 422
+        });
+      }
+      throw error;
+    }
+    await this.todoist.itemUpdate({
+      commandUuid: randomUUID(),
       todoistTaskId: task.todoistTaskId,
-      dueDatetime: newDue,
-      durationMinutes: task.durationMinutes
-    }, randomUUID());
+      description,
+      duration: { amount: newDuration, unit: "minute" },
+      due: { kind: "preserve" },
+      assignment: { kind: "preserve" }
+    });
     const tx = this.db.transaction(() => {
-      this.tasks.updateTaskSchedule(taskId, newDue, task.durationMinutes, now);
+      this.tasks.updateTaskSchedule(taskId, task.dueDatetime, newDuration, now, description);
       this.tasks.updateCommitmentState(taskId, {
         state: "started",
         deadlineExtensionDelta: 1,
@@ -266,20 +378,31 @@ export class TaskActionService {
     const task = this.requireTask(taskId);
     const descriptionWasProvided = "description" in input;
     const normalizedDescription = descriptionWasProvided
-      ? normalizeOptionalText(input.description ?? null)
+      ? reconstructTaskDescription({
+          ...decodeTaskDescription(task.description),
+          userDescription: normalizeOptionalText(input.description ?? null) ?? ""
+        })
       : undefined;
-    await this.todoist.rescheduleTask({
+    const recurrence = recurrenceForReschedule(task, input.dueDatetime);
+    await this.todoist.itemUpdate({
+      commandUuid: randomUUID(),
       todoistTaskId: task.todoistTaskId,
-      dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes,
-      ...(descriptionWasProvided ? { description: input.description ?? null } : {})
-    }, randomUUID());
+      ...(normalizedDescription === undefined ? {} : { description: normalizedDescription }),
+      duration: { amount: input.durationMinutes, unit: "minute" },
+      due: recurrence,
+      assignment: { kind: "preserve" }
+    });
     const tx = this.db.transaction(() => {
       this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now, normalizedDescription);
-      this.tasks.updateCommitmentState(taskId, {
-        state: "planned",
-        lastSnoozedAt: null,
-        incrementScheduleVersion: true,
+      this.tasks.rotateOccurrence(taskId, {
+        occurrenceKey: randomUUID(),
+        occurrenceDueDatetime: input.dueDatetime,
+        occurrenceRecurrenceFingerprint: recurrenceFingerprint({
+          isRecurring: task.isRecurring,
+          dueString: recurrence.kind === "replace" ? recurrence.string : task.dueString,
+          dueLang: recurrence.kind === "replace" ? recurrence.lang : task.dueLang,
+          dueTimezone: recurrence.kind === "replace" ? recurrence.timezone : task.dueTimezone
+        }),
         updatedAt: input.now
       });
     });
@@ -298,7 +421,10 @@ export class TaskActionService {
     }
 
     const normalizedTitle = input.title.trim();
-    const normalizedDescription = normalizeOptionalText(input.description);
+    const normalizedDescription = reconstructTaskDescription({
+      ...decodeTaskDescription(task.description),
+      userDescription: normalizeOptionalText(input.description) ?? ""
+    });
     const errors: string[] = [];
     if (normalizedTitle.length === 0) {
       errors.push("title_required");
@@ -320,18 +446,32 @@ export class TaskActionService {
       });
     }
 
-    await this.todoist.updateTask({
+    const due = recurrenceForUpdate(task, input);
+    if (task.projectId !== input.projectId) {
+      await this.todoist.itemMove({
+        commandUuid: randomUUID(),
+        todoistTaskId: task.todoistTaskId,
+        projectId: input.projectId
+      });
+    }
+    await this.todoist.itemUpdate({
+      commandUuid: randomUUID(),
       todoistTaskId: task.todoistTaskId,
       title: normalizedTitle,
       description: normalizedDescription,
-      projectId: input.projectId,
-      assigneeId: project.canAssignTasks ? input.assigneeId : null,
-      dueDatetime: input.dueDatetime,
-      durationMinutes: input.durationMinutes
-    }, {
-      updateCommandUuid: randomUUID(),
-      ...(task.projectId !== input.projectId ? { moveCommandUuid: randomUUID() } : {})
+      duration: { amount: input.durationMinutes, unit: "minute" },
+      due,
+      assignment: project.canAssignTasks && input.assigneeId !== null
+        ? { kind: "assign", assigneeId: input.assigneeId }
+        : { kind: "unassign" }
     });
+    const scheduleChanged = task.dueDatetime !== input.dueDatetime
+      || task.durationMinutes !== input.durationMinutes
+      || task.isRecurring !== (due.kind === "replace" && due.string !== null)
+      || task.dueString !== (due.kind === "replace" ? due.string : task.dueString)
+      || task.dueTimezone !== (due.kind === "replace" ? due.timezone : task.dueTimezone);
+    const wasOwned = task.assigneeId === this.currentUserId || task.commitmentOwnerId === this.currentUserId;
+    const isOwned = (project.canAssignTasks && input.assigneeId === this.currentUserId) || !project.canAssignTasks;
     const tx = this.db.transaction(() => {
       this.tasks.updateTaskFields(taskId, {
         title: normalizedTitle,
@@ -343,13 +483,21 @@ export class TaskActionService {
         updatedAt: input.now,
         commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
       });
-      this.tasks.updateCommitmentState(taskId, {
-        state: "planned",
-        startedAt: null,
-        lastSnoozedAt: null,
-        incrementScheduleVersion: true,
-        updatedAt: input.now
-      });
+      if (!isOwned && wasOwned) {
+        this.tasks.leaveOccurrenceOwnership(taskId, input.now);
+      } else if (isOwned && (!wasOwned || scheduleChanged)) {
+        this.tasks.rotateOccurrence(taskId, {
+          occurrenceKey: randomUUID(),
+          occurrenceDueDatetime: input.dueDatetime,
+          occurrenceRecurrenceFingerprint: recurrenceFingerprint({
+            isRecurring: due.kind === "replace" && due.string !== null,
+            dueString: due.kind === "replace" ? due.string : task.dueString,
+            dueLang: due.kind === "replace" ? due.lang : task.dueLang,
+            dueTimezone: due.kind === "replace" ? due.timezone : task.dueTimezone
+          }),
+          updatedAt: input.now
+        });
+      }
     });
     tx();
   }
@@ -439,4 +587,65 @@ interface TaskWithTodoistFields {
 
 function normalizeOptionalText(value: string | null): string | null {
   return value?.trim().length ? value.trim() : null;
+}
+
+function isIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) {
+  if (!task.isRecurring) {
+    return { kind: "replace" as const, datetime: dueDatetime, string: null, lang: null, timezone: null };
+  }
+  const description = describeRecurrence({
+    isRecurring: task.isRecurring,
+    rule: task.dueString,
+    language: task.dueLang,
+    timeZone: task.dueTimezone
+  });
+  if (description.kind !== "supported" || description.preset === null || task.dueTimezone === null) {
+    throw Object.assign(new Error("Custom Todoist recurrence must be replaced before changing its schedule"), {
+      code: "custom_recurrence_schedule_change_requires_replacement",
+      statusCode: 422
+    });
+  }
+  const recurrence = translateRecurrencePreset({
+    preset: description.preset,
+    selectedStart: dueDatetime,
+    timeZone: task.dueTimezone
+  });
+  if (recurrence === null) {
+    throw new Error("supported_recurrence_translation_missing");
+  }
+  return { kind: "replace" as const, datetime: dueDatetime, ...recurrence };
+}
+
+function recurrenceForUpdate(task: TaskWithCommitment, input: UpdateTaskInput) {
+  const scheduleChanged = task.dueDatetime !== input.dueDatetime || task.durationMinutes !== input.durationMinutes;
+  if (input.recurrencePreset !== undefined) {
+    const timeZone = input.timeZone ?? task.dueTimezone ?? "UTC";
+    if (!isIanaTimeZone(timeZone)) {
+      throw Object.assign(new Error("Time zone must be an IANA time zone"), { code: "time_zone_invalid", statusCode: 422 });
+    }
+    const recurrence = translateRecurrencePreset({
+      preset: input.recurrencePreset,
+      selectedStart: input.dueDatetime,
+      timeZone
+    });
+    return recurrence === null
+      ? { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null }
+      : { kind: "replace" as const, datetime: input.dueDatetime, ...recurrence };
+  }
+  if (!task.isRecurring) {
+    return { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null };
+  }
+  if (scheduleChanged) {
+    return recurrenceForReschedule(task, input.dueDatetime);
+  }
+  return { kind: "preserve" as const };
 }
