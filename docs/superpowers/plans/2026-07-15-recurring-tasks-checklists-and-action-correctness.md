@@ -348,8 +348,8 @@ type TodoistDueMutation =
 - Create: `backend/test/domain/taskRecurrence.test.ts`
 - Create: `backend/test/domain/taskDescriptionCodec.test.ts`
 
-- [ ] Write failing table-driven recurrence tests for Never, Daily, Weekdays, Weekly, Monthly, and Yearly; DST-zone preservation; exact recognition of Buzer-generated rules; and custom Todoist recurrence preservation. Run `npm test -- test/domain/taskRecurrence.test.ts`. Expected: FAIL because the module does not exist.
-- [ ] Define `RecurrencePreset` as the six fixed values in the API section. Translate supported presets on the backend using the selected start interpreted in the supplied IANA time zone, `due_lang = "en"`, and these canonical rule forms:
+- [x] Write failing table-driven recurrence tests for Never, Daily, Weekdays, Weekly, Monthly, and Yearly; DST-zone preservation; exact recognition of Buzer-generated rules; and custom Todoist recurrence preservation. Run `npm test -- test/domain/taskRecurrence.test.ts`. Expected: FAIL because the module does not exist.
+- [x] Define `RecurrencePreset` as the six fixed values in the API section. Translate supported presets on the backend using the selected start interpreted in the supplied IANA time zone, `due_lang = "en"`, and these canonical rule forms:
 
 ```text
 daily     -> every day at HH:mm
@@ -360,9 +360,9 @@ yearly    -> every year on <month> <ordinal-day> at HH:mm
 ```
 
 Use English weekday/month names and a tested ordinal formatter (`1st`, `2nd`, `3rd`, `4th`, `11th`, `12th`, `13th`, `21st`). Never calculate future occurrences in Buzer.
-- [ ] Return `{kind: "custom", preset: null}` when a Todoist rule cannot be recognized exactly. Metadata/checklist edits preserve its full rule/lang/time zone; schedule or recurrence edits reject it until the request selects a supported preset or Never.
-- [ ] Write failing codec tests for no marker, one valid marker, malformed activity suffix, duplicate/corrupt markers, whitespace preservation, reconstruction, append, Unicode arrow text, and description overflow. Run `npm test -- test/domain/taskDescriptionCodec.test.ts`. Expected: FAIL.
-- [ ] Implement the exact delimiter and event model. The 16,384-character constant is grounded in Todoist's current official [task-description documentation](https://www.todoist.com/help/articles/add-a-task-description-in-todoist-rOryWIHn), not inferred from an error string:
+- [x] Return `{kind: "custom", preset: null}` when a Todoist rule cannot be recognized exactly. Metadata/checklist edits preserve its full rule/lang/time zone; schedule or recurrence edits reject it until the request selects a supported preset or Never.
+- [x] Write failing codec tests for no marker, one valid marker, malformed activity suffix, duplicate/corrupt markers, whitespace preservation, reconstruction, append, Unicode arrow text, and description overflow. Run `npm test -- test/domain/taskDescriptionCodec.test.ts`. Expected: FAIL.
+- [x] Implement the exact delimiter and event model. The 16,384-character constant is grounded in Todoist's current official [task-description documentation](https://www.todoist.com/help/articles/add-a-task-description-in-todoist-rOryWIHn), not inferred from an error string:
 
 ```ts
 export const BUZER_ACTIVITY_DELIMITER = "--- Buzer activity (managed) ---";
@@ -375,10 +375,10 @@ interface ActivityLogEntry {
 }
 ```
 
-- [ ] Treat the suffix as managed only when the delimiter is at a line boundary and every non-empty following line parses as an activity entry. Otherwise preserve the complete description as user text. On the next extension, append a fresh delimiter and entry rather than deleting or guessing at malformed content.
-- [ ] Implement `appendExtension` to produce `YYYY-MM-DD HH:mm <IANA-zone> — Extended +30 min (<old> → <new> min)`, using the task's Todoist zone and UTC fallback. Reject before calling Todoist if the reconstructed full description exceeds 16,384 characters.
-- [ ] Run both focused tests and `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add recurrence and task description codecs"`.
+- [x] Treat the suffix as managed only when the delimiter is at a line boundary and every non-empty following line parses as an activity entry. Otherwise preserve the complete description as user text. On the next extension, append a fresh delimiter and entry rather than deleting or guessing at malformed content.
+- [x] Implement `appendExtension` to produce `YYYY-MM-DD HH:mm <IANA-zone> — Extended +30 min (<old> → <new> min)`, using the task's Todoist zone and UTC fallback. Reject before calling Todoist if the reconstructed full description exceeds 16,384 characters.
+- [x] Run both focused tests and `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add recurrence and task description codecs"`.
 
 ## Task 4: Classify And Project Root Commitments With Checklist Children
 
