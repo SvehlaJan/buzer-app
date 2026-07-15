@@ -20,19 +20,19 @@ describe("TodoistSyncService", () => {
         title: "Pick up parcel",
         description: "Bring printed form",
         projectId: null,
-        parentId: null,
-        childOrder: null,
+        parentId: "todoist-root",
+        childOrder: 3,
         assigneeId: "user-self",
         creatorId: "wife",
         dueDate: "2026-05-08T17:00:00Z",
         dueDatetime: "2026-05-08T17:00:00Z",
-        dueString: null,
-        dueLang: null,
-        dueTimezone: null,
-        isRecurring: false,
-        durationAmount: 20,
-        durationUnit: "minute",
-        durationMinutes: 20,
+        dueString: "every day at 17:00",
+        dueLang: "en",
+        dueTimezone: "Europe/Bratislava",
+        isRecurring: true,
+        durationAmount: 2,
+        durationUnit: "hour",
+        durationMinutes: 120,
         completedAt: null,
         deletedAt: null,
         rawJson: { id: "todoist-1" },
@@ -43,8 +43,20 @@ describe("TodoistSyncService", () => {
     const service = new TodoistSyncService(db, repo, new ProjectRepository(db), adapter);
     await service.syncOnce();
 
-    expect(repo.getByTodoistTaskId("todoist-1")?.title).toBe("Pick up parcel");
-    expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Bring printed form");
+    expect(repo.getByTodoistTaskId("todoist-1")).toMatchObject({
+      title: "Pick up parcel",
+      description: "Bring printed form",
+      parentId: "todoist-root",
+      childOrder: 3,
+      dueDate: "2026-05-08T17:00:00Z",
+      dueString: "every day at 17:00",
+      dueLang: "en",
+      dueTimezone: "Europe/Bratislava",
+      isRecurring: true,
+      durationAmount: 2,
+      durationUnit: "hour",
+      durationMinutes: 120
+    });
     const token = db.prepare("select sync_token as syncToken from todoist_sync_state where id = 1").get() as { syncToken: string };
     expect(token.syncToken).toBe("next-token");
   });

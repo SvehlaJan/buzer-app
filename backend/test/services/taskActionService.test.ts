@@ -553,7 +553,7 @@ describe("TaskActionService", () => {
     expect(taskRepo.getByTodoistTaskId("created-1")).toBeNull();
   });
 
-  it("accepts Todoist-created due datetime when only fractional seconds differ", async () => {
+  it("persists every authoritative created mirror field after equivalent-due verification", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const taskRepo = new TaskRepository(db);
@@ -577,18 +577,18 @@ describe("TaskActionService", () => {
         title: "Personal strict task",
         description: null,
         projectId: "project-personal",
-        parentId: null,
-        childOrder: null,
+        parentId: "unexpected-parent",
+        childOrder: 4,
         assigneeId: null,
         creatorId: "user-self",
         dueDate: "2026-06-13T12:00:00Z",
         dueDatetime: "2026-06-13T12:00:00Z",
-        dueString: null,
-        dueLang: null,
-        dueTimezone: null,
-        isRecurring: false,
-        durationAmount: 30,
-        durationUnit: "minute",
+        dueString: "every weekday at 12:00",
+        dueLang: "en",
+        dueTimezone: "Europe/Bratislava",
+        isRecurring: true,
+        durationAmount: 0.5,
+        durationUnit: "hour",
         durationMinutes: 30,
         completedAt: null,
         deletedAt: null,
@@ -609,7 +609,19 @@ describe("TaskActionService", () => {
       now: "2026-06-13T10:00:00Z"
     });
 
-    expect(taskRepo.getById(created.id)?.dueDatetime).toBe("2026-06-13T12:00:00Z");
+    expect(taskRepo.getById(created.id)).toMatchObject({
+      parentId: "unexpected-parent",
+      childOrder: 4,
+      dueDate: "2026-06-13T12:00:00Z",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      dueString: "every weekday at 12:00",
+      dueLang: "en",
+      dueTimezone: "Europe/Bratislava",
+      isRecurring: true,
+      durationAmount: 0.5,
+      durationUnit: "hour",
+      durationMinutes: 30
+    });
   });
 
   it("rejects non-positive duration before calling Todoist even when task is assigned away", async () => {

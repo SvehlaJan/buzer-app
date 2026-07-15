@@ -271,8 +271,8 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       throw new Error(formatCommandFailure(uuid, type, status));
     }
     const status = response.sync_status?.[uuid];
-    if (status !== undefined && status !== "ok") {
-      throw new Error(formatCommandFailure(uuid, type, status));
+    if (status !== "ok") {
+      throw new Error(formatCommandFailure(uuid, type, status ?? "missing_status"));
     }
     return response;
   }
