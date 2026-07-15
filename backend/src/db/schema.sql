@@ -6,6 +6,7 @@ create table if not exists schema_migrations (
 create table if not exists todoist_sync_state (
   id integer primary key check (id = 1),
   sync_token text not null,
+  mirror_contract_version integer not null default 1,
   updated_at text not null
 );
 
@@ -15,13 +16,23 @@ create table if not exists todoist_tasks (
   title text not null,
   description text,
   project_id text,
+  parent_id text,
+  child_order integer,
   assignee_id text,
   creator_id text,
+  due_date text,
   due_datetime text,
+  due_string text,
+  due_lang text,
+  due_timezone text,
+  is_recurring integer not null default 0,
+  duration_amount integer,
+  duration_unit text,
   duration_minutes integer,
   completed_at text,
   deleted_at text,
   raw_json text not null,
+  mirror_revision integer not null default 1,
   updated_at text not null
 );
 
@@ -35,6 +46,11 @@ create table if not exists commitment_states (
   last_snoozed_at text,
   escalation_sent_at text,
   schedule_version integer not null default 1,
+  occurrence_key text,
+  occurrence_due_datetime text,
+  occurrence_recurrence_fingerprint text,
+  reconciliation_status text not null default 'confirmed'
+    check (reconciliation_status in ('confirmed', 'pending')),
   updated_at text not null
 );
 
@@ -60,6 +76,7 @@ create table if not exists devices (
 create table if not exists whatsapp_escalations (
   id text primary key,
   task_id text not null references todoist_tasks(id) on delete cascade,
+  occurrence_key text,
   recipient_id text not null,
   message text not null,
   status text not null,
@@ -68,5 +85,27 @@ create table if not exists whatsapp_escalations (
   sent_at text
 );
 
-create unique index if not exists whatsapp_escalations_one_per_task
-  on whatsapp_escalations(task_id);
+create table if not exists task_action_journal (
+  action_id text primary key,
+  device_id text not null,
+  root_task_id text,
+  expected_occurrence_key text,
+  action_type text not null,
+  request_fingerprint text not null,
+  status text not null check (status in ('processing', 'completed', 'failed', 'reconciliation_pending')),
+  response_json text,
+  error_json text,
+  created_at text not null,
+  updated_at text not null
+);
+
+create table if not exists task_action_commands (
+  action_id text not null references task_action_journal(action_id) on delete cascade,
+  step_key text not null,
+  command_uuid text not null unique,
+  temp_id text,
+  status text not null check (status in ('reserved', 'sent', 'confirmed', 'failed')),
+  result_json text,
+  updated_at text not null,
+  primary key (action_id, step_key)
+);
