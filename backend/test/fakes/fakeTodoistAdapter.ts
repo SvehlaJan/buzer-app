@@ -2,10 +2,19 @@ import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
   TodoistCreateTaskResult,
+  TodoistLegacyUpdateCommandIdentities,
   TodoistRescheduleInput,
   TodoistUpdateTaskInput,
   TodoistSyncResult
 } from "../../src/todoist/todoistAdapter.js";
+import type {
+  TodoistItemAddInput,
+  TodoistItemAddResult,
+  TodoistItemIdentityInput,
+  TodoistItemMoveInput,
+  TodoistItemUpdateInput,
+  TodoistRecurringCompletionInput
+} from "../../src/todoist/todoistMutationGateway.js";
 
 export class FakeTodoistAdapter implements TodoistAdapter {
   syncResults: TodoistSyncResult[] = [];
@@ -15,6 +24,13 @@ export class FakeTodoistAdapter implements TodoistAdapter {
   completedTaskIds: string[] = [];
   reschedules: TodoistRescheduleInput[] = [];
   updates: TodoistUpdateTaskInput[] = [];
+  itemAdds: TodoistItemAddInput[] = [];
+  itemUpdates: TodoistItemUpdateInput[] = [];
+  itemMoves: TodoistItemMoveInput[] = [];
+  itemCloses: TodoistItemIdentityInput[] = [];
+  itemUncompletes: TodoistItemIdentityInput[] = [];
+  itemDeletes: TodoistItemIdentityInput[] = [];
+  recurringCompletions: TodoistRecurringCompletionInput[] = [];
 
   async sync(syncToken: string): Promise<TodoistSyncResult> {
     this.syncTokens.push(syncToken);
@@ -30,9 +46,18 @@ export class FakeTodoistAdapter implements TodoistAdapter {
         title: input.title,
         description: input.description ?? null,
         projectId: input.projectId,
+        parentId: null,
+        childOrder: null,
         assigneeId: input.assigneeId,
         creatorId: "user-self",
+        dueDate: input.dueDatetime,
         dueDatetime: input.dueDatetime,
+        dueString: null,
+        dueLang: null,
+        dueTimezone: null,
+        isRecurring: false,
+        durationAmount: input.durationMinutes,
+        durationUnit: input.durationMinutes === null ? null : "minute",
         durationMinutes: input.durationMinutes,
         completedAt: null,
         deletedAt: null,
@@ -42,15 +67,44 @@ export class FakeTodoistAdapter implements TodoistAdapter {
     };
   }
 
-  async completeTask(todoistTaskId: string): Promise<void> {
+  async completeTask(todoistTaskId: string, _commandUuid: string): Promise<void> {
     this.completedTaskIds.push(todoistTaskId);
   }
 
-  async rescheduleTask(input: TodoistRescheduleInput): Promise<void> {
+  async rescheduleTask(input: TodoistRescheduleInput, _commandUuid: string): Promise<void> {
     this.reschedules.push(input);
   }
 
-  async updateTask(input: TodoistUpdateTaskInput): Promise<void> {
+  async updateTask(input: TodoistUpdateTaskInput, _commands: TodoistLegacyUpdateCommandIdentities): Promise<void> {
     this.updates.push(input);
+  }
+
+  async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
+    this.itemAdds.push(input);
+    return { todoistTaskId: `created-${input.tempId}` };
+  }
+
+  async itemUpdate(input: TodoistItemUpdateInput): Promise<void> {
+    this.itemUpdates.push(input);
+  }
+
+  async itemMove(input: TodoistItemMoveInput): Promise<void> {
+    this.itemMoves.push(input);
+  }
+
+  async itemClose(input: TodoistItemIdentityInput): Promise<void> {
+    this.itemCloses.push(input);
+  }
+
+  async itemUncomplete(input: TodoistItemIdentityInput): Promise<void> {
+    this.itemUncompletes.push(input);
+  }
+
+  async itemDelete(input: TodoistItemIdentityInput): Promise<void> {
+    this.itemDeletes.push(input);
+  }
+
+  async itemUpdateDateComplete(input: TodoistRecurringCompletionInput): Promise<void> {
+    this.recurringCompletions.push(input);
   }
 }
