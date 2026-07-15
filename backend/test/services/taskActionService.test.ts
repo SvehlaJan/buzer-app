@@ -78,6 +78,57 @@ function actionAwareService(
 }
 
 describe("TaskActionService", () => {
+  it("keeps one-time Done local state unchanged when coordinated confirmation is pending", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    let syncCalls = 0;
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => {
+      syncCalls += 1;
+      if (syncCalls === 2) throw new Error("sync unavailable");
+    });
+
+    await expect(service.done("task-1", "2026-07-15T10:00:00Z", {
+      actionId: "done-pending", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(adapter.itemCloses).toHaveLength(1);
+    expect(repo.getById("task-1")).toMatchObject({
+      completedAt: null, state: "planned", occurrenceKey: "occurrence-1", reconciliationStatus: "pending"
+    });
+  });
+
+  it("rejects Done when a direct child has a non-datetime schedule field", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.createChecklistChild({
+      id: "child-local", todoistTaskId: "child-1", parentTodoistTaskId: "todoist-1", projectId: null,
+      title: "Prepare invoice", description: null, childOrder: 0, updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.upsertTodoistTask({
+      id: "child-local", todoistTaskId: "child-1", title: "Prepare invoice", description: null, projectId: null,
+      parentId: "todoist-1", childOrder: 0, assigneeId: null, creatorId: null,
+      dueDate: null, dueDatetime: null, dueString: "every day", dueLang: "en", dueTimezone: "Europe/Bratislava", isRecurring: false,
+      durationAmount: null, durationUnit: null, durationMinutes: null, completedAt: "2026-07-15T09:30:00Z", deletedAt: null,
+      rawJson: "{}", updatedAt: "2026-07-15T09:30:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "user-self");
+
+    await expect(service.done("task-1", "2026-07-15T10:00:00Z")).rejects.toMatchObject({
+      code: "unsupported_hierarchy", statusCode: 422
+    });
+    expect(adapter.itemCloses).toEqual([]);
+  });
+
   it("preflights recurrence and every checklist draft before creating a root command", async () => {
     const db = new Database(":memory:");
     migrate(db);

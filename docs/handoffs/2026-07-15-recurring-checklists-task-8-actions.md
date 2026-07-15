@@ -233,3 +233,49 @@ Assumptions and remaining work:
 
 Next recommended step:
 - Commit this Task 8 review-correction checkpoint, then resume Task 9 route/schema migration from the known five-test boundary.
+
+## Task 8 Final Confirmation And Tree-Validation Corrections
+
+Plan/task attempted:
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`, Task 8 follow-up only. No Task 9 route, schema, or fake-adapter changes were made.
+
+Changes made:
+- One-time Done no longer writes `completed_at` or lifecycle state inside the action command executor. Its coordinator effect requires mirror evidence of both a Todoist completion timestamp and completed lifecycle state; a failed/non-observing post-command sync remains `reconciliation_pending` without blocking the occurrence.
+- Replaced the fragmented Done and project-move hierarchy predicates with one `directChildTree` validator. It validates the complete typed direct-child contract: same project as root; no date, datetime, rule, language, or timezone; no recurrence; no duration amount/unit/minutes; unassigned; no active grandchild; and at most 30 direct children.
+
+Files changed:
+- `backend/src/services/taskActionService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+TDD evidence:
+- RED: `npm test -- test/services/taskActionService.test.ts`
+  - Result: FAIL (2 regressions)
+  - Evidence: a failed second sync after `item_close` had already set `completedAt` and lifecycle to completed; Done also accepted a checked direct child with only `dueString`/`dueLang`/`dueTimezone` populated.
+- GREEN: `npm test -- test/services/taskActionService.test.ts`
+  - Result: PASS
+  - Evidence: 37 tests passed. The pending one-time close preserves planned state and occurrence key, while the non-datetime scheduled child returns `unsupported_hierarchy` without `item_close`.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 3 files, 75 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (known Task 9 boundary only)
+  - Evidence: 289/294 tests passed. The unchanged failures are exactly the five legacy fake-array assertions in `backend/test/http/routes.test.ts`: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, and `updates full task edit payload through update route`.
+
+Manual verification:
+- Inspected the coordinator path: it runs synchronization after the close command before evaluating `hasAuthoritativelyCompleted`; only a synchronized mirror state can satisfy that predicate.
+
+Assumptions and remaining work:
+- The synchronizer continues to own the authoritative transition of a Todoist-completed one-time root to `completedAt` plus completed lifecycle. The service intentionally does not synthesize that evidence in an action-aware call.
+- Task 9 remains responsible for the known HTTP legacy-array migration; this follow-up leaves that boundary unchanged.
+
+Next recommended step:
+- Commit this final Task 8 correction checkpoint, then resume Task 9 from the five documented route-test migrations.

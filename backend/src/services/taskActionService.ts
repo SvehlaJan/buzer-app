@@ -420,7 +420,7 @@ export class TaskActionService {
       metadata,
       isEffectPresent: () => task.isRecurring
         ? this.hasAdvancedRecurringOccurrence(taskId, task)
-        : this.tasks.getById(taskId)?.state === "completed",
+        : this.hasAuthoritativelyCompleted(taskId),
       responseAfterReconciliation: () => true
     }, async (context) => {
       const current = this.requireCompletableTask(taskId);
@@ -429,6 +429,9 @@ export class TaskActionService {
         return true;
       }
       await context.executeCommand("item_close", (commandUuid) => this.todoist.itemClose({ commandUuid, todoistTaskId: current.todoistTaskId }));
+      return true;
+    });
+    if (metadata === undefined && !task.isRecurring) {
       const tx = this.db.transaction(() => {
         this.tasks.markCompleted(taskId, now);
         this.tasks.updateCommitmentState(taskId, {
@@ -438,8 +441,7 @@ export class TaskActionService {
         });
       });
       tx();
-      return true;
-    });
+    }
   }
 
   async postponeStart(taskId: string, now: string): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
@@ -739,16 +741,11 @@ export class TaskActionService {
     if (task.completedAt !== null || task.deletedAt !== null || task.state === "completed" || task.state === "deleted") {
       throw Object.assign(new Error("Task occurrence is no longer current"), { code: "stale_occurrence", statusCode: 409 });
     }
-    const all = this.tasks.listAll();
-    const children = all.filter((candidate) => candidate.parentId === task.todoistTaskId && candidate.deletedAt === null);
-    const hasGrandchild = all.some((candidate) => children.some((child) => child.todoistTaskId === candidate.parentId));
-    const invalidChild = children.some((child) =>
-      child.dueDatetime !== null || child.dueDate !== null || child.durationMinutes !== null || child.isRecurring || child.assigneeId !== null
-    );
-    if (hasGrandchild || invalidChild || children.length > 30) {
+    const tree = this.directChildTree(task);
+    if (!tree.valid) {
       throw Object.assign(new Error("Task hierarchy is not supported"), { code: "unsupported_hierarchy", statusCode: 422 });
     }
-    if (children.some((child) => child.completedAt === null)) {
+    if (tree.children.some((child) => child.completedAt === null)) {
       throw Object.assign(new Error("Complete every checklist item first"), { code: "children_incomplete", statusCode: 422 });
     }
     return task;
@@ -779,10 +776,13 @@ export class TaskActionService {
       && current.occurrenceDueDatetime !== previous.occurrenceDueDatetime;
   }
 
+  private hasAuthoritativelyCompleted(taskId: string): boolean {
+    const current = this.tasks.getById(taskId);
+    return current?.completedAt !== null && current?.state === "completed";
+  }
+
   private directChildTodoistIds(root: TaskWithCommitment): string[] {
-    return this.tasks.listAll()
-      .filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null)
-      .map((child) => child.todoistTaskId);
+    return this.directChildTree(root).children.map((child) => child.todoistTaskId);
   }
 
   private hasVerifiedProjectMove(
@@ -792,25 +792,33 @@ export class TaskActionService {
   ): boolean {
     const root = this.tasks.getById(taskId);
     if (root?.projectId !== targetProjectId) return false;
-    const all = this.tasks.listAll();
-    const children = all.filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null);
-    const hasGrandchild = all.some((candidate) => children.some((child) => child.todoistTaskId === candidate.parentId));
-    return !hasGrandchild
+    const tree = this.directChildTree(root);
+    const children = tree.children;
+    return tree.valid
       && children.length === expectedDirectChildTodoistIds.length
       && expectedDirectChildTodoistIds.every((todoistTaskId) => children.some((child) => child.todoistTaskId === todoistTaskId))
-      && children.every((child) =>
-        child.projectId === targetProjectId
-        && child.dueDate === null
-        && child.dueDatetime === null
-        && child.dueString === null
-        && child.dueLang === null
-        && child.dueTimezone === null
-        && !child.isRecurring
-        && child.durationAmount === null
-        && child.durationUnit === null
-        && child.durationMinutes === null
-        && child.assigneeId === null
-      );
+      && children.every((child) => child.projectId === targetProjectId);
+  }
+
+  private directChildTree(root: TaskWithCommitment): { children: TaskWithCommitment[]; valid: boolean } {
+    const all = this.tasks.listAll();
+    const children = all.filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null);
+    const childIds = new Set(children.map((child) => child.todoistTaskId));
+    const hasGrandchild = all.some((candidate) => candidate.deletedAt === null && candidate.parentId !== null && childIds.has(candidate.parentId));
+    const invalidChild = children.some((child) =>
+      child.projectId !== root.projectId
+      || child.dueDate !== null
+      || child.dueDatetime !== null
+      || child.dueString !== null
+      || child.dueLang !== null
+      || child.dueTimezone !== null
+      || child.isRecurring
+      || child.durationAmount !== null
+      || child.durationUnit !== null
+      || child.durationMinutes !== null
+      || child.assigneeId !== null
+    );
+    return { children, valid: children.length <= 30 && !hasGrandchild && !invalidChild };
   }
 }
 
