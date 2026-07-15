@@ -1,4 +1,5 @@
 import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
+import type { TodoistMutationGateway } from "./todoistMutationGateway.js";
 
 export interface TodoistSyncResult {
   syncToken: string;
@@ -37,10 +38,15 @@ export interface TodoistUpdateTaskInput {
   durationMinutes: number;
 }
 
-export interface TodoistAdapter {
+export interface TodoistLegacyUpdateCommandIdentities {
+  updateCommandUuid: string;
+  moveCommandUuid?: string;
+}
+
+export interface TodoistAdapter extends TodoistMutationGateway {
   sync(syncToken: string): Promise<TodoistSyncResult>;
   createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult>;
-  completeTask(todoistTaskId: string): Promise<void>;
-  rescheduleTask(input: TodoistRescheduleInput): Promise<void>;
-  updateTask(input: TodoistUpdateTaskInput): Promise<void>;
+  completeTask(todoistTaskId: string, commandUuid: string): Promise<void>;
+  rescheduleTask(input: TodoistRescheduleInput, commandUuid: string): Promise<void>;
+  updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities): Promise<void>;
 }

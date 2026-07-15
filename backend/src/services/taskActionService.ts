@@ -158,7 +158,7 @@ export class TaskActionService {
 
   async done(taskId: string, now: string): Promise<void> {
     const task = this.requireTask(taskId);
-    await this.todoist.completeTask(task.todoistTaskId);
+    await this.todoist.completeTask(task.todoistTaskId, randomUUID());
     const tx = this.db.transaction(() => {
       this.tasks.markCompleted(taskId, now);
       this.tasks.updateCommitmentState(taskId, {
@@ -194,7 +194,7 @@ export class TaskActionService {
       todoistTaskId: task.todoistTaskId,
       dueDatetime: newDue,
       durationMinutes: task.durationMinutes
-    });
+    }, randomUUID());
     const tx = this.db.transaction(() => {
       this.tasks.updateTaskSchedule(taskId, newDue, task.durationMinutes, now);
       this.tasks.updateCommitmentState(taskId, {
@@ -218,7 +218,7 @@ export class TaskActionService {
       dueDatetime: input.dueDatetime,
       durationMinutes: input.durationMinutes,
       ...(descriptionWasProvided ? { description: input.description ?? null } : {})
-    });
+    }, randomUUID());
     const tx = this.db.transaction(() => {
       this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now, normalizedDescription);
       this.tasks.updateCommitmentState(taskId, {
@@ -272,6 +272,9 @@ export class TaskActionService {
       assigneeId: project.canAssignTasks ? input.assigneeId : null,
       dueDatetime: input.dueDatetime,
       durationMinutes: input.durationMinutes
+    }, {
+      updateCommandUuid: randomUUID(),
+      ...(task.projectId !== input.projectId ? { moveCommandUuid: randomUUID() } : {})
     });
     const tx = this.db.transaction(() => {
       this.tasks.updateTaskFields(taskId, {

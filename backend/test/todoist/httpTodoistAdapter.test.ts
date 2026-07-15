@@ -144,7 +144,7 @@ describe("HttpTodoistAdapter", () => {
       todoistTaskId: "todoist-1",
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 30
-    });
+    }, "reschedule-command");
 
     const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
     const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: Record<string, unknown> }>;
@@ -162,19 +162,19 @@ describe("HttpTodoistAdapter", () => {
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 30,
       description: "  Updated gate code: 1357  "
-    });
+    }, "reschedule-set");
     await adapter.rescheduleTask({
       todoistTaskId: "todoist-1",
       dueDatetime: "2026-05-08T17:00:00Z",
       durationMinutes: 45,
       description: "   "
-    });
+    }, "reschedule-blank");
     await adapter.rescheduleTask({
       todoistTaskId: "todoist-1",
       dueDatetime: "2026-05-08T18:00:00Z",
       durationMinutes: 60,
       description: null
-    });
+    }, "reschedule-clear");
 
     const descriptions = fetchMock.mock.calls.map((call) => {
       const body = new URLSearchParams(String(call[1]?.body));
@@ -184,7 +184,7 @@ describe("HttpTodoistAdapter", () => {
     expect(descriptions).toEqual(["Updated gate code: 1357", "", ""]);
   });
 
-  it("updates all editable task fields through sync item_update", async () => {
+  it("moves projects separately before updating editable task fields", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
       sync_status: {}
     })));
@@ -198,23 +198,33 @@ describe("HttpTodoistAdapter", () => {
       assigneeId: "43186358",
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 45
+    }, {
+      moveCommandUuid: "legacy-move",
+      updateCommandUuid: "legacy-update"
     });
 
-    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
-    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ type: string; args: Record<string, unknown> }>;
-    expect(commands[0]?.type).toBe("item_update");
-    expect(commands[0]?.args).toEqual({
-      id: "todoist-1",
-      content: "Edited task",
-      description: "Updated details",
-      project_id: "project-family",
-      responsible_uid: "43186358",
-      due: { datetime: "2026-05-08T16:00:00Z" },
-      duration: { amount: 45, unit: "minute" }
-    });
+    expect(readCommands(fetchMock)).toEqual([
+      {
+        type: "item_move",
+        uuid: "legacy-move",
+        args: { id: "todoist-1", project_id: "project-family" }
+      },
+      {
+        type: "item_update",
+        uuid: "legacy-update",
+        args: {
+          id: "todoist-1",
+          content: "Edited task",
+          description: "Updated details",
+          responsible_uid: "43186358",
+          due: { date: "2026-05-08T16:00:00Z" },
+          duration: { amount: 45, unit: "minute" }
+        }
+      }
+    ]);
   });
 
-  it("omits responsible_uid when updating a task without an assignee", async () => {
+  it("explicitly clears responsible_uid when updating a task without an assignee", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
       sync_status: {}
     })));
@@ -228,11 +238,11 @@ describe("HttpTodoistAdapter", () => {
       assigneeId: null,
       dueDatetime: "2026-05-08T16:00:00Z",
       durationMinutes: 45
-    });
+    }, { updateCommandUuid: "legacy-unassign" });
 
     const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
     const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: Record<string, unknown> }>;
-    expect(commands[0]?.args).not.toHaveProperty("responsible_uid");
+    expect(commands[0]?.args.responsible_uid).toBeNull();
   });
 
   it("maps Todoist checked, completed_at, and is_deleted fields", async () => {
@@ -316,4 +326,362 @@ describe("HttpTodoistAdapter", () => {
       }
     ]);
   });
+
+  it("maps hierarchy, recurrence, checked state, and duration facts without product-policy inference", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_token: "typed-token",
+      items: [
+        {
+          id: "child-hour",
+          content: "Keep exact details",
+          description: "  whitespace is user data  ",
+          project_id: "project-family",
+          parent_id: "root-1",
+          child_order: 7,
+          responsible_uid: "user-self",
+          added_by_uid: "wife",
+          checked: true,
+          due: {
+            date: "2026-07-16T08:30:00Z",
+            datetime: "2026-07-16T08:30:00Z",
+            string: "every weekday at 10:30",
+            lang: "en",
+            timezone: "Europe/Bratislava",
+            is_recurring: true
+          },
+          duration: { amount: 2, unit: "hour" },
+          updated_at: "2026-07-15T12:00:00Z"
+        },
+        {
+          id: "minute-task",
+          content: "Minutes",
+          description: null,
+          checked: false,
+          duration: { amount: 45, unit: "minute" },
+          updated_at: "2026-07-15T12:01:00Z"
+        },
+        {
+          id: "unsupported-duration",
+          content: "Unsupported duration",
+          duration: { amount: 3, unit: "day" },
+          updated_at: "2026-07-15T12:02:00Z"
+        }
+      ]
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    const result = await adapter.sync("*");
+
+    expect(result.tasks[0]).toEqual({
+      todoistTaskId: "child-hour",
+      title: "Keep exact details",
+      description: "  whitespace is user data  ",
+      projectId: "project-family",
+      parentId: "root-1",
+      childOrder: 7,
+      assigneeId: "user-self",
+      creatorId: "wife",
+      dueDate: "2026-07-16T08:30:00Z",
+      dueDatetime: "2026-07-16T08:30:00Z",
+      dueString: "every weekday at 10:30",
+      dueLang: "en",
+      dueTimezone: "Europe/Bratislava",
+      isRecurring: true,
+      durationAmount: 2,
+      durationUnit: "hour",
+      durationMinutes: 120,
+      completedAt: "2026-07-15T12:00:00Z",
+      deletedAt: null,
+      rawJson: expect.any(Object),
+      updatedAt: "2026-07-15T12:00:00Z"
+    });
+    expect(result.tasks[1]).toMatchObject({
+      durationAmount: 45,
+      durationUnit: "minute",
+      durationMinutes: 45,
+      completedAt: null
+    });
+    expect(result.tasks[2]).toMatchObject({
+      durationAmount: 3,
+      durationUnit: "day",
+      durationMinutes: null
+    });
+  });
+
+  it("emits root item_add with the caller command UUID and temp ID", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: { "root-command": "ok" },
+      temp_id_mapping: { "root-temp": "todoist-root" }
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    const result = await adapter.itemAdd({
+      kind: "root",
+      commandUuid: "root-command",
+      tempId: "root-temp",
+      title: "Recurring root",
+      description: "Root details",
+      projectId: "project-family",
+      assigneeId: "user-self",
+      due: {
+        kind: "replace",
+        datetime: "2026-07-16T08:30:00+02:00",
+        string: "every weekday at 08:30",
+        lang: "en",
+        timezone: "Europe/Bratislava"
+      },
+      duration: { amount: 45, unit: "minute" }
+    });
+
+    expect(readCommands(fetchMock)).toEqual([{
+      type: "item_add",
+      uuid: "root-command",
+      temp_id: "root-temp",
+      args: {
+        content: "Recurring root",
+        description: "Root details",
+        project_id: "project-family",
+        responsible_uid: "user-self",
+        due: {
+          date: "2026-07-16T08:30:00+02:00",
+          string: "every weekday at 08:30",
+          lang: "en",
+          timezone: "Europe/Bratislava"
+        },
+        duration: { amount: 45, unit: "minute" }
+      }
+    }]);
+    expect(result).toEqual({ todoistTaskId: "todoist-root" });
+  });
+
+  it("emits child item_add with only checklist-safe fields", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: { "child-command": "ok" },
+      temp_id_mapping: { "child-temp": "todoist-child" }
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    const result = await adapter.itemAdd({
+      kind: "child",
+      commandUuid: "child-command",
+      tempId: "child-temp",
+      title: "Pack charger",
+      description: "USB-C",
+      projectId: "project-family",
+      parentTodoistTaskId: "todoist-root"
+    });
+
+    const commands = readCommands(fetchMock);
+    expect(commands).toEqual([{
+      type: "item_add",
+      uuid: "child-command",
+      temp_id: "child-temp",
+      args: {
+        content: "Pack charger",
+        description: "USB-C",
+        project_id: "project-family",
+        parent_id: "todoist-root"
+      }
+    }]);
+    expect(commands[0]?.args).not.toHaveProperty("due");
+    expect(commands[0]?.args).not.toHaveProperty("duration");
+    expect(commands[0]?.args).not.toHaveProperty("responsible_uid");
+    expect(result).toEqual({ todoistTaskId: "todoist-child" });
+  });
+
+  it("makes item_update due and assignment mutations explicit without accepting project moves", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.itemUpdate({
+      commandUuid: "update-preserve",
+      todoistTaskId: "todoist-root",
+      title: "Metadata only",
+      duration: { amount: 90, unit: "minute" },
+      due: { kind: "preserve" },
+      assignment: { kind: "preserve" }
+    });
+    await adapter.itemUpdate({
+      commandUuid: "update-clear",
+      todoistTaskId: "todoist-root",
+      description: null,
+      due: { kind: "clear" },
+      assignment: { kind: "unassign" }
+    });
+    await adapter.itemUpdate({
+      commandUuid: "update-replace",
+      todoistTaskId: "todoist-root",
+      due: {
+        kind: "replace",
+        datetime: "2026-07-17T09:15:00+02:00",
+        string: "every day at 09:15",
+        lang: "en",
+        timezone: "Europe/Bratislava"
+      },
+      assignment: { kind: "assign", assigneeId: "user-self" }
+    });
+
+    const [preserve, clear, replace] = readCommands(fetchMock);
+    expect(preserve).toEqual({
+      type: "item_update",
+      uuid: "update-preserve",
+      args: {
+        id: "todoist-root",
+        content: "Metadata only",
+        duration: { amount: 90, unit: "minute" }
+      }
+    });
+    expect(preserve?.args).not.toHaveProperty("project_id");
+    expect(clear).toEqual({
+      type: "item_update",
+      uuid: "update-clear",
+      args: {
+        id: "todoist-root",
+        description: "",
+        due: null,
+        responsible_uid: null
+      }
+    });
+    expect(replace).toEqual({
+      type: "item_update",
+      uuid: "update-replace",
+      args: {
+        id: "todoist-root",
+        due: {
+          date: "2026-07-17T09:15:00+02:00",
+          string: "every day at 09:15",
+          lang: "en",
+          timezone: "Europe/Bratislava"
+        },
+        responsible_uid: "user-self"
+      }
+    });
+  });
+
+  it("emits dedicated move, close, uncomplete, and delete commands with caller UUIDs", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      sync_status: {}
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.itemMove({ commandUuid: "move-command", todoistTaskId: "todoist-1", projectId: "project-new" });
+    await adapter.itemClose({ commandUuid: "close-command", todoistTaskId: "todoist-1" });
+    await adapter.itemUncomplete({ commandUuid: "uncomplete-command", todoistTaskId: "todoist-1" });
+    await adapter.itemDelete({ commandUuid: "delete-command", todoistTaskId: "todoist-1" });
+
+    expect(readCommands(fetchMock)).toEqual([
+      {
+        type: "item_move",
+        uuid: "move-command",
+        args: { id: "todoist-1", project_id: "project-new" }
+      },
+      {
+        type: "item_close",
+        uuid: "close-command",
+        args: { id: "todoist-1" }
+      },
+      {
+        type: "item_uncomplete",
+        uuid: "uncomplete-command",
+        args: { id: "todoist-1" }
+      },
+      {
+        type: "item_delete",
+        uuid: "delete-command",
+        args: { id: "todoist-1" }
+      }
+    ]);
+  });
+
+  it("emits recurring completion with mirrored due facts and a hard-coded child reset", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: { "recurring-complete": "ok" }
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+
+    await adapter.itemUpdateDateComplete({
+      commandUuid: "recurring-complete",
+      task: {
+        todoistTaskId: "todoist-root",
+        title: "Recurring root",
+        description: null,
+        projectId: "project-family",
+        parentId: null,
+        childOrder: null,
+        assigneeId: "user-self",
+        creatorId: "wife",
+        dueDate: "2026-07-16T08:30:00+02:00",
+        dueDatetime: "2026-07-16T08:30:00+02:00",
+        dueString: "every weekday at 08:30",
+        dueLang: "en",
+        dueTimezone: "Europe/Bratislava",
+        isRecurring: true,
+        durationAmount: 45,
+        durationUnit: "minute",
+        durationMinutes: 45,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: {},
+        updatedAt: "2026-07-15T12:00:00Z"
+      }
+    });
+
+    expect(readCommands(fetchMock)).toEqual([{
+      type: "item_update_date_complete",
+      uuid: "recurring-complete",
+      args: {
+        id: "todoist-root",
+        due: {
+          date: "2026-07-16T08:30:00+02:00",
+          string: "every weekday at 08:30",
+          lang: "en",
+          timezone: "Europe/Bratislava",
+          is_recurring: true
+        },
+        is_forward: 1,
+        reset_subtasks: true
+      }
+    }]);
+  });
+
+  it("reports sanitized command failures with UUID, type, and Todoist status", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: {
+        "delete-failure": { error_code: 22, error: "invalid item" }
+      }
+    })));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    const error = await adapter.itemDelete({
+      commandUuid: "delete-failure",
+      todoistTaskId: "todoist-1"
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain("delete-failure");
+    expect(message).toContain("item_delete");
+    expect(message).toContain("invalid item");
+    expect(message).not.toContain("super-secret-token");
+    expect(message.toLowerCase()).not.toContain("authorization");
+  });
 });
+
+function readCommands(fetchMock: ReturnType<typeof vi.spyOn>): Array<{
+  type: string;
+  uuid: string;
+  temp_id?: string;
+  args: Record<string, unknown>;
+}> {
+  return fetchMock.mock.calls.flatMap((call: [unknown, RequestInit?]) => {
+    const body = new URLSearchParams(String(call[1]?.body));
+    return JSON.parse(body.get("commands") ?? "[]") as Array<{
+      type: string;
+      uuid: string;
+      temp_id?: string;
+      args: Record<string, unknown>;
+    }>;
+  });
+}
