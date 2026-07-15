@@ -17,7 +17,8 @@ import {
   TodoistChecklistService,
   type TodoistChecklistServiceOptions,
   type ChecklistMutationRequest,
-  type ChecklistMutationResult
+  type ChecklistMutationResult,
+  type ChecklistActionMetadata
 } from "./todoistChecklistService.js";
 
 export interface TaskActionServiceOptions {
@@ -121,6 +122,20 @@ export class TaskActionService {
     }
   }
 
+  private checklistActionForRootEdit(metadata: RootActionMetadata | undefined): ChecklistActionMetadata {
+    if (metadata === undefined || metadata.expectedOccurrenceKey === undefined || metadata.expectedOccurrenceKey === null) {
+      throw Object.assign(new Error("Checklist mutations require durable action metadata"), {
+        code: "checklist_action_metadata_required",
+        statusCode: 503
+      });
+    }
+    return {
+      actionId: actionStableUuid(metadata.actionId, "checklist_mutations"),
+      deviceId: metadata.deviceId,
+      expectedOccurrenceKey: metadata.expectedOccurrenceKey
+    };
+  }
+
   private async executeRootAction<T>(
     config: {
       rootTaskId: string;
@@ -174,10 +189,22 @@ export class TaskActionService {
     deviceId?: string;
     expectedOccurrenceKey?: string | null;
     expectedTaskRevision?: string;
-  }): RootActionMetadata | undefined {
+  }, requirements: { occurrence?: boolean; revision?: boolean } = {}): RootActionMetadata | undefined {
     if (input.actionId === undefined && input.deviceId === undefined) return undefined;
     if (input.actionId === undefined || input.deviceId === undefined) {
       throw Object.assign(new Error("Root action metadata must include actionId and deviceId"), {
+        code: "task_action_metadata_invalid",
+        statusCode: 422
+      });
+    }
+    if (requirements.occurrence === true && input.expectedOccurrenceKey === undefined) {
+      throw Object.assign(new Error("Root action metadata must include expectedOccurrenceKey"), {
+        code: "task_action_metadata_invalid",
+        statusCode: 422
+      });
+    }
+    if (requirements.revision === true && input.expectedTaskRevision === undefined) {
+      throw Object.assign(new Error("Root action metadata must include expectedTaskRevision"), {
         code: "task_action_metadata_invalid",
         statusCode: 422
       });
@@ -252,11 +279,19 @@ export class TaskActionService {
     const recurrencePreset = input.recurrencePreset ?? "never";
     const timeZone = input.timeZone ?? "UTC";
     const checklist = input.checklist ?? [];
+    if (!isRecurrencePreset(recurrencePreset)) {
+      errors.push("recurrence_preset_invalid");
+    }
     if (!isIanaTimeZone(timeZone)) {
       errors.push("time_zone_invalid");
     }
     if (checklist.length > 30) {
       errors.push("too_many_children");
+    }
+    for (const child of checklist) {
+      if (child.title.trim().length === 0) {
+        errors.push("child_title_required");
+      }
     }
     if (errors.length > 0) {
       throw Object.assign(new Error("Task validation failed"), {
@@ -342,18 +377,22 @@ export class TaskActionService {
         projectId: input.projectId,
         parentTodoistTaskId: createdTodoistTaskId
       }), { tempId: childTempId });
-      if (childCreated.todoistTaskId !== null) {
-        this.tasks.createChecklistChild({
-          id: randomUUID(),
-          todoistTaskId: childCreated.todoistTaskId,
-          parentTodoistTaskId: createdTodoistTaskId,
-          projectId: input.projectId,
-          title: childTitle,
-          description: normalizeOptionalText(child.description ?? null),
-          childOrder,
-          updatedAt: input.now
+      if (childCreated.todoistTaskId === null) {
+        throw Object.assign(new Error("Todoist did not return a checklist item ID"), {
+          code: "todoist_child_create_unconfirmed",
+          statusCode: 502
         });
       }
+      this.tasks.createChecklistChild({
+        id: randomUUID(),
+        todoistTaskId: childCreated.todoistTaskId,
+        parentTodoistTaskId: createdTodoistTaskId,
+        projectId: input.projectId,
+        title: childTitle,
+        description: normalizeOptionalText(child.description ?? null),
+        childOrder,
+        updatedAt: input.now
+      });
       }
       return { id, todoistTaskId: createdTodoistTaskId };
     });
@@ -373,21 +412,20 @@ export class TaskActionService {
   async done(taskId: string, now: string, action?: RootActionMetadata): Promise<void> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
-    let recurringCommandIssued = false;
+    const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
     await this.executeRootAction({
       rootTaskId: taskId,
       actionType: "done",
       payload: { todoistTaskId: task.todoistTaskId, recurring: task.isRecurring },
-      metadata: action,
+      metadata,
       isEffectPresent: () => task.isRecurring
-        ? recurringCommandIssued
+        ? this.hasAdvancedRecurringOccurrence(taskId, task)
         : this.tasks.getById(taskId)?.state === "completed",
       responseAfterReconciliation: () => true
     }, async (context) => {
       const current = this.requireCompletableTask(taskId);
       if (current.isRecurring) {
         await context.executeCommand("item_update_date_complete", (commandUuid) => this.todoist.itemUpdateDateComplete({ commandUuid, task: current }));
-        recurringCommandIssued = true;
         return true;
       }
       await context.executeCommand("item_close", (commandUuid) => this.todoist.itemClose({ commandUuid, todoistTaskId: current.todoistTaskId }));
@@ -466,18 +504,18 @@ export class TaskActionService {
         due: { kind: "preserve" },
         assignment: { kind: "preserve" }
       }));
-      const tx = this.db.transaction(() => {
-        this.tasks.updateTaskSchedule(taskId, task.dueDatetime, newDuration, now, description);
-        this.tasks.updateCommitmentState(taskId, {
-          state: "started",
-          deadlineExtensionDelta: 1,
-          incrementScheduleVersion: true,
-          updatedAt: now
-        });
-      });
-      tx();
       return true;
     });
+    const tx = this.db.transaction(() => {
+      this.tasks.updateTaskSchedule(taskId, task.dueDatetime, newDuration, now, description);
+      this.tasks.updateCommitmentState(taskId, {
+        state: "started",
+        deadlineExtensionDelta: 1,
+        incrementScheduleVersion: true,
+        updatedAt: now
+      });
+    });
+    tx();
   }
 
   async reschedule(taskId: string, input: RescheduleTaskInput): Promise<void> {
@@ -495,7 +533,7 @@ export class TaskActionService {
       rootTaskId: taskId,
       actionType: "reschedule",
       payload: { dueDatetime: input.dueDatetime, durationMinutes: input.durationMinutes },
-      metadata: this.rootMetadata(input),
+      metadata: this.rootMetadata(input, { occurrence: true }),
       isEffectPresent: () => this.tasks.getById(taskId)?.dueDatetime === input.dueDatetime,
       responseAfterReconciliation: () => true
     }, async (context) => {
@@ -526,9 +564,16 @@ export class TaskActionService {
     });
   }
 
-  async update(taskId: string, input: UpdateTaskInput): Promise<void> {
+  async update(taskId: string, input: UpdateTaskInput): Promise<void | ChecklistMutationResult> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
+    const metadata = this.rootMetadata(input, { occurrence: true, revision: true });
+    const checklistAction = input.checklistMutations === undefined
+      ? undefined
+      : this.checklistActionForRootEdit(metadata);
+    if (checklistAction !== undefined) {
+      this.assertChecklistDependencies({ action: checklistAction, mutations: input.checklistMutations ?? [] });
+    }
     const project = this.projects.getActiveByTodoistProjectId(input.projectId);
     if (project === null) {
       throw Object.assign(new Error("Project not found"), {
@@ -564,6 +609,10 @@ export class TaskActionService {
     }
 
     const due = recurrenceForUpdate(task, input);
+    const projectMoveRequiresAuthoritativeTree = metadata !== undefined && task.projectId !== input.projectId;
+    const expectedDirectChildTodoistIds = projectMoveRequiresAuthoritativeTree
+      ? this.directChildTodoistIds(task)
+      : [];
     const scheduleChanged = task.dueDatetime !== input.dueDatetime
       || task.durationMinutes !== input.durationMinutes
       || task.isRecurring !== (due.kind === "replace" && due.string !== null)
@@ -574,16 +623,25 @@ export class TaskActionService {
     await this.executeRootAction({
       rootTaskId: taskId,
       actionType: "edit_task",
-      payload: { title: normalizedTitle, projectId: input.projectId, assigneeId: input.assigneeId, due, durationMinutes: input.durationMinutes },
-      metadata: this.rootMetadata(input),
+      payload: {
+        title: normalizedTitle,
+        projectId: input.projectId,
+        assigneeId: input.assigneeId,
+        due,
+        durationMinutes: input.durationMinutes,
+        checklistMutations: input.checklistMutations ?? []
+      },
+      metadata,
       isEffectPresent: () => {
         const current = this.tasks.getById(taskId);
-        return current?.title === normalizedTitle
+        const rootMatches = current?.title === normalizedTitle
           && current.description === normalizedDescription
           && current.projectId === input.projectId
           && current.assigneeId === (project.canAssignTasks ? input.assigneeId : null)
           && current.dueDatetime === input.dueDatetime
           && current.durationMinutes === input.durationMinutes;
+        return rootMatches && (!projectMoveRequiresAuthoritativeTree
+          || this.hasVerifiedProjectMove(taskId, input.projectId, expectedDirectChildTodoistIds));
       },
       responseAfterReconciliation: () => true
     }, async (context) => {
@@ -605,36 +663,44 @@ export class TaskActionService {
           ? { kind: "assign", assigneeId: input.assigneeId }
           : { kind: "unassign" }
       }));
-      const tx = this.db.transaction(() => {
-      this.tasks.updateTaskFields(taskId, {
-        title: normalizedTitle,
-        description: normalizedDescription,
-        projectId: input.projectId,
-        assigneeId: project.canAssignTasks ? input.assigneeId : null,
-        dueDatetime: input.dueDatetime,
-        durationMinutes: input.durationMinutes,
-        updatedAt: input.now,
-        commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
-      });
-      if (!isOwned && wasOwned) {
-        this.tasks.leaveOccurrenceOwnership(taskId, input.now);
-      } else if (isOwned && (!wasOwned || scheduleChanged)) {
-        this.tasks.rotateOccurrence(taskId, {
-          occurrenceKey: randomUUID(),
-          occurrenceDueDatetime: input.dueDatetime,
-          occurrenceRecurrenceFingerprint: recurrenceFingerprint({
-            isRecurring: due.kind === "replace" && due.string !== null,
-            dueString: due.kind === "replace" ? due.string : task.dueString,
-            dueLang: due.kind === "replace" ? due.lang : task.dueLang,
-            dueTimezone: due.kind === "replace" ? due.timezone : task.dueTimezone
-          }),
-          updatedAt: input.now
+      if (!projectMoveRequiresAuthoritativeTree) {
+        const tx = this.db.transaction(() => {
+          this.tasks.updateTaskFields(taskId, {
+            title: normalizedTitle,
+            description: normalizedDescription,
+            projectId: input.projectId,
+            assigneeId: project.canAssignTasks ? input.assigneeId : null,
+            dueDatetime: input.dueDatetime,
+            durationMinutes: input.durationMinutes,
+            updatedAt: input.now,
+            commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
+          });
+          if (!isOwned && wasOwned) {
+            this.tasks.leaveOccurrenceOwnership(taskId, input.now);
+          } else if (isOwned && (!wasOwned || scheduleChanged)) {
+            this.tasks.rotateOccurrence(taskId, {
+              occurrenceKey: randomUUID(),
+              occurrenceDueDatetime: input.dueDatetime,
+              occurrenceRecurrenceFingerprint: recurrenceFingerprint({
+                isRecurring: due.kind === "replace" && due.string !== null,
+                dueString: due.kind === "replace" ? due.string : task.dueString,
+                dueLang: due.kind === "replace" ? due.lang : task.dueLang,
+                dueTimezone: due.kind === "replace" ? due.timezone : task.dueTimezone
+              }),
+              updatedAt: input.now
+            });
+          }
         });
+        tx();
       }
-      });
-      tx();
       return true;
     });
+    if (checklistAction !== undefined) {
+      return this.mutateChecklist(taskId, {
+        action: checklistAction,
+        mutations: input.checklistMutations ?? []
+      });
+    }
   }
 
   private requireSchedulableTask(taskId: string): TaskWithCommitment & { dueDatetime: string; durationMinutes: number } {
@@ -702,6 +768,49 @@ export class TaskActionService {
       && child.title === draft.title.trim()
       && child.description === normalizeOptionalText(draft.description ?? null)
     ));
+  }
+
+  private hasAdvancedRecurringOccurrence(taskId: string, previous: TaskWithCommitment): boolean {
+    const current = this.tasks.getById(taskId);
+    return current !== null
+      && current.isRecurring
+      && current.occurrenceKey !== null
+      && current.occurrenceKey !== previous.occurrenceKey
+      && current.occurrenceDueDatetime !== previous.occurrenceDueDatetime;
+  }
+
+  private directChildTodoistIds(root: TaskWithCommitment): string[] {
+    return this.tasks.listAll()
+      .filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null)
+      .map((child) => child.todoistTaskId);
+  }
+
+  private hasVerifiedProjectMove(
+    taskId: string,
+    targetProjectId: string,
+    expectedDirectChildTodoistIds: readonly string[]
+  ): boolean {
+    const root = this.tasks.getById(taskId);
+    if (root?.projectId !== targetProjectId) return false;
+    const all = this.tasks.listAll();
+    const children = all.filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null);
+    const hasGrandchild = all.some((candidate) => children.some((child) => child.todoistTaskId === candidate.parentId));
+    return !hasGrandchild
+      && children.length === expectedDirectChildTodoistIds.length
+      && expectedDirectChildTodoistIds.every((todoistTaskId) => children.some((child) => child.todoistTaskId === todoistTaskId))
+      && children.every((child) =>
+        child.projectId === targetProjectId
+        && child.dueDate === null
+        && child.dueDatetime === null
+        && child.dueString === null
+        && child.dueLang === null
+        && child.dueTimezone === null
+        && !child.isRecurring
+        && child.durationAmount === null
+        && child.durationUnit === null
+        && child.durationMinutes === null
+        && child.assigneeId === null
+      );
   }
 }
 
@@ -774,6 +883,15 @@ function isIanaTimeZone(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isRecurrencePreset(value: unknown): value is RecurrencePreset {
+  return value === "never"
+    || value === "daily"
+    || value === "weekdays"
+    || value === "weekly"
+    || value === "monthly"
+    || value === "yearly";
 }
 
 function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) {

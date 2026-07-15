@@ -63,7 +63,258 @@ class FailingSender implements AccountabilitySender {
   }
 }
 
+function actionAwareService(
+  db: Database.Database,
+  repo: TaskRepository,
+  projects: ProjectRepository,
+  adapter: FakeTodoistAdapter,
+  synchronize: () => Promise<void> = async () => undefined
+): TaskActionService {
+  const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+  return new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+    rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) },
+    checklist: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+  });
+}
+
 describe("TaskActionService", () => {
+  it("preflights recurrence and every checklist draft before creating a root command", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Root", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30,
+      recurrencePreset: "not-a-preset" as never,
+      timeZone: "Europe/Bratislava", checklist: [{ title: "   " }],
+      creatorId: "user-self", now: "2026-07-15T09:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      details: { errors: expect.arrayContaining(["recurrence_preset_invalid", "child_title_required"]) }
+    });
+    expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it("rejects an unconfirmed Todoist checklist child instead of silently dropping it", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    class MissingChildIdAdapter extends FakeTodoistAdapter {
+      override async itemAdd(input: Parameters<FakeTodoistAdapter["itemAdd"]>[0]) {
+        const created = await super.itemAdd(input);
+        return input.kind === "child" ? { todoistTaskId: null } : created;
+      }
+    }
+    const adapter = new MissingChildIdAdapter();
+    const service = new TaskActionService(db, repo, projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Root", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30, recurrencePreset: "never",
+      timeZone: "Europe/Bratislava", checklist: [{ title: "Child" }], creatorId: "user-self", now: "2026-07-15T09:00:00Z"
+    })).rejects.toMatchObject({ code: "todoist_child_create_unconfirmed", statusCode: 502 });
+
+    expect(adapter.itemAdds.map((input) => input.kind)).toEqual(["root", "child"]);
+  });
+
+  it("does not mutate local extension state when coordinated confirmation is pending", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    let syncCalls = 0;
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => {
+      syncCalls += 1;
+      if (syncCalls === 2) throw new Error("sync unavailable");
+    });
+
+    await expect(service.extend("task-1", "2026-07-15T10:00:00Z", {
+      actionId: "extend-pending", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(repo.getById("task-1")).toMatchObject({ durationMinutes: 30, deadlineExtensionCount: 0, state: "planned" });
+  });
+
+  it("keeps recurring Done pending until synchronization exposes the next occurrence", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Send invoice", description: null, projectId: null,
+      assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-05-08T16:00:00Z",
+      dueString: "every day at 16:00", dueLang: "en", dueTimezone: "Europe/Bratislava", isRecurring: true,
+      durationMinutes: 30, completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "daily", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter());
+
+    await expect(service.done("task-1", "2026-07-15T10:00:00Z", {
+      actionId: "recurring-done", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+    expect(repo.getById("task-1")).toMatchObject({ occurrenceKey: "occurrence-1", state: "planned" });
+  });
+
+  it("completes a recurring Done only after authoritative synchronization rotates the occurrence", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Send invoice", description: null, projectId: null,
+      assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-05-08T16:00:00Z",
+      dueString: "every day at 16:00", dueLang: "en", dueTimezone: "Europe/Bratislava", isRecurring: true,
+      durationMinutes: 30, completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "daily", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    let syncCalls = 0;
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => {
+      syncCalls += 1;
+      if (syncCalls !== 2) return;
+      repo.upsertTodoistTask({
+        id: "task-1", todoistTaskId: "todoist-1", title: "Send invoice", description: null, projectId: null,
+        assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-05-09T16:00:00Z",
+        dueString: "every day at 16:00", dueLang: "en", dueTimezone: "Europe/Bratislava", isRecurring: true,
+        durationMinutes: 30, completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+      });
+      repo.rotateOccurrence("task-1", {
+        occurrenceKey: "occurrence-2", occurrenceDueDatetime: "2026-05-09T16:00:00Z",
+        occurrenceRecurrenceFingerprint: "daily", updatedAt: "2026-07-15T10:00:00Z"
+      });
+    });
+
+    await expect(service.done("task-1", "2026-07-15T10:00:00Z", {
+      actionId: "recurring-done-confirmed", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    })).resolves.toBeUndefined();
+    expect(repo.getById("task-1")).toMatchObject({ occurrenceKey: "occurrence-2", occurrenceDueDatetime: "2026-05-09T16:00:00Z" });
+  });
+
+  it("requires revision and occurrence metadata for action-aware edits and occurrence metadata for Done and reschedule", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
+
+    await expect(service.update("task-1", {
+      title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
+      actionId: "edit-missing", deviceId: "phone-a"
+    })).rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
+    await expect(service.done("task-1", "2026-07-15T10:00:00Z", { actionId: "done-missing", deviceId: "phone-a" }))
+      .rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
+    await expect(service.reschedule("task-1", {
+      dueDatetime: "2026-05-08T17:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
+      actionId: "reschedule-missing", deviceId: "phone-a"
+    })).rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
+  });
+
+  it("composes supplied checklist mutations into the durable root edit workflow", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: "user-self"
+    });
+    repo.createChecklistChild({
+      id: "child-local", todoistTaskId: "child-one", parentTodoistTaskId: "todoist-1", projectId: "project-personal",
+      title: "First step", description: null, childOrder: 0, updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    const result = await service.update("task-1", {
+      title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
+      actionId: "edit-with-checklist", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+      checklistMutations: [{ type: "check", clientMutationId: "check-child", childId: "child-one", expectedChildRevision: "r:1" }]
+    });
+
+    expect(result).toMatchObject({
+      outcome: "completed",
+      childOutcomes: [{ clientMutationId: "check-child", childId: "child-one", outcome: "completed", errorCode: null }]
+    });
+    expect(adapter.itemCloses).toHaveLength(1);
+  });
+
+  it("keeps a coordinated project move pending until the direct child tree is authoritative", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: null, projectId: "project-old", assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: null
+    });
+    repo.createChecklistChild({
+      id: "child-local", todoistTaskId: "child-one", parentTodoistTaskId: "todoist-1", projectId: "project-old",
+      title: "First step", description: null, childOrder: 0, updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    for (const todoistProjectId of ["project-old", "project-new"]) {
+      projects.upsertProject({
+        todoistProjectId, name: todoistProjectId, shared: true, canAssignTasks: true,
+        isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+      });
+    }
+    const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
+
+    await expect(service.update("task-1", {
+      title: "Send invoice", description: null, projectId: "project-new", assigneeId: "user-self",
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
+      actionId: "move-needs-tree-sync", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+  });
+
   it.each([
     ["add", { type: "add", clientMutationId: "add", title: "Add", description: null }],
     ["edit", { type: "edit", clientMutationId: "edit", childId: "child-1", expectedChildRevision: "r:1", title: "Edit", description: null }],
@@ -671,7 +922,15 @@ describe("TaskActionService", () => {
       }
     }
     const adapter = new InterruptingAdapter();
-    const synchronize = vi.fn(async () => undefined);
+    let syncCalls = 0;
+    const synchronize = vi.fn(async () => {
+      syncCalls += 1;
+      if (syncCalls !== 3) return;
+      repo.updateTaskFields("task-1", {
+        title: "Renamed invoice", description: "", projectId: "project-new", assigneeId: "user-self",
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T10:00:00Z", commitmentOwnerId: null
+      });
+    });
     const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
     const service = new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
       rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
@@ -679,7 +938,8 @@ describe("TaskActionService", () => {
     const input = {
       title: "Renamed invoice", description: "", projectId: "project-new", assigneeId: "user-self",
       dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "move-edit", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+      actionId: "move-edit", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
     };
 
     await expect(service.update("task-1", input)).rejects.toThrow("interrupted after move");

@@ -175,3 +175,61 @@ Assumptions and remaining concerns:
 
 Next recommended step:
 - Begin Task 9's authenticated route/schema migration, including the five legacy FakeTodoistAdapter assertion updates, from this committed checkpoint.
+
+## Task 8 Spec-Review Corrections
+
+Plan/task attempted:
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`, Task 8 review corrections only. No Task 9 routes, schemas, or fake-adapter compatibility work was started.
+
+Changes made:
+- `TaskActionService.update` now includes supplied checklist mutations in its durable root-action payload and executes them through the existing `TodoistChecklistService` using a deterministic derived action ID, the same root coordinator/mutex, and the existing partial child-outcome result shape.
+- Action-aware edit now requires both expected occurrence and task revision; action-aware Done and reschedule require expected occurrence. Missing metadata rejects before any command.
+- Recurring Done only confirms after a post-command synchronization exposes a rotated occurrence key and changed occurrence due datetime. It no longer treats command issuance as confirmation.
+- Extend performs its local duration, lifecycle, and extension-count transaction only after coordinator completion; a reconciliation-pending response leaves local state unchanged.
+- An action-aware project move defers local root writes and requires post-sync confirmation of the root plus the exact pre-move direct-child set, including parent linkage, target project, and schedule-free/assignment-free child invariants. Missing evidence remains reconciliation-pending.
+- Create validates recurrence presets and every child title before action reservation or root `item_add`; a missing Todoist child ID is a 502 `todoist_child_create_unconfirmed`, never a silent omission.
+
+Files changed:
+- `backend/src/services/taskActionService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+TDD evidence:
+- RED: `npm test -- test/services/taskActionService.test.ts`
+  - Result: FAIL (4 focused regressions)
+  - Evidence: create sent a root before draft validation; coordinated Extend mutated local state before pending; recurring Done accepted an in-memory command-issued flag; action-aware edit accepted omitted revision/occurrence metadata.
+- GREEN: `npm test -- test/services/taskActionService.test.ts`
+  - Result: PASS except one existing action-aware edit fixture missing its newly required revision token; fixture was migrated to the stricter contract.
+- RED: `npm test -- test/services/taskActionService.test.ts`
+  - Result: FAIL (2 focused regressions)
+  - Evidence: supplied `checklistMutations` returned `undefined` without dispatching a child action; project move journal completed despite a direct child still reflecting the old project.
+- GREEN: `npm test -- test/services/taskActionService.test.ts`
+  - Result: PASS
+  - Evidence: 35 tests passed, including next-occurrence confirmation, unconfirmed child creation, composed checklist mutation outcomes, project-tree confirmation, and deferred Extend state.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 3 files, 73 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (known Task 9 boundary only)
+  - Evidence: 287/292 tests passed. The same five `backend/test/http/routes.test.ts` legacy fake-array assertions failed: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, and `updates full task edit payload through update route`.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Manual verification:
+- Inspected the action-aware move replay fixture: its simulated authoritative sync now updates the mirror only after the unfinished `item_update`, proving that the journal no longer completes from the service's optimistic local mutation.
+
+Assumptions and remaining work:
+- Task 9 owns the five route-test migrations and route parsing for action metadata; these corrections deliberately do not alter that boundary.
+- Production synchronization remains responsible for applying Todoist's next recurring occurrence and moved child tree to the mirror. The service only confirms after that mirror evidence is present.
+
+Next recommended step:
+- Commit this Task 8 review-correction checkpoint, then resume Task 9 route/schema migration from the known five-test boundary.
