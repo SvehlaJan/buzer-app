@@ -135,6 +135,128 @@ describe("TaskRepository", () => {
       mirrorRevision: 2
     });
   });
+
+  it("advances mirror revision for changed direct schedule writes but not identical replays", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(taskUpsert({
+      id: "schedule-local",
+      todoistTaskId: "schedule-todoist",
+      description: "Original details",
+      dueDatetime: "2026-07-16T09:00:00Z",
+      durationMinutes: 30
+    }));
+
+    repo.updateTaskSchedule(
+      "schedule-local",
+      "2026-07-16T09:00:00Z",
+      30,
+      "2026-07-15T10:00:00Z",
+      "Changed details"
+    );
+    expect(repo.getById("schedule-local")).toMatchObject({
+      description: "Changed details",
+      mirrorRevision: 2
+    });
+
+    repo.updateTaskSchedule(
+      "schedule-local",
+      "2026-07-16T09:00:00Z",
+      30,
+      "2026-07-15T10:01:00Z",
+      "Changed details"
+    );
+    expect(repo.getById("schedule-local")?.mirrorRevision).toBe(2);
+
+    repo.updateTaskSchedule(
+      "schedule-local",
+      "2026-07-16T09:30:00Z",
+      45,
+      "2026-07-15T10:02:00Z"
+    );
+    expect(repo.getById("schedule-local")).toMatchObject({
+      description: "Changed details",
+      dueDatetime: "2026-07-16T09:30:00Z",
+      durationMinutes: 45,
+      mirrorRevision: 3
+    });
+  });
+
+  it("advances mirror revision for changed direct field writes but not commitment-only changes", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(taskUpsert({
+      id: "fields-local",
+      todoistTaskId: "fields-todoist",
+      title: "Original title",
+      description: null,
+      projectId: "project-1",
+      assigneeId: null,
+      dueDatetime: "2026-07-16T09:00:00Z",
+      durationMinutes: 30,
+      commitmentOwnerId: "owner-1"
+    }));
+    const changedFields = {
+      title: "Changed title",
+      description: "Changed details",
+      projectId: "project-2",
+      assigneeId: "owner-2",
+      dueDatetime: "2026-07-16T10:00:00Z",
+      durationMinutes: 45,
+      updatedAt: "2026-07-15T10:10:00Z",
+      commitmentOwnerId: "owner-2"
+    };
+
+    repo.updateTaskFields("fields-local", changedFields);
+    expect(repo.getById("fields-local")).toMatchObject({
+      ...changedFields,
+      mirrorRevision: 2
+    });
+
+    repo.updateTaskFields("fields-local", {
+      ...changedFields,
+      updatedAt: "2026-07-15T10:11:00Z"
+    });
+    expect(repo.getById("fields-local")?.mirrorRevision).toBe(2);
+
+    repo.updateTaskFields("fields-local", {
+      ...changedFields,
+      updatedAt: "2026-07-15T10:12:00Z",
+      commitmentOwnerId: "owner-3"
+    });
+    expect(repo.getById("fields-local")).toMatchObject({
+      commitmentOwnerId: "owner-3",
+      mirrorRevision: 2
+    });
+  });
+
+  it("advances mirror revision for changed direct completion writes but not identical replays", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(taskUpsert({
+      id: "completion-local",
+      todoistTaskId: "completion-todoist",
+      completedAt: null
+    }));
+
+    repo.markCompleted("completion-local", "2026-07-15T10:20:00Z");
+    expect(repo.getById("completion-local")).toMatchObject({
+      completedAt: "2026-07-15T10:20:00Z",
+      mirrorRevision: 2
+    });
+
+    repo.markCompleted("completion-local", "2026-07-15T10:20:00Z");
+    expect(repo.getById("completion-local")?.mirrorRevision).toBe(2);
+
+    repo.markCompleted("completion-local", "2026-07-15T10:21:00Z");
+    expect(repo.getById("completion-local")).toMatchObject({
+      completedAt: "2026-07-15T10:21:00Z",
+      mirrorRevision: 3
+    });
+  });
 });
 
 describe("DeviceRepository", () => {

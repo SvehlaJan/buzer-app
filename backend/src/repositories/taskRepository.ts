@@ -281,11 +281,17 @@ export class TaskRepository {
       "duration_minutes = @durationMinutes",
       "updated_at = @updatedAt"
     ];
+    const revisionChanges = [
+      "due_datetime is not @dueDatetime",
+      "duration_minutes is not @durationMinutes"
+    ];
     const params: Record<string, string | number | null> = { id, dueDatetime, durationMinutes, updatedAt };
     if (description !== undefined) {
       sets.push("description = @description");
+      revisionChanges.push("description is not @description");
       params.description = description;
     }
+    sets.push(`mirror_revision = mirror_revision + case when ${revisionChanges.join(" or ")} then 1 else 0 end`);
     this.db.prepare(`
       update todoist_tasks
       set ${sets.join(", ")}
@@ -315,6 +321,16 @@ export class TaskRepository {
         assignee_id = @assigneeId,
         due_datetime = @dueDatetime,
         duration_minutes = @durationMinutes,
+        mirror_revision = mirror_revision + case
+          when title is not @title
+            or description is not @description
+            or project_id is not @projectId
+            or assignee_id is not @assigneeId
+            or due_datetime is not @dueDatetime
+            or duration_minutes is not @durationMinutes
+          then 1
+          else 0
+        end,
         updated_at = @updatedAt
       where id = @id
     `).run({ id, ...values });
@@ -328,9 +344,12 @@ export class TaskRepository {
   markCompleted(id: string, completedAt: string): void {
     this.db.prepare(`
       update todoist_tasks
-      set completed_at = ?, updated_at = ?
-      where id = ?
-    `).run(completedAt, completedAt, id);
+      set
+        completed_at = @completedAt,
+        mirror_revision = mirror_revision + case when completed_at is not @completedAt then 1 else 0 end,
+        updated_at = @completedAt
+      where id = @id
+    `).run({ id, completedAt });
   }
 }
 

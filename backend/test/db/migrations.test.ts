@@ -84,6 +84,131 @@ describe("migrate", () => {
     `).run()).toThrow(/UNIQUE constraint failed/);
   });
 
+  it("declares fresh action journal IDs non-null", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+
+    const actionIdColumn = (db.prepare("pragma table_info(task_action_journal)").all() as Array<{
+      name: string;
+      notnull: number;
+    }>).find((column) => column.name === "action_id");
+    expect(actionIdColumn?.notnull).toBe(1);
+    expect(() => insertNullActionId(db)).toThrow(/(?:NOT NULL constraint failed|action_id must not be null)/);
+  });
+
+  it("guards action journal IDs in databases that already recorded migration v2", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      create table schema_migrations (version integer primary key, applied_at text not null);
+      insert into schema_migrations (version, applied_at) values
+        (1, '2026-07-15T10:00:00Z'),
+        (2, '2026-07-15T10:01:00Z');
+      create table task_action_journal (
+        action_id text primary key,
+        device_id text not null,
+        root_task_id text,
+        expected_occurrence_key text,
+        action_type text not null,
+        request_fingerprint text not null,
+        status text not null check (status in ('processing', 'completed', 'failed', 'reconciliation_pending')),
+        response_json text,
+        error_json text,
+        created_at text not null,
+        updated_at text not null
+      );
+    `);
+
+    migrate(db);
+
+    expect(() => insertNullActionId(db)).toThrow(/task_action_journal.action_id must not be null/);
+  });
+
+  it("fills missing occurrence anchors independently in an already-v2 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      insert into todoist_tasks (
+        id,
+        todoist_task_id,
+        title,
+        due_datetime,
+        is_recurring,
+        raw_json,
+        updated_at
+      ) values
+        (
+          'partial-fingerprint-task',
+          'todoist-partial-fingerprint',
+          'Partial fingerprint',
+          '2026-07-16T12:00:00Z',
+          1,
+          '{"due":{"string":"Every Day at 12:00","lang":"EN","timezone":"Europe/Bratislava","is_recurring":true}}',
+          '2026-07-15T11:00:00Z'
+        ),
+        (
+          'partial-due-task',
+          'todoist-partial-due',
+          'Partial due',
+          '2026-07-17T13:00:00Z',
+          0,
+          '{}',
+          '2026-07-15T11:00:00Z'
+        );
+      insert into commitment_states (
+        task_id,
+        state,
+        occurrence_key,
+        occurrence_due_datetime,
+        occurrence_recurrence_fingerprint,
+        updated_at
+      ) values
+        (
+          'partial-fingerprint-task',
+          'started',
+          'preserved-key-fingerprint',
+          'preserved-due-anchor',
+          null,
+          '2026-07-15T11:00:00Z'
+        ),
+        (
+          'partial-due-task',
+          'planned',
+          'preserved-key-due',
+          null,
+          'preserved-fingerprint',
+          '2026-07-15T11:00:00Z'
+        );
+    `);
+
+    migrate(db);
+
+    expect(db.prepare(`
+      select
+        occurrence_key as occurrenceKey,
+        occurrence_due_datetime as occurrenceDueDatetime,
+        occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint
+      from commitment_states
+      where task_id = 'partial-fingerprint-task'
+    `).get()).toEqual({
+      occurrenceKey: "preserved-key-fingerprint",
+      occurrenceDueDatetime: "preserved-due-anchor",
+      occurrenceRecurrenceFingerprint:
+        '{"isRecurring":true,"dueString":"every day at 12:00","dueLang":"en","dueTimezone":"Europe/Bratislava"}'
+    });
+    expect(db.prepare(`
+      select
+        occurrence_key as occurrenceKey,
+        occurrence_due_datetime as occurrenceDueDatetime,
+        occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint
+      from commitment_states
+      where task_id = 'partial-due-task'
+    `).get()).toEqual({
+      occurrenceKey: "preserved-key-due",
+      occurrenceDueDatetime: "2026-07-17T13:00:00Z",
+      occurrenceRecurrenceFingerprint: "preserved-fingerprint"
+    });
+  });
+
   it("migrates legacy commitments to typed mirrors, occurrences, and durable journals", () => {
     const db = new Database(":memory:");
     db.pragma("foreign_keys = ON");
@@ -321,4 +446,18 @@ describe("migrate", () => {
 
 function tableColumns(db: Database.Database, table: string): string[] {
   return (db.prepare(`pragma table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name);
+}
+
+function insertNullActionId(db: Database.Database): void {
+  db.prepare(`
+    insert into task_action_journal (
+      action_id,
+      device_id,
+      action_type,
+      request_fingerprint,
+      status,
+      created_at,
+      updated_at
+    ) values (null, 'device-1', 'test', 'fingerprint', 'processing', '2026-07-15T11:00:00Z', '2026-07-15T11:00:00Z')
+  `).run();
 }

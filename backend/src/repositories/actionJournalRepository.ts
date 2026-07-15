@@ -182,6 +182,35 @@ export class ActionJournalRepository {
     tx();
   }
 
+  markCommandFailed(actionId: string, stepKey: string, error: unknown, updatedAt: string): void {
+    const errorJson = serializeJson(error);
+    const tx = this.db.transaction(() => {
+      const current = this.getCommandRow(actionId, stepKey);
+      if (current === undefined) {
+        throw new Error("action_command_not_found");
+      }
+      if (current.status === "failed") {
+        if (current.resultJson === errorJson) {
+          return;
+        }
+        throw new Error("action_command_transition_invalid");
+      }
+      if (current.status !== "sent") {
+        throw new Error("action_command_transition_invalid");
+      }
+
+      const update = this.db.prepare(`
+        update task_action_commands
+        set status = 'failed', result_json = ?, updated_at = ?
+        where action_id = ? and step_key = ? and status = 'sent'
+      `).run(errorJson, updatedAt, actionId, stepKey);
+      if (update.changes !== 1) {
+        throw new Error("action_command_transition_conflict");
+      }
+    });
+    tx();
+  }
+
   markCompleted(actionId: string, response: unknown, updatedAt: string): void {
     this.transitionAction(
       actionId,

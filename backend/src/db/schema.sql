@@ -86,7 +86,7 @@ create table if not exists whatsapp_escalations (
 );
 
 create table if not exists task_action_journal (
-  action_id text primary key,
+  action_id text not null primary key,
   device_id text not null,
   root_task_id text,
   expected_occurrence_key text,
