@@ -1,9 +1,10 @@
 import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
+import { ActionJournalRepository } from "../../src/repositories/actionJournalRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { TodoistChecklistService, type ChildMutation } from "../../src/services/todoistChecklistService.js";
-import { TaskActionCoordinator } from "../../src/services/taskActionCoordinator.js";
+import { actionFingerprint, TaskActionCoordinator } from "../../src/services/taskActionCoordinator.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("TodoistChecklistService", () => {
@@ -95,6 +96,85 @@ describe("TodoistChecklistService", () => {
     ], snapshot: { authoritative: true } });
     expect(adapter.itemCloses).toHaveLength(1);
     expect(db.prepare("select status from task_action_journal where action_id = ?").get("mixed-stale-safe")).toEqual({ status: "completed" });
+  });
+
+  it("replays an interrupted mixed batch without turning a no-command stale draft into success", async () => {
+    const { service, db, repo } = setup({ coordinated: true, children: [child("one"), child("two")] });
+    const safeRevision = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
+    const request = {
+      action: { actionId: "interrupted-mixed", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [
+        { type: "edit" as const, clientMutationId: "stale", childId: "child-one", expectedChildRevision: "r:0", title: "Ignored", description: null },
+        { type: "check" as const, clientMutationId: "safe", childId: "child-two", expectedChildRevision: safeRevision }
+      ]
+    };
+    const journal = new ActionJournalRepository(db);
+    journal.reserve({
+      actionId: request.action.actionId,
+      deviceId: request.action.deviceId,
+      rootTaskId: "root",
+      expectedOccurrenceKey: request.action.expectedOccurrenceKey,
+      actionType: "checklist_mutation",
+      requestFingerprint: actionFingerprint("checklist_mutation", { mutations: request.mutations }),
+      now: "2026-07-15T10:00:00Z"
+    });
+    journal.reserveCommand({
+      actionId: request.action.actionId,
+      stepKey: "child:child-two:check",
+      commandUuid: "safe-command",
+      tempId: null,
+      now: "2026-07-15T10:00:00Z"
+    });
+    journal.markCommandSent(request.action.actionId, "child:child-two:check", "2026-07-15T10:00:00Z");
+    journal.markCommandConfirmed(request.action.actionId, "child:child-two:check", { kind: "void" }, "2026-07-15T10:00:00Z");
+    repo.setChecklistChildChecked("local-child-two", true, "2026-07-15T10:00:00Z");
+
+    const replay = await service.mutate("root", request);
+
+    expect(replay).toMatchObject({ outcome: "partial", childOutcomes: [
+      { clientMutationId: "stale", outcome: "stale_child", errorCode: "stale_child" },
+      { clientMutationId: "safe", outcome: "completed", errorCode: null }
+    ] });
+  });
+
+  it("replays an interrupted mixed batch with the exact no-command local validation failure", async () => {
+    const { service, db, repo } = setup({ coordinated: true, children: [child("one"), child("two")] });
+    const invalidRevision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+    const safeRevision = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
+    const request = {
+      action: { actionId: "interrupted-local-failure", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [
+        { type: "edit" as const, clientMutationId: "invalid", childId: "child-one", expectedChildRevision: invalidRevision, title: " ", description: null },
+        { type: "check" as const, clientMutationId: "safe", childId: "child-two", expectedChildRevision: safeRevision }
+      ]
+    };
+    const journal = new ActionJournalRepository(db);
+    journal.reserve({
+      actionId: request.action.actionId,
+      deviceId: request.action.deviceId,
+      rootTaskId: "root",
+      expectedOccurrenceKey: request.action.expectedOccurrenceKey,
+      actionType: "checklist_mutation",
+      requestFingerprint: actionFingerprint("checklist_mutation", { mutations: request.mutations }),
+      now: "2026-07-15T10:00:00Z"
+    });
+    journal.reserveCommand({
+      actionId: request.action.actionId,
+      stepKey: "child:child-two:check",
+      commandUuid: "safe-command",
+      tempId: null,
+      now: "2026-07-15T10:00:00Z"
+    });
+    journal.markCommandSent(request.action.actionId, "child:child-two:check", "2026-07-15T10:00:00Z");
+    journal.markCommandConfirmed(request.action.actionId, "child:child-two:check", { kind: "void" }, "2026-07-15T10:00:00Z");
+    repo.setChecklistChildChecked("local-child-two", true, "2026-07-15T10:00:00Z");
+
+    const replay = await service.mutate("root", request);
+
+    expect(replay).toMatchObject({ outcome: "partial", childOutcomes: [
+      { clientMutationId: "invalid", outcome: "failed", errorCode: "child_title_required" },
+      { clientMutationId: "safe", outcome: "completed", errorCode: null }
+    ] });
   });
 
   it("rejects a child that is not directly under the requested root", async () => {

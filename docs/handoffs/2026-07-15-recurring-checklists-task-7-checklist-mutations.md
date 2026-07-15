@@ -139,3 +139,61 @@ Verification:
 - Assumption: nullable `description` remains the precise optional-description representation for `add` and `edit` variants; no additional fields are accepted.
 - Known skips: no live Todoist, WhatsApp, Android, VPS, or HTTP-route mutation was performed; focused routes remain Task 9 scope.
 - Next recommended step: continue with Task 8 only; use `TaskActionServiceOptions.checklist` when composing a future focused-action route so its coordinator and sync/snapshot providers are the production instances.
+
+## Critical Recovery Correction
+
+Task: Task 7 critical spec re-review correction (interrupted mixed child-batch replay only; no Task 8 work attempted).
+
+### Changes
+
+- The coordinator now supplies durable reserved command-step context to reconciliation response builders, not only effect verifiers.
+- Checklist replay reconstructs outcomes by `clientMutationId`: effects from reserved sibling steps are completed only after verification; mutations without a durable command are revalidated locally and retain stale or exact local-validation failures. An otherwise unprovable no-command mutation is conservatively returned as failed.
+- Added interrupted processing-journal regressions for both a stale child draft and a local title-validation failure alongside a confirmed safe sibling command.
+
+### Files Changed
+
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/src/services/todoistChecklistService.ts`
+- `backend/test/services/todoistChecklistService.test.ts`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-7-checklist-mutations.md`
+
+### TDD Evidence
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: a seeded processing action with one confirmed safe command replayed as `completed` and incorrectly changed the stale no-command child outcome to `completed`.
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: after the first recovery fix, the no-command invalid-title draft remained failed but lost its `child_title_required` error code, returning the generic Todoist mutation failure instead.
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 2 test files and 49 tests passed, including stale and local-failure interrupted mixed-batch replay cases.
+
+### Final Verification
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited 0 without diagnostics.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 28 backend test files and 266 tests passed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual Verification, Assumptions, And Next Step
+
+- Manual verification: inspected the seeded processing journal to confirm only `child:child-two:check` was durable, while the stale/invalid first child had no command row. Replay preserved that distinction in its per-child result.
+- Assumption: without a durable command and without a safely reproducible no-op, returning a generic failed outcome is safer than inferring external success.
+- Known skips: no live Todoist, WhatsApp, Android, VPS, or HTTP-route mutation was performed; focused routes remain Task 9 scope.
+- Next recommended step: proceed with Task 8 only.

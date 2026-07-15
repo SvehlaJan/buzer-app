@@ -49,7 +49,7 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   validate?: (root: CoordinatorRoot) => void;
   isEffectPresent?: (root: CoordinatorRoot, context: TaskActionEffectContext) => boolean;
   /** Builds the replay response after an external command is confirmed by a later sync. */
-  responseAfterReconciliation(root: CoordinatorRoot): TResponse;
+  responseAfterReconciliation(root: CoordinatorRoot, context: TaskActionEffectContext): TResponse;
   /** The journal stores this reduced value, never the full action response. */
   compactResponse(response: TResponse): unknown;
   execute(context: TaskActionCommandContext): Promise<TResponse>;
@@ -120,11 +120,12 @@ export class TaskActionCoordinator {
       const isReplay = reservation.kind === "replay";
       await this.options.sync.syncOnce();
       let root = this.requireRoot(action.rootTaskId);
-      const effect = this.effectStatus(action, root);
+      const effectContext = this.effectContext(action.actionId);
+      const effect = this.effectStatus(action, root, effectContext);
 
       if (isReplay && effect === "present") {
         const response = pendingResponse<TResponse>(current.error)
-          ?? action.responseAfterReconciliation(root);
+          ?? action.responseAfterReconciliation(root, effectContext);
         this.journal.markCompleted(action.actionId, action.compactResponse(response), this.now());
         this.options.roots.confirmOccurrenceReconciliation(action.rootTaskId, this.now());
         return { kind: "completed", response };
@@ -225,17 +226,22 @@ export class TaskActionCoordinator {
 
   private effectStatus(
     action: CoordinatedTaskAction,
-    root: CoordinatorRoot
+    root: CoordinatorRoot,
+    context = this.effectContext(action.actionId)
   ): "present" | "absent" | "unknown" {
     if (action.isEffectPresent === undefined) {
       return "unknown";
     }
+    return action.isEffectPresent(root, context) ? "present" : "absent";
+  }
+
+  private effectContext(actionId: string): TaskActionEffectContext {
     const reservedStepKeys = new Set(
-      this.journal.listCommands(action.actionId)
+      this.journal.listCommands(actionId)
         .filter((command) => command.status !== "failed")
         .map((command) => command.stepKey)
     );
-    return action.isEffectPresent(root, { reservedStepKeys }) ? "present" : "absent";
+    return { reservedStepKeys };
   }
 
   private markPending<TResponse>(

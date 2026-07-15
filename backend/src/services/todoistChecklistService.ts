@@ -91,7 +91,7 @@ export class TodoistChecklistService {
         payload: { mutations: request.mutations },
         validate: () => this.assertProjectedTree(rootTaskId),
         isEffectPresent: (_root, context) => this.effectsPresent(rootTaskId, request.mutations, createdChildIds, context),
-        responseAfterReconciliation: () => this.responseFromCurrentState(rootTaskId, request.mutations),
+        responseAfterReconciliation: (_root, context) => this.responseFromCurrentState(rootTaskId, request.mutations, context),
         compactResponse: (response) => ({
           outcome: response.outcome,
           childOutcomes: response.childOutcomes
@@ -240,16 +240,51 @@ export class TodoistChecklistService {
     return send(randomUUID());
   }
 
-  private responseFromCurrentState(rootTaskId: string, mutations: readonly ChildMutation[]): Omit<ChecklistMutationResult, "snapshot"> {
+  private responseFromCurrentState(
+    rootTaskId: string,
+    mutations: readonly ChildMutation[],
+    context: TaskActionEffectContext
+  ): Omit<ChecklistMutationResult, "snapshot"> {
     const root = this.requireRoot(rootTaskId);
+    const childOutcomes = mutations.map((mutation) => context.reservedStepKeys.has(commandStepKey(mutation))
+      ? completedOutcome(mutation, mutation.type === "add" ? null : mutation.childId)
+      : this.reconstructNoCommandOutcome(root, mutation)
+    );
     return {
-      outcome: "completed",
+      outcome: childOutcomes.some((outcome) => outcome.outcome !== "completed") ? "partial" : "completed",
       root,
-      childOutcomes: mutations.map((mutation) => completedOutcome(
-        mutation,
-        mutation.type === "add" ? null : mutation.childId
-      ))
+      childOutcomes
     };
+  }
+
+  private reconstructNoCommandOutcome(root: TaskWithCommitment, mutation: ChildMutation): ChecklistChildOutcome {
+    try {
+      if (mutation.type === "add") {
+        if (this.childrenOf(root).length >= 30) {
+          throw domainError("too_many_children", "A commitment can have at most 30 checklist items");
+        }
+        requiredTitle(mutation.title);
+        requiredProjectId(root);
+        return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
+      }
+      const child = this.requireChild(root, mutation.childId);
+      if (child.mirrorRevision !== parseRevision(mutation.expectedChildRevision)) {
+        return staleOutcome(mutation);
+      }
+      if (mutation.type === "edit") {
+        requiredTitle(mutation.title);
+        return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
+      }
+      if (mutation.type === "check" || mutation.type === "uncheck") {
+        const requestedChecked = mutation.type === "check";
+        if ((child.completedAt !== null) === requestedChecked) {
+          return completedOutcome(mutation, child.todoistTaskId);
+        }
+      }
+      return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
+    } catch (error) {
+      return failedOutcome(mutation, error);
+    }
   }
 
   private effectsPresent(
