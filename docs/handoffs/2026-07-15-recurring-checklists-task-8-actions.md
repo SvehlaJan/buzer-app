@@ -505,3 +505,53 @@ Assumptions and remaining work:
 
 Next recommended step:
 - Commit this Task 8 crash-boundary correction, then resume the documented Task 9 route/schema migration.
+
+## Confirmed-Command Replay Verification Follow-up
+
+Plan/task attempted:
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`, Task 8 coordinator quality follow-up. The dedicated quality checkbox is complete. No Task 9 route, schema, or fake-backend files were changed.
+
+Root-cause diagnosis:
+- A replayed command with `task_action_commands.status = 'confirmed'` returned its stored result without setting the coordinator's existing post-sync effect-verification flag. When the original confirmation sync had failed, the replay performed two no-op synchronizations with the effect still absent yet marked the action completed.
+
+Changes made:
+- Restoring a confirmed command now marks it effect-bearing. The existing post-command synchronization and absent-effect path therefore run exactly as for a newly sent command, retaining `reconciliation_pending` until authoritative mirror evidence arrives.
+- Migrated the older typed-result recovery fixture to expose effect evidence on its replay post-command synchronization; it continues proving the command result is restored without resending.
+
+Files changed:
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/test/services/taskActionCoordinator.test.ts`
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+TDD evidence:
+- RED: `npm test -- --run test/services/taskActionCoordinator.test.ts --testNamePattern "keeps a restored confirmed command pending"`
+  - Result: FAIL
+  - Evidence: the recovered action returned `completed` after both replay synchronizations lacked the effect.
+- GREEN: `npm test -- --run test/services/taskActionCoordinator.test.ts --testNamePattern "keeps a restored confirmed command pending"`
+  - Result: PASS
+  - Evidence: the same command is restored without a resend, but the replay remains `reconciliation_pending` after its post-command verification fails.
+
+Verification:
+- Command: `npm test -- --run test/services/taskActionCoordinator.test.ts test/services/taskActionService.test.ts test/services/rootTaskMutex.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 4 files, 93 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (known Task 9 boundary only)
+  - Evidence: 302/308 tests passed. The unchanged six HTTP route fixtures still lack mandatory action metadata/coordinator wiring: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, `updates full task edit payload through update route`, and `sends escalation through postpone route on second start postpone`.
+
+Manual verification:
+- Traced the replay path: a confirmed command now takes the same post-sync absent-effect guard as an original command. It is not resent because its stored command result is still returned.
+
+Assumptions and remaining work:
+- The effect verifier remains action-specific; a confirmed external command is not considered a successful action until that verifier observes its durable mirrored effect.
+- Task 9 remains responsible for route metadata/coordinator wiring and the six documented HTTP fixture migrations.
+
+Next recommended step:
+- Commit this isolated Task 8 replay-verification correction, then resume Task 9 from the documented route-test boundary.

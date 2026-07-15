@@ -143,6 +143,7 @@ export class TaskActionCoordinator {
           }
           const command = this.reserveCommand(resolvedAction.actionId, stepKey, commandOptions?.tempId ?? null);
           if (command.status === "confirmed") {
+            sentCommand = true;
             return restoredCommandResult<TResult>(command.result);
           }
           if (command.status === "reserved") {

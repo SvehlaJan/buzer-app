@@ -145,10 +145,11 @@ describe("TaskActionCoordinator", () => {
     const roots = new MemoryRoots();
     const first = new TaskActionCoordinator({ db, roots, sync: { syncOnce: async () => undefined } });
     const send = vi.fn(async () => ({ todoistTaskId: "todoist-add-1" }));
+    let effectPresent = false;
     const request = action({
       actionType: "create_child",
       payload: { title: "First child" },
-      isEffectPresent: () => false,
+      isEffectPresent: () => effectPresent,
       execute: async (context) => {
         await context.executeCommand("child:add", send);
         throw new Error("simulated crash");
@@ -156,7 +157,17 @@ describe("TaskActionCoordinator", () => {
     });
 
     await expect(first.execute(request)).rejects.toThrow("simulated crash");
-    const recovered = new TaskActionCoordinator({ db, roots, sync: { syncOnce: async () => undefined } });
+    let replaySyncCalls = 0;
+    const recovered = new TaskActionCoordinator({
+      db,
+      roots,
+      sync: {
+        syncOnce: async () => {
+          replaySyncCalls += 1;
+          if (replaySyncCalls === 2) effectPresent = true;
+        }
+      }
+    });
     let recoveredTodoistId: string | undefined;
     const replay = await recovered.execute({
       ...request,
@@ -170,6 +181,7 @@ describe("TaskActionCoordinator", () => {
     expect(replay).toEqual({ kind: "completed", response: { snoozedUntil: "2026-07-15T09:05:00Z" } });
     expect(recoveredTodoistId).toBe("todoist-add-1");
     expect(send).toHaveBeenCalledOnce();
+    expect(replaySyncCalls).toBe(2);
   });
 
   it("recovers a partially completed project move by issuing only the unfinished field update", async () => {
@@ -314,6 +326,33 @@ describe("TaskActionCoordinator", () => {
     expect(result).toEqual({ kind: "pending", actionId: "action-1" });
     expect(roots.getById("root-1")?.reconciliationStatus).toBe("pending");
     expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a restored confirmed command pending until replay sync verifies its effect", async () => {
+    const db = database();
+    const roots = new MemoryRoots();
+    const send = vi.fn(async () => undefined);
+    const request = action({
+      isEffectPresent: () => false,
+      execute: async (context) => {
+        await context.executeCommand("postpone", send);
+        return { snoozedUntil: "2026-07-15T09:05:00Z" };
+      }
+    });
+    const firstSync = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("confirmation sync failed"));
+    const first = new TaskActionCoordinator({ db, roots, sync: { syncOnce: firstSync } });
+
+    await expect(first.execute(request)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
+
+    const replaySync = vi.fn(async () => undefined);
+    const recovered = new TaskActionCoordinator({ db, roots, sync: { syncOnce: replaySync } });
+    await expect(recovered.execute(request)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(replaySync).toHaveBeenCalledTimes(2);
+    expect(journal(db, "action-1")).toMatchObject({ status: "reconciliation_pending" });
   });
 
   it("confirms a pending action after retry synchronization proves its effect without resending", async () => {
