@@ -56,6 +56,8 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   responseAfterReconciliation(root: CoordinatorRoot, context: TaskActionEffectContext): TResponse;
   /** The journal stores this reduced value, never the full action response. */
   compactResponse(response: TResponse): unknown;
+  finalize?: (root: CoordinatorRoot) => void;
+  useAuthoritativeResponse?: boolean;
   execute(context: TaskActionCommandContext): Promise<TResponse>;
 }
 
@@ -130,6 +132,7 @@ export class TaskActionCoordinator {
 
       if (isReplay && effect === "present") {
         const response = resolvedAction.responseAfterReconciliation(root, effectContext);
+        resolvedAction.finalize?.(root);
         this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(response), this.now());
         this.options.roots.confirmOccurrenceReconciliation(resolvedAction.rootTaskId, this.now());
         return { kind: "completed", response };
@@ -193,8 +196,12 @@ export class TaskActionCoordinator {
         return this.markPending(resolvedAction, resolvedAction.compactResponse(response), new Error("todoist_effect_not_confirmed"));
       }
 
-      this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(response), this.now());
-      return { kind: "completed", response };
+      const confirmedResponse = resolvedAction.useAuthoritativeResponse === true
+        ? resolvedAction.responseAfterReconciliation(confirmedRoot, this.effectContext(resolvedAction.actionId))
+        : response;
+      resolvedAction.finalize?.(confirmedRoot);
+      this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(confirmedResponse), this.now());
+      return { kind: "completed", response: confirmedResponse };
     });
   }
 

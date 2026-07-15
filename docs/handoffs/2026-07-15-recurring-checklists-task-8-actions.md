@@ -363,3 +363,30 @@ Manual verification:
 
 Next recommended step:
 - Task 9 should add authenticated route action metadata parsing and the server coordinator dependencies, then migrate the five route fixtures. Do not weaken root-action durability for compatibility.
+
+## Root Lifecycle And Canonical-Response Follow-up
+
+Plan/task attempted:
+- Completed the Task 8 quality follow-up for Start/Postpone coordination, Extend finalization, and canonical create responses. No Task 9 files changed.
+
+Changes made:
+- Start and Postpone now require action/device/occurrence metadata and execute through the durable coordinator. Postpone's state increment and escalation run in the journaled executor, so a completed action replay does not double-count or re-escalate.
+- The coordinator supports an idempotent post-confirmation finalizer. Extend uses it to set started state, increment the extension counter, and advance schedule version exactly once after authoritative duration confirmation.
+- Create requests opt into an authoritative completion response, returning the canonical sync-reconstructed local root ID rather than the provisional deterministic ID.
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 3 files, 80 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+- Command: `npm run build`
+  - Result: PASS
+- Command: `npm test`
+  - Result: FAIL (Task 9 boundary only)
+  - Evidence: 293/299 passed. Six route fixtures now await Task 9 metadata/coordinator wiring, the previous five plus `sends escalation through postpone route on second start postpone`.
+- Command: `git diff --check`
+  - Result: PASS
+
+Next recommended step:
+- Task 9 must wire action metadata/coordinator for Start and Postpone as well as the existing root mutation routes; do not restore metadata-free calls.

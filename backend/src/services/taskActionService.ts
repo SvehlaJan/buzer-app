@@ -149,6 +149,8 @@ export class TaskActionService {
       resolveRootTaskId?: () => string | null;
       isEffectPresent: () => boolean;
       responseAfterReconciliation: () => T;
+      finalize?: () => void;
+      useAuthoritativeResponse?: boolean;
     },
     execute: (context: TaskActionCommandContext) => Promise<T>
   ): Promise<T> {
@@ -172,6 +174,8 @@ export class TaskActionService {
       isEffectPresent: () => config.isEffectPresent(),
       responseAfterReconciliation: () => config.responseAfterReconciliation(),
       compactResponse: (response) => response ?? {},
+      ...(config.finalize === undefined ? {} : { finalize: () => config.finalize?.() }),
+      ...(config.useAuthoritativeResponse === true ? { useAuthoritativeResponse: true } : {}),
       execute
     });
     if (result.kind === "pending") {
@@ -315,6 +319,7 @@ export class TaskActionService {
       payload: { title: input.title, projectId: input.projectId, recurrencePreset, timeZone, checklist },
       metadata,
       allowRootAbsent: true,
+      useAuthoritativeResponse: true,
       resolveRootTaskId: () => this.syncedCreatedRootId(metadata.actionId),
       isEffectPresent: () => this.isCreatedTaskTreePresent(this.syncedCreatedRootId(metadata.actionId), checklist),
       responseAfterReconciliation: () => {
@@ -370,14 +375,16 @@ export class TaskActionService {
     });
   }
 
-  async start(taskId: string, now: string): Promise<void> {
+  async start(taskId: string, now: string, action?: RootActionMetadata): Promise<void> {
     this.assertMirrorReady();
-    this.requireTask(taskId);
-    this.tasks.updateCommitmentState(taskId, {
-      state: "started",
-      startedAt: now,
-      incrementScheduleVersion: true,
-      updatedAt: now
+    const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
+    await this.executeRootAction({
+      rootTaskId: taskId, actionType: "start", payload: { now }, metadata,
+      isEffectPresent: () => this.tasks.getById(taskId)?.state === "started",
+      responseAfterReconciliation: () => true
+    }, async () => {
+      this.tasks.updateCommitmentState(taskId, { state: "started", startedAt: now, incrementScheduleVersion: true, updatedAt: now });
+      return true;
     });
   }
 
@@ -405,22 +412,24 @@ export class TaskActionService {
     });
   }
 
-  async postponeStart(taskId: string, now: string): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
+  async postponeStart(taskId: string, now: string, action?: RootActionMetadata): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
     const snoozedUntil = addMinutes(now, 5);
     const nextDismissCount = task.startDismissCount + 1;
     const escalationTriggered = nextDismissCount >= 2;
-    this.tasks.updateCommitmentState(taskId, {
-      startDismissDelta: 1,
-      lastSnoozedAt: snoozedUntil,
-      incrementScheduleVersion: true,
-      updatedAt: now
+    const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
+    return this.executeRootAction({
+      rootTaskId: taskId, actionType: "postpone_start", payload: { snoozedUntil }, metadata,
+      isEffectPresent: () => this.tasks.getById(taskId)?.lastSnoozedAt === snoozedUntil,
+      responseAfterReconciliation: () => ({ snoozedUntil, escalationTriggered })
+    }, async () => {
+      this.tasks.updateCommitmentState(taskId, { startDismissDelta: 1, lastSnoozedAt: snoozedUntil, incrementScheduleVersion: true, updatedAt: now });
+      if (escalationTriggered && task.escalationSentAt === null && this.escalationService !== null) {
+        await this.escalationService.sendForTask(taskId, nextDismissCount);
+      }
+      return { snoozedUntil, escalationTriggered };
     });
-    if (escalationTriggered && task.escalationSentAt === null && this.escalationService !== null) {
-      await this.escalationService.sendForTask(taskId, nextDismissCount);
-    }
-    return { snoozedUntil, escalationTriggered };
   }
 
   async extend(taskId: string, now: string, action?: RootActionMetadata): Promise<void> {
@@ -459,6 +468,14 @@ export class TaskActionService {
       metadata,
       isEffectPresent: () => this.tasks.getById(taskId)?.durationMinutes === newDuration,
       responseAfterReconciliation: () => true
+      , finalize: () => {
+        this.tasks.updateCommitmentState(taskId, {
+          state: "started",
+          deadlineExtensionDelta: 1,
+          incrementScheduleVersion: true,
+          updatedAt: now
+        });
+      }
     }, async (context) => {
       await context.executeCommand("item_update", (commandUuid) => this.todoist.itemUpdate({
         commandUuid,

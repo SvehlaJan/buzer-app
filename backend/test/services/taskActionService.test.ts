@@ -68,10 +68,11 @@ function actionAwareService(
   repo: TaskRepository,
   projects: ProjectRepository,
   adapter: FakeTodoistAdapter,
-  synchronize: () => Promise<void> = async () => undefined
+  synchronize: () => Promise<void> = async () => undefined,
+  escalation: EscalationService | null = null
 ): TaskActionService {
   const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
-  return new TaskActionService(db, repo, projects, adapter, "user-self", null, false, {
+  return new TaskActionService(db, repo, projects, adapter, "user-self", escalation, false, {
     rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) },
     checklist: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
   });
@@ -919,10 +920,10 @@ describe("TaskActionService", () => {
       updatedAt: "2026-06-13T10:00:00Z"
     });
     const adapter = new FakeTodoistAdapter();
-    const service = new TaskActionService(db, repo, projectRepo, adapter);
+    const service = actionAwareService(db, repo, projectRepo, adapter);
 
-    await service.start("task-1", "2026-05-08T17:00:00Z");
-    await service.postponeStart("task-1", "2026-05-08T17:05:00Z");
+    await service.start("task-1", "2026-05-08T17:00:00Z", { actionId: "start-aggregate", deviceId: "phone-a", expectedOccurrenceKey: null });
+    await service.postponeStart("task-1", "2026-05-08T17:05:00Z", { actionId: "postpone-aggregate", deviceId: "phone-a", expectedOccurrenceKey: null });
     expect(repo.getById("task-1")).toMatchObject({
       state: "started",
       startDismissCount: 1
@@ -1087,10 +1088,10 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new DryRunSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation);
 
-    await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
-    await service.postponeStart("task-1", "2026-05-08T15:05:00Z");
+    await service.postponeStart("task-1", "2026-05-08T15:00:00Z", { actionId: "postpone-one", deviceId: "phone-a", expectedOccurrenceKey: null });
+    await service.postponeStart("task-1", "2026-05-08T15:05:00Z", { actionId: "postpone-two", deviceId: "phone-a", expectedOccurrenceKey: null });
 
     const count = db.prepare("select count(*) as count from whatsapp_escalations").get() as { count: number };
     expect(count.count).toBe(1);
@@ -1105,11 +1106,12 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new DeferredSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation);
 
-    await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
-    const first = service.postponeStart("task-1", "2026-05-08T15:05:00Z");
-    const second = service.postponeStart("task-1", "2026-05-08T15:06:00Z");
+    await service.postponeStart("task-1", "2026-05-08T15:00:00Z", { actionId: "overlap-first", deviceId: "phone-a", expectedOccurrenceKey: null });
+    const first = service.postponeStart("task-1", "2026-05-08T15:05:00Z", { actionId: "overlap-second", deviceId: "phone-a", expectedOccurrenceKey: null });
+    const second = service.postponeStart("task-1", "2026-05-08T15:06:00Z", { actionId: "overlap-third", deviceId: "phone-a", expectedOccurrenceKey: null });
+    await vi.waitFor(() => expect(sender.sent).toHaveLength(1));
     sender.resolveAll();
     await Promise.all([first, second]);
 
@@ -1126,14 +1128,14 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new FailingSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = new TaskActionService(db, repo, new ProjectRepository(db), adapter, "", escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation);
 
-    await service.postponeStart("task-1", "2026-05-08T15:00:00Z");
-    await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z")).resolves.toEqual({
+    await service.postponeStart("task-1", "2026-05-08T15:00:00Z", { actionId: "fail-first", deviceId: "phone-a", expectedOccurrenceKey: null });
+    await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z", { actionId: "fail-second", deviceId: "phone-a", expectedOccurrenceKey: null })).resolves.toEqual({
       snoozedUntil: "2026-05-08T15:10:00.000Z",
       escalationTriggered: true
     });
-    await service.postponeStart("task-1", "2026-05-08T15:10:00Z");
+    await service.postponeStart("task-1", "2026-05-08T15:10:00Z", { actionId: "fail-third", deviceId: "phone-a", expectedOccurrenceKey: null });
 
     const rows = db.prepare("select status, error_message as errorMessage from whatsapp_escalations").all() as Array<{
       status: string;
