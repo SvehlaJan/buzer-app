@@ -279,3 +279,87 @@ Assumptions and remaining work:
 
 Next recommended step:
 - Commit this final Task 8 correction checkpoint, then resume Task 9 from the five documented route-test migrations.
+
+## Uncommitted Root-Action Durability Follow-up
+
+Plan/task attempted:
+- Task 8 quality follow-up: mandatory root metadata/coordinator, sync-reconstructed create recovery, and removal of optimistic create/reschedule/non-move-edit mirror writes. No Task 9 files were changed.
+
+Current uncommitted files:
+- `backend/src/services/taskActionService.ts`
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/src/repositories/actionJournalRepository.ts`
+- `backend/test/services/taskActionService.test.ts`
+
+Implemented and verified in targeted tests:
+- Root mutations now reject absent action metadata and no longer generate an unjournaled command UUID.
+- Action-aware create, reschedule, and non-move edit stay reconciliation-pending under a no-op sync and leave their mirror/occurrence state unchanged.
+- Create replay can resolve the Todoist ID persisted in its confirmed command result, locate an authoritative sync-created root with a different local ID, rebind `task_action_journal.root_task_id`, and return that actual local ID.
+
+TDD evidence:
+- RED: `npm test -- test/services/taskActionService.test.ts`
+  - Result: FAIL
+  - Evidence: metadata-free create succeeded; action-aware create/reschedule/non-move edit confirmed using local writes.
+- GREEN (new regression subset): `npm test -- test/services/taskActionService.test.ts --testNamePattern "adopts a sync-reconstructed root|rejects metadata-free root creation|keeps action-aware create pending|keeps action-aware reschedule pending|keeps action-aware non-move edit pending"`
+  - Result: PASS
+  - Evidence: 5 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+  - Result: PASS
+- Command: `npm run build`
+  - Result: PASS
+- Command: `npm test -- test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 38 tests passed.
+- Command: `npm test`
+  - Result: FAIL
+  - Evidence: 281/299 passed. In addition to the known five Task 9 HTTP route failures, 13 legacy `taskActionService` tests still invoke now-forbidden metadata-free root actions or expect optimistic mirror writes. They must be migrated to authoritative-sync fixtures before this work can be committed.
+
+Manual verification:
+- The recovery regression asserts the journal root association changes to `sync-root` after the retry's authoritative sync.
+
+Next recommended step:
+- Migrate the 13 listed legacy TaskActionService fixtures to action metadata plus deterministic authoritative-sync setup, then rerun the combined focused suite, full backend status, and commit. Do not reintroduce a metadata-free production fallback.
+
+## Root-Action Durability Completion
+
+Plan/task attempted:
+- Completed the Task 8 root-action durability quality follow-up and marked its dedicated Task 8 plan checkbox. No Task 9 routes or fakes changed.
+
+Changes made:
+- Removed the metadata-free root-command UUID fallback. Create/edit/done/reschedule/extend now require action/device metadata and the server-scoped root coordinator.
+- Removed optimistic mirror writes from action-aware create, reschedule, non-move edit, and the remaining post-Extend state path. No-op synchronization produces `reconciliation_pending` rather than a synthetic success.
+- Added create root reassociation: the coordinator can rebind its journal root ID after sync discovers the Todoist ID recorded by confirmed `item_add`, including a different local mirror ID after process recovery.
+- Migrated all 13 legacy `TaskActionService` fixtures to action metadata and explicit no-op authoritative-sync expectations. They assert emitted Todoist commands plus pending/no-local-write behavior rather than using the removed direct path.
+
+Files changed:
+- `backend/src/repositories/actionJournalRepository.ts`
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/src/services/taskActionService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+Verification:
+- Command: `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 3 files, 80 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (Task 9 boundary only)
+  - Evidence: 294/299 tests passed. Exactly five `backend/test/http/routes.test.ts` legacy route fixtures fail because they do not yet supply the now-mandatory action metadata/coordinator wiring: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, and `updates full task edit payload through update route`.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Manual verification:
+- The crash-reconstruction regression verifies both returned `sync-root` identity and the durable journal `root_task_id` reassignment after retry.
+
+Next recommended step:
+- Task 9 should add authenticated route action metadata parsing and the server coordinator dependencies, then migrate the five route fixtures. Do not weaken root-action durability for compatibility.

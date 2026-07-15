@@ -48,6 +48,8 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   payload: TPayload;
   /** Root creation is journaled before Todoist assigns the root ID, so no local row exists yet. */
   allowRootAbsent?: boolean;
+  /** Rebinds a create journal to the mirror row reconstructed by authoritative synchronization. */
+  resolveRootTaskId?: () => string | null;
   validate?: (root: CoordinatorRoot) => void;
   isEffectPresent?: (root: CoordinatorRoot, context: TaskActionEffectContext) => boolean;
   /** Builds the replay response after an external command is confirmed by a later sync. */
@@ -121,15 +123,15 @@ export class TaskActionCoordinator {
 
       const isReplay = reservation.kind === "replay";
       await this.options.sync.syncOnce();
-      let root = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
-      const effectContext = this.effectContext(action.actionId);
-      const effect = this.effectStatus(action, root, effectContext);
+      let resolvedAction = this.resolveRoot(action);
+      let root = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
+      const effectContext = this.effectContext(resolvedAction.actionId);
+      const effect = this.effectStatus(resolvedAction, root, effectContext);
 
       if (isReplay && effect === "present") {
-        const response = pendingResponse<TResponse>(current.error)
-          ?? action.responseAfterReconciliation(root, effectContext);
-        this.journal.markCompleted(action.actionId, action.compactResponse(response), this.now());
-        this.options.roots.confirmOccurrenceReconciliation(action.rootTaskId, this.now());
+        const response = resolvedAction.responseAfterReconciliation(root, effectContext);
+        this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(response), this.now());
+        this.options.roots.confirmOccurrenceReconciliation(resolvedAction.rootTaskId, this.now());
         return { kind: "completed", response };
       }
 
@@ -138,19 +140,19 @@ export class TaskActionCoordinator {
         (current.status === "reconciliation_pending" || this.journal.hasDispatchedCommand(action.actionId)) &&
         effect === "unknown"
       ) {
-        return this.markPending(action, pendingResponse(current.error) ?? null, new Error("todoist_effect_unverified"));
+        return this.markPending(resolvedAction, pendingResponse(current.error) ?? null, new Error("todoist_effect_unverified"));
       }
 
       if (current.status === "reconciliation_pending" && effect === "absent") {
-        this.options.roots.confirmOccurrenceReconciliation(action.rootTaskId, this.now());
-        root = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
+        this.options.roots.confirmOccurrenceReconciliation(resolvedAction.rootTaskId, this.now());
+        root = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
       }
 
       try {
-        this.validate(action, root);
+        this.validate(resolvedAction, root);
       } catch (error) {
         if (error instanceof DomainError && error.statusCode !== 202) {
-          this.journal.markFailed(action.actionId, serializeDomainError(error), this.now());
+          this.journal.markFailed(resolvedAction.actionId, serializeDomainError(error), this.now());
         }
         throw error;
       }
@@ -162,19 +164,19 @@ export class TaskActionCoordinator {
         send: (commandUuid: string) => Promise<TResult>,
         commandOptions?: { tempId?: string | null }
         ) => {
-          if (action.responseAfterReconciliation === undefined) {
+          if (resolvedAction.responseAfterReconciliation === undefined) {
             throw new Error("reconciliation_response_provider_required");
           }
-          const command = this.reserveCommand(action.actionId, stepKey, commandOptions?.tempId ?? null);
+          const command = this.reserveCommand(resolvedAction.actionId, stepKey, commandOptions?.tempId ?? null);
           if (command.status === "confirmed") {
             return restoredCommandResult<TResult>(command.result);
           }
           if (command.status === "reserved") {
-            this.journal.markCommandSent(action.actionId, stepKey, this.now());
+            this.journal.markCommandSent(resolvedAction.actionId, stepKey, this.now());
           }
           sentCommand = true;
           const result = await send(command.commandUuid);
-          this.journal.markCommandConfirmed(action.actionId, stepKey, storedCommandResult(result), this.now());
+          this.journal.markCommandConfirmed(resolvedAction.actionId, stepKey, storedCommandResult(result), this.now());
           return result;
         }
       });
@@ -182,17 +184,27 @@ export class TaskActionCoordinator {
       try {
         await this.options.sync.syncOnce();
       } catch (error) {
-        return this.markPending(action, action.compactResponse(response), error);
+        return this.markPending(resolvedAction, resolvedAction.compactResponse(response), error);
       }
 
-      const confirmedRoot = this.requireRoot(action.rootTaskId, action.allowRootAbsent === true);
-      if (sentCommand && this.effectStatus(action, confirmedRoot) !== "present") {
-        return this.markPending(action, action.compactResponse(response), new Error("todoist_effect_not_confirmed"));
+      resolvedAction = this.resolveRoot(resolvedAction);
+      const confirmedRoot = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
+      if (sentCommand && this.effectStatus(resolvedAction, confirmedRoot) !== "present") {
+        return this.markPending(resolvedAction, resolvedAction.compactResponse(response), new Error("todoist_effect_not_confirmed"));
       }
 
-      this.journal.markCompleted(action.actionId, action.compactResponse(response), this.now());
+      this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(response), this.now());
       return { kind: "completed", response };
     });
+  }
+
+  private resolveRoot<TResponse, TPayload>(action: CoordinatedTaskAction<TResponse, TPayload>): CoordinatedTaskAction<TResponse, TPayload> {
+    const rootTaskId = action.resolveRootTaskId?.() ?? action.rootTaskId;
+    if (rootTaskId !== action.rootTaskId) {
+      this.journal.reassignRootTask(action.actionId, rootTaskId, this.now());
+      return { ...action, rootTaskId };
+    }
+    return action;
   }
 
   private reserveCommand(actionId: string, stepKey: string, tempId: string | null): ActionCommandEntry {

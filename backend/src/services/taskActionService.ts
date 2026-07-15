@@ -5,6 +5,7 @@ import { addMinutes } from "../domain/time.js";
 import { appendExtension, decodeTaskDescription, reconstructTaskDescription } from "../domain/taskDescriptionCodec.js";
 import { describeRecurrence, translateRecurrencePreset, type RecurrencePreset } from "../domain/taskRecurrence.js";
 import { recurrenceFingerprint } from "./occurrenceReconciler.js";
+import { ActionJournalRepository } from "../repositories/actionJournalRepository.js";
 import {
   TaskActionCoordinator,
   type TaskActionCommandContext
@@ -85,6 +86,7 @@ export interface UpdateTaskInput {
 
 export class TaskActionService {
   private readonly checklistService: TodoistChecklistService;
+  private readonly actionJournal: ActionJournalRepository;
 
   constructor(
     private readonly db: Database.Database,
@@ -97,6 +99,7 @@ export class TaskActionService {
     private readonly options: TaskActionServiceOptions = {}
   ) {
     this.checklistService = new TodoistChecklistService(tasks, todoist, options.checklist);
+    this.actionJournal = new ActionJournalRepository(db);
   }
 
   /** Checklist children are intentionally delegated to their dedicated mutation boundary. */
@@ -141,18 +144,14 @@ export class TaskActionService {
       rootTaskId: string;
       actionType: string;
       payload: unknown;
-      metadata: RootActionMetadata | undefined;
+      metadata: RootActionMetadata;
       allowRootAbsent?: boolean;
+      resolveRootTaskId?: () => string | null;
       isEffectPresent: () => boolean;
       responseAfterReconciliation: () => T;
     },
     execute: (context: TaskActionCommandContext) => Promise<T>
   ): Promise<T> {
-    if (config.metadata === undefined) {
-      return execute({
-        executeCommand: async <TResult>(_stepKey: string, send: (commandUuid: string) => Promise<TResult>) => send(randomUUID())
-      });
-    }
     const rootActions = this.options.rootActions;
     if (rootActions === undefined) {
       throw Object.assign(new Error("Root actions with action metadata require coordination"), {
@@ -169,6 +168,7 @@ export class TaskActionService {
       actionType: config.actionType,
       payload: config.payload,
       allowRootAbsent: config.allowRootAbsent === true,
+      ...(config.resolveRootTaskId === undefined ? {} : { resolveRootTaskId: config.resolveRootTaskId }),
       isEffectPresent: () => config.isEffectPresent(),
       responseAfterReconciliation: () => config.responseAfterReconciliation(),
       compactResponse: (response) => response ?? {},
@@ -189,8 +189,13 @@ export class TaskActionService {
     deviceId?: string;
     expectedOccurrenceKey?: string | null;
     expectedTaskRevision?: string;
-  }, requirements: { occurrence?: boolean; revision?: boolean } = {}): RootActionMetadata | undefined {
-    if (input.actionId === undefined && input.deviceId === undefined) return undefined;
+  }, requirements: { occurrence?: boolean; revision?: boolean } = {}): RootActionMetadata {
+    if (input.actionId === undefined && input.deviceId === undefined) {
+      throw Object.assign(new Error("Root actions require action metadata"), {
+        code: "task_action_metadata_required",
+        statusCode: 422
+      });
+    }
     if (input.actionId === undefined || input.deviceId === undefined) {
       throw Object.assign(new Error("Root action metadata must include actionId and deviceId"), {
         code: "task_action_metadata_invalid",
@@ -302,19 +307,21 @@ export class TaskActionService {
     }
     const metadata = this.rootMetadata(input);
     const recurrence = translateRecurrencePreset({ preset: recurrencePreset, selectedStart: dueDatetime, timeZone });
-    const id = metadata === undefined ? randomUUID() : actionStableUuid(metadata.actionId, "root_id");
-    const rootTempId = metadata === undefined ? randomUUID() : actionStableUuid(metadata.actionId, "item_add");
+    const id = actionStableUuid(metadata.actionId, "root_id");
+    const rootTempId = actionStableUuid(metadata.actionId, "item_add");
     return this.executeRootAction({
       rootTaskId: id,
       actionType: "create_task",
       payload: { title: input.title, projectId: input.projectId, recurrencePreset, timeZone, checklist },
       metadata,
       allowRootAbsent: true,
-      isEffectPresent: () => this.isCreatedTaskTreePresent(id, checklist),
+      resolveRootTaskId: () => this.syncedCreatedRootId(metadata.actionId),
+      isEffectPresent: () => this.isCreatedTaskTreePresent(this.syncedCreatedRootId(metadata.actionId), checklist),
       responseAfterReconciliation: () => {
-        const root = this.tasks.getById(id);
+        const rootId = this.syncedCreatedRootId(metadata.actionId);
+        const root = rootId === null ? null : this.tasks.getById(rootId);
         if (root === null) throw new Error("created_task_not_available_after_reconciliation");
-        return { id, todoistTaskId: root.todoistTaskId };
+        return { id: root.id, todoistTaskId: root.todoistTaskId };
       }
     }, async (context) => {
       const created = await context.executeCommand("item_add", (commandUuid) => this.todoist.itemAdd({
@@ -337,37 +344,12 @@ export class TaskActionService {
         });
       }
       const createdTodoistTaskId = created.todoistTaskId;
-      this.tasks.upsertTodoistTask({
-      id,
-      todoistTaskId: createdTodoistTaskId,
-      title: input.title,
-      description: normalizeOptionalText(input.description),
-      projectId: input.projectId,
-      parentId: null,
-      childOrder: null,
-      assigneeId: input.assigneeId,
-      creatorId: input.creatorId,
-      dueDate: dueDatetime,
-      dueDatetime,
-      dueString: recurrence?.string ?? null,
-      dueLang: recurrence?.lang ?? null,
-      dueTimezone: recurrence?.timezone ?? null,
-      isRecurring: recurrence !== null,
-      durationAmount: durationMinutes,
-      durationUnit: "minute",
-      durationMinutes,
-      completedAt: null,
-      deletedAt: null,
-      rawJson: JSON.stringify({ id: createdTodoistTaskId }),
-      updatedAt: input.now,
-      commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
-      });
       for (const [childOrder, child] of checklist.entries()) {
       const childTitle = child.title.trim();
       if (childTitle.length === 0) {
         throw Object.assign(new Error("Checklist item title is required"), { code: "child_title_required", statusCode: 422 });
       }
-      const childTempId = metadata === undefined ? randomUUID() : actionStableUuid(metadata.actionId, `child_add:${childOrder}`);
+      const childTempId = actionStableUuid(metadata.actionId, `child_add:${childOrder}`);
       const childCreated = await context.executeCommand(`child_add:${childOrder}`, (commandUuid) => this.todoist.itemAdd({
         kind: "child",
         commandUuid,
@@ -383,16 +365,6 @@ export class TaskActionService {
           statusCode: 502
         });
       }
-      this.tasks.createChecklistChild({
-        id: randomUUID(),
-        todoistTaskId: childCreated.todoistTaskId,
-        parentTodoistTaskId: createdTodoistTaskId,
-        projectId: input.projectId,
-        title: childTitle,
-        description: normalizeOptionalText(child.description ?? null),
-        childOrder,
-        updatedAt: input.now
-      });
       }
       return { id, todoistTaskId: createdTodoistTaskId };
     });
@@ -431,17 +403,6 @@ export class TaskActionService {
       await context.executeCommand("item_close", (commandUuid) => this.todoist.itemClose({ commandUuid, todoistTaskId: current.todoistTaskId }));
       return true;
     });
-    if (metadata === undefined && !task.isRecurring) {
-      const tx = this.db.transaction(() => {
-        this.tasks.markCompleted(taskId, now);
-        this.tasks.updateCommitmentState(taskId, {
-          state: "completed",
-          incrementScheduleVersion: true,
-          updatedAt: now
-        });
-      });
-      tx();
-    }
   }
 
   async postponeStart(taskId: string, now: string): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
@@ -490,11 +451,12 @@ export class TaskActionService {
       }
       throw error;
     }
+    const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
     await this.executeRootAction({
       rootTaskId: taskId,
       actionType: "extend",
       payload: { durationMinutes: newDuration },
-      metadata: action,
+      metadata,
       isEffectPresent: () => this.tasks.getById(taskId)?.durationMinutes === newDuration,
       responseAfterReconciliation: () => true
     }, async (context) => {
@@ -508,16 +470,6 @@ export class TaskActionService {
       }));
       return true;
     });
-    const tx = this.db.transaction(() => {
-      this.tasks.updateTaskSchedule(taskId, task.dueDatetime, newDuration, now, description);
-      this.tasks.updateCommitmentState(taskId, {
-        state: "started",
-        deadlineExtensionDelta: 1,
-        incrementScheduleVersion: true,
-        updatedAt: now
-      });
-    });
-    tx();
   }
 
   async reschedule(taskId: string, input: RescheduleTaskInput): Promise<void> {
@@ -547,21 +499,6 @@ export class TaskActionService {
         due: recurrence,
         assignment: { kind: "preserve" }
       }));
-      const tx = this.db.transaction(() => {
-        this.tasks.updateTaskSchedule(taskId, input.dueDatetime, input.durationMinutes, input.now, normalizedDescription);
-        this.tasks.rotateOccurrence(taskId, {
-          occurrenceKey: randomUUID(),
-          occurrenceDueDatetime: input.dueDatetime,
-          occurrenceRecurrenceFingerprint: recurrenceFingerprint({
-            isRecurring: task.isRecurring,
-            dueString: recurrence.kind === "replace" ? recurrence.string : task.dueString,
-            dueLang: recurrence.kind === "replace" ? recurrence.lang : task.dueLang,
-            dueTimezone: recurrence.kind === "replace" ? recurrence.timezone : task.dueTimezone
-          }),
-          updatedAt: input.now
-        });
-      });
-      tx();
       return true;
     });
   }
@@ -665,36 +602,6 @@ export class TaskActionService {
           ? { kind: "assign", assigneeId: input.assigneeId }
           : { kind: "unassign" }
       }));
-      if (!projectMoveRequiresAuthoritativeTree) {
-        const tx = this.db.transaction(() => {
-          this.tasks.updateTaskFields(taskId, {
-            title: normalizedTitle,
-            description: normalizedDescription,
-            projectId: input.projectId,
-            assigneeId: project.canAssignTasks ? input.assigneeId : null,
-            dueDatetime: input.dueDatetime,
-            durationMinutes: input.durationMinutes,
-            updatedAt: input.now,
-            commitmentOwnerId: project.canAssignTasks ? null : this.currentUserId
-          });
-          if (!isOwned && wasOwned) {
-            this.tasks.leaveOccurrenceOwnership(taskId, input.now);
-          } else if (isOwned && (!wasOwned || scheduleChanged)) {
-            this.tasks.rotateOccurrence(taskId, {
-              occurrenceKey: randomUUID(),
-              occurrenceDueDatetime: input.dueDatetime,
-              occurrenceRecurrenceFingerprint: recurrenceFingerprint({
-                isRecurring: due.kind === "replace" && due.string !== null,
-                dueString: due.kind === "replace" ? due.string : task.dueString,
-                dueLang: due.kind === "replace" ? due.lang : task.dueLang,
-                dueTimezone: due.kind === "replace" ? due.timezone : task.dueTimezone
-              }),
-              updatedAt: input.now
-            });
-          }
-        });
-        tx();
-      }
       return true;
     });
     if (checklistAction !== undefined) {
@@ -752,10 +659,10 @@ export class TaskActionService {
   }
 
   private isCreatedTaskTreePresent(
-    rootId: string,
+    rootId: string | null,
     checklist: ReadonlyArray<{ title: string; description?: string | null }>
   ): boolean {
-    const root = this.tasks.getById(rootId);
+    const root = rootId === null ? null : this.tasks.getById(rootId);
     if (root === null) return false;
     const children = this.tasks.listAll();
     return checklist.every((draft, childOrder) => children.some((child) =>
@@ -765,6 +672,12 @@ export class TaskActionService {
       && child.title === draft.title.trim()
       && child.description === normalizeOptionalText(draft.description ?? null)
     ));
+  }
+
+  private syncedCreatedRootId(actionId: string): string | null {
+    const rootCommand = this.actionJournal.listCommands(actionId).find((command) => command.stepKey === "item_add");
+    const todoistTaskId = rootCommand === undefined ? null : todoistTaskIdFromCommandResult(rootCommand.result);
+    return todoistTaskId === null ? null : this.tasks.getByTodoistTaskId(todoistTaskId)?.id ?? null;
   }
 
   private hasAdvancedRecurringOccurrence(taskId: string, previous: TaskWithCommitment): boolean {
@@ -875,6 +788,16 @@ interface TaskWithTodoistFields {
 
 function normalizeOptionalText(value: string | null): string | null {
   return value?.trim().length ? value.trim() : null;
+}
+
+function todoistTaskIdFromCommandResult(result: unknown): string | null {
+  const value = typeof result === "object" && result !== null
+    && "kind" in result && "value" in result && (result as { kind: unknown }).kind === "value"
+    ? (result as { value: unknown }).value
+    : result;
+  if (typeof value !== "object" || value === null || !("todoistTaskId" in value)) return null;
+  const todoistTaskId = (value as { todoistTaskId: unknown }).todoistTaskId;
+  return typeof todoistTaskId === "string" ? todoistTaskId : null;
 }
 
 /** Stable UUIDs let a replay reconstruct the exact Todoist temp identity from an action ID. */

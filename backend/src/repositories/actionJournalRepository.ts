@@ -131,6 +131,15 @@ export class ActionJournalRepository {
     return rows.map(mapCommandRow);
   }
 
+  reassignRootTask(actionId: string, rootTaskId: string, updatedAt: string): void {
+    const result = this.db.prepare(`
+      update task_action_journal
+      set root_task_id = ?, updated_at = ?
+      where action_id = ?
+    `).run(rootTaskId, updatedAt, actionId);
+    if (result.changes !== 1) throw new Error("action_journal_reservation_missing");
+  }
+
   reserveCommand(input: ReserveCommandInput): ActionCommandReservation {
     const tx = this.db.transaction((): ActionCommandReservation => {
       const existing = this.getCommand(input.actionId, input.stepKey);
