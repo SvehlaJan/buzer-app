@@ -7,8 +7,12 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.filter
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -150,8 +154,10 @@ class AddTaskFakeBackendTest {
                 waitForRecordedCall("/tasks")
                 composeRule.onNodeWithText("Add task").assertIsDisplayed()
                 composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
-                composeRule.onNodeWithText("Task was not saved").performScrollTo().assertIsDisplayed()
-                composeRule.onNodeWithText("Retry").performScrollTo().assertIsDisplayed()
+                // "Task was not saved" / "Retry" are AlertDialog content (AddTaskFailurePresentation),
+                // not inline form content — there is no scrollable ancestor to scroll to.
+                composeRule.onNodeWithText("Task was not saved").assertIsDisplayed()
+                composeRule.onNodeWithText("Retry").assertIsDisplayed()
                 composeRule.onAllNodesWithText("500", substring = true).assertCountEquals(1)
                 composeRule.onAllNodesWithText("System error", substring = true).assertCountEquals(0)
             } finally {
@@ -234,7 +240,15 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Start picker").performScrollTo().performClick()
+        // "Start picker" is a row of two side-by-side buttons (date, time); performClick() on
+        // the row itself lands at its geometric center, which falls in the gap between the two
+        // buttons and never opens the dialog. Click the first actual clickable child instead.
+        composeRule.onNodeWithContentDescription("Start picker")
+            .performScrollTo()
+            .onChildren()
+            .filter(hasClickAction())
+            .onFirst()
+            .performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }

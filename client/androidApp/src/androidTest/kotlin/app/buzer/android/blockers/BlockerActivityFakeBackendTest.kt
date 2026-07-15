@@ -6,8 +6,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.filter
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onChildren
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -415,7 +419,15 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun selectDefaultDeadline() {
-        composeRule.onNodeWithContentDescription("Start picker").performScrollTo().performClick()
+        // "Start picker" is a row of two side-by-side buttons (date, time); performClick() on
+        // the row itself lands at its geometric center, which falls in the gap between the two
+        // buttons and never opens the dialog. Click the first actual clickable child instead.
+        composeRule.onNodeWithContentDescription("Start picker")
+            .performScrollTo()
+            .onChildren()
+            .filter(hasClickAction())
+            .onFirst()
+            .performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
     }
