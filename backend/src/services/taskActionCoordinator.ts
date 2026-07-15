@@ -125,7 +125,7 @@ export class TaskActionCoordinator {
 
       const isReplay = reservation.kind === "replay";
       await this.options.sync.syncOnce();
-      let resolvedAction = this.resolveRoot(action);
+      let resolvedAction = await this.resolveRoot(action);
       let root = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
       const effectContext = this.effectContext(resolvedAction.actionId);
       const effect = this.effectStatus(resolvedAction, root, effectContext);
@@ -190,7 +190,7 @@ export class TaskActionCoordinator {
         return this.markPending(resolvedAction, resolvedAction.compactResponse(response), error);
       }
 
-      resolvedAction = this.resolveRoot(resolvedAction);
+      resolvedAction = await this.resolveRoot(resolvedAction);
       const confirmedRoot = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
       if (sentCommand && this.effectStatus(resolvedAction, confirmedRoot) !== "present") {
         return this.markPending(resolvedAction, resolvedAction.compactResponse(response), new Error("todoist_effect_not_confirmed"));
@@ -205,10 +205,13 @@ export class TaskActionCoordinator {
     });
   }
 
-  private resolveRoot<TResponse, TPayload>(action: CoordinatedTaskAction<TResponse, TPayload>): CoordinatedTaskAction<TResponse, TPayload> {
+  private async resolveRoot<TResponse, TPayload>(
+    action: CoordinatedTaskAction<TResponse, TPayload>
+  ): Promise<CoordinatedTaskAction<TResponse, TPayload>> {
     const rootTaskId = action.resolveRootTaskId?.() ?? action.rootTaskId;
     if (rootTaskId !== action.rootTaskId) {
       this.journal.reassignRootTask(action.actionId, rootTaskId, this.now());
+      await this.mutex.handoff(action.rootTaskId, rootTaskId);
       return { ...action, rootTaskId };
     }
     return action;

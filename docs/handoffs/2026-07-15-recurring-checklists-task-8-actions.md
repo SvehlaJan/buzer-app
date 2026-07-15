@@ -390,3 +390,61 @@ Verification:
 
 Next recommended step:
 - Task 9 must wire action metadata/coordinator for Start and Postpone as well as the existing root mutation routes; do not restore metadata-free calls.
+
+## Canonical Root-Lock Handoff Follow-up
+
+Plan/task attempted:
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`, Task 8 quality follow-up: provisional-to-canonical create-recovery mutex handoff. The Task 8 plan checkbox is complete. No Task 9 routes, schemas, or fake-backend files were changed.
+
+Changes made:
+- Added `RootTaskMutex.handoff(provisionalRootTaskId, canonicalRootTaskId)`. While the recovery owns its provisional tail, it waits every currently queued canonical tail, then aliases the provisional tail under the canonical key. New canonical actions therefore queue behind the remaining recovery work. Cleanup removes all aliases for a released tail.
+- Made coordinator root resolution asynchronous and invoke the handoff immediately after durable `task_action_journal.root_task_id` reassociation. This is a one-way wait and does not acquire the provisional lock again, avoiding a lock cycle.
+- Added a recovery-vs-canonical-edit concurrency regression: a recovered create cannot finish while an action already holding the canonical root lock is blocked.
+- Audited the previous lifecycle findings and added independent meaningful tests for metadata-free Start/Postpone rejection and authoritative Extend finalization. The focused count did not previously increase because the lifecycle change migrated/reworked existing tests rather than adding distinct cases. It now increases from the prior 80 three-file focused cases to 84 there, or 89 when the root-mutex file is included.
+
+Files changed:
+- `backend/src/services/rootTaskMutex.ts`
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/test/services/rootTaskMutex.test.ts`
+- `backend/test/services/taskActionCoordinator.test.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+TDD evidence:
+- RED: `npm test -- --run test/services/rootTaskMutex.test.ts`
+  - Result: FAIL
+  - Evidence: `TypeError: mutex.handoff is not a function` in the new provisional-to-canonical lock test.
+- RED: `npm test -- --run test/services/taskActionCoordinator.test.ts` with the coordinator handoff line deliberately removed.
+  - Result: FAIL
+  - Evidence: recovery settled before the blocked canonical action released (`expected true to be false`).
+- GREEN: `npm test -- --run test/services/rootTaskMutex.test.ts test/services/taskActionCoordinator.test.ts`
+  - Result: PASS
+  - Evidence: 25 tests passed after restoring the coordinator handoff.
+
+Verification:
+- Command: `npm test -- --run test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/services/rootTaskMutex.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 4 files, 89 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (known Task 9 boundary only)
+  - Evidence: 298/304 tests passed. The six unchanged legacy route fixtures fail because they still omit mandatory action metadata/coordinator wiring: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, `updates full task edit payload through update route`, and `sends escalation through postpone route on second start postpone`.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Manual verification:
+- Inspected the alias handoff queue semantics: existing canonical work finishes first; the provisional recovery tail becomes the canonical predecessor; later canonical work observes that tail as its predecessor. The new test asserts that exact blocked/released ordering.
+
+Assumptions and remaining work:
+- A recovery waits queued canonical work rather than preempting it. This is safe and deadlock-free for the one-way provisional-to-canonical reassociation, though continuous canonical traffic could delay recovery.
+- Task 9 remains responsible for adding route metadata/coordinator dependencies and migrating the six HTTP fixtures; this follow-up intentionally leaves that boundary unchanged.
+
+Next recommended step:
+- Commit this isolated Task 8 canonical-lock handoff correction, then resume Task 9 route/schema migration from the documented six-test boundary.

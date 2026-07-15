@@ -392,6 +392,86 @@ describe("TaskActionCoordinator", () => {
 
     expect(results).toEqual([1, 2]);
   });
+
+  it("waits for canonical-root work before recovering a reassociated create", async () => {
+    const db = database();
+    const canonicalRoot: CoordinatorRoot = {
+      id: "canonical-root", mirrorRevision: 1, occurrenceKey: null, reconciliationStatus: "confirmed"
+    };
+    const roots: RootTaskStore = {
+      getById: (id) => id === canonicalRoot.id ? canonicalRoot : null,
+      markOccurrenceReconciliationPending: () => undefined,
+      confirmOccurrenceReconciliation: () => undefined
+    };
+    let resolvedRootId: string | null = null;
+    let releaseCanonical: (() => void) | undefined;
+    const canonicalGate = new Promise<void>((resolve) => { releaseCanonical = resolve; });
+    let canonicalStarted: (() => void) | undefined;
+    const canonicalStartedGate = new Promise<void>((resolve) => { canonicalStarted = resolve; });
+    const order: string[] = [];
+    let syncCalls = 0;
+    let canonicalAction: Promise<unknown> | undefined;
+    const coordinator = new TaskActionCoordinator({
+      db,
+      roots,
+      sync: {
+        syncOnce: async () => {
+          syncCalls += 1;
+          if (syncCalls === 3) {
+            resolvedRootId = canonicalRoot.id;
+            canonicalAction = coordinator.execute(action({
+              actionId: "canonical-edit",
+              rootTaskId: canonicalRoot.id,
+              expectedOccurrenceKey: null,
+              actionType: "edit_task",
+              payload: { title: "Canonical edit" },
+              execute: async () => {
+                order.push("canonical:execute");
+                return { snoozedUntil: "2026-07-15T09:10:00Z" };
+              }
+            }));
+            await canonicalStartedGate;
+            return;
+          }
+          if (syncCalls === 4) {
+            order.push("canonical:locked");
+            canonicalStarted?.();
+            await canonicalGate;
+            order.push("canonical:released");
+          }
+        }
+      }
+    });
+    const { expectedTaskRevision: _ignored, ...create } = action({
+      actionId: "create-root",
+      rootTaskId: "provisional-root",
+      expectedOccurrenceKey: null,
+      actionType: "create_task",
+      payload: { title: "Root" },
+      allowRootAbsent: true,
+      resolveRootTaskId: () => resolvedRootId,
+      isEffectPresent: (root) => root.id === canonicalRoot.id,
+      responseAfterReconciliation: (root) => ({ snoozedUntil: root.id }),
+      execute: async (context) => {
+        await context.executeCommand("root:add", async () => undefined);
+        return { snoozedUntil: "provisional-root" };
+      }
+    });
+
+    await expect(coordinator.execute(create)).resolves.toEqual({ kind: "pending", actionId: "create-root" });
+    const recovery = coordinator.execute(create);
+    await vi.waitFor(() => expect(order).toContain("canonical:locked"));
+    let recoverySettled = false;
+    void recovery.finally(() => { recoverySettled = true; });
+    await Promise.resolve();
+    expect(recoverySettled).toBe(false);
+
+    releaseCanonical?.();
+    await canonicalAction;
+    await expect(recovery).resolves.toEqual({ kind: "completed", response: { snoozedUntil: "canonical-root" } });
+    expect(order).toEqual(["canonical:locked", "canonical:released", "canonical:execute"]);
+    expect(journal(db, "create-root")).toMatchObject({ status: "completed" });
+  });
 });
 
 class MemoryRoots implements RootTaskStore {

@@ -97,6 +97,23 @@ describe("TaskActionService", () => {
     expect(adapter.itemAdds).toEqual([]);
   });
 
+  it.each([
+    ["start", (service: TaskActionService) => service.start("task-1", "2026-07-15T10:00:00Z")],
+    ["postpone", (service: TaskActionService) => service.postponeStart("task-1", "2026-07-15T10:00:00Z")]
+  ] as const)("rejects metadata-free %s actions before mutating commitment state", async (_name, invoke) => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter());
+    const initialScheduleVersion = repo.getById("task-1")?.scheduleVersion;
+
+    await expect(invoke(service)).rejects.toMatchObject({ code: "task_action_metadata_required", statusCode: 422 });
+    expect(repo.getById("task-1")).toMatchObject({
+      state: "planned", startDismissCount: 0, scheduleVersion: initialScheduleVersion
+    });
+  });
+
   it("keeps action-aware create pending without an authoritative mirrored root", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -323,6 +340,35 @@ describe("TaskActionService", () => {
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(repo.getById("task-1")).toMatchObject({ durationMinutes: 30, deadlineExtensionCount: 0, state: "planned" });
+  });
+
+  it("finalizes an authoritatively confirmed extension after mirror confirmation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    let syncCalls = 0;
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => {
+      syncCalls += 1;
+      if (syncCalls !== 2) return;
+      repo.upsertTodoistTask({
+        id: "task-1", todoistTaskId: "todoist-1", title: "Send invoice", description: null, projectId: null,
+        assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 60,
+        completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+      });
+    });
+    const action = { actionId: "extend-confirmed", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" };
+
+    await expect(service.extend("task-1", "2026-07-15T10:00:00Z", action)).resolves.toBeUndefined();
+
+    expect(repo.getById("task-1")).toMatchObject({
+      durationMinutes: 60, deadlineExtensionCount: 1, state: "started", scheduleVersion: 2
+    });
+    expect(syncCalls).toBe(2);
   });
 
   it("keeps recurring Done pending until synchronization exposes the next occurrence", async () => {

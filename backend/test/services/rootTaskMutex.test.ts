@@ -57,4 +57,36 @@ describe("RootTaskMutex", () => {
 
     expect(mutex.activeRootCount).toBe(0);
   });
+
+  it("hands a provisional root lock to the canonical root after existing work", async () => {
+    const mutex = new RootTaskMutex();
+    const order: string[] = [];
+    let releaseCanonical: (() => void) | undefined;
+    const canonicalGate = new Promise<void>((resolve) => { releaseCanonical = resolve; });
+
+    const canonical = mutex.run("canonical-root", async () => {
+      order.push("canonical:start");
+      await canonicalGate;
+      order.push("canonical:end");
+    });
+    const provisional = mutex.run("provisional-root", async () => {
+      order.push("provisional:start");
+      await mutex.handoff("provisional-root", "canonical-root");
+      order.push("provisional:after-handoff");
+    });
+
+    await vi.waitFor(() => expect(order).toEqual(["canonical:start", "provisional:start"]));
+    expect(order).not.toContain("provisional:after-handoff");
+
+    releaseCanonical?.();
+    await Promise.all([canonical, provisional]);
+
+    expect(order).toEqual([
+      "canonical:start",
+      "provisional:start",
+      "canonical:end",
+      "provisional:after-handoff",
+    ]);
+    expect(mutex.activeRootCount).toBe(0);
+  });
 });
