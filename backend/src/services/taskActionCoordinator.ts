@@ -56,6 +56,8 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   responseAfterReconciliation(root: CoordinatorRoot, context: TaskActionEffectContext): TResponse;
   /** The journal stores this reduced value, never the full action response. */
   compactResponse(response: TResponse): unknown;
+  /** Runs durable post-effect work when replay observes an already-applied local effect. */
+  reconcile?: (context: TaskActionCommandContext, root: CoordinatorRoot) => Promise<void>;
   finalize?: (root: CoordinatorRoot) => void;
   useAuthoritativeResponse?: boolean;
   execute(context: TaskActionCommandContext): Promise<TResponse>;
@@ -129,12 +131,34 @@ export class TaskActionCoordinator {
       let root = this.requireRoot(resolvedAction.rootTaskId, resolvedAction.allowRootAbsent === true);
       const effectContext = this.effectContext(resolvedAction.actionId);
       const effect = this.effectStatus(resolvedAction, root, effectContext);
+      let sentCommand = false;
+      const commandContext: TaskActionCommandContext = {
+        executeCommand: async <TResult>(
+          stepKey: string,
+          send: (commandUuid: string) => Promise<TResult>,
+          commandOptions?: { tempId?: string | null }
+        ) => {
+          if (resolvedAction.responseAfterReconciliation === undefined) {
+            throw new Error("reconciliation_response_provider_required");
+          }
+          const command = this.reserveCommand(resolvedAction.actionId, stepKey, commandOptions?.tempId ?? null);
+          if (command.status === "confirmed") {
+            return restoredCommandResult<TResult>(command.result);
+          }
+          if (command.status === "reserved") {
+            this.journal.markCommandSent(resolvedAction.actionId, stepKey, this.now());
+          }
+          sentCommand = true;
+          const result = await send(command.commandUuid);
+          this.journal.markCommandConfirmed(resolvedAction.actionId, stepKey, storedCommandResult(result), this.now());
+          return result;
+        }
+      };
 
       if (isReplay && effect === "present") {
+        await resolvedAction.reconcile?.(commandContext, root);
         const response = resolvedAction.responseAfterReconciliation(root, effectContext);
-        resolvedAction.finalize?.(root);
-        this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(response), this.now());
-        this.options.roots.confirmOccurrenceReconciliation(resolvedAction.rootTaskId, this.now());
+        this.completeAction(resolvedAction, root, response, true);
         return { kind: "completed", response };
       }
 
@@ -160,29 +184,7 @@ export class TaskActionCoordinator {
         throw error;
       }
 
-      let sentCommand = false;
-      const response = await action.execute({
-        executeCommand: async <TResult>(
-          stepKey: string,
-        send: (commandUuid: string) => Promise<TResult>,
-        commandOptions?: { tempId?: string | null }
-        ) => {
-          if (resolvedAction.responseAfterReconciliation === undefined) {
-            throw new Error("reconciliation_response_provider_required");
-          }
-          const command = this.reserveCommand(resolvedAction.actionId, stepKey, commandOptions?.tempId ?? null);
-          if (command.status === "confirmed") {
-            return restoredCommandResult<TResult>(command.result);
-          }
-          if (command.status === "reserved") {
-            this.journal.markCommandSent(resolvedAction.actionId, stepKey, this.now());
-          }
-          sentCommand = true;
-          const result = await send(command.commandUuid);
-          this.journal.markCommandConfirmed(resolvedAction.actionId, stepKey, storedCommandResult(result), this.now());
-          return result;
-        }
-      });
+      const response = await resolvedAction.execute(commandContext);
 
       try {
         await this.options.sync.syncOnce();
@@ -199,10 +201,26 @@ export class TaskActionCoordinator {
       const confirmedResponse = resolvedAction.useAuthoritativeResponse === true
         ? resolvedAction.responseAfterReconciliation(confirmedRoot, this.effectContext(resolvedAction.actionId))
         : response;
-      resolvedAction.finalize?.(confirmedRoot);
-      this.journal.markCompleted(resolvedAction.actionId, resolvedAction.compactResponse(confirmedResponse), this.now());
+      this.completeAction(resolvedAction, confirmedRoot, confirmedResponse);
       return { kind: "completed", response: confirmedResponse };
     });
+  }
+
+  private completeAction<TResponse>(
+    action: CoordinatedTaskAction<TResponse>,
+    root: CoordinatorRoot,
+    response: TResponse,
+    confirmReconciliation = false
+  ): void {
+    const compactResponse = action.compactResponse(response);
+    const complete = this.options.db.transaction(() => {
+      action.finalize?.(root);
+      this.journal.markCompleted(action.actionId, compactResponse, this.now());
+      if (confirmReconciliation) {
+        this.options.roots.confirmOccurrenceReconciliation(action.rootTaskId, this.now());
+      }
+    });
+    complete();
   }
 
   private async resolveRoot<TResponse, TPayload>(

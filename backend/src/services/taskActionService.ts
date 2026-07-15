@@ -149,6 +149,7 @@ export class TaskActionService {
       resolveRootTaskId?: () => string | null;
       isEffectPresent: () => boolean;
       responseAfterReconciliation: () => T;
+      reconcile?: (context: TaskActionCommandContext) => Promise<void>;
       finalize?: () => void;
       useAuthoritativeResponse?: boolean;
     },
@@ -174,6 +175,7 @@ export class TaskActionService {
       isEffectPresent: () => config.isEffectPresent(),
       responseAfterReconciliation: () => config.responseAfterReconciliation(),
       compactResponse: (response) => response ?? {},
+      ...(config.reconcile === undefined ? {} : { reconcile: (context) => config.reconcile?.(context) ?? Promise.resolve() }),
       ...(config.finalize === undefined ? {} : { finalize: () => config.finalize?.() }),
       ...(config.useAuthoritativeResponse === true ? { useAuthoritativeResponse: true } : {}),
       execute
@@ -414,22 +416,41 @@ export class TaskActionService {
 
   async postponeStart(taskId: string, now: string, action?: RootActionMetadata): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
     this.assertMirrorReady();
-    const task = this.requireTask(taskId);
     const snoozedUntil = addMinutes(now, 5);
-    const nextDismissCount = task.startDismissCount + 1;
-    const escalationTriggered = nextDismissCount >= 2;
     const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
     return this.executeRootAction({
       rootTaskId: taskId, actionType: "postpone_start", payload: { snoozedUntil }, metadata,
       isEffectPresent: () => this.tasks.getById(taskId)?.lastSnoozedAt === snoozedUntil,
-      responseAfterReconciliation: () => ({ snoozedUntil, escalationTriggered })
-    }, async () => {
-      this.tasks.updateCommitmentState(taskId, { startDismissDelta: 1, lastSnoozedAt: snoozedUntil, incrementScheduleVersion: true, updatedAt: now });
-      if (escalationTriggered && task.escalationSentAt === null && this.escalationService !== null) {
-        await this.escalationService.sendForTask(taskId, nextDismissCount);
+      responseAfterReconciliation: () => ({
+        snoozedUntil,
+        escalationTriggered: (this.tasks.getById(taskId)?.startDismissCount ?? 0) >= 2
+      }),
+      reconcile: async (context) => {
+        const current = this.requireTask(taskId);
+        await this.sendPostponeEscalation(taskId, current.startDismissCount, context);
       }
+    }, async (context) => {
+      const current = this.requireTask(taskId);
+      const nextDismissCount = current.startDismissCount + 1;
+      const escalationTriggered = nextDismissCount >= 2;
+      this.tasks.updateCommitmentState(taskId, { startDismissDelta: 1, lastSnoozedAt: snoozedUntil, incrementScheduleVersion: true, updatedAt: now });
+      await this.sendPostponeEscalation(taskId, nextDismissCount, context);
       return { snoozedUntil, escalationTriggered };
     });
+  }
+
+  private async sendPostponeEscalation(
+    taskId: string,
+    dismissCount: number,
+    context: TaskActionCommandContext
+  ): Promise<void> {
+    if (dismissCount < 2 || this.escalationService === null) {
+      return;
+    }
+    if (this.requireTask(taskId).escalationSentAt !== null) {
+      return;
+    }
+    await context.executeCommand("whatsapp_escalation", async () => this.escalationService?.sendForTask(taskId, dismissCount));
   }
 
   async extend(taskId: string, now: string, action?: RootActionMetadata): Promise<void> {

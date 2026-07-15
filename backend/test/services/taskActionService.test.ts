@@ -1144,6 +1144,61 @@ describe("TaskActionService", () => {
     expect(sender.sent).toHaveLength(1);
   });
 
+  it("derives concurrent first postpones under the root lock before escalating", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    const sender = new DryRunSender();
+    const escalation = new EscalationService(db, repo, sender, "wife-chat");
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation);
+
+    await Promise.all([
+      service.postponeStart("task-1", "2026-05-08T15:00:00Z", {
+        actionId: "concurrent-first", deviceId: "phone-a", expectedOccurrenceKey: null
+      }),
+      service.postponeStart("task-1", "2026-05-08T15:05:00Z", {
+        actionId: "concurrent-second", deviceId: "phone-b", expectedOccurrenceKey: null
+      })
+    ]);
+
+    expect(repo.getById("task-1")).toMatchObject({ startDismissCount: 2 });
+    expect(sender.sent).toHaveLength(1);
+    expect(db.prepare("select count(*) as count from whatsapp_escalations").get()).toEqual({ count: 1 });
+  });
+
+  it("replays a crashed second postpone through its durable escalation step", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    const sender = new DryRunSender();
+    const escalation = new EscalationService(db, repo, sender, "wife-chat");
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation);
+    await service.postponeStart("task-1", "2026-05-08T15:00:00Z", {
+      actionId: "crash-first", deviceId: "phone-a", expectedOccurrenceKey: null
+    });
+    const update = repo.updateCommitmentState.bind(repo);
+    let crashAfterPostpone = true;
+    vi.spyOn(repo, "updateCommitmentState").mockImplementation((taskId, values) => {
+      update(taskId, values);
+      if (crashAfterPostpone && values.startDismissDelta === 1) {
+        crashAfterPostpone = false;
+        throw new Error("simulated crash after postpone state");
+      }
+    });
+    const action = { actionId: "crash-second", deviceId: "phone-a", expectedOccurrenceKey: null };
+
+    await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z", action)).rejects.toThrow("simulated crash after postpone state");
+    await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z", action)).resolves.toEqual({
+      snoozedUntil: "2026-05-08T15:10:00.000Z", escalationTriggered: true
+    });
+
+    expect(sender.sent).toHaveLength(1);
+    expect(db.prepare("select status from task_action_commands where action_id = ? and step_key = ?")
+      .get("crash-second", "whatsapp_escalation")).toEqual({ status: "confirmed" });
+  });
+
   it("claims only one escalation when second postpone requests overlap", async () => {
     const db = new Database(":memory:");
     migrate(db);

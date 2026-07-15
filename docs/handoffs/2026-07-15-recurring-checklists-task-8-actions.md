@@ -448,3 +448,60 @@ Assumptions and remaining work:
 
 Next recommended step:
 - Commit this isolated Task 8 canonical-lock handoff correction, then resume Task 9 route/schema migration from the documented six-test boundary.
+
+## Postpone And Extend Crash-Boundary Follow-up
+
+Plan/task attempted:
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`, Task 8 final quality follow-up. The new Task 8 quality checkbox is complete. No Task 9 route, schema, or fake-backend files were changed.
+
+Root-cause diagnosis:
+- Postpone derived `startDismissCount + 1` before the per-root coordinator mutex. Two concurrent first requests both captured zero and each performed a first dismissal, leaving no escalation.
+- Extend ran its lifecycle finalizer and journal completion in separate SQLite transactions. A crash after the state update but before `markCompleted` left a processing action whose replay finalized a second time.
+
+Changes made:
+- Postpone now reads the current task, computes the next dismissal, updates the state, and decides escalation inside the serialized executor. The second dismiss sends `whatsapp_escalation` through the persisted action-command context.
+- Added a coordinator `reconcile` hook for durable post-effect work. A replay that observes the local postpone state but has not completed the action executes the saved escalation step before completing the journal. The existing occurrence-unique WhatsApp claim keeps the sender at once per occurrence.
+- Wrapped finalizer, journal completion, and replay reconciliation confirmation in one synchronous better-sqlite3 transaction. Its nested journal transaction is a savepoint; an error rolls back the finalizer state along with the completion transition.
+
+Files changed:
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/src/services/taskActionService.ts`
+- `backend/test/services/taskActionCoordinator.test.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-8-actions.md`
+
+TDD evidence:
+- RED: `npm test -- --run test/services/taskActionService.test.ts --testNamePattern "derives concurrent first postpones|replays a crashed second postpone"`
+  - Result: FAIL
+  - Evidence: both regressions observed zero sends. The concurrent actions had both captured a first-dismiss decision; replay of the crash after local state skipped escalation because the root effect was already present.
+- RED: `npm test -- --run test/services/taskActionCoordinator.test.ts --testNamePattern "rolls back a crashed extend finalizer"`
+  - Result: FAIL
+  - Evidence: after the simulated crash, durable finalizer state was already `{ extensionCount: 1, scheduleVersion: 2 }` while the journal remained processing.
+- GREEN: `npm test -- --run test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts`
+  - Result: PASS
+  - Evidence: 68 tests passed, including both new Postpone regressions and the Extend crash-boundary regression.
+
+Verification:
+- Command: `npm test -- --run test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/services/rootTaskMutex.test.ts test/todoist/httpTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 4 files, 92 tests passed.
+- Command: `npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` exited 0.
+- Command: `npm run build`
+  - Result: PASS
+  - Evidence: production TypeScript build and schema copy completed.
+- Command: `npm test`
+  - Result: FAIL (known Task 9 boundary only)
+  - Evidence: 301/307 tests passed. The same six legacy HTTP route fixtures still lack mandatory action metadata/coordinator wiring: `handles task action routes and device check-in`, `accepts omitted assignee for non-assignable project creation`, `passes trimmed create descriptions to Todoist`, `passes reschedule descriptions through with omitted, null, blank, and set semantics`, `updates full task edit payload through update route`, and `sends escalation through postpone route on second start postpone`.
+
+Manual verification:
+- Context7 consultation of better-sqlite3 confirmed that nested `Database.transaction` functions use savepoints and that an uncaught finalizer error rolls back the outer transaction. The coordinator intentionally performs no asynchronous work inside that transaction.
+
+Assumptions and remaining work:
+- The durable escalation command is scoped to journal replay; sender-level uniqueness remains `(task_id, occurrence_key)`, so retry after an ambiguous send returns the existing claim rather than emitting a second WhatsApp message.
+- Task 9 remains responsible for route metadata/coordinator wiring and the six failing HTTP fixtures.
+
+Next recommended step:
+- Commit this Task 8 crash-boundary correction, then resume the documented Task 9 route/schema migration.

@@ -472,6 +472,40 @@ describe("TaskActionCoordinator", () => {
     expect(order).toEqual(["canonical:locked", "canonical:released", "canonical:execute"]);
     expect(journal(db, "create-root")).toMatchObject({ status: "completed" });
   });
+
+  it("rolls back a crashed extend finalizer before replaying journal completion", async () => {
+    const db = database();
+    db.exec("create table finalizer_state (extension_count integer not null, schedule_version integer not null)");
+    db.prepare("insert into finalizer_state (extension_count, schedule_version) values (0, 1)").run();
+    const roots = new MemoryRoots();
+    let crashAfterFinalize = true;
+    const request = action({
+      actionId: "extend-crash",
+      actionType: "extend",
+      payload: { durationMinutes: 60 },
+      isEffectPresent: () => true,
+      finalize: () => {
+        db.prepare("update finalizer_state set extension_count = extension_count + 1, schedule_version = schedule_version + 1").run();
+        if (crashAfterFinalize) {
+          crashAfterFinalize = false;
+          throw new Error("simulated crash after extend finalizer");
+        }
+      }
+    });
+    const first = new TaskActionCoordinator({ db, roots, sync: { syncOnce: async () => undefined } });
+
+    await expect(first.execute(request)).rejects.toThrow("simulated crash after extend finalizer");
+    expect(db.prepare("select extension_count as extensionCount, schedule_version as scheduleVersion from finalizer_state").get())
+      .toEqual({ extensionCount: 0, scheduleVersion: 1 });
+
+    const recovered = new TaskActionCoordinator({ db, roots, sync: { syncOnce: async () => undefined } });
+    await expect(recovered.execute(request)).resolves.toEqual({
+      kind: "completed", response: { snoozedUntil: "2026-07-15T09:05:00Z" }
+    });
+    expect(db.prepare("select extension_count as extensionCount, schedule_version as scheduleVersion from finalizer_state").get())
+      .toEqual({ extensionCount: 1, scheduleVersion: 2 });
+    expect(journal(db, "extend-crash")).toMatchObject({ status: "completed" });
+  });
 });
 
 class MemoryRoots implements RootTaskStore {
