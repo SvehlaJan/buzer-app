@@ -6,6 +6,23 @@ import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { TaskSnapshotService } from "../../src/services/taskSnapshotService.js";
 
 describe("TaskSnapshotService", () => {
+  it("blocks typed snapshots until the occurrence mirror contract is ready", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const service = new TaskSnapshotService(new TaskRepository(db), new ProjectRepository(db), "user-self", true);
+
+    expect(() => service.getSnapshot("2026-07-15T10:00:00Z")).toThrow(expect.objectContaining({
+      code: "sync_initializing",
+      statusCode: 503
+    }));
+
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
+    `).run();
+    expect(service.getSnapshot("2026-07-15T10:00:00Z")).toMatchObject({ tasks: [] });
+  });
+
   it("returns validation errors and computed start time", () => {
     const db = new Database(":memory:");
     migrate(db);

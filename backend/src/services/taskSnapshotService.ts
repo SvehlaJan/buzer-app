@@ -8,10 +8,12 @@ export class TaskSnapshotService {
   constructor(
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
-    private readonly currentUserId: string
+    private readonly currentUserId: string,
+    private readonly requireMirrorReady = false
   ) {}
 
   getSnapshot(serverTime: string) {
+    this.assertMirrorReady();
     const rows = this.tasks.listAll();
     const projectsById = new Map(
       this.projects.listActive().map((project) => [project.todoistProjectId, project])
@@ -74,6 +76,19 @@ export class TaskSnapshotService {
       health: []
     };
   }
+
+  private assertMirrorReady(): void {
+    if (this.requireMirrorReady && !this.tasks.isMirrorContractReady()) {
+      throw syncInitializingError();
+    }
+  }
+}
+
+function syncInitializingError(): Error & { code: string; statusCode: number } {
+  return Object.assign(new Error("Todoist synchronization is initializing"), {
+    code: "sync_initializing",
+    statusCode: 503
+  });
 }
 
 function extractDateOnlyDueDate(rawJson: string): string | null {

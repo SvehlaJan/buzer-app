@@ -81,7 +81,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     escalationService
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, tasks, projects, todoist),
+    new TodoistSyncService(db, tasks, projects, todoist, currentUserId),
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")

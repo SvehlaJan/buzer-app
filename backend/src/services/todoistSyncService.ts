@@ -1,24 +1,53 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
-import type { TaskRepository } from "../repositories/taskRepository.js";
+import { ActionJournalRepository } from "../repositories/actionJournalRepository.js";
+import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
+import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
+import {
+  OccurrenceReconciler,
+  recurrenceFingerprint,
+  type OccurrenceDecision
+} from "./occurrenceReconciler.js";
 
 export class TodoistSyncService {
+  private syncTail: Promise<void> = Promise.resolve();
+  private readonly occurrenceReconciler = new OccurrenceReconciler();
+
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
-    private readonly todoist: TodoistAdapter
+    private readonly todoist: TodoistAdapter,
+    private readonly currentUserId = ""
   ) {}
 
   async syncOnce(): Promise<void> {
+    const run = this.syncTail.then(() => this.syncOnceSerialized());
+    this.syncTail = run.catch(() => undefined);
+    return run;
+  }
+
+  private async syncOnceSerialized(allowChildResetFollowUp = true): Promise<void> {
+    const preSyncTasks = this.tasks.listAll();
+    const preSyncPolicy = new TaskEnforcementPolicy({
+      currentUserId: this.currentUserId,
+      projectsById: new Map(
+        this.projects.listActive().map((project) => [project.todoistProjectId, project])
+      )
+    });
     const current = this.db
-      .prepare("select sync_token as syncToken from todoist_sync_state where id = 1")
-      .get() as { syncToken: string } | undefined;
-    const syncToken = this.projects.listActive().length === 0 ? "*" : current?.syncToken ?? "*";
+      .prepare("select sync_token as syncToken, mirror_contract_version as mirrorContractVersion from todoist_sync_state where id = 1")
+      .get() as { syncToken: string; mirrorContractVersion: number } | undefined;
+    const requiresFullSync = current?.mirrorContractVersion !== 2;
+    const syncToken = requiresFullSync || this.projects.listActive().length === 0 ? "*" : current.syncToken;
     const result = await this.todoist.sync(syncToken);
     const now = new Date().toISOString();
+    const previousByTodoistId = new Map(
+      preSyncTasks.map((task) => [task.todoistTaskId, task])
+    );
+    const resetPlans: ResetPlan[] = [];
 
     const tx = this.db.transaction(() => {
       for (const project of result.projects) {
@@ -36,7 +65,7 @@ export class TodoistSyncService {
       }
 
       for (const task of result.tasks) {
-        const existing = this.tasks.getByTodoistTaskId(task.todoistTaskId);
+        const existing = previousByTodoistId.get(task.todoistTaskId) ?? null;
         const id = existing?.id ?? randomUUID();
         this.tasks.upsertTodoistTask({
           id,
@@ -77,13 +106,155 @@ export class TodoistSyncService {
         }
       }
 
+      const allTasks = this.tasks.listAll();
+      const policy = new TaskEnforcementPolicy({
+        currentUserId: this.currentUserId,
+        projectsById: new Map(
+          this.projects.listActive().map((project) => [project.todoistProjectId, project])
+        )
+      });
+      for (const currentTask of allTasks) {
+        if (currentTask.parentId !== null || isTerminal(currentTask)) {
+          continue;
+        }
+        const previous = previousByTodoistId.get(currentTask.todoistTaskId) ?? null;
+        const decision = this.occurrenceReconciler.decide({
+          current: currentTask,
+          incoming: currentTask,
+          isOwned: isOwnedForReconciliation(currentTask, this.currentUserId, policy),
+          wasOwned: previous === null
+            ? isOwnedForReconciliation(currentTask, this.currentUserId, policy)
+            : isOwnedForReconciliation(previous, this.currentUserId, preSyncPolicy),
+          source: "sync",
+          checkedChildIds: eligibleCheckedChildIds(currentTask, allTasks)
+        });
+        this.applyOccurrenceDecision(currentTask, decision, now, resetPlans);
+      }
+
       this.db.prepare(`
         insert into todoist_sync_state (id, sync_token, updated_at)
         values (1, ?, ?)
         on conflict(id) do update set sync_token = excluded.sync_token, updated_at = excluded.updated_at
       `).run(result.syncToken, now);
+      if (syncToken === "*") {
+        this.db.prepare(`
+          update todoist_sync_state
+          set mirror_contract_version = 2, updated_at = ?
+          where id = 1
+        `).run(now);
+      }
     });
 
     tx();
+
+    if (!allowChildResetFollowUp) {
+      return;
+    }
+    for (const plan of resetPlans) {
+      await this.resetCheckedChildren(plan);
+    }
+    if (resetPlans.length > 0) {
+      await this.syncOnceSerialized(false);
+    }
   }
+
+  private applyOccurrenceDecision(
+    task: TaskWithCommitment,
+    decision: OccurrenceDecision,
+    now: string,
+    resetPlans: ResetPlan[]
+  ): void {
+    if (decision.kind === "rotate") {
+      this.tasks.rotateOccurrence(task.id, {
+        occurrenceKey: randomUUID(),
+        occurrenceDueDatetime: task.dueDatetime,
+        occurrenceRecurrenceFingerprint: recurrenceFingerprint(task),
+        updatedAt: now
+      });
+      return;
+    }
+    if (decision.kind === "leave_ownership") {
+      this.tasks.leaveOccurrenceOwnership(task.id, now);
+      return;
+    }
+    if (decision.kind === "reset_children_then_rotate") {
+      this.tasks.markOccurrenceReconciliationPending(task.id, now);
+      resetPlans.push({ task, checkedChildIds: decision.checkedChildIds });
+    }
+  }
+
+  private async resetCheckedChildren(plan: ResetPlan): Promise<void> {
+    const journal = new ActionJournalRepository(this.db);
+    const fingerprint = JSON.stringify({
+      taskId: plan.task.id,
+      occurrenceKey: plan.task.occurrenceKey,
+      checkedChildIds: plan.checkedChildIds
+    });
+    const actionId = `system-recurring-reset:${plan.task.id}:${plan.task.occurrenceKey}`;
+    const now = new Date().toISOString();
+    journal.reserve({
+      actionId,
+      deviceId: "system",
+      rootTaskId: plan.task.id,
+      expectedOccurrenceKey: plan.task.occurrenceKey,
+      actionType: "recurring_child_reset",
+      requestFingerprint: fingerprint,
+      now
+    });
+
+    for (const childId of plan.checkedChildIds) {
+      const reservation = journal.reserveCommand({
+        actionId,
+        stepKey: `uncomplete:${childId}`,
+        commandUuid: randomUUID(),
+        tempId: null,
+        now
+      });
+      if (reservation.command.status === "confirmed") {
+        continue;
+      }
+      if (reservation.command.status === "reserved") {
+        journal.markCommandSent(actionId, reservation.command.stepKey, now);
+      }
+      await this.todoist.itemUncomplete({
+        commandUuid: reservation.command.commandUuid,
+        todoistTaskId: childId
+      });
+      journal.markCommandConfirmed(actionId, reservation.command.stepKey, { todoistTaskId: childId }, new Date().toISOString());
+    }
+    journal.markCompleted(actionId, { outcome: "commands_sent" }, new Date().toISOString());
+  }
+}
+
+interface ResetPlan {
+  task: TaskWithCommitment;
+  checkedChildIds: string[];
+}
+
+function isTerminal(task: TaskWithCommitment): boolean {
+  return task.completedAt !== null || task.deletedAt !== null;
+}
+
+function isOwnedForReconciliation(
+  task: TaskWithCommitment,
+  currentUserId: string,
+  policy: TaskEnforcementPolicy
+): boolean {
+  return task.assigneeId === currentUserId || policy.isCompanionOwned(task);
+}
+
+function eligibleCheckedChildIds(root: TaskWithCommitment, allTasks: TaskWithCommitment[]): string[] {
+  return allTasks
+    .filter((task) =>
+      task.parentId === root.todoistTaskId &&
+      task.completedAt !== null &&
+      task.deletedAt === null &&
+      task.dueDatetime === null &&
+      task.dueDate === null &&
+      task.durationMinutes === null &&
+      task.durationAmount === null &&
+      !task.isRecurring &&
+      task.assigneeId === null
+    )
+    .map((task) => task.todoistTaskId);
 }

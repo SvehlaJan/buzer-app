@@ -95,6 +95,15 @@ const taskWithCommitmentSelect = `
 export class TaskRepository {
   constructor(private readonly db: Database.Database) {}
 
+  isMirrorContractReady(): boolean {
+    const row = this.db.prepare(`
+      select mirror_contract_version as mirrorContractVersion
+      from todoist_sync_state
+      where id = 1
+    `).get() as { mirrorContractVersion: number } | undefined;
+    return row?.mirrorContractVersion === 2;
+  }
+
   upsertTodoistTask(task: TodoistTaskUpsert): void {
     const taskParams = {
       id: task.id,
@@ -267,6 +276,82 @@ export class TaskRepository {
     }
 
     this.db.prepare(`update commitment_states set ${sets.join(", ")} where task_id = @id`).run(params);
+  }
+
+  rotateOccurrence(
+    id: string,
+    values: {
+      occurrenceKey: string;
+      occurrenceDueDatetime: string | null;
+      occurrenceRecurrenceFingerprint: string;
+      updatedAt: string;
+    }
+  ): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        state = 'planned',
+        started_at = null,
+        start_dismiss_count = 0,
+        deadline_extension_count = 0,
+        last_snoozed_at = null,
+        escalation_sent_at = null,
+        occurrence_key = @occurrenceKey,
+        occurrence_due_datetime = @occurrenceDueDatetime,
+        occurrence_recurrence_fingerprint = @occurrenceRecurrenceFingerprint,
+        reconciliation_status = 'confirmed',
+        schedule_version = schedule_version + 1,
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, ...values });
+  }
+
+  markOccurrenceReconciliationPending(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set reconciliation_status = 'pending', updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
+  leaveOccurrenceOwnership(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        state = 'planned',
+        started_at = null,
+        start_dismiss_count = 0,
+        deadline_extension_count = 0,
+        last_snoozed_at = null,
+        escalation_sent_at = null,
+        reconciliation_status = 'confirmed',
+        schedule_version = schedule_version + 1,
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
+  initializeOccurrence(
+    id: string,
+    values: {
+      occurrenceKey: string;
+      occurrenceDueDatetime: string | null;
+      occurrenceRecurrenceFingerprint: string;
+      updatedAt: string;
+    }
+  ): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        occurrence_key = coalesce(nullif(trim(occurrence_key), ''), @occurrenceKey),
+        occurrence_due_datetime = coalesce(occurrence_due_datetime, @occurrenceDueDatetime),
+        occurrence_recurrence_fingerprint = coalesce(
+          nullif(trim(occurrence_recurrence_fingerprint), ''),
+          @occurrenceRecurrenceFingerprint
+        ),
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, ...values });
   }
 
   updateTaskSchedule(

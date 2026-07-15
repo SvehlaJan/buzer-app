@@ -108,11 +108,26 @@ describe("HTTP routes", () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it("returns task snapshot with auth token", async () => {
+  it("blocks typed snapshots until sync initialization finishes while health remains available", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
 
+    const blocked = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot",
+      headers: { authorization: "Bearer secret" }
+    });
+    expect(blocked.statusCode).toBe(503);
+    expect(blocked.json()).toMatchObject({ code: "sync_initializing" });
+
+    const health = await app.inject({ method: "GET", url: "/health" });
+    expect(health.statusCode).toBe(200);
+
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
+    `).run();
     const response = await app.inject({
       method: "GET",
       url: "/tasks/snapshot",
@@ -163,6 +178,7 @@ describe("HTTP routes", () => {
   it("handles task action routes and device check-in", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const repo = new TaskRepository(db);
     repo.upsertTodoistTask({
       id: "task-1",
@@ -206,6 +222,7 @@ describe("HTTP routes", () => {
   it("rejects invalid self-assigned task creation without calling Todoist", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
       todoistProjectId: "project-family",
@@ -246,6 +263,7 @@ describe("HTTP routes", () => {
   it("accepts omitted assignee for non-assignable project creation", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
       todoistProjectId: "project-personal",
@@ -281,6 +299,7 @@ describe("HTTP routes", () => {
   it("passes trimmed create descriptions to Todoist", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
       todoistProjectId: "project-family",
@@ -355,6 +374,7 @@ describe("HTTP routes", () => {
   it("passes reschedule descriptions through with omitted, null, blank, and set semantics", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const repo = new TaskRepository(db);
     repo.upsertTodoistTask({
       id: "task-1",
@@ -408,6 +428,7 @@ describe("HTTP routes", () => {
   it("updates full task edit payload through update route", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const repo = new TaskRepository(db);
     repo.upsertTodoistTask({
       id: "task-1",
@@ -468,6 +489,7 @@ describe("HTTP routes", () => {
   it("sends escalation through postpone route on second start postpone", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markMirrorReady(db);
     const repo = new TaskRepository(db);
     repo.upsertTodoistTask({
       id: "task-1",
@@ -504,3 +526,10 @@ describe("HTTP routes", () => {
     expect(sender.sent).toHaveLength(1);
   });
 });
+
+function markMirrorReady(db: Database.Database): void {
+  db.prepare(`
+    insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+    values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
+  `).run();
+}

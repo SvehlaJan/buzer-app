@@ -42,10 +42,12 @@ export class TaskActionService {
     private readonly projects: ProjectRepository,
     private readonly todoist: TodoistAdapter,
     private readonly currentUserId = "",
-    private readonly escalationService: EscalationService | null = null
+    private readonly escalationService: EscalationService | null = null,
+    private readonly requireMirrorReady = false
   ) {}
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {
+    this.assertMirrorReady();
     const project = this.projects.getActiveByTodoistProjectId(input.projectId);
     if (project === null) {
       throw Object.assign(new Error("Project not found"), {
@@ -156,6 +158,7 @@ export class TaskActionService {
   }
 
   async start(taskId: string, now: string): Promise<void> {
+    this.assertMirrorReady();
     this.requireTask(taskId);
     this.tasks.updateCommitmentState(taskId, {
       state: "started",
@@ -166,6 +169,7 @@ export class TaskActionService {
   }
 
   async done(taskId: string, now: string): Promise<void> {
+    this.assertMirrorReady();
     const task = this.requireTask(taskId);
     await this.todoist.completeTask(task.todoistTaskId, randomUUID());
     const tx = this.db.transaction(() => {
@@ -180,6 +184,7 @@ export class TaskActionService {
   }
 
   async postponeStart(taskId: string, now: string): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
+    this.assertMirrorReady();
     const task = this.requireTask(taskId);
     const snoozedUntil = addMinutes(now, 5);
     const nextDismissCount = task.startDismissCount + 1;
@@ -197,6 +202,7 @@ export class TaskActionService {
   }
 
   async extend(taskId: string, now: string): Promise<void> {
+    this.assertMirrorReady();
     const task = this.requireSchedulableTask(taskId);
     const newDue = addMinutes(task.dueDatetime, 30);
     await this.todoist.rescheduleTask({
@@ -217,6 +223,7 @@ export class TaskActionService {
   }
 
   async reschedule(taskId: string, input: RescheduleTaskInput): Promise<void> {
+    this.assertMirrorReady();
     const task = this.requireTask(taskId);
     const descriptionWasProvided = "description" in input;
     const normalizedDescription = descriptionWasProvided
@@ -241,6 +248,7 @@ export class TaskActionService {
   }
 
   async update(taskId: string, input: UpdateTaskInput): Promise<void> {
+    this.assertMirrorReady();
     const task = this.requireTask(taskId);
     const project = this.projects.getActiveByTodoistProjectId(input.projectId);
     if (project === null) {
@@ -316,6 +324,15 @@ export class TaskActionService {
       });
     }
     return task as TaskWithCommitment & { dueDatetime: string; durationMinutes: number };
+  }
+
+  private assertMirrorReady(): void {
+    if (this.requireMirrorReady && !this.tasks.isMirrorContractReady()) {
+      throw Object.assign(new Error("Todoist synchronization is initializing"), {
+        code: "sync_initializing",
+        statusCode: 503
+      });
+    }
   }
 
   private requireTask(taskId: string): TaskWithCommitment {

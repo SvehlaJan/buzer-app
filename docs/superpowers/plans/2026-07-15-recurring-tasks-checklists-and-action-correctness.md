@@ -423,9 +423,9 @@ type HierarchyViolation =
 - Create: `backend/test/services/occurrenceReconciler.test.ts`
 - Modify: `backend/test/services/escalationService.test.ts`
 
-- [ ] Write failing occurrence tests for first backfill, unchanged sync, external one-time schedule edit, recurring due advance, recurrence-rule change, title-only edit, explicit Buzer schedule replan, Extend 30 exception, leaving ownership, and returning to ownership.
-- [ ] Compute a stable recurrence fingerprint from `isRecurring`, due rule, language, and time zone. Treat `occurrence_key` as opaque random identity; do not derive it from due datetime.
-- [ ] Implement these reconciler decisions:
+- [x] Write failing occurrence tests for first backfill, unchanged sync, external one-time schedule edit, recurring due advance, recurrence-rule change, title-only edit, explicit Buzer schedule replan, Extend 30 exception, leaving ownership, and returning to ownership.
+- [x] Compute a stable recurrence fingerprint from `isRecurring`, due rule, language, and time zone. Treat `occurrence_key` as opaque random identity; do not derive it from due datetime.
+- [x] Implement these reconciler decisions:
 
 ```ts
 type OccurrenceDecision =
@@ -435,14 +435,14 @@ type OccurrenceDecision =
   | { kind: "leave_ownership" };
 ```
 
-- [ ] On rotation, generate a new key, copy current due/fingerprint anchors, set state to `planned`, clear started/dismiss/extension/snooze/escalation fields, increment schedule version, and mark reconciliation confirmed only after the tree is authoritative.
-- [ ] For an externally advanced recurring root with checked children, mark the root pending, reserve a system action and per-child `item_uncomplete` commands through the same journal/gateway, synchronize again, and rotate only after every direct eligible child is confirmed unchecked. Do not schedule the next occurrence while pending.
-- [ ] Serialize `TodoistSyncService.syncOnce()` so two action coordinators cannot race the shared sync token. Read the token inside the serialized section and update it only after the corresponding mirror transaction commits.
-- [ ] After migration, require a successful `sync("*")` before writing `mirror_contract_version = 2`. Until then, snapshot and mutation services return `503 sync_initializing`; `/health` remains available. This prevents typed policy from reading partially backfilled raw JSON.
-- [ ] Change escalation lookup and insert to `(task_id, occurrence_key)`. Verify an existing migrated occurrence cannot resend, while the next rotated occurrence can send once.
-- [ ] Run `npm test -- test/services/occurrenceReconciler.test.ts test/services/todoistSyncService.test.ts test/services/escalationService.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: reconcile recurring task occurrences"`.
+- [x] On rotation, generate a new key, copy current due/fingerprint anchors, set state to `planned`, clear started/dismiss/extension/snooze/escalation fields, increment schedule version, and mark reconciliation confirmed only after the tree is authoritative.
+- [x] For an externally advanced recurring root with checked children, mark the root pending, reserve a system action and per-child `item_uncomplete` commands through the same journal/gateway, synchronize again, and rotate only after every direct eligible child is confirmed unchecked. Do not schedule the next occurrence while pending.
+- [x] Serialize `TodoistSyncService.syncOnce()` so two action coordinators cannot race the shared sync token. Read the token inside the serialized section and update it only after the corresponding mirror transaction commits.
+- [x] After migration, require a successful `sync("*")` before writing `mirror_contract_version = 2`. Until then, snapshot and mutation services return `503 sync_initializing`; `/health` remains available. This prevents typed policy from reading partially backfilled raw JSON.
+- [x] Change escalation lookup and insert to `(task_id, occurrence_key)`. Verify an existing migrated occurrence cannot resend, while the next rotated occurrence can send once.
+- [x] Run `npm test -- test/services/occurrenceReconciler.test.ts test/services/todoistSyncService.test.ts test/services/escalationService.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: reconcile recurring task occurrences"`.
 
 ## Task 6: Add Durable Root Serialization And Replay Coordination
 

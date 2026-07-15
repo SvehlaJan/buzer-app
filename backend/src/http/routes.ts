@@ -103,7 +103,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 
   app.get("/tasks/snapshot", async () => {
     const repo = new TaskRepository(options.db);
-    const service = new TaskSnapshotService(repo, new ProjectRepository(options.db), options.currentUserId);
+    const service = new TaskSnapshotService(repo, new ProjectRepository(options.db), options.currentUserId, true);
     return service.getSnapshot(new Date().toISOString());
   });
 
@@ -129,7 +129,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     return service.create({
       ...body,
@@ -147,7 +148,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     await service.start(id, new Date().toISOString());
     return { ok: true };
@@ -161,7 +163,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     await service.done(id, new Date().toISOString());
     return { ok: true };
@@ -175,7 +178,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     return service.postponeStart(id, new Date().toISOString());
   });
@@ -188,7 +192,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     await service.extend(id, new Date().toISOString());
     return { ok: true };
@@ -203,7 +208,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     const descriptionPatch = Object.prototype.hasOwnProperty.call(body, "description")
       ? { description: body.description ?? null }
@@ -226,7 +232,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       new ProjectRepository(options.db),
       options.todoist,
       options.currentUserId,
-      options.escalationService ?? null
+      options.escalationService ?? null,
+      true
     );
     await service.update(id, {
       title: body.title,

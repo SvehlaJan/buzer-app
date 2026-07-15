@@ -63,6 +63,25 @@ class FailingSender implements AccountabilitySender {
 }
 
 describe("TaskActionService", () => {
+  it("blocks mutations until the occurrence mirror contract is ready", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const service = new TaskActionService(
+      db,
+      new TaskRepository(db),
+      new ProjectRepository(db),
+      new FakeTodoistAdapter(),
+      "user-self",
+      null,
+      true
+    );
+
+    await expect(service.start("task-1", "2026-07-15T10:00:00Z")).rejects.toMatchObject({
+      code: "sync_initializing",
+      statusCode: 503
+    });
+  });
+
   it("rejects invalid self-assigned created tasks before calling Todoist", async () => {
     const db = new Database(":memory:");
     migrate(db);
