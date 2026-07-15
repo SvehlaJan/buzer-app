@@ -14,12 +14,12 @@ Status: Initial contract for MVP planning
 
 ## Base URL
 
-All paths in this contract are relative to a base URL that already includes the `/buzer` prefix — the backend serves every route under it (Tailscale Funnel does not strip its path mount):
-
 - Production (public, HTTPS via Tailscale Funnel): `https://oc-vps.taila50381.ts.net/buzer`
-- Tailnet fallback (dev-machine `curl` only, plain HTTP): `http://100.105.180.34:18432/buzer`
+- Tailnet fallback (dev-machine `curl` only, plain HTTP, bypasses Funnel entirely): `http://100.105.180.34:18432`
 
-Example: the snapshot endpoint below is `GET https://oc-vps.taila50381.ts.net/buzer/tasks/snapshot`. Clients must never assume the API lives at the host root.
+The `/buzer` segment exists only in the production URL, as Tailscale Funnel's own `--set-path /buzer` mapping — Funnel strips it before forwarding, so the backend itself serves plain, unprefixed routes (e.g. `GET /tasks/snapshot`) and never sees `/buzer` in the request path. This means the two base URLs above are **not** simply "same path, different host" — the production URL needs the `/buzer` segment appended by the client and the tailnet-fallback URL does not. See `docs/decisions/2026-07-15-funnel-strips-path-prefix.md`.
+
+Example: the snapshot endpoint below is `GET https://oc-vps.taila50381.ts.net/buzer/tasks/snapshot` in production, or `GET http://100.105.180.34:18432/tasks/snapshot` via the tailnet fallback.
 
 ## Core Types
 

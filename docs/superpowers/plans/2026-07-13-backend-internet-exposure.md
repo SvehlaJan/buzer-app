@@ -179,6 +179,8 @@ git commit -m "fix: constant-time bearer token comparison"
 
 ### Task 2: Serve all routes under the `/buzer` prefix
 
+> **Reverted 2026-07-15 — this task's premise was wrong.** Live verification after the first real deploy showed Tailscale Funnel *does* strip its `--set-path` mount before forwarding, the opposite of what this section assumes. The `/buzer` prefix added here was removed from the backend; see `docs/decisions/2026-07-15-funnel-strips-path-prefix.md`. Left below unedited as a historical record of what was originally built and why — do not follow this task's steps for new work.
+
 Tailscale Funnel forwards `https://…/buzer/health` to the backend as `GET /buzer/health` — the mount path is NOT stripped. The backend must own the prefix.
 
 **Files:**

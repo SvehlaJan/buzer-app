@@ -7,7 +7,7 @@ env_file="${BUZER_ENV_FILE:-$repo_dir/.env}"
 compose_file="${BUZER_COMPOSE_FILE:-$repo_dir/docker-compose.yml}"
 compose_service="${BUZER_COMPOSE_SERVICE:-backend}"
 host_port="${BUZER_HOST_PORT:-18432}"
-health_url="${BUZER_HEALTH_URL:-http://127.0.0.1:$host_port/buzer/health}"
+health_url="${BUZER_HEALTH_URL:-http://127.0.0.1:$host_port/health}"
 
 cd "$repo_dir"
 

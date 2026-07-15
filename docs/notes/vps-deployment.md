@@ -67,7 +67,7 @@ The deploy script:
 - fetches `origin/master`
 - resets the local checkout to `origin/master`
 - rebuilds and restarts `buzer-backend`
-- waits for `/buzer/health`
+- waits for `/health`
 - prints recent backend logs if health does not pass
 
 This script is allowed to overwrite local repository changes in `/home/skclaw/buzer-app`. Runtime data stays in Docker named volumes unless the volumes are explicitly removed.
@@ -77,16 +77,16 @@ This script is allowed to overwrite local repository changes in `/home/skclaw/bu
 From the VPS:
 
 ```bash
-curl --fail http://127.0.0.1:18432/buzer/health
+curl --fail http://127.0.0.1:18432/health
 ```
 
 From a Tailscale-connected machine (direct fallback, bypasses Funnel):
 
 ```bash
-curl --fail http://100.105.180.34:18432/buzer/health
+curl --fail http://100.105.180.34:18432/health
 ```
 
-From anywhere (public path through Funnel):
+From anywhere (public path through Funnel — Funnel strips its own `/buzer` mount before forwarding, so the backend never sees it; see "Internet Exposure" below):
 
 ```bash
 curl --fail https://oc-vps.taila50381.ts.net/buzer/health
@@ -104,7 +104,7 @@ Unauthenticated expected shape (trimmed on purpose — no `checks` detail for th
 
 With a valid `Authorization: Bearer <ANDROID_API_TOKEN>` header the response additionally contains `checks` (database, WhatsApp connection status).
 
-`/buzer/health` is unauthenticated but trimmed; all other `/buzer/*` routes require bearer auth. A global per-IP rate limit (60 req/min) applies behind `trustProxy` — the compose network subnet is pinned to `172.28.0.0/16` to match, so do not change one without the other.
+`/health` is unauthenticated but trimmed; all other routes require bearer auth. A global per-IP rate limit (60 req/min) applies behind `trustProxy` — the compose network subnet is pinned to `172.28.0.0/16` to match, so do not change one without the other.
 
 ## Operational Commands
 
@@ -182,7 +182,7 @@ cd /home/skclaw/buzer-app
 git fetch origin
 git checkout <known-good-commit>
 docker compose up -d --build --remove-orphans
-curl --fail http://127.0.0.1:18432/buzer/health
+curl --fail http://127.0.0.1:18432/health
 ```
 
 After rollback, switch back to `master` before the next normal deploy:
@@ -208,6 +208,6 @@ sudo tailscale funnel --bg --set-path /buzer 18432
 
 Tailnet prerequisites (admin console, one-time): MagicDNS enabled, HTTPS certificates enabled, `funnel` node attribute on `oc-vps` in the tailnet policy file.
 
-Funnel does not strip the `/buzer` mount path (tailscale/tailscale#6571), so the backend serves all routes under `/buzer` natively. Any additional service exposed on this hostname must likewise own its path prefix, or use public ports 8443/10000, or run its own tailscale sidecar node.
+**Correction (2026-07-15, superseding the original design assumption):** the original design assumed Funnel does *not* strip its `--set-path` mount before forwarding (citing tailscale/tailscale#6571) and had the backend serve all routes under a self-imposed `/buzer` prefix to compensate. Live verification after the first real deploy showed the opposite: **Funnel does strip the mount path.** A request to `https://oc-vps.taila50381.ts.net/buzer/health` arrives at the backend as `GET /health`, not `GET /buzer/health` — confirmed by testing a deliberately-doubled path (`.../buzer/buzer/health` returned 200 — one `/buzer` was stripped by Funnel, the other landed on the backend as a literal, matching `/buzer/health` route that existed at the time). The backend was reverted to serve plain, unprefixed routes; `/buzer` now exists *only* as Funnel's own `--set-path` mapping, external to the backend entirely. See `docs/decisions/2026-07-15-funnel-strips-path-prefix.md` for the full incident writeup. The "reserve `/buzer` on this hostname for this service" goal is unaffected — it's just enforced one layer up, at the Funnel mapping itself, not in application code. Any additional service exposed on this hostname still needs its own `--set-path` mount (and, like this one, should serve plain unprefixed routes internally), or use public ports 8443/10000, or run its own tailscale sidecar node.
 
 `fail2ban` is deliberately not installed: SSH is accepted only on `tailscale0`, so it could only ban tailnet peers.

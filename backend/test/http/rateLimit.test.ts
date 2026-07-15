@@ -1,7 +1,6 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
-import { API_PREFIX } from "../../src/http/prefix.js";
 import { buildServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
@@ -22,10 +21,10 @@ describe("rate limiting", () => {
     const app = createApp();
 
     for (let i = 0; i < 3; i += 1) {
-      const ok = await app.inject({ method: "GET", url: `${API_PREFIX}/health`, remoteAddress: "198.51.100.10" });
+      const ok = await app.inject({ method: "GET", url: "/health", remoteAddress: "198.51.100.10" });
       expect(ok.statusCode).toBe(200);
     }
-    const blocked = await app.inject({ method: "GET", url: `${API_PREFIX}/health`, remoteAddress: "198.51.100.10" });
+    const blocked = await app.inject({ method: "GET", url: "/health", remoteAddress: "198.51.100.10" });
     await app.close();
 
     expect(blocked.statusCode).toBe(429);
@@ -38,20 +37,20 @@ describe("rate limiting", () => {
     for (let i = 0; i < 3; i += 1) {
       await app.inject({
         method: "GET",
-        url: `${API_PREFIX}/health`,
+        url: "/health",
         remoteAddress: proxyPeer,
         headers: { "x-forwarded-for": "203.0.113.1" }
       });
     }
     const exhaustedClient = await app.inject({
       method: "GET",
-      url: `${API_PREFIX}/health`,
+      url: "/health",
       remoteAddress: proxyPeer,
       headers: { "x-forwarded-for": "203.0.113.1" }
     });
     const otherClient = await app.inject({
       method: "GET",
-      url: `${API_PREFIX}/health`,
+      url: "/health",
       remoteAddress: proxyPeer,
       headers: { "x-forwarded-for": "203.0.113.2" }
     });
@@ -67,20 +66,20 @@ describe("rate limiting", () => {
     for (let i = 0; i < 3; i += 1) {
       await app.inject({
         method: "GET",
-        url: `${API_PREFIX}/health`,
+        url: "/health",
         remoteAddress: "100.100.7.7",
         headers: { "x-forwarded-for": "203.0.113.1" }
       });
     }
     const samePeer = await app.inject({
       method: "GET",
-      url: `${API_PREFIX}/health`,
+      url: "/health",
       remoteAddress: "100.100.7.7",
       headers: { "x-forwarded-for": "203.0.113.9" }
     });
     const differentPeerSameHeader = await app.inject({
       method: "GET",
-      url: `${API_PREFIX}/health`,
+      url: "/health",
       remoteAddress: "100.100.7.8",
       headers: { "x-forwarded-for": "203.0.113.1" }
     });
@@ -94,10 +93,10 @@ describe("rate limiting", () => {
     const app = createApp();
 
     for (let i = 0; i < 3; i += 1) {
-      const miss = await app.inject({ method: "GET", url: `${API_PREFIX}/nope`, remoteAddress: "198.51.100.20" });
+      const miss = await app.inject({ method: "GET", url: "/nope", remoteAddress: "198.51.100.20" });
       expect(miss.statusCode).toBe(404);
     }
-    const blocked = await app.inject({ method: "GET", url: `${API_PREFIX}/nope`, remoteAddress: "198.51.100.20" });
+    const blocked = await app.inject({ method: "GET", url: "/nope", remoteAddress: "198.51.100.20" });
     await app.close();
 
     expect(blocked.statusCode).toBe(429);

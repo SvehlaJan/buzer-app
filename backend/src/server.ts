@@ -5,7 +5,6 @@ import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
-import { API_PREFIX } from "./http/prefix.js";
 import { registerRoutes } from "./http/routes.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
@@ -38,7 +37,7 @@ export function buildServer(options: BuildServerOptions) {
   });
   app.register(async (scope) => {
     registerRoutes(scope, options);
-  }, { prefix: API_PREFIX });
+  });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
       reply.status(404).send({ code: "not_found", message: "Not Found" });
