@@ -310,6 +310,84 @@ describe("ActionJournalRepository", () => {
       "2026-07-15T09:40:00Z"
     )).toThrow("action_command_transition_invalid");
   });
+
+  it("marks only sent commands definitively failed and replays the same failure idempotently", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new ActionJournalRepository(db);
+    reserveAction(repo, "failed-command-action");
+    repo.reserveCommand({
+      actionId: "failed-command-action",
+      stepKey: "update-root",
+      commandUuid: "failed-command-uuid",
+      tempId: null,
+      now: "2026-07-15T09:41:00Z"
+    });
+    repo.markCommandSent("failed-command-action", "update-root", "2026-07-15T09:42:00Z");
+
+    repo.markCommandFailed(
+      "failed-command-action",
+      "update-root",
+      { code: "todoist_rejected", status: 400 },
+      "2026-07-15T09:43:00Z"
+    );
+    expect(repo.reserveCommand({
+      actionId: "failed-command-action",
+      stepKey: "update-root",
+      commandUuid: "unused-failed-command-uuid",
+      tempId: null,
+      now: "2026-07-15T09:44:00Z"
+    })).toMatchObject({
+      kind: "replay",
+      command: {
+        status: "failed",
+        result: { code: "todoist_rejected", status: 400 },
+        updatedAt: "2026-07-15T09:43:00Z"
+      }
+    });
+
+    repo.markCommandFailed(
+      "failed-command-action",
+      "update-root",
+      { code: "todoist_rejected", status: 400 },
+      "2026-07-15T09:45:00Z"
+    );
+    expect(repo.reserveCommand({
+      actionId: "failed-command-action",
+      stepKey: "update-root",
+      commandUuid: "another-unused-failed-command-uuid",
+      tempId: null,
+      now: "2026-07-15T09:46:00Z"
+    })).toMatchObject({
+      command: { updatedAt: "2026-07-15T09:43:00Z" }
+    });
+    expect(() => repo.markCommandFailed(
+      "failed-command-action",
+      "update-root",
+      { code: "different_failure" },
+      "2026-07-15T09:47:00Z"
+    )).toThrow("action_command_transition_invalid");
+
+    repo.reserveCommand({
+      actionId: "failed-command-action",
+      stepKey: "reserved-only",
+      commandUuid: "reserved-command-uuid",
+      tempId: null,
+      now: "2026-07-15T09:48:00Z"
+    });
+    expect(() => repo.markCommandFailed(
+      "failed-command-action",
+      "reserved-only",
+      { code: "not_sent" },
+      "2026-07-15T09:49:00Z"
+    )).toThrow("action_command_transition_invalid");
+    expect(() => repo.markCommandFailed(
+      "missing-action",
+      "missing-step",
+      { code: "missing" },
+      "2026-07-15T09:50:00Z"
+    )).toThrow("action_command_not_found");
+  });
 });
 
 function reserveAction(repo: ActionJournalRepository, actionId: string): void {

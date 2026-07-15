@@ -22,6 +22,8 @@ export function migrate(db: Database.Database): void {
       migrateToVersionTwo(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(2, new Date().toISOString());
     }
+    ensureActionJournalGuards(db);
+    backfillOccurrences(db);
   });
 
   tx();
@@ -89,10 +91,24 @@ function migrateToVersionTwo(db: Database.Database): void {
   db.prepare("delete from todoist_sync_state").run();
 }
 
+function ensureActionJournalGuards(db: Database.Database): void {
+  db.exec(`
+    create trigger if not exists task_action_journal_require_action_id
+    before insert on task_action_journal
+    when new.action_id is null
+    begin
+      select raise(abort, 'task_action_journal.action_id must not be null');
+    end
+  `);
+}
+
 function backfillOccurrences(db: Database.Database): void {
   const rows = db.prepare(`
     select
       c.task_id as taskId,
+      c.occurrence_key as occurrenceKey,
+      c.occurrence_due_datetime as occurrenceDueDatetime,
+      c.occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint,
       t.due_datetime as dueDatetime,
       t.is_recurring as isRecurring,
       t.due_string as dueString,
@@ -101,9 +117,19 @@ function backfillOccurrences(db: Database.Database): void {
       t.raw_json as rawJson
     from commitment_states c
     join todoist_tasks t on t.id = c.task_id
-    where c.occurrence_key is null or trim(c.occurrence_key) = ''
+    where c.occurrence_key is null
+      or trim(c.occurrence_key) = ''
+      or (
+        (c.occurrence_due_datetime is null or trim(c.occurrence_due_datetime) = '')
+        and t.due_datetime is not null
+      )
+      or c.occurrence_recurrence_fingerprint is null
+      or trim(c.occurrence_recurrence_fingerprint) = ''
   `).all() as Array<{
     taskId: string;
+    occurrenceKey: string | null;
+    occurrenceDueDatetime: string | null;
+    occurrenceRecurrenceFingerprint: string | null;
     dueDatetime: string | null;
     isRecurring: number;
     dueString: string | null;
@@ -117,16 +143,15 @@ function backfillOccurrences(db: Database.Database): void {
     set
       occurrence_key = ?,
       occurrence_due_datetime = ?,
-      occurrence_recurrence_fingerprint = ?,
-      reconciliation_status = 'confirmed'
+      occurrence_recurrence_fingerprint = ?
     where task_id = ?
   `);
   for (const row of rows) {
     const recurrenceFacts = legacyRecurrenceFacts(row);
     update.run(
-      randomUUID(),
-      row.dueDatetime,
-      recurrenceFingerprint(recurrenceFacts),
+      nonBlank(row.occurrenceKey) ?? randomUUID(),
+      nonBlank(row.occurrenceDueDatetime) ?? row.dueDatetime,
+      nonBlank(row.occurrenceRecurrenceFingerprint) ?? recurrenceFingerprint(recurrenceFacts),
       row.taskId
     );
   }
@@ -219,4 +244,8 @@ function readBoolean(value: unknown): boolean | null {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function nonBlank(value: string | null): string | null {
+  return value?.trim() ? value : null;
 }
