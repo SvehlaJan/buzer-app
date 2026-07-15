@@ -1,4 +1,5 @@
 import { computeStartAt } from "../domain/time.js";
+import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
 import { validateTaskStrictness } from "../domain/taskValidation.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
@@ -15,23 +16,21 @@ export class TaskSnapshotService {
     const projectsById = new Map(
       this.projects.listActive().map((project) => [project.todoistProjectId, project])
     );
+    const policy = new TaskEnforcementPolicy({
+      currentUserId: this.currentUserId,
+      projectsById
+    });
     const items = rows.map((task) => {
-      const project = task.projectId === null ? null : projectsById.get(task.projectId) ?? null;
-      const isCurrentUserPersonalProjectTask =
-        task.assigneeId === null &&
-        task.creatorId === this.currentUserId &&
-        project?.canAssignTasks === false;
-      const isCompanionOwnedByUser =
-        task.assigneeId === null &&
-        (task.commitmentOwnerId === this.currentUserId || isCurrentUserPersonalProjectTask);
+      const isCompanionOwnedByUser = policy.isCompanionOwned(task);
       const isAssignedToUser = task.assigneeId === this.currentUserId || isCompanionOwnedByUser;
       const validation = validateTaskStrictness({
         title: task.title,
         creatorId: task.creatorId,
-        assigneeId: isCompanionOwnedByUser ? this.currentUserId : task.assigneeId,
+        assigneeId: task.assigneeId,
         dueDatetime: task.dueDatetime,
         durationMinutes: task.durationMinutes,
-        currentUserId: this.currentUserId
+        currentUserId: this.currentUserId,
+        isCompanionOwned: isCompanionOwnedByUser
       });
       const startAt = task.dueDatetime !== null && task.durationMinutes !== null
         ? computeStartAt(task.dueDatetime, task.durationMinutes)

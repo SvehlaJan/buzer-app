@@ -389,9 +389,9 @@ interface ActivityLogEntry {
 - Create: `backend/test/domain/taskEnforcementPolicy.test.ts`
 - Create: `backend/test/services/taskHierarchyProjector.test.ts`
 
-- [ ] Write failing policy tests for an eligible root, a repairable root candidate, an eligible child, not-owned tasks, scheduled/recurring/assigned/duration-bearing children, a grandchild, 31 direct children, and a valid 30-child tree. Expected classification names: `ROOT_COMMITMENT`, `ROOT_CANDIDATE_INVALID`, `CHECKLIST_CHILD`, `UNSUPPORTED_HIERARCHY`, and `NOT_OWNED`.
-- [ ] Move personal-project ownership normalization out of `TaskSnapshotService` into `TaskEnforcementPolicy`. Preserve the current rule that a task created by the configured user in a non-assignable personal project can be companion-owned through `commitment_owner_id`.
-- [ ] Give hierarchy violations stable codes suitable for API/UI tests:
+- [x] Write failing policy tests for an eligible root, a repairable root candidate, an eligible child, not-owned tasks, scheduled/recurring/assigned/duration-bearing children, a grandchild, 31 direct children, and a valid 30-child tree. Expected classification names: `ROOT_COMMITMENT`, `ROOT_CANDIDATE_INVALID`, `CHECKLIST_CHILD`, `UNSUPPORTED_HIERARCHY`, and `NOT_OWNED`.
+- [x] Move personal-project ownership normalization out of `TaskSnapshotService` into `TaskEnforcementPolicy`. Preserve the current rule that a task created by the configured user in a non-assignable personal project can be companion-owned through `commitment_owner_id`.
+- [x] Give hierarchy violations stable codes suitable for API/UI tests:
 
 ```ts
 type HierarchyViolation =
@@ -404,12 +404,12 @@ type HierarchyViolation =
   | "child_project_mismatch";
 ```
 
-- [ ] Write failing projector tests proving only roots appear at top level, direct children are ordered by `child_order` then stable ID, child progress is derived, grandchildren are detected rather than flattened, and changing one child's checked state does not change the root revision.
-- [ ] Implement a pure projector returning root, children, checked/total counts, policy classification, and violation. Do not place alarm, recurrence mutation, or SQLite writes in this component.
-- [ ] Keep the underlying mirror uniform for every task. Do not create a checklist-only table or schema branch; future scheduled-child support must require a new policy classification, not a mirror migration.
-- [ ] Run `npm test -- test/domain/taskEnforcementPolicy.test.ts test/services/taskHierarchyProjector.test.ts test/domain/taskValidation.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: project checklist task hierarchies"`.
+- [x] Write failing projector tests proving only roots appear at top level, direct children are ordered by `child_order` then stable ID, child progress is derived, grandchildren are detected rather than flattened, and changing one child's checked state does not change the root revision.
+- [x] Implement a pure projector returning root, children, checked/total counts, policy classification, and violation. Do not place alarm, recurrence mutation, or SQLite writes in this component.
+- [x] Keep the underlying mirror uniform for every task. Do not create a checklist-only table or schema branch; future scheduled-child support must require a new policy classification, not a mirror migration.
+- [x] Run `npm test -- test/domain/taskEnforcementPolicy.test.ts test/services/taskHierarchyProjector.test.ts test/domain/taskValidation.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: project checklist task hierarchies"`.
 
 ## Task 5: Reconcile Occurrence Identity And Per-Occurrence Accountability
 
