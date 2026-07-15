@@ -1,0 +1,3 @@
+[agents.implementer_light]
+description = "Bounded, low-risk implementation work with deterministic tests."
+config_file = "agents/implementer-light.toml"
