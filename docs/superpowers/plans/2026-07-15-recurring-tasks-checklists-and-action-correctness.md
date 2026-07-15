@@ -278,7 +278,7 @@ create table if not exists task_action_commands (
 - Modify: `backend/test/fakes/fakeTodoistAdapter.ts`
 - Modify: `backend/test/todoist/httpTodoistAdapter.test.ts`
 
-- [ ] Use Context7 before editing the adapter:
+- [x] Use Context7 before editing the adapter:
 
 ```text
 npx ctx7@latest library "Todoist API" "API v1 Sync commands item_add item_update item_move item_close item_uncomplete item_delete item_update_date_complete reset_subtasks parent_id due recurrence"
@@ -286,8 +286,8 @@ npx ctx7@latest docs "/websites/developer_todoist_api_v1" "exact command argumen
 ```
 
 Expected: the docs confirm dedicated move/completion commands and `item_update_date_complete` with `reset_subtasks`.
-- [ ] Add failing adapter tests for parsing `parent_id`, `child_order`, checked state, due date/datetime/string/lang/timezone/recurring flag, duration amount/unit, and for emitting each dedicated command with a caller-supplied UUID. Run `npm test -- test/todoist/httpTodoistAdapter.test.ts`. Expected: FAIL against the generic current adapter.
-- [ ] Map Todoist data into this typed shape without inferring product policy:
+- [x] Add failing adapter tests for parsing `parent_id`, `child_order`, checked state, due date/datetime/string/lang/timezone/recurring flag, duration amount/unit, and for emitting each dedicated command with a caller-supplied UUID. Run `npm test -- test/todoist/httpTodoistAdapter.test.ts`. Expected: FAIL against the generic current adapter.
+- [x] Map Todoist data into this typed shape without inferring product policy:
 
 ```ts
 interface TodoistTaskMirror {
@@ -315,9 +315,9 @@ interface TodoistTaskMirror {
 }
 ```
 
-- [ ] Normalize minute and hour durations to `durationMinutes`, retain unsupported units in the typed amount/unit fields, and let policy reject unsupported scheduled roots. Do not erase raw values.
-- [ ] Replace random UUID generation inside `HttpTodoistAdapter` with caller-supplied command identities. Keep `sync(syncToken)` and expose explicit gateway methods for `item_add`, `item_update`, `item_move`, `item_close`, `item_uncomplete`, `item_delete`, and `item_update_date_complete`.
-- [ ] Model due mutations explicitly so field updates can preserve or replace recurrence without accidental flattening:
+- [x] Normalize minute and hour durations to `durationMinutes`, retain unsupported units in the typed amount/unit fields, and let policy reject unsupported scheduled roots. Do not erase raw values.
+- [x] Replace random UUID generation inside `HttpTodoistAdapter` with caller-supplied command identities. Keep `sync(syncToken)` and expose explicit gateway methods for `item_add`, `item_update`, `item_move`, `item_close`, `item_uncomplete`, `item_delete`, and `item_update_date_complete`.
+- [x] Model due mutations explicitly so field updates can preserve or replace recurrence without accidental flattening:
 
 ```ts
 type TodoistDueMutation =
@@ -332,13 +332,13 @@ type TodoistDueMutation =
     };
 ```
 
-- [ ] Ensure `item_update` omits due for metadata-only edits and one-time extension, emits a recurrence-aware due object for supported reschedule/edit, and sends `responsible_uid: null` when unassigning. Ensure project changes use `item_move`, never `project_id` inside `item_update`.
-- [ ] Implement recurring completion with `item_update_date_complete`, the mirrored due facts required by the official command, and hard-coded `reset_subtasks: true`. There must be no Boolean parameter that permits `false`.
-- [ ] Implement root and child creation through `item_add` with journal-provided UUID/temp ID. A child command must contain `parent_id`, the root project, content, and optional description, and must omit due, duration, recurrence, and assignment.
-- [ ] Assert command failures include command UUID, type, and Todoist status but never the Authorization header or API token.
-- [ ] Run `npm test -- test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "refactor: use explicit Todoist task commands"`.
+- [x] Ensure `item_update` omits due for metadata-only edits and one-time extension, emits a recurrence-aware due object for supported reschedule/edit, and sends `responsible_uid: null` when unassigning. Ensure project changes use `item_move`, never `project_id` inside `item_update`.
+- [x] Implement recurring completion with `item_update_date_complete`, the mirrored due facts required by the official command, and hard-coded `reset_subtasks: true`. There must be no Boolean parameter that permits `false`.
+- [x] Implement root and child creation through `item_add` with journal-provided UUID/temp ID. A child command must contain `parent_id`, the root project, content, and optional description, and must omit due, duration, recurrence, and assignment.
+- [x] Assert command failures include command UUID, type, and Todoist status but never the Authorization header or API token.
+- [x] Run `npm test -- test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "refactor: use explicit Todoist task commands"`.
 
 ## Task 3: Add Recurrence Presets And Managed Description Encoding
 
