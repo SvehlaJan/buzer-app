@@ -10,7 +10,8 @@ Branch: `feature/recurring-checklists`
 ## Status And Attempted Steps
 
 - All Task 1 implementation and verification steps are complete locally.
-- Plan checkboxes were intentionally left unchanged for the controller to update.
+- The controller marked every Task 1 plan checkbox complete after independent spec and quality
+  re-reviews approved the amended implementation.
 - Implemented guarded migration v2, typed task persistence and mirror revisions, occurrence and
   escalation backfill, action/command journaling, regression tests, both review-fix rounds, and this
   handoff.
@@ -256,6 +257,21 @@ Verification:
 - Result: PASS
 - Evidence: initial review found three Important issues; each received a RED/GREEN fix. Re-review
   reported no Critical, Important, or new Minor findings and assessed the task ready to merge.
+
+Verification:
+- Command: independent Task 1 specification re-audit over `f572e0e..91f1815`
+- Result: PASS
+- Evidence: reviewer reported `Spec compliant` after all quality fixes.
+
+Verification:
+- Command: independent Task 1 quality re-review over `f572e0e..91f1815`
+- Result: PASS
+- Evidence: reviewer reported `Approved`; all four quality findings were closed.
+
+Verification:
+- Command: controller rerun of `npm test`, `npm run typecheck`, and `npm run build`
+- Result: PASS
+- Evidence: 19 backend test files and 100 tests passed; typecheck and production build exited 0.
 
 ## Manual Verification
 

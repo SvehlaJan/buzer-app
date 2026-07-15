@@ -204,8 +204,8 @@ The implementation must update existing assertions in the same task that changes
 - Modify: `backend/test/repositories/taskRepository.test.ts`
 - Create: `backend/test/repositories/actionJournalRepository.test.ts`
 
-- [ ] Add failing migration tests that open a legacy schema, insert one active and one terminal commitment plus an existing WhatsApp row, run `migrate`, and assert typed columns, occurrence backfill, the new escalation uniqueness, journal tables, and forced full-sync state. Run from `backend/`: `npm test -- test/db/migrations.test.ts`. Expected: FAIL because migration version 2 is absent.
-- [ ] Extend `todoist_tasks` with these typed columns while keeping `raw_json`:
+- [x] Add failing migration tests that open a legacy schema, insert one active and one terminal commitment plus an existing WhatsApp row, run `migrate`, and assert typed columns, occurrence backfill, the new escalation uniqueness, journal tables, and forced full-sync state. Run from `backend/`: `npm test -- test/db/migrations.test.ts`. Expected: FAIL because migration version 2 is absent.
+- [x] Extend `todoist_tasks` with these typed columns while keeping `raw_json`:
 
 ```sql
 parent_id text,
@@ -220,7 +220,7 @@ duration_unit text,
 mirror_revision integer not null default 1
 ```
 
-- [ ] Extend `commitment_states` with:
+- [x] Extend `commitment_states` with:
 
 ```sql
 occurrence_key text,
@@ -230,8 +230,8 @@ reconciliation_status text not null default 'confirmed'
   check (reconciliation_status in ('confirmed', 'pending'))
 ```
 
-- [ ] Add `occurrence_key` to `whatsapp_escalations`, drop `whatsapp_escalations_one_per_task`, backfill active rows from `commitment_states.occurrence_key`, use a deterministic `legacy:<task_id>` key for terminal/history rows, and create `whatsapp_escalations_one_per_occurrence` on `(task_id, occurrence_key)`.
-- [ ] Add the durable journal tables. Persist parsed request fingerprints and compact response/error JSON only; do not add any header, bearer token, Todoist token, or raw HTTP-request column.
+- [x] Add `occurrence_key` to `whatsapp_escalations`, drop `whatsapp_escalations_one_per_task`, backfill active rows from `commitment_states.occurrence_key`, use a deterministic `legacy:<task_id>` key for terminal/history rows, and create `whatsapp_escalations_one_per_occurrence` on `(task_id, occurrence_key)`.
+- [x] Add the durable journal tables. Persist parsed request fingerprints and compact response/error JSON only; do not add any header, bearer token, Todoist token, or raw HTTP-request column.
 
 ```sql
 create table if not exists task_action_journal (
@@ -260,13 +260,13 @@ create table if not exists task_action_commands (
 );
 ```
 
-- [ ] Implement migration version 2 as an idempotent transaction. Backfill every missing occurrence key with `randomUUID()`, copy the current due anchor and a normalized recurrence fingerprint, and delete the current `todoist_sync_state` row so the next synchronization uses `*`. Add a `mirror_contract_version` column and write version 2 only after that full sync succeeds.
-- [ ] Expand `TodoistTaskMirror`, `TodoistTaskUpsert`, and `TaskWithCommitment` with all typed fields and opaque revision/occurrence values. Store booleans as `0/1` in SQLite and expose booleans at repository boundaries.
-- [ ] Make mirror upsert update every typed field and increment `mirror_revision` only when authoritative Todoist fields changed. Test that an identical replay keeps the same revision and a changed child title advances only that child's revision.
-- [ ] Implement `ActionJournalRepository.reserve`, `get`, `reserveCommand`, `markCommandSent`, `markCommandConfirmed`, `markCompleted`, `markFailed`, and `markReconciliationPending`. `reserve` must return replay for the same fingerprint and throw `409 action_id_reused` for a different fingerprint.
-- [ ] Run `npm test -- test/db/migrations.test.ts test/repositories/taskRepository.test.ts test/repositories/actionJournalRepository.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit only this task's files with `git commit -m "feat: add occurrence and action journal persistence"`.
+- [x] Implement migration version 2 as an idempotent transaction. Backfill every missing occurrence key with `randomUUID()`, copy the current due anchor and a normalized recurrence fingerprint, and delete the current `todoist_sync_state` row so the next synchronization uses `*`. Add a `mirror_contract_version` column and write version 2 only after that full sync succeeds.
+- [x] Expand `TodoistTaskMirror`, `TodoistTaskUpsert`, and `TaskWithCommitment` with all typed fields and opaque revision/occurrence values. Store booleans as `0/1` in SQLite and expose booleans at repository boundaries.
+- [x] Make mirror upsert update every typed field and increment `mirror_revision` only when authoritative Todoist fields changed. Test that an identical replay keeps the same revision and a changed child title advances only that child's revision.
+- [x] Implement `ActionJournalRepository.reserve`, `get`, `reserveCommand`, `markCommandSent`, `markCommandConfirmed`, `markCompleted`, `markFailed`, and `markReconciliationPending`. `reserve` must return replay for the same fingerprint and throw `409 action_id_reused` for a different fingerprint.
+- [x] Run `npm test -- test/db/migrations.test.ts test/repositories/taskRepository.test.ts test/repositories/actionJournalRepository.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit only this task's files with `git commit -m "feat: add occurrence and action journal persistence"`.
 
 ## Task 2: Mirror Todoist Hierarchy And Recurrence Through Explicit Commands
 
