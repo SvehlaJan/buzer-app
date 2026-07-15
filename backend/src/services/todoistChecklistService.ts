@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DomainError } from "../domain/errors.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistMutationGateway } from "../todoist/todoistMutationGateway.js";
-import type { TaskActionCommandContext, TaskActionCoordinator } from "./taskActionCoordinator.js";
+import type { TaskActionCommandContext, TaskActionCoordinator, TaskActionEffectContext } from "./taskActionCoordinator.js";
 
 export type ChildMutation =
   | { type: "add"; clientMutationId: string; title: string; description: string | null }
@@ -90,7 +90,7 @@ export class TodoistChecklistService {
         actionType: "checklist_mutation",
         payload: { mutations: request.mutations },
         validate: () => this.assertProjectedTree(rootTaskId),
-        isEffectPresent: () => this.effectsPresent(rootTaskId, request.mutations, createdChildIds),
+        isEffectPresent: (_root, context) => this.effectsPresent(rootTaskId, request.mutations, createdChildIds, context),
         responseAfterReconciliation: () => this.responseFromCurrentState(rootTaskId, request.mutations),
         compactResponse: (response) => ({
           outcome: response.outcome,
@@ -101,7 +101,12 @@ export class TodoistChecklistService {
       if (response.kind === "pending") {
         throw DomainError.reconciliationPending(this.snapshot());
       }
-      return { ...response.response, snapshot: this.snapshot() };
+      return {
+        outcome: response.response.outcome,
+        root: this.requireRoot(rootTaskId),
+        childOutcomes: response.response.childOutcomes,
+        snapshot: this.snapshot()
+      };
     }
 
     await this.synchronize();
@@ -250,10 +255,11 @@ export class TodoistChecklistService {
   private effectsPresent(
     rootTaskId: string,
     mutations: readonly ChildMutation[],
-    createdChildIds: ReadonlyMap<string, string>
+    createdChildIds: ReadonlyMap<string, string>,
+    context: TaskActionEffectContext
   ): boolean {
     const root = this.requireRoot(rootTaskId);
-    return mutations.every((mutation) => {
+    return mutations.filter((mutation) => context.reservedStepKeys.has(commandStepKey(mutation))).every((mutation) => {
       if (mutation.type === "add") {
         const createdId = createdChildIds.get(mutation.clientMutationId);
         if (createdId !== undefined) {
@@ -282,7 +288,8 @@ export class TodoistChecklistService {
     }
     if (children.some((child) =>
       child.projectId !== root.projectId || child.dueDatetime !== null || child.dueDate !== null ||
-      child.durationMinutes !== null || child.durationAmount !== null || child.isRecurring || child.assigneeId !== null
+      child.dueString !== null || child.dueLang !== null || child.dueTimezone !== null || child.isRecurring ||
+      child.durationMinutes !== null || child.durationAmount !== null || child.durationUnit !== null || child.assigneeId !== null
     )) {
       throw DomainError.unsupportedHierarchy(this.snapshot());
     }
@@ -309,15 +316,53 @@ export class TodoistChecklistService {
 }
 
 function assertRequestShape(mutations: readonly ChildMutation[]): void {
-  for (const mutation of mutations as readonly Record<string, unknown>[]) {
-    const forbidden = [
-      "parent", "parentId", "parent_id", "due", "dueDate", "dueDatetime", "duration", "durationMinutes",
-      "recurrence", "isRecurring", "assigneeId", "assignment", "responsibleUid", "children", "descendants"
-    ];
-    if (forbidden.some((field) => field in mutation)) {
-      throw domainError("forbidden_child_field", "Checklist items cannot carry scheduling, assignment, or descendants");
+  for (const mutation of mutations as readonly unknown[]) {
+    if (typeof mutation !== "object" || mutation === null || Array.isArray(mutation)) {
+      throw invalidChildMutation();
+    }
+    const source = mutation as Record<string, unknown>;
+    const type = source.type;
+    const allowedKeys = childMutationKeys(type);
+    if (allowedKeys === null || !allowedKeys.every((key) => hasOwn(source, key)) || Object.keys(source).some((key) => !allowedKeys.includes(key))) {
+      throw invalidChildMutation();
+    }
+    if (typeof source.clientMutationId !== "string") throw invalidChildMutation();
+    if (type === "add" || type === "edit") {
+      if (typeof source.title !== "string" || (source.description !== null && typeof source.description !== "string")) {
+        throw invalidChildMutation();
+      }
+    }
+    if (type !== "add") {
+      if (typeof source.childId !== "string" || typeof source.expectedChildRevision !== "string") {
+        throw invalidChildMutation();
+      }
     }
   }
+}
+
+function childMutationKeys(type: unknown): readonly string[] | null {
+  switch (type) {
+    case "add": return ["type", "clientMutationId", "title", "description"];
+    case "edit": return ["type", "clientMutationId", "childId", "expectedChildRevision", "title", "description"];
+    case "delete":
+    case "check":
+    case "uncheck": return ["type", "clientMutationId", "childId", "expectedChildRevision"];
+    default: return null;
+  }
+}
+
+function hasOwn(source: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function invalidChildMutation(): DomainError {
+  return domainError("forbidden_child_field", "Checklist items only accept their declared mutation fields");
+}
+
+function commandStepKey(mutation: ChildMutation): string {
+  return mutation.type === "add"
+    ? `child:${mutation.clientMutationId}:add`
+    : `child:${mutation.childId}:${mutation.type}`;
 }
 
 function parseRevision(value: string): number {

@@ -77,6 +77,26 @@ describe("TodoistChecklistService", () => {
     expect(adapter.itemCloses).toHaveLength(1);
   });
 
+  it("completes a coordinated mixed stale and safe batch with terminal child outcomes", async () => {
+    const { service, adapter, db, repo } = setup({ coordinated: true, children: [child("one"), child("two")] });
+    const revision = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
+
+    const result = await service.mutate("root", {
+      action: { actionId: "mixed-stale-safe", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [
+        { type: "edit", clientMutationId: "stale", childId: "child-one", expectedChildRevision: "r:0", title: "Ignored", description: null },
+        { type: "check", clientMutationId: "safe", childId: "child-two", expectedChildRevision: revision }
+      ]
+    });
+
+    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
+      { clientMutationId: "stale", outcome: "stale_child", errorCode: "stale_child" },
+      { clientMutationId: "safe", outcome: "completed", errorCode: null }
+    ], snapshot: { authoritative: true } });
+    expect(adapter.itemCloses).toHaveLength(1);
+    expect(db.prepare("select status from task_action_journal where action_id = ?").get("mixed-stale-safe")).toEqual({ status: "completed" });
+  });
+
   it("rejects a child that is not directly under the requested root", async () => {
     const { service, repo } = setup({ children: [child("other", { parentTodoistTaskId: "different-root" })] });
     const revision = `r:${repo.getByTodoistTaskId("child-other")?.mirrorRevision}`;
@@ -94,6 +114,35 @@ describe("TodoistChecklistService", () => {
     } as unknown as ChildMutation] })).rejects.toMatchObject({ code: "forbidden_child_field", statusCode: 422 });
 
     expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it.each([
+    { type: "add", clientMutationId: "project", title: "No project", description: null, projectId: "project-2" },
+    { type: "add", clientMutationId: "parent-camel", title: "No parent", description: null, parentId: "other-root" },
+    { type: "add", clientMutationId: "parent-snake", title: "No parent", description: null, parent_id: "other-root" },
+    { type: "add", clientMutationId: "parent-todoist", title: "No parent", description: null, parentTodoistTaskId: "other-root" },
+    { type: "delete", clientMutationId: "other-variant", childId: "child-one", expectedChildRevision: "r:1", description: null },
+    { type: "check", clientMutationId: "unknown", childId: "child-one", expectedChildRevision: "r:1", arbitrary: true }
+  ])("rejects every extraneous child mutation field", async (mutation) => {
+    const { service, adapter } = setup({ children: [child("one")] });
+
+    await expect(service.mutate("root", { mutations: [mutation as unknown as ChildMutation] })).rejects.toMatchObject({
+      code: "forbidden_child_field",
+      statusCode: 422
+    });
+
+    expect(adapter.itemAdds).toEqual([]);
+    expect(adapter.itemUpdates).toEqual([]);
+    expect(adapter.itemDeletes).toEqual([]);
+    expect(adapter.itemCloses).toEqual([]);
+  });
+
+  it("rejects child variants missing their required discriminated-union fields", async () => {
+    const { service } = setup();
+
+    await expect(service.mutate("root", { mutations: [{
+      type: "add", clientMutationId: "missing-description", title: "Required fields only"
+    } as unknown as ChildMutation] })).rejects.toMatchObject({ code: "forbidden_child_field", statusCode: 422 });
   });
 
   it("caps a root at thirty children while allowing a batch to fill the remaining slots", async () => {
@@ -159,6 +208,72 @@ describe("TodoistChecklistService", () => {
       { stepKey: "child:two:add", status: "confirmed" }
     ]);
     expect(result.snapshot).toEqual({ authoritative: true });
+  });
+
+  it("hydrates a completed coordinated replay with root, child outcomes, and authoritative snapshot", async () => {
+    const { service, repo } = setup({ coordinated: true, children: [child("one")] });
+    const request = {
+      action: { actionId: "replay-complete", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [{
+        type: "check" as const,
+        clientMutationId: "check-one",
+        childId: "child-one",
+        expectedChildRevision: `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`
+      }]
+    };
+
+    await service.mutate("root", request);
+    const replay = await service.mutate("root", request);
+
+    expect(replay).toMatchObject({
+      root: { id: "root", todoistTaskId: "todoist-root" },
+      childOutcomes: [{ clientMutationId: "check-one", childId: "child-one", outcome: "completed" }],
+      snapshot: { authoritative: true }
+    });
+  });
+
+  it.each([
+    ["dueDatetime", "2026-07-15T12:00:00Z"],
+    ["dueDate", "2026-07-15"],
+    ["dueString", "every day"],
+    ["dueLang", "en"],
+    ["dueTimezone", "Europe/Bratislava"],
+    ["isRecurring", true],
+    ["durationMinutes", 30],
+    ["durationAmount", 30],
+    ["durationUnit", "minute"],
+    ["assigneeId", "user-self"]
+  ] as const)("rejects a direct child with typed %s hierarchy facts", async (field, value) => {
+    const { service, repo } = setup();
+    repo.upsertTodoistTask({
+      id: "invalid-child",
+      todoistTaskId: "invalid-child",
+      title: "Invalid child",
+      description: null,
+      projectId: "project-1",
+      parentId: "todoist-root",
+      childOrder: 0,
+      assigneeId: field === "assigneeId" ? value as string : null,
+      creatorId: null,
+      dueDatetime: field === "dueDatetime" ? value as string : null,
+      dueDate: field === "dueDate" ? value as string : null,
+      dueString: field === "dueString" ? value as string : null,
+      dueLang: field === "dueLang" ? value as string : null,
+      dueTimezone: field === "dueTimezone" ? value as string : null,
+      isRecurring: field === "isRecurring" ? value as boolean : false,
+      durationMinutes: field === "durationMinutes" ? value as number : null,
+      durationAmount: field === "durationAmount" ? value as number : null,
+      durationUnit: field === "durationUnit" ? value as string : null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T09:00:00Z"
+    });
+
+    await expect(service.mutate("root", { mutations: [add("blocked", "Blocked")] })).rejects.toMatchObject({
+      code: "unsupported_hierarchy",
+      statusCode: 422
+    });
   });
 
   it("refuses metadata-bearing mutations when durable coordination is unavailable", async () => {

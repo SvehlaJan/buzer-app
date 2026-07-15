@@ -1,11 +1,12 @@
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { EscalationService } from "../../src/services/escalationService.js";
 import { TaskActionService } from "../../src/services/taskActionService.js";
+import { TaskActionCoordinator } from "../../src/services/taskActionCoordinator.js";
 import type { AccountabilitySender, EscalationInput } from "../../src/accountability/accountabilitySender.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
@@ -63,6 +64,53 @@ class FailingSender implements AccountabilitySender {
 }
 
 describe("TaskActionService", () => {
+  it("uses injected authoritative synchronization and snapshots for focused checklist actions", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.createChecklistChild({
+      id: "child-local",
+      todoistTaskId: "child-one",
+      parentTodoistTaskId: "todoist-1",
+      projectId: null,
+      title: "First step",
+      description: null,
+      childOrder: 0,
+      updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1",
+      occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time",
+      updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const synchronize = vi.fn(async () => undefined);
+    const snapshot = vi.fn(() => ({ source: "authoritative-snapshot" }));
+    const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(
+      db,
+      repo,
+      new ProjectRepository(db),
+      adapter,
+      "user-self",
+      null,
+      false,
+      { checklist: { coordinator, synchronize, snapshot } }
+    );
+    const revision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+
+    const result = await service.mutateChecklist("task-1", {
+      action: { actionId: "focused-check", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [{ type: "check", clientMutationId: "check-one", childId: "child-one", expectedChildRevision: revision }]
+    });
+
+    expect(synchronize).toHaveBeenCalledTimes(2);
+    expect(adapter.itemCloses).toHaveLength(1);
+    expect(result.snapshot).toEqual({ source: "authoritative-snapshot" });
+  });
+
   it("blocks mutations until the occurrence mirror contract is ready", async () => {
     const db = new Database(":memory:");
     migrate(db);

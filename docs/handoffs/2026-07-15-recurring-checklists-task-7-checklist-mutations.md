@@ -76,3 +76,66 @@ Verification:
 ## Next Recommended Step
 
 Proceed with Task 8 only. Keep all root create/edit/done/reschedule/extend semantics out of any follow-up checklist-only work.
+
+## Review Corrections
+
+Task: Task 7 spec-review corrections (no Task 8/root semantics or HTTP routes attempted).
+
+### Changes
+
+- Coordinated checklist effect verification now checks only durable command steps reserved for this action. A stale/rejected child before command is returned as a terminal child outcome and cannot turn a successfully dispatched sibling into `reconciliation_pending`.
+- Completed coordinated replays rehydrate the current root and authoritative snapshot around the compact durable child-outcome response.
+- `TaskActionService` accepts explicit checklist dependencies and requires coordinator, synchronizer, and snapshot providers for focused check/uncheck actions; it no longer silently delegates those production-facing actions through no-op synchronization.
+- Runtime mutation validation now enforces the exact discriminated-union keys and required fields, rejecting all variant-crossing and unknown fields, including project and parent-ID fields.
+- Direct-child hierarchy validation now rejects every mirrored due, recurrence, duration, and assignment fact, including `dueString`, `dueLang`, `dueTimezone`, and `durationUnit`.
+
+### Files Changed
+
+- `backend/src/repositories/actionJournalRepository.ts`
+- `backend/src/services/taskActionCoordinator.ts`
+- `backend/src/services/taskActionService.ts`
+- `backend/src/services/todoistChecklistService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `backend/test/services/todoistChecklistService.test.ts`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-7-checklist-mutations.md`
+
+### TDD Evidence
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: 12 new regressions failed: a mixed stale/safe coordinated batch returned `reconciliation_pending`; compact replay omitted `root`; extra/missing union fields were accepted; typed `dueString`, `dueLang`, `dueTimezone`, and `durationUnit` facts bypassed hierarchy rejection; and the TaskActionService façade had not forwarded coordinator/sync/snapshot dependencies.
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 2 files and 47 tests passed after the scoped corrections.
+
+### Final Verification
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: PASS
+- Evidence: 2 test files, 47 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited 0 without diagnostics.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 28 backend test files and 264 tests passed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual Verification, Assumptions, And Next Step
+
+- Manual verification: inspected that command-effect context is sourced from durable per-action command rows, so a pre-command stale mutation has no step to verify while a dispatched sibling remains verified.
+- Assumption: nullable `description` remains the precise optional-description representation for `add` and `edit` variants; no additional fields are accepted.
+- Known skips: no live Todoist, WhatsApp, Android, VPS, or HTTP-route mutation was performed; focused routes remain Task 9 scope.
+- Next recommended step: continue with Task 8 only; use `TaskActionServiceOptions.checklist` when composing a future focused-action route so its coordinator and sync/snapshot providers are the production instances.

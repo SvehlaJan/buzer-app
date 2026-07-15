@@ -8,9 +8,15 @@ import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import type { EscalationService } from "./escalationService.js";
 import {
   TodoistChecklistService,
+  type TodoistChecklistServiceOptions,
   type ChecklistMutationRequest,
   type ChecklistMutationResult
 } from "./todoistChecklistService.js";
+
+export interface TaskActionServiceOptions {
+  /** Production-facing checklist actions must supply live sync, snapshot, and coordination. */
+  checklist?: TodoistChecklistServiceOptions;
+}
 
 export interface CreateTaskInput {
   title: string;
@@ -50,15 +56,28 @@ export class TaskActionService {
     private readonly todoist: TodoistAdapter,
     private readonly currentUserId = "",
     private readonly escalationService: EscalationService | null = null,
-    private readonly requireMirrorReady = false
+    private readonly requireMirrorReady = false,
+    private readonly options: TaskActionServiceOptions = {}
   ) {
-    this.checklistService = new TodoistChecklistService(tasks, todoist);
+    this.checklistService = new TodoistChecklistService(tasks, todoist, options.checklist);
   }
 
   /** Checklist children are intentionally delegated to their dedicated mutation boundary. */
   async mutateChecklist(taskId: string, request: ChecklistMutationRequest): Promise<ChecklistMutationResult> {
     this.assertMirrorReady();
+    this.assertFocusedChecklistDependencies(request);
     return this.checklistService.mutate(taskId, request);
+  }
+
+  private assertFocusedChecklistDependencies(request: ChecklistMutationRequest): void {
+    if (!request.mutations.some((mutation) => mutation.type === "check" || mutation.type === "uncheck")) return;
+    const checklist = this.options.checklist;
+    if (checklist?.coordinator === undefined || checklist.synchronize === undefined || checklist.snapshot === undefined) {
+      throw Object.assign(new Error("Focused checklist actions require coordinated authoritative synchronization"), {
+        code: "checklist_focused_dependencies_required",
+        statusCode: 503
+      });
+    }
   }
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {

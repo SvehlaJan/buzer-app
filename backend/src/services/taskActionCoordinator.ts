@@ -33,6 +33,11 @@ export interface TaskActionCommandContext {
   ): Promise<TResult>;
 }
 
+export interface TaskActionEffectContext {
+  /** Persisted command steps that may require an authoritative effect check. */
+  reservedStepKeys: ReadonlySet<string>;
+}
+
 export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> {
   actionId: string;
   deviceId: string;
@@ -42,7 +47,7 @@ export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> 
   actionType: string;
   payload: TPayload;
   validate?: (root: CoordinatorRoot) => void;
-  isEffectPresent?: (root: CoordinatorRoot) => boolean;
+  isEffectPresent?: (root: CoordinatorRoot, context: TaskActionEffectContext) => boolean;
   /** Builds the replay response after an external command is confirmed by a later sync. */
   responseAfterReconciliation(root: CoordinatorRoot): TResponse;
   /** The journal stores this reduced value, never the full action response. */
@@ -225,7 +230,12 @@ export class TaskActionCoordinator {
     if (action.isEffectPresent === undefined) {
       return "unknown";
     }
-    return action.isEffectPresent(root) ? "present" : "absent";
+    const reservedStepKeys = new Set(
+      this.journal.listCommands(action.actionId)
+        .filter((command) => command.status !== "failed")
+        .map((command) => command.stepKey)
+    );
+    return action.isEffectPresent(root, { reservedStepKeys }) ? "present" : "absent";
   }
 
   private markPending<TResponse>(

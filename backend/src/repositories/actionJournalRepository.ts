@@ -115,6 +115,22 @@ export class ActionJournalRepository {
     return row !== undefined;
   }
 
+  listCommands(actionId: string): ActionCommandEntry[] {
+    const rows = this.db.prepare(`
+      select
+        action_id as actionId,
+        step_key as stepKey,
+        command_uuid as commandUuid,
+        temp_id as tempId,
+        status,
+        result_json as resultJson,
+        updated_at as updatedAt
+      from task_action_commands
+      where action_id = ?
+    `).all(actionId) as ActionCommandRow[];
+    return rows.map(mapCommandRow);
+  }
+
   reserveCommand(input: ReserveCommandInput): ActionCommandReservation {
     const tx = this.db.transaction((): ActionCommandReservation => {
       const existing = this.getCommand(input.actionId, input.stepKey);
