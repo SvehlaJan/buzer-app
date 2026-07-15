@@ -177,6 +177,48 @@ describe("TodoistChecklistService", () => {
     ] });
   });
 
+  it.each([
+    { label: "add", mutations: [add("missing-action-add", "Add")] },
+    { label: "edit", mutations: [{ type: "edit" as const, clientMutationId: "missing-action-edit", childId: "child-one", expectedChildRevision: "r:1", title: "Edited", description: null }] },
+    { label: "delete", mutations: [{ type: "delete" as const, clientMutationId: "missing-action-delete", childId: "child-one", expectedChildRevision: "r:1" }] },
+    { label: "check", mutations: [{ type: "check" as const, clientMutationId: "missing-action-check", childId: "child-one", expectedChildRevision: "r:1" }] },
+    { label: "uncheck", mutations: [{ type: "uncheck" as const, clientMutationId: "missing-action-uncheck", childId: "child-one", expectedChildRevision: "r:1" }] }
+  ])("rejects a product %s mutation without durable action metadata", async ({ mutations }) => {
+    const { rawService, adapter } = setup({ children: [child("one")] });
+
+    await expect(rawService.mutate("root", { mutations })).rejects.toMatchObject({
+      code: "checklist_action_metadata_required",
+      statusCode: 503
+    });
+
+    expect(adapter.itemAdds).toEqual([]);
+    expect(adapter.itemUpdates).toEqual([]);
+    expect(adapter.itemDeletes).toEqual([]);
+    expect(adapter.itemCloses).toEqual([]);
+    expect(adapter.itemUncompletes).toEqual([]);
+  });
+
+  it("completes and replays a coordinated trimmed edit title", async () => {
+    const { service, repo } = setup({ coordinated: true, children: [child("one")] });
+    const request = {
+      action: { actionId: "trimmed-edit", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [{
+        type: "edit" as const,
+        clientMutationId: "rename",
+        childId: "child-one",
+        expectedChildRevision: `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`,
+        title: "  Renamed  ",
+        description: null
+      }]
+    };
+
+    const first = await service.mutate("root", request);
+    const replay = await service.mutate("root", request);
+
+    expect(first).toMatchObject({ outcome: "completed", childOutcomes: [{ clientMutationId: "rename", outcome: "completed" }] });
+    expect(replay).toMatchObject({ outcome: "completed", childOutcomes: [{ clientMutationId: "rename", outcome: "completed" }] });
+  });
+
   it("rejects a child that is not directly under the requested root", async () => {
     const { service, repo } = setup({ children: [child("other", { parentTodoistTaskId: "different-root" })] });
     const revision = `r:${repo.getByTodoistTaskId("child-other")?.mirrorRevision}`;
@@ -238,21 +280,18 @@ describe("TodoistChecklistService", () => {
     expect(adapter.itemAdds).toHaveLength(2);
   });
 
-  it("keeps successful external child commands when a later batch mutation fails", async () => {
+  it("keeps successful external child commands when a local batch mutation fails", async () => {
     const { service, adapter, repo } = setup({ children: [child("one"), child("two")] });
-    vi.spyOn(adapter, "itemUpdate").mockImplementation(async (input) => {
-      if (input.todoistTaskId === "child-one") throw new Error("Todoist unavailable");
-    });
     const revisionOne = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
     const revisionTwo = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
 
     const result = await service.mutate("root", { mutations: [
-      { type: "edit", clientMutationId: "failed-draft", childId: "child-one", expectedChildRevision: revisionOne, title: "Won't save", description: null },
+      { type: "edit", clientMutationId: "failed-draft", childId: "child-one", expectedChildRevision: revisionOne, title: " ", description: null },
       { type: "edit", clientMutationId: "saved-draft", childId: "child-two", expectedChildRevision: revisionTwo, title: "Saved", description: null }
     ] });
 
     expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "failed-draft", outcome: "failed", errorCode: "todoist_child_mutation_failed" },
+      { clientMutationId: "failed-draft", outcome: "failed", errorCode: "child_title_required" },
       { clientMutationId: "saved-draft", outcome: "completed" }
     ] });
     expect(repo.getByTodoistTaskId("child-one")?.title).toBe("Child one");
@@ -357,9 +396,9 @@ describe("TodoistChecklistService", () => {
   });
 
   it("refuses metadata-bearing mutations when durable coordination is unavailable", async () => {
-    const { service, adapter } = setup();
+    const { rawService, adapter } = setup({ coordinated: false });
 
-    await expect(service.mutate("root", {
+    await expect(rawService.mutate("root", {
       action: { actionId: "must-journal", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
       mutations: [add("one", "First")]
     })).rejects.toMatchObject({ code: "checklist_action_coordinator_required", statusCode: 503 });
@@ -382,7 +421,8 @@ function setup(input: { children?: ReturnType<typeof child>[]; sync?: () => Prom
     if (item.checked) repo.setChecklistChildChecked(`local-${item.todoistTaskId}`, true, "2026-07-15T09:30:00Z");
   }
   const adapter = new FakeTodoistAdapter();
-  if (input.coordinated) {
+  const coordinated = input.coordinated ?? true;
+  if (coordinated) {
     repo.initializeOccurrence("root", {
       occurrenceKey: "occurrence-1",
       occurrenceDueDatetime: "2026-07-15T12:00:00Z",
@@ -390,16 +430,32 @@ function setup(input: { children?: ReturnType<typeof child>[]; sync?: () => Prom
       updatedAt: "2026-07-15T09:00:00Z"
     });
   }
-  const coordinator = input.coordinated
+  const coordinator = coordinated
     ? new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: input.sync ?? (async () => undefined) } })
     : undefined;
-  const service = new TodoistChecklistService(repo, adapter, {
+  const rawService = new TodoistChecklistService(repo, adapter, {
     ...(input.sync === undefined ? {} : { synchronize: input.sync }),
     ...(coordinator === undefined ? {} : { coordinator }),
     snapshot: () => ({ authoritative: true }),
     now: () => "2026-07-15T10:00:00Z"
   });
-  return { service, adapter, repo, db };
+  let actionNumber = 0;
+  const action = () => ({
+    actionId: `test-action-${actionNumber++}`,
+    deviceId: "test-device",
+    expectedOccurrenceKey: "occurrence-1"
+  });
+  const service = {
+    mutate: (rootTaskId: string, request: Parameters<TodoistChecklistService["mutate"]>[1]) => rawService.mutate(rootTaskId, {
+      ...request,
+      ...(request.action === undefined ? { action: action() } : {})
+    }),
+    check: (rootTaskId: string, mutation: Extract<ChildMutation, { type: "check" }>, metadata?: Parameters<TodoistChecklistService["check"]>[2]) =>
+      rawService.check(rootTaskId, mutation, metadata ?? action()),
+    uncheck: (rootTaskId: string, mutation: Extract<ChildMutation, { type: "uncheck" }>, metadata?: Parameters<TodoistChecklistService["uncheck"]>[2]) =>
+      rawService.uncheck(rootTaskId, mutation, metadata ?? action())
+  };
+  return { service, rawService, adapter, repo, db };
 }
 
 function add(clientMutationId: string, title: string, description: string | null = null): Extract<ChildMutation, { type: "add" }> {

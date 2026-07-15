@@ -50,7 +50,6 @@ export interface TodoistChecklistServiceOptions {
  * of this service so a child can never inherit root scheduling/assignment update paths.
  */
 export class TodoistChecklistService {
-  private readonly synchronize: () => Promise<void>;
   private readonly snapshot: () => unknown;
   private readonly now: () => string;
 
@@ -59,20 +58,20 @@ export class TodoistChecklistService {
     private readonly todoist: TodoistMutationGateway,
     private readonly options: TodoistChecklistServiceOptions = {}
   ) {
-    this.synchronize = options.synchronize ?? (async () => undefined);
     this.snapshot = options.snapshot ?? (() => ({ tasks: this.tasks.listAll() }));
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
   async mutate(rootTaskId: string, request: ChecklistMutationRequest): Promise<ChecklistMutationResult> {
     assertRequestShape(request.mutations);
-    if (request.mutations.length === 0) {
-      await this.synchronize();
-      const root = this.requireRoot(rootTaskId);
-      return { outcome: "completed", root, childOutcomes: [], snapshot: this.snapshot() };
+    if (request.action === undefined) {
+      throw domainError(
+        "checklist_action_metadata_required",
+        "Checklist mutations require durable action metadata",
+        503
+      );
     }
-
-    if (request.action !== undefined && this.options.coordinator === undefined) {
+    if (this.options.coordinator === undefined) {
       throw domainError(
         "checklist_action_coordinator_required",
         "Checklist actions with retry metadata require durable coordination",
@@ -80,40 +79,32 @@ export class TodoistChecklistService {
       );
     }
 
-    if (request.action !== undefined && this.options.coordinator !== undefined) {
-      const createdChildIds = new Map<string, string>();
-      const response = await this.options.coordinator.execute({
-        actionId: request.action.actionId,
-        deviceId: request.action.deviceId,
-        rootTaskId,
-        expectedOccurrenceKey: request.action.expectedOccurrenceKey,
-        actionType: "checklist_mutation",
-        payload: { mutations: request.mutations },
-        validate: () => this.assertProjectedTree(rootTaskId),
-        isEffectPresent: (_root, context) => this.effectsPresent(rootTaskId, request.mutations, createdChildIds, context),
-        responseAfterReconciliation: (_root, context) => this.responseFromCurrentState(rootTaskId, request.mutations, context),
-        compactResponse: (response) => ({
-          outcome: response.outcome,
-          childOutcomes: response.childOutcomes
-        }),
-        execute: (context) => this.executeMutations(rootTaskId, request.mutations, context, createdChildIds)
-      });
-      if (response.kind === "pending") {
-        throw DomainError.reconciliationPending(this.snapshot());
-      }
-      return {
-        outcome: response.response.outcome,
-        root: this.requireRoot(rootTaskId),
-        childOutcomes: response.response.childOutcomes,
-        snapshot: this.snapshot()
-      };
+    const createdChildIds = new Map<string, string>();
+    const response = await this.options.coordinator.execute({
+      actionId: request.action.actionId,
+      deviceId: request.action.deviceId,
+      rootTaskId,
+      expectedOccurrenceKey: request.action.expectedOccurrenceKey,
+      actionType: "checklist_mutation",
+      payload: { mutations: request.mutations },
+      validate: () => this.assertProjectedTree(rootTaskId),
+      isEffectPresent: (_root, context) => this.effectsPresent(rootTaskId, request.mutations, createdChildIds, context),
+      responseAfterReconciliation: (_root, context) => this.responseFromCurrentState(rootTaskId, request.mutations, context),
+      compactResponse: (response) => ({
+        outcome: response.outcome,
+        childOutcomes: response.childOutcomes
+      }),
+      execute: (context) => this.executeMutations(rootTaskId, request.mutations, context, createdChildIds)
+    });
+    if (response.kind === "pending") {
+      throw DomainError.reconciliationPending(this.snapshot());
     }
-
-    await this.synchronize();
-    this.assertProjectedTree(rootTaskId);
-    const response = await this.executeMutations(rootTaskId, request.mutations);
-    await this.synchronize();
-    return { ...response, snapshot: this.snapshot() };
+    return {
+      outcome: response.response.outcome,
+      root: this.requireRoot(rootTaskId),
+      childOutcomes: response.response.childOutcomes,
+      snapshot: this.snapshot()
+    };
   }
 
   async check(rootTaskId: string, mutation: Extract<ChildMutation, { type: "check" }>, action?: ChecklistActionMetadata) {
@@ -127,7 +118,7 @@ export class TodoistChecklistService {
   private async executeMutations(
     rootTaskId: string,
     mutations: readonly ChildMutation[],
-    context?: TaskActionCommandContext,
+    context: TaskActionCommandContext,
     createdChildIds?: Map<string, string>
   ): Promise<Omit<ChecklistMutationResult, "snapshot">> {
     const root = this.requireRoot(rootTaskId);
@@ -151,7 +142,7 @@ export class TodoistChecklistService {
   private async executeOne(
     root: TaskWithCommitment,
     mutation: ChildMutation,
-    context: TaskActionCommandContext | undefined,
+    context: TaskActionCommandContext,
     createdChildIds: Map<string, string> | undefined
   ): Promise<ChecklistChildOutcome> {
     if (mutation.type === "add") {
@@ -231,13 +222,12 @@ export class TodoistChecklistService {
   }
 
   private async send<TResult>(
-    context: TaskActionCommandContext | undefined,
+    context: TaskActionCommandContext,
     stepKey: string,
     tempId: string | null,
     send: (commandUuid: string) => Promise<TResult>
   ): Promise<TResult> {
-    if (context !== undefined) return context.executeCommand(stepKey, send, { tempId });
-    return send(randomUUID());
+    return context.executeCommand(stepKey, send, { tempId });
   }
 
   private responseFromCurrentState(
@@ -310,7 +300,7 @@ export class TodoistChecklistService {
       if (mutation.type === "delete") return child.deletedAt !== null;
       if (mutation.type === "check") return child.completedAt !== null;
       if (mutation.type === "uncheck") return child.completedAt === null;
-      return child.title === mutation.title && child.description === normalizeDescription(mutation.description);
+      return child.title === requiredTitle(mutation.title) && child.description === normalizeDescription(mutation.description);
     });
   }
 

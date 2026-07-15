@@ -64,6 +64,30 @@ class FailingSender implements AccountabilitySender {
 }
 
 describe("TaskActionService", () => {
+  it.each([
+    ["add", { type: "add", clientMutationId: "add", title: "Add", description: null }],
+    ["edit", { type: "edit", clientMutationId: "edit", childId: "child-1", expectedChildRevision: "r:1", title: "Edit", description: null }],
+    ["delete", { type: "delete", clientMutationId: "delete", childId: "child-1", expectedChildRevision: "r:1" }],
+    ["check", { type: "check", clientMutationId: "check", childId: "child-1", expectedChildRevision: "r:1" }],
+    ["uncheck", { type: "uncheck", clientMutationId: "uncheck", childId: "child-1", expectedChildRevision: "r:1" }]
+  ] as const)("rejects metadata-free checklist %s actions before Todoist", async (_type, mutation) => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, new TaskRepository(db), new ProjectRepository(db), adapter);
+
+    await expect(service.mutateChecklist("task-1", { mutations: [mutation] })).rejects.toMatchObject({
+      code: "checklist_action_metadata_required",
+      statusCode: 503
+    });
+
+    expect(adapter.itemAdds).toEqual([]);
+    expect(adapter.itemUpdates).toEqual([]);
+    expect(adapter.itemDeletes).toEqual([]);
+    expect(adapter.itemCloses).toEqual([]);
+    expect(adapter.itemUncompletes).toEqual([]);
+  });
+
   it("uses injected authoritative synchronization and snapshots for focused checklist actions", async () => {
     const db = new Database(":memory:");
     migrate(db);

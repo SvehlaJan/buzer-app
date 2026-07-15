@@ -197,3 +197,69 @@ Verification:
 - Assumption: without a durable command and without a safely reproducible no-op, returning a generic failed outcome is safer than inferring external success.
 - Known skips: no live Todoist, WhatsApp, Android, VPS, or HTTP-route mutation was performed; focused routes remain Task 9 scope.
 - Next recommended step: proceed with Task 8 only.
+
+## Code-Quality Correction: Mandatory Durable Checklist Actions
+
+Task: Task 7 code-quality correction (mandatory action metadata/coordinator and normalized edit verification only; no Task 8/routes attempted).
+
+### Changes
+
+- Removed the direct Todoist mutation path from `TodoistChecklistService`: every product child mutation now requires action metadata and a durable coordinator, so fresh unjournaled command UUIDs cannot be issued.
+- `TaskActionService` now enforces action metadata and coordinator/synchronizer/snapshot dependencies for every checklist mutation, not only focused check/uncheck actions.
+- All normal checklist service tests now use coordinated metadata; the raw service is retained only to assert metadata/coordinator rejection and never executes an uncoordinated command.
+- Effect verification normalizes edit titles with the same trimming rule used for Todoist send and mirror storage, so a whitespace-padded title completes and replays normally.
+- Updated the old transport-failure batch unit scenario to a deterministic local validation failure: a sent command that throws remains durably uncertain by design, while a local failure remains a truthful partial outcome.
+
+### Files Changed
+
+- `backend/src/services/taskActionService.ts`
+- `backend/src/services/todoistChecklistService.ts`
+- `backend/test/services/taskActionService.test.ts`
+- `backend/test/services/todoistChecklistService.test.ts`
+- `docs/handoffs/2026-07-15-recurring-checklists-task-7-checklist-mutations.md`
+
+### TDD Evidence
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: all five metadata-free add/edit/delete/check/uncheck mutations executed successfully and emitted Todoist commands; the whitespace-padded coordinated edit ended in `reconciliation_pending` because effect verification compared the raw title.
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 2 test files and 60 tests passed. New cases cover all five metadata-free variants at both service boundaries, a real coordinated synchronizer path, and immediate plus replayed whitespace-title edit completion.
+
+### Final Verification
+
+Verification:
+- Command: `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`
+- Result: PASS
+- Evidence: 2 test files and 60 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit` exited 0 without diagnostics.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.build.json` and schema copy completed successfully.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 28 backend test files and 277 tests passed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual Verification, Assumptions, And Next Step
+
+- Manual verification: inspected the sole `send` helper and confirmed it can only invoke `TaskActionCommandContext.executeCommand`; no direct random-UUID Todoist command remains.
+- Assumption: a transport exception after durable `sent` remains reconciliation-pending rather than becoming a failed child result, because external Todoist effect remains unknown; deterministic pre-command validation failures remain partial outcomes.
+- Known skips: no live Todoist, WhatsApp, Android, VPS, or HTTP-route mutation was performed; focused routes remain Task 9 scope.
+- Next recommended step: proceed with Task 8 only.

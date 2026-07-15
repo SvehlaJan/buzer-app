@@ -65,16 +65,21 @@ export class TaskActionService {
   /** Checklist children are intentionally delegated to their dedicated mutation boundary. */
   async mutateChecklist(taskId: string, request: ChecklistMutationRequest): Promise<ChecklistMutationResult> {
     this.assertMirrorReady();
-    this.assertFocusedChecklistDependencies(request);
+    this.assertChecklistDependencies(request);
     return this.checklistService.mutate(taskId, request);
   }
 
-  private assertFocusedChecklistDependencies(request: ChecklistMutationRequest): void {
-    if (!request.mutations.some((mutation) => mutation.type === "check" || mutation.type === "uncheck")) return;
+  private assertChecklistDependencies(request: ChecklistMutationRequest): void {
+    if (request.action === undefined) {
+      throw Object.assign(new Error("Checklist mutations require durable action metadata"), {
+        code: "checklist_action_metadata_required",
+        statusCode: 503
+      });
+    }
     const checklist = this.options.checklist;
     if (checklist?.coordinator === undefined || checklist.synchronize === undefined || checklist.snapshot === undefined) {
-      throw Object.assign(new Error("Focused checklist actions require coordinated authoritative synchronization"), {
-        code: "checklist_focused_dependencies_required",
+      throw Object.assign(new Error("Checklist mutations require coordinated authoritative synchronization"), {
+        code: "checklist_action_coordinator_required",
         statusCode: 503
       });
     }
