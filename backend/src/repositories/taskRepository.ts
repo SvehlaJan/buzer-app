@@ -444,6 +444,74 @@ export class TaskRepository {
       where id = @id
     `).run({ id, completedAt });
   }
+
+  createChecklistChild(input: {
+    id: string;
+    todoistTaskId: string;
+    parentTodoistTaskId: string;
+    projectId: string | null;
+    title: string;
+    description: string | null;
+    childOrder: number;
+    updatedAt: string;
+  }): void {
+    this.upsertTodoistTask({
+      id: input.id,
+      todoistTaskId: input.todoistTaskId,
+      title: input.title,
+      description: input.description,
+      projectId: input.projectId,
+      parentId: input.parentTodoistTaskId,
+      childOrder: input.childOrder,
+      assigneeId: null,
+      creatorId: null,
+      dueDate: null,
+      dueDatetime: null,
+      dueString: null,
+      dueLang: null,
+      dueTimezone: null,
+      isRecurring: false,
+      durationAmount: null,
+      durationUnit: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: input.updatedAt
+    });
+  }
+
+  updateChecklistChild(id: string, title: string, description: string | null, updatedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set title = @title,
+          description = @description,
+          mirror_revision = mirror_revision + case when title is not @title or description is not @description then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, title, description, updatedAt });
+  }
+
+  setChecklistChildChecked(id: string, checked: boolean, updatedAt: string): void {
+    const completedAt = checked ? updatedAt : null;
+    this.db.prepare(`
+      update todoist_tasks
+      set completed_at = @completedAt,
+          mirror_revision = mirror_revision + case when completed_at is not @completedAt then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, completedAt, updatedAt });
+  }
+
+  deleteChecklistChild(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set deleted_at = @updatedAt,
+          mirror_revision = mirror_revision + case when deleted_at is not @updatedAt then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, updatedAt });
+  }
 }
 
 type TaskWithCommitmentRow = Omit<TaskWithCommitment, "isRecurring"> & { isRecurring: number };

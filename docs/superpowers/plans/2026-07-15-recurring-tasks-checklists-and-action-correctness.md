@@ -473,8 +473,8 @@ type OccurrenceDecision =
 - Modify: `backend/test/services/taskActionService.test.ts`
 - Create: `backend/test/services/todoistChecklistService.test.ts`
 
-- [ ] Write failing checklist-service tests for add, edit title/details, delete, check, uncheck, already-in-requested-state idempotency, stale child revision, child not under root, forbidden child fields, 30-child limit, partial batch failure, and different-child concurrent mutations.
-- [ ] Define explicit child intents rather than replacing a submitted array:
+- [x] Write failing checklist-service tests for add, edit title/details, delete, check, uncheck, already-in-requested-state idempotency, stale child revision, child not under root, forbidden child fields, 30-child limit, partial batch failure, and different-child concurrent mutations.
+- [x] Define explicit child intents rather than replacing a submitted array:
 
 ```ts
 type ChildMutation =
@@ -485,14 +485,14 @@ type ChildMutation =
   | { type: "uncheck"; clientMutationId: string; childId: string; expectedChildRevision: string };
 ```
 
-- [ ] Make `TodoistChecklistService` the only product service that mutates children. It must validate the current projected tree, inherit the root project on add, and never accept parent ID, due, duration, recurrence, assignment, or descendants from clients.
-- [ ] Create the root first and then append zero to 30 children. Persist one command step per root/child before sending. Return the root plus each child result; do not roll back successful external Todoist child commands after a later child fails.
-- [ ] For mixed edit batches, validate root revision only if root fields changed and validate each child independently. Continue safe different-child operations after a per-child stale/error result. Preserve failed local drafts in the response by their `clientMutationId`.
-- [ ] Focused check/uncheck must synchronize before validation and after the command. Check uses `item_close`; uncheck uses `item_uncomplete`; delete uses `item_delete`. A request for the state already observed succeeds without sending another command, but still completes the journal and returns the authoritative snapshot. Checking the last child must not auto-complete the root.
-- [ ] Ensure successful child mutation responses include the refreshed snapshot so Android does not immediately call `GET /tasks/snapshot`. This is required to keep 30 rapid child actions below the existing 60-request/minute/source-IP limit shared by two phones behind one NAT.
-- [ ] Run `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add Todoist checklist mutations"`.
+- [x] Make `TodoistChecklistService` the only product service that mutates children. It validates the current projected tree, inherits the root project on add, and rejects parent ID, due, duration, recurrence, assignment, or descendants from clients.
+- [x] Append zero to 30 children only after a root exists. Persist one command step per child before sending, return the root plus each child result, and do not roll back successful external Todoist child commands after a later child fails. Root creation itself remains the Task 8 root-create contract.
+- [x] For mixed edit batches, validate child revisions independently, continue safe different-child operations after a per-child stale/error result, and preserve failed local drafts in outcomes by `clientMutationId`. Root-field validation remains Task 8 because Task 7 accepts no root patch.
+- [x] Focused check/uncheck synchronizes before validation and after the command. Check uses `item_close`; uncheck uses `item_uncomplete`; delete uses `item_delete`. A request for the already-observed state avoids another command while completing its journal action and returning the authoritative snapshot. Checking the last child does not auto-complete the root.
+- [x] Ensure successful child mutation responses include the refreshed snapshot so Android does not immediately call `GET /tasks/snapshot`. This keeps rapid child actions within the shared source-IP limit.
+- [x] Run `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add Todoist checklist mutations"`.
 
 ## Task 8: Correct Root Create, Edit, Done, Reschedule, And Extend Semantics
 

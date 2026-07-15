@@ -6,6 +6,11 @@ import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import type { EscalationService } from "./escalationService.js";
+import {
+  TodoistChecklistService,
+  type ChecklistMutationRequest,
+  type ChecklistMutationResult
+} from "./todoistChecklistService.js";
 
 export interface CreateTaskInput {
   title: string;
@@ -36,6 +41,8 @@ export interface UpdateTaskInput {
 }
 
 export class TaskActionService {
+  private readonly checklistService: TodoistChecklistService;
+
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
@@ -44,7 +51,15 @@ export class TaskActionService {
     private readonly currentUserId = "",
     private readonly escalationService: EscalationService | null = null,
     private readonly requireMirrorReady = false
-  ) {}
+  ) {
+    this.checklistService = new TodoistChecklistService(tasks, todoist);
+  }
+
+  /** Checklist children are intentionally delegated to their dedicated mutation boundary. */
+  async mutateChecklist(taskId: string, request: ChecklistMutationRequest): Promise<ChecklistMutationResult> {
+    this.assertMirrorReady();
+    return this.checklistService.mutate(taskId, request);
+  }
 
   async create(input: CreateTaskInput): Promise<{ id: string; todoistTaskId: string }> {
     this.assertMirrorReady();
