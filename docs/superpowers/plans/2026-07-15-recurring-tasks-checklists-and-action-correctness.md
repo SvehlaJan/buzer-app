@@ -185,12 +185,12 @@ The implementation must update existing assertions in the same task that changes
 - Read: `docs/handoffs/2026-07-13-subtasks-recurring-tasks-research.md`
 - Modify: `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md` (checkboxes only)
 
-- [ ] Run `git status --short --branch` from the repository root. Record pre-existing changes in the session handoff and do not overwrite them. Expected clean baseline at planning time: `master` tracks `origin/master` with no short-status entries.
-- [ ] Run `git log -8 --oneline --decorate`. Confirm the Tailscale/Funnel security work is present, especially constant-time bearer auth, per-source rate limiting, trusted-proxy scoping, loopback/tailnet binding, production cleartext removal, and the Funnel prefix correction.
-- [ ] From `backend/`, run `npm test`, `npm run typecheck`, and `npm run build`. Expected: 18 Vitest files and 84 tests pass at the planning baseline; typecheck and build exit 0.
-- [ ] From `tools/fake-backend/`, run `npm test` and `npm run build`. Expected: all Node tests pass and TypeScript exits 0.
-- [ ] From `client/`, run `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`. Expected: `BUILD SUCCESSFUL`.
-- [ ] If any baseline command fails before implementation, use `superpowers:systematic-debugging`, document whether it is pre-existing, and stop before mixing an unrelated fix into this feature.
+- [x] Run `git status --short --branch` from the repository root. Record pre-existing changes in the session handoff and do not overwrite them. Expected clean baseline at planning time: `master` tracks `origin/master` with no short-status entries.
+- [x] Run `git log -8 --oneline --decorate`. Confirm the Tailscale/Funnel security work is present, especially constant-time bearer auth, per-source rate limiting, trusted-proxy scoping, loopback/tailnet binding, production cleartext removal, and the Funnel prefix correction.
+- [x] From `backend/`, run `npm test`, `npm run typecheck`, and `npm run build`. Expected: 18 Vitest files and 84 tests pass at the planning baseline; typecheck and build exit 0.
+- [x] From `tools/fake-backend/`, run `npm test` and `npm run build`. Expected: all Node tests pass and TypeScript exits 0.
+- [x] From `client/`, run `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --console=plain`. Expected: `BUILD SUCCESSFUL`.
+- [x] If any baseline command fails before implementation, use `superpowers:systematic-debugging`, document whether it is pre-existing, and stop before mixing an unrelated fix into this feature.
 
 ## Task 1: Add Guarded Persistence For Typed Mirrors, Occurrences, And Journaling
 
