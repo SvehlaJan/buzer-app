@@ -608,10 +608,10 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/blockers/BlockerUiModelsTest.kt`
 - Create: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/commitment/ChecklistEditorModelsTest.kt`
 
-- [ ] Add failing reducer tests proving nested children are not independent invalid/active tasks, unsupported and pending roots appear in Morning Review, a recurring next occurrence is distinct from the old key, and stale mutation snapshots replace cached authority without losing a caller-owned draft object.
-- [ ] Add `occurrenceKey` to `DesiredAlarm` and define alarm identity as `(taskId, occurrenceKey, kind)`. Exclude invalid, unsupported, completed/deleted, and reconciliation-pending roots from alarm creation.
-- [ ] Add alarm-plan tests for key rotation at the same due timestamp, recurring rollover, pending cancellation, checklist-only mutation with unchanged key, and Extend 30 with unchanged key but changed deadline.
-- [ ] Add pure editor models for recurrence choices in numbered order and explicit checklist draft/mutation state:
+- [x] Add failing reducer tests proving nested children are not independent invalid/active tasks, unsupported and pending roots appear in Morning Review, a recurring next occurrence is distinct from the old key, and stale mutation snapshots replace cached authority without losing a caller-owned draft object.
+- [x] Add `occurrenceKey` to `DesiredAlarm` and define alarm identity as `(taskId, occurrenceKey, kind)`. Exclude invalid, unsupported, completed/deleted, and reconciliation-pending roots from alarm creation.
+- [x] Add alarm-plan tests for key rotation at the same due timestamp, recurring rollover, pending cancellation, checklist-only mutation with unchanged key, and Extend 30 with unchanged key but changed deadline.
+- [x] Add pure editor models for recurrence choices in numbered order and explicit checklist draft/mutation state:
 
 ```kotlin
 val recurrenceChoices = listOf(
@@ -624,10 +624,10 @@ val recurrenceChoices = listOf(
 )
 ```
 
-- [ ] Model custom recurrence as read-only and require an explicit supported replacement before a start/recurrence edit. Validate 30 children, nonblank child titles, stable `clientMutationId`, and retention of failed drafts.
-- [ ] Extend Home/blocker UI models with checked/total progress, next unchecked child, Done enabled only when counts match, and Extend enabled only for non-recurring roots.
-- [ ] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: make client state occurrence aware"`.
+- [x] Model custom recurrence as read-only and require an explicit supported replacement before a start/recurrence edit. Validate 30 children, nonblank child titles, stable `clientMutationId`, and retention of failed drafts.
+- [x] Extend Home/blocker UI models with checked/total progress, next unchecked child, Done enabled only when counts match, and Extend enabled only for non-recurring roots.
+- [x] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: make client state occurrence aware"`.
 
 ## Task 13: Persist Device Identity And Occurrence-Keyed Android Alarms
 

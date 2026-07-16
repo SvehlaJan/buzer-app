@@ -1,6 +1,7 @@
 package app.buzer.shared.ui.blockers
 
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.ui.commitment.formatDurationLabel
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -24,7 +25,12 @@ data class BlockerUiModel(
     val title: String,
     val blockWindow: String,
     val description: String?,
-    val consequenceText: String?
+    val consequenceText: String?,
+    val checkedCount: Int,
+    val totalCount: Int,
+    val nextUncheckedChildTitle: String?,
+    val doneEnabled: Boolean,
+    val extendEnabled: Boolean
 )
 
 fun buildBlockerUiModel(
@@ -46,7 +52,17 @@ fun buildBlockerUiModel(
             BlockerKind.Start,
             BlockerKind.OverlayStart -> "Second postpone escalates via WhatsApp."
             BlockerKind.Deadline -> null
-        }
+        },
+        checkedCount = task?.checkedCount ?: 0,
+        totalCount = task?.totalCount ?: 0,
+        nextUncheckedChildTitle = task?.checklistItems
+            ?.asSequence()
+            ?.filterNot { it.checked }
+            ?.sortedBy { it.order }
+            ?.firstOrNull()
+            ?.title,
+        doneEnabled = task?.let { it.checkedCount == it.totalCount } ?: false,
+        extendEnabled = task?.recurrence?.kind == RecurrenceKind.none
     )
 
 private fun formatBlockWindow(

@@ -1,14 +1,97 @@
 package app.buzer.shared.state
 
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
+import app.buzer.shared.model.HierarchyStatus
+import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.ui.commitment.CommitmentEditorDraft
+import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 
 class SnapshotReducerTest {
+    @Test
+    fun checklistChildrenNeverBecomeIndependentTopLevelReducerTasks() {
+        val root = task("root", CommitmentState.start_blocker_active).copy(
+            checklistItems = listOf(
+                ChecklistItem(
+                    id = "child-1",
+                    title = "Confirm notes",
+                    checked = false,
+                    order = 1,
+                    childRevision = "r:2"
+                )
+            )
+        )
+
+        val result = SnapshotReducer.reduce(
+            TasksSnapshotResponse(
+                scheduleVersion = 7,
+                serverTime = "2026-05-08T07:00:00Z",
+                tasks = listOf(root),
+                health = emptyList()
+            )
+        )
+
+        assertEquals(listOf("root"), result.tasks.map { it.id })
+        assertEquals(listOf("root"), result.activeBlockers.map { it.id })
+        assertEquals(emptyList(), result.invalidTasks.map { it.id })
+    }
+
+    @Test
+    fun morningReviewIncludesUnsupportedAndReconciliationPendingRoots() {
+        val snapshot = TasksSnapshotResponse(
+            scheduleVersion = 8,
+            serverTime = "2026-05-08T07:00:00Z",
+            tasks = listOf(
+                task("unsupported", CommitmentState.planned, hierarchyStatus = HierarchyStatus.unsupported),
+                task("pending", CommitmentState.planned, reconciliationStatus = ReconciliationStatus.pending)
+            ),
+            health = emptyList()
+        )
+
+        val result = SnapshotReducer.reduce(snapshot)
+
+        assertEquals(listOf("unsupported", "pending"), result.invalidTasks.map { it.id })
+    }
+
+    @Test
+    fun authoritativeStaleSnapshotReplacesCachedTasksWithoutDiscardingCallerDraft() {
+        val draft = CommitmentEditorDraft(
+            title = "Keep editing this",
+            description = "Unsaved detail",
+            projectName = "Home",
+            assigneeLabel = "Me",
+            start = LocalDateTime(2026, 5, 8, 9, 0),
+            durationMinutes = 30,
+            titleEditable = true,
+            descriptionExpanded = true
+        )
+        val cached = SnapshotWithCallerDraft(
+            viewState = SnapshotReducer.reduce(
+                TasksSnapshotResponse(1, "2026-05-08T07:00:00Z", listOf(task("task", CommitmentState.planned, occurrenceKey = "old-occurrence")), emptyList())
+            ),
+            callerDraft = draft
+        )
+        val authoritative = TasksSnapshotResponse(
+            scheduleVersion = 2,
+            serverTime = "2026-05-08T07:01:00Z",
+            tasks = listOf(task("task", CommitmentState.planned, occurrenceKey = "next-occurrence")),
+            health = emptyList()
+        )
+
+        val replaced = SnapshotReducer.replaceAuthoritative(cached, authoritative)
+
+        assertEquals(listOf("task"), replaced.viewState.tasks.map { it.id })
+        assertEquals("next-occurrence", replaced.viewState.tasks.single().occurrenceKey)
+        assertSame(draft, replaced.callerDraft)
+    }
+
     @Test
     fun separatesInvalidActiveAndTodayTasks() {
         val snapshot = TasksSnapshotResponse(
@@ -41,7 +124,10 @@ class SnapshotReducerTest {
         id: String,
         state: CommitmentState,
         startAt: String? = "2026-05-08T06:30:00Z",
-        validationErrors: List<String> = emptyList()
+        validationErrors: List<String> = emptyList(),
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
+        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
+        occurrenceKey: String = ""
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -63,6 +149,9 @@ class SnapshotReducerTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-05-08T06:00:00Z"
+            updatedAt = "2026-05-08T06:00:00Z",
+            hierarchyStatus = hierarchyStatus,
+            reconciliationStatus = reconciliationStatus,
+            occurrenceKey = occurrenceKey
         )
 }

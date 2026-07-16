@@ -1,7 +1,10 @@
 package app.buzer.shared.enforcement
 
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.HealthStatus
+import app.buzer.shared.model.HierarchyStatus
+import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
@@ -9,6 +12,91 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AlarmPlanCalculatorTest {
+    @Test
+    fun desiredAlarmIdentityIncludesOccurrenceKey() {
+        val oldOccurrence = DesiredAlarm(
+            taskId = "task-1",
+            occurrenceKey = "occurrence-old",
+            kind = DesiredAlarmKind.START_BLOCKER,
+            triggerAtIso = "2026-05-28T12:00:00Z"
+        )
+        val newOccurrence = oldOccurrence.copy(occurrenceKey = "occurrence-new")
+
+        assertTrue(oldOccurrence != newOccurrence)
+    }
+
+    @Test
+    fun recurringRolloverReplacesSameTimedAlarmsWithNewOccurrenceIdentity() {
+        val oldPlan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "recurring", occurrenceKey = "occurrence-old")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+        val nextPlan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "recurring", occurrenceKey = "occurrence-next")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertEquals(oldPlan.alarms.map { it.triggerAtIso }, nextPlan.alarms.map { it.triggerAtIso })
+        assertTrue(oldPlan.alarms.zip(nextPlan.alarms).all { (old, next) -> old.occurrenceKey != next.occurrenceKey })
+    }
+
+    @Test
+    fun pendingRootCreatesNoAlarmsAndRequestsCancellation() {
+        val plan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "pending", reconciliationStatus = ReconciliationStatus.pending)),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertTrue(plan.alarms.isEmpty())
+        assertEquals(setOf("pending"), plan.cancelTaskIds)
+    }
+
+    @Test
+    fun extendKeepsOccurrenceIdentityWhileMovingDeadlineAlarm() {
+        val before = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "extend", occurrenceKey = "occurrence-1", dueDatetime = "2026-05-28T12:00:00Z")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+        val after = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "extend", occurrenceKey = "occurrence-1", dueDatetime = "2026-05-28T12:30:00Z", startAt = "2026-05-28T12:30:00Z")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertEquals("occurrence-1", before.alarms.last().occurrenceKey)
+        assertEquals("occurrence-1", after.alarms.last().occurrenceKey)
+        assertTrue(before.alarms.last().triggerAtIso != after.alarms.last().triggerAtIso)
+    }
+
+    @Test
+    fun checklistOnlyChangeKeepsAlarmIdentities() {
+        val before = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "checklist", occurrenceKey = "occurrence-1")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+        val after = AlarmPlanCalculator.calculate(
+            snapshot(
+                task(id = "checklist", occurrenceKey = "occurrence-1").copy(
+                    checklistItems = listOf(ChecklistItem("child-1", "Checked", checked = true, order = 1, childRevision = "r:2")),
+                    checkedCount = 1,
+                    totalCount = 1
+                )
+            ),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertEquals(before.alarms, after.alarms)
+    }
+
+    @Test
+    fun unsupportedRootCreatesNoAlarms() {
+        val plan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "unsupported", hierarchyStatus = HierarchyStatus.unsupported)),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertTrue(plan.alarms.isEmpty())
+    }
+
     @Test
     fun schedulesFutureAlarmsForValidActiveTask() {
         val snapshot = snapshot(
@@ -206,7 +294,10 @@ class AlarmPlanCalculatorTest {
         isDeleted: Boolean = false,
         isAssignedToUser: Boolean = true,
         validationErrors: List<String> = emptyList(),
-        startedAt: String? = null
+        startedAt: String? = null,
+        occurrenceKey: String = "",
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
+        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -228,6 +319,9 @@ class AlarmPlanCalculatorTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-05-28T09:00:00Z"
+            updatedAt = "2026-05-28T09:00:00Z",
+            occurrenceKey = occurrenceKey,
+            hierarchyStatus = hierarchyStatus,
+            reconciliationStatus = reconciliationStatus
         )
 }

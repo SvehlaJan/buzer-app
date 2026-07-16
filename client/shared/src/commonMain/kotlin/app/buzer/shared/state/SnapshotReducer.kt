@@ -3,6 +3,8 @@ package app.buzer.shared.state
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
+import app.buzer.shared.model.HierarchyStatus
+import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 
@@ -20,6 +22,11 @@ data class SnapshotViewState(
             inProgressTasks +
             startingToday
         ).distinctBy { it.id }
+    )
+
+data class SnapshotWithCallerDraft<D>(
+    val viewState: SnapshotViewState,
+    val callerDraft: D
 )
 
 object SnapshotReducer {
@@ -30,7 +37,12 @@ object SnapshotReducer {
         return SnapshotViewState(
             scheduleVersion = snapshot.scheduleVersion,
             serverTime = snapshot.serverTime,
-            invalidTasks = visibleTasks.filter { it.state == CommitmentState.invalid || it.validationErrors.isNotEmpty() },
+            invalidTasks = visibleTasks.filter {
+                it.state == CommitmentState.invalid ||
+                    it.validationErrors.isNotEmpty() ||
+                    it.hierarchyStatus == HierarchyStatus.unsupported ||
+                    it.reconciliationStatus == ReconciliationStatus.pending
+            },
             activeBlockers = visibleTasks.filter {
                 it.state == CommitmentState.start_blocker_active ||
                     it.state == CommitmentState.deadline_blocker_active
@@ -43,6 +55,11 @@ object SnapshotReducer {
             tasks = snapshot.tasks.filterNot { it.isDeleted }
         )
     }
+
+    fun <D> replaceAuthoritative(
+        cached: SnapshotWithCallerDraft<D>,
+        snapshot: TasksSnapshotResponse
+    ): SnapshotWithCallerDraft<D> = cached.copy(viewState = reduce(snapshot))
 }
 
 private fun String.isoDatePrefix(): String =
