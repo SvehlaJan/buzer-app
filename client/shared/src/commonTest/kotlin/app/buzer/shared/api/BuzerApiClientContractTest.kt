@@ -12,12 +12,14 @@ import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TaskRecurrence
+import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 
 class BuzerApiClientContractTest {
     @Test
@@ -152,6 +154,49 @@ class BuzerApiClientContractTest {
         assertEquals(MutationOutcome.partial, response.outcome)
         assertEquals("simulated_child_failure", response.childOutcomes[1].errorCode)
         assertEquals(null, response.childOutcomes[1].childId)
+    }
+
+    @Test
+    fun childOutcomeDecodesStaleChildWithoutRejectingTheWholeResponse() {
+        val response = buzerApiJson.decodeFromString<MutationResponse>(
+            """
+            {
+              "actionId":"action-edit-1", "outcome":"partial",
+              "childOutcomes":[{"clientMutationId":"check-1","childId":"child-1","outcome":"stale_child","errorCode":"stale_child"}],
+              "snapshot":{"scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}
+            }
+            """.trimIndent()
+        )
+
+        assertEquals(MutationOutcome.stale_child, response.childOutcomes.single().outcome)
+    }
+
+    @Test
+    fun fixedMutationRequestsRejectBlankActionMetadata() {
+        assertFailsWith<IllegalArgumentException> {
+            CreateTaskRequest(
+                title = "Prepare release",
+                projectId = "project-1",
+                dueDatetime = "2026-07-16T18:00:00Z",
+                durationMinutes = 60,
+                actionId = " ",
+                deviceId = "device-1"
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TaskActionRequest(
+                actionId = "action-start-1",
+                deviceId = "device-1",
+                expectedOccurrenceKey = " "
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            UpdateTaskRequest(
+                actionId = "action-edit-1",
+                deviceId = " ",
+                expectedOccurrenceKey = "occurrence-1"
+            )
+        }
     }
 
     @Test

@@ -124,18 +124,6 @@ class BuzerApiClient(
         request: FocusedChecklistMutationRequest
     ): MutationResponse = focusedChecklistPost("$baseUrl/tasks/$id/checklist/$childId/uncheck", request)
 
-    @Deprecated("Use the overload that carries immutable action metadata")
-    suspend fun startTask(id: String): MutationResponse = startTask(id, emptyActionRequest())
-
-    @Deprecated("Use the overload that carries immutable action metadata")
-    suspend fun completeTask(id: String): MutationResponse = completeTask(id, emptyActionRequest())
-
-    @Deprecated("Use the overload that carries immutable action metadata")
-    suspend fun postponeStart(id: String): MutationResponse = postponeStart(id, emptyActionRequest())
-
-    @Deprecated("Use the overload that carries immutable action metadata")
-    suspend fun extendTask(id: String): MutationResponse = extendTask(id, emptyActionRequest())
-
     suspend fun dismissMorningReview() {
         httpClient.post("$baseUrl/review/dismiss") {
             contentType(ContentType.Application.Json)
@@ -162,7 +150,6 @@ class BuzerApiClient(
         )
     )
 
-    private fun emptyActionRequest() = TaskActionRequest("", "", "")
 }
 
 private suspend inline fun <reified T> HttpResponse.decodeBody(): T {
@@ -173,7 +160,7 @@ private suspend inline fun <reified T> HttpResponse.decodeBody(): T {
 private suspend fun HttpResponse.ensureSuccess() {
     if (status.isSuccess()) return
     val error = bodyAsText().toBuzerApiException(status.value, headers[HttpHeaders.RetryAfter])
-    AppLog.error("api http_error status=${error.status} code=${error.code}", error)
+    AppLog.error("api http_error status=${error.status} code=${error.code}")
     throw error
 }
 

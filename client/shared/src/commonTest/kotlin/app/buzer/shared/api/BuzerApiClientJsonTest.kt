@@ -20,7 +20,9 @@ class BuzerApiClientJsonTest {
                 projectId = "project-personal",
                 assigneeId = null,
                 dueDatetime = "2026-06-13T12:00:00Z",
-                durationMinutes = 30
+                durationMinutes = 30,
+                actionId = "action-create-1",
+                deviceId = "device-1"
             )
         )
 
@@ -37,14 +39,19 @@ class BuzerApiClientJsonTest {
                 projectId = "project-personal",
                 assigneeId = null,
                 dueDatetime = "2026-06-13T12:00:00Z",
-                durationMinutes = 30
+                durationMinutes = 30,
+                actionId = "action-create-2",
+                deviceId = "device-1"
             )
         )
         val rescheduleBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest(
                 dueDatetime = "2026-06-13T13:00:00Z",
                 durationMinutes = 45,
-                description = "  Updated gate code: 1357  "
+                description = "  Updated gate code: 1357  ",
+                actionId = "action-reschedule-1",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1"
             )
         )
 
@@ -84,27 +91,39 @@ class BuzerApiClientJsonTest {
         val unchangedBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest(
                 dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45
+                durationMinutes = 45,
+                actionId = "action-reschedule-1",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1"
             )
         )
         val clearNullBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest.clearDescription(
                 dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45
+                durationMinutes = 45,
+                actionId = "action-reschedule-2",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1"
             )
         )
         val clearBlankBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest.setDescription(
                 dueDatetime = "2026-06-13T13:00:00Z",
                 durationMinutes = 45,
-                description = "   "
+                description = "   ",
+                actionId = "action-reschedule-3",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1"
             )
         )
         val setBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest.setDescription(
                 dueDatetime = "2026-06-13T13:00:00Z",
                 durationMinutes = 45,
-                description = "  Updated gate code: 1357  "
+                description = "  Updated gate code: 1357  ",
+                actionId = "action-reschedule-4",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1"
             )
         )
 

@@ -137,28 +137,43 @@ data class CreateTaskRequest(
     val assigneeId: String? = null,
     val dueDatetime: String,
     val durationMinutes: Int,
-    val actionId: String = "",
-    val deviceId: String = "",
+    val actionId: String,
+    val deviceId: String,
     val recurrencePreset: RecurrencePreset = RecurrencePreset.never,
     val timeZone: String? = null,
     val checklistDrafts: List<ChecklistDraft> = emptyList()
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+    }
+}
 
 @Serializable
 data class UpdateTaskRequest(
-    val actionId: String = "",
-    val deviceId: String = "",
-    val expectedOccurrenceKey: String = "",
+    val actionId: String,
+    val deviceId: String,
+    val expectedOccurrenceKey: String,
     val rootPatch: RootTaskPatch? = null,
     val childMutations: List<ChecklistMutation> = emptyList()
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+    }
+}
 
 @Serializable
 data class ChecklistDraft(
     val clientMutationId: String,
     val title: String,
     val description: String? = null
-)
+) {
+    init {
+        requireNonBlank("clientMutationId", clientMutationId)
+    }
+}
 
 @Serializable(with = RootTaskPatchSerializer::class)
 data class RootTaskPatch(
@@ -171,7 +186,11 @@ data class RootTaskPatch(
     val durationMinutes: Int? = null,
     val recurrencePreset: RecurrencePreset? = null,
     val timeZone: String? = null
-)
+) {
+    init {
+        requireNonBlank("expectedTaskRevision", expectedTaskRevision)
+    }
+}
 
 object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
     override val descriptor: SerialDescriptor = buildClassSerialDescriptor("RootTaskPatch") {
@@ -275,7 +294,13 @@ data class TaskActionRequest(
     val actionId: String,
     val deviceId: String,
     val expectedOccurrenceKey: String
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+    }
+}
 
 @Serializable
 data class AddChecklistItemRequest(
@@ -285,7 +310,14 @@ data class AddChecklistItemRequest(
     val clientMutationId: String,
     val title: String,
     val description: String? = null
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        requireNonBlank("clientMutationId", clientMutationId)
+    }
+}
 
 @Serializable
 data class UpdateChecklistItemRequest(
@@ -295,7 +327,14 @@ data class UpdateChecklistItemRequest(
     val expectedChildRevision: String,
     val title: String? = null,
     val description: String? = null
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        requireNonBlank("expectedChildRevision", expectedChildRevision)
+    }
+}
 
 @Serializable
 data class FocusedChecklistMutationRequest(
@@ -304,10 +343,17 @@ data class FocusedChecklistMutationRequest(
     val expectedOccurrenceKey: String,
     val expectedChildRevision: String,
     val checked: Boolean
-)
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        requireNonBlank("expectedChildRevision", expectedChildRevision)
+    }
+}
 
 @Serializable
-enum class MutationOutcome { completed, partial, reconciliation_pending, failed }
+enum class MutationOutcome { completed, partial, reconciliation_pending, failed, stale_child }
 
 @Serializable
 data class ChecklistMutationOutcome(
@@ -332,10 +378,15 @@ data class RescheduleTaskRequest(
     val durationMinutes: Int,
     val description: String? = null,
     val descriptionUpdate: DescriptionUpdate = if (description == null) DescriptionUpdate.Unchanged else DescriptionUpdate.Set,
-    val actionId: String = "",
-    val deviceId: String = "",
-    val expectedOccurrenceKey: String = ""
+    val actionId: String,
+    val deviceId: String,
+    val expectedOccurrenceKey: String
 ) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+    }
     enum class DescriptionUpdate {
         Unchanged,
         Set,
@@ -346,9 +397,9 @@ data class RescheduleTaskRequest(
         fun clearDescription(
             dueDatetime: String,
             durationMinutes: Int,
-            actionId: String = "",
-            deviceId: String = "",
-            expectedOccurrenceKey: String = ""
+            actionId: String,
+            deviceId: String,
+            expectedOccurrenceKey: String
         ): RescheduleTaskRequest =
             RescheduleTaskRequest(
                 dueDatetime = dueDatetime,
@@ -364,9 +415,9 @@ data class RescheduleTaskRequest(
             dueDatetime: String,
             durationMinutes: Int,
             description: String,
-            actionId: String = "",
-            deviceId: String = "",
-            expectedOccurrenceKey: String = ""
+            actionId: String,
+            deviceId: String,
+            expectedOccurrenceKey: String
         ): RescheduleTaskRequest =
             RescheduleTaskRequest(
                 dueDatetime = dueDatetime,
@@ -454,4 +505,8 @@ object RescheduleTaskRequestSerializer : KSerializer<RescheduleTaskRequest> {
     private fun requiredString(element: JsonObject, key: String): String =
         element[key]?.jsonPrimitive?.contentOrNull
             ?: throw SerializationException("Missing $key")
+}
+
+private fun requireNonBlank(name: String, value: String) {
+    require(value.isNotBlank()) { "$name must not be blank" }
 }

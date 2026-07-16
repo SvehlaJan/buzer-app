@@ -59,3 +59,37 @@ Assumptions:
 Next recommended step:
 
 - Continue Task 12 occurrence-aware state and alarm plan changes, then migrate Android callers to explicit action metadata in Task 14.
+
+## Contract-hardening follow-up
+
+Plan/task attempted:
+
+- Recovered Task 11 review findings only. No Task 12 files were edited.
+
+Changes made:
+
+- Removed the client’s deprecated overloads that created empty action metadata. Fixed request models now require nonblank `actionId`, `deviceId`, and, when applicable, `expectedOccurrenceKey` at construction.
+- Added `stale_child` as a supported child mutation outcome so partial responses remain decodable.
+- Error logging now emits status and code only; it no longer attaches the exception, avoiding response-message/stack logging through this path.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --console=plain`
+  - Result: FAIL
+  - Evidence: contract compilation failed because `MutationOutcome.stale_child` did not exist.
+- GREEN: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --console=plain`
+  - Result: PASS
+  - Evidence: nonblank metadata rejection and partial `stale_child` decoding passed.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Known failures or skipped checks:
+
+- `./gradlew :androidApp:compileDebugKotlin --console=plain` is currently FAIL because the pre-Task 14 Android coordinator/editor code still constructs legacy flat requests and calls removed no-metadata action methods. This recovery deliberately does not fabricate metadata in shared client code; migrate those UI/coordinator callers through explicit user-intent request objects in Task 14 before Android application verification.
