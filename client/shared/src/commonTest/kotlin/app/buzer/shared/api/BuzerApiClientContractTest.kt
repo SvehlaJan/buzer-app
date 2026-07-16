@@ -5,9 +5,11 @@ import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.ChecklistMutationOutcome
+import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
+import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.RootTaskPatch
@@ -15,6 +17,7 @@ import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.model.UpdateChecklistItemRequest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -111,7 +114,7 @@ class BuzerApiClientContractTest {
                 rootPatch = RootTaskPatch(
                     expectedTaskRevision = "r:5",
                     title = "Renamed",
-                    assigneeId = null
+                    assigneeId = NullablePatch.Value(null)
                 ),
                 childMutations = listOf(
                     ChecklistMutation.Check(
@@ -208,7 +211,8 @@ class BuzerApiClientContractTest {
             ChecklistMutation.Edit(
                 clientMutationId = "edit-1",
                 childId = "child-1",
-                expectedChildRevision = " "
+                expectedChildRevision = " ",
+                title = "Updated title"
             )
         }
         assertFailsWith<IllegalArgumentException> {
@@ -235,20 +239,59 @@ class BuzerApiClientContractTest {
     }
 
     @Test
+    fun rootPatchKeepsAbsentFieldsDistinctFromExplicitNullableClears() {
+        val titleOnly = buzerApiJson.encodeToString(
+            RootTaskPatch(expectedTaskRevision = "r:5", title = "Renamed")
+        )
+        val clearNullableFields = buzerApiJson.encodeToString(
+            RootTaskPatch(
+                expectedTaskRevision = "r:5",
+                description = NullablePatch.Value(null),
+                assigneeId = NullablePatch.Value(null)
+            )
+        )
+
+        assertFalse(titleOnly.contains("description"))
+        assertFalse(titleOnly.contains("assigneeId"))
+        assertContains(clearNullableFields, "\"description\":null")
+        assertContains(clearNullableFields, "\"assigneeId\":null")
+    }
+
+    @Test
+    fun checklistEditRequestsRequireNonblankTitles() {
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Edit(
+                clientMutationId = "edit-1",
+                childId = "child-1",
+                expectedChildRevision = "r:2",
+                title = " "
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            UpdateChecklistItemRequest(
+                actionId = "action-edit-1",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1",
+                expectedChildRevision = "r:2",
+                title = " "
+            )
+        }
+    }
+
+    @Test
     fun focusedChecklistRequestSerializesReusableActionAndChildRevision() {
         val request = FocusedChecklistMutationRequest(
             actionId = "action-check-1",
             deviceId = "device-1",
             expectedOccurrenceKey = "occurrence-1",
-            expectedChildRevision = "r:8",
-            checked = true
+            expectedChildRevision = "r:8"
         )
 
         val body = buzerApiJson.encodeToString(request)
 
         assertContains(body, "\"actionId\":\"action-check-1\"")
         assertContains(body, "\"expectedChildRevision\":\"r:8\"")
-        assertContains(body, "\"checked\":true")
+        assertFalse(body.contains("checked"))
         assertFalse(body.contains("buzer"))
     }
 }

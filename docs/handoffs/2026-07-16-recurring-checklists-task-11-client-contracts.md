@@ -39,6 +39,33 @@ Verification:
 - Command: `./gradlew :shared:testAndroidHostTest --console=plain`
   - Result: PASS
   - Evidence: complete shared Android-host suite passed.
+
+## Patch and focused-checklist quality follow-up
+
+Plan/task attempted:
+
+- Recovered the final Task 11 patch-serialization and focused-checklist quality findings only. No Task 12 files were edited.
+
+Changes made:
+
+- Replaced lossy nullable root-patch fields with `NullablePatch`, preserving absent, non-null set, and explicit-null clear semantics for description and assignee.
+- Made bulk checklist edit and focused checklist update titles required nonblank strings.
+- Removed the `checked` property from `FocusedChecklistMutationRequest`; check/uncheck is represented solely by the endpoint path, which now sends the original action metadata body unchanged.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --console=plain`
+  - Result: FAIL
+  - Evidence: `NullablePatch` and the checked-free focused request did not exist, so the new fixed-wire contract did not compile.
+- GREEN: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --tests 'app.buzer.shared.api.BuzerApiClientErrorTest' --console=plain`
+  - Result: PASS
+  - Evidence: tri-state root patch wire tests, strict edit-title validation, and MockEngine focused-path/body checks passed.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
 - Command: `git diff --check`
   - Result: PASS
   - Evidence: no whitespace errors.

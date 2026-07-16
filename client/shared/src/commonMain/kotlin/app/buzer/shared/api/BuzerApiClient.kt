@@ -3,6 +3,7 @@ package app.buzer.shared.api
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.AddChecklistItemRequest
 import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.RescheduleTaskRequest
@@ -35,8 +36,6 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.Json
 
-typealias FocusedChecklistMutationRequest = app.buzer.shared.model.FocusedChecklistMutationRequest
-
 class BuzerApiException(
     val status: Int,
     val code: String?,
@@ -50,14 +49,6 @@ private data class BuzerApiErrorBody(
     val code: String? = null,
     val message: String? = null,
     val snapshot: TasksSnapshotResponse? = null
-)
-
-@Serializable
-private data class FocusedChecklistActionBody(
-    val actionId: String,
-    val deviceId: String,
-    val expectedOccurrenceKey: String,
-    val expectedChildRevision: String
 )
 
 class BuzerApiClient(
@@ -110,19 +101,19 @@ class BuzerApiClient(
         id: String,
         childId: String,
         request: FocusedChecklistMutationRequest
-    ): MutationResponse = focusedChecklistPost("$baseUrl/tasks/$id/checklist/$childId/delete", request)
+    ): MutationResponse = mutationPost("$baseUrl/tasks/$id/checklist/$childId/delete", request)
 
     suspend fun checkChecklistItem(
         id: String,
         childId: String,
         request: FocusedChecklistMutationRequest
-    ): MutationResponse = focusedChecklistPost("$baseUrl/tasks/$id/checklist/$childId/check", request)
+    ): MutationResponse = mutationPost("$baseUrl/tasks/$id/checklist/$childId/check", request)
 
     suspend fun uncheckChecklistItem(
         id: String,
         childId: String,
         request: FocusedChecklistMutationRequest
-    ): MutationResponse = focusedChecklistPost("$baseUrl/tasks/$id/checklist/$childId/uncheck", request)
+    ): MutationResponse = mutationPost("$baseUrl/tasks/$id/checklist/$childId/uncheck", request)
 
     suspend fun dismissMorningReview() {
         httpClient.post("$baseUrl/review/dismiss") {
@@ -136,19 +127,6 @@ class BuzerApiClient(
             contentType(ContentType.Application.Json)
             setBody(body)
         }.decodeBody()
-
-    private suspend fun focusedChecklistPost(
-        url: String,
-        request: FocusedChecklistMutationRequest
-    ): MutationResponse = mutationPost(
-        url,
-        FocusedChecklistActionBody(
-            actionId = request.actionId,
-            deviceId = request.deviceId,
-            expectedOccurrenceKey = request.expectedOccurrenceKey,
-            expectedChildRevision = request.expectedChildRevision
-        )
-    )
 
 }
 

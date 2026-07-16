@@ -2,6 +2,7 @@ package app.buzer.shared.api
 
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectsResponse
+import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TasksSnapshotResponse
@@ -69,9 +70,9 @@ class BuzerApiClientJsonTest {
                 rootPatch = RootTaskPatch(
                     expectedTaskRevision = "r:3",
                     title = "Edited task",
-                    description = "Updated details",
+                    description = NullablePatch.Value("Updated details"),
                     projectId = "project-family",
-                    assigneeId = "user-me",
+                    assigneeId = NullablePatch.Value("user-me"),
                     dueDatetime = "2026-06-13T13:00:00Z",
                     durationMinutes = 45
                 )

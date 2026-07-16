@@ -175,13 +175,18 @@ data class ChecklistDraft(
     }
 }
 
+sealed interface NullablePatch<out T> {
+    data object Absent : NullablePatch<Nothing>
+    data class Value<T>(val value: T?) : NullablePatch<T>
+}
+
 @Serializable(with = RootTaskPatchSerializer::class)
 data class RootTaskPatch(
     val expectedTaskRevision: String,
     val title: String? = null,
-    val description: String? = null,
+    val description: NullablePatch<String> = NullablePatch.Absent,
     val projectId: String? = null,
-    val assigneeId: String? = null,
+    val assigneeId: NullablePatch<String> = NullablePatch.Absent,
     val dueDatetime: String? = null,
     val durationMinutes: Int? = null,
     val recurrencePreset: RecurrencePreset? = null,
@@ -211,9 +216,9 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
         jsonEncoder.encodeJsonElement(buildJsonObject {
             put("expectedTaskRevision", value.expectedTaskRevision)
             value.title?.let { put("title", it) }
-            value.description?.let { put("description", it) }
+            value.description.putNullablePatch("description", this)
             value.projectId?.let { put("projectId", it) }
-            put("assigneeId", value.assigneeId?.let(::JsonPrimitive) ?: JsonNull)
+            value.assigneeId.putNullablePatch("assigneeId", this)
             value.dueDatetime?.let { put("dueDatetime", it) }
             value.durationMinutes?.let { put("durationMinutes", it) }
             value.recurrencePreset?.let { put("recurrencePreset", it.name) }
@@ -228,9 +233,9 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
         return RootTaskPatch(
             expectedTaskRevision = requiredString(value, "expectedTaskRevision"),
             title = value["title"]?.jsonPrimitive?.contentOrNull,
-            description = value["description"]?.jsonPrimitive?.contentOrNull,
+            description = value.nullablePatch("description"),
             projectId = value["projectId"]?.jsonPrimitive?.contentOrNull,
-            assigneeId = value["assigneeId"]?.jsonPrimitive?.contentOrNull,
+            assigneeId = value.nullablePatch("assigneeId"),
             dueDatetime = value["dueDatetime"]?.jsonPrimitive?.contentOrNull,
             durationMinutes = value["durationMinutes"]?.jsonPrimitive?.int,
             recurrencePreset = value["recurrencePreset"]?.jsonPrimitive?.contentOrNull?.let(RecurrencePreset::valueOf),
@@ -240,6 +245,16 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
 
     private fun requiredString(value: JsonObject, key: String): String =
         value[key]?.jsonPrimitive?.contentOrNull ?: throw SerializationException("Missing $key")
+
+    private fun JsonObject.nullablePatch(key: String): NullablePatch<String> =
+        if (containsKey(key)) NullablePatch.Value(this[key]?.jsonPrimitive?.contentOrNull) else NullablePatch.Absent
+
+    private fun NullablePatch<String>.putNullablePatch(key: String, target: kotlinx.serialization.json.JsonObjectBuilder) {
+        when (this) {
+            NullablePatch.Absent -> Unit
+            is NullablePatch.Value -> target.put(key, value?.let(::JsonPrimitive) ?: JsonNull)
+        }
+    }
 }
 
 @Serializable
@@ -264,12 +279,13 @@ sealed class ChecklistMutation {
         override val clientMutationId: String,
         val childId: String,
         val expectedChildRevision: String,
-        val title: String? = null,
+        val title: String,
         val description: String? = null
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
             requireNonBlank("expectedChildRevision", expectedChildRevision)
+            requireNonBlank("title", title)
         }
     }
 
@@ -349,7 +365,7 @@ data class UpdateChecklistItemRequest(
     val deviceId: String,
     val expectedOccurrenceKey: String,
     val expectedChildRevision: String,
-    val title: String? = null,
+    val title: String,
     val description: String? = null
 ) {
     init {
@@ -357,6 +373,7 @@ data class UpdateChecklistItemRequest(
         requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         requireNonBlank("expectedChildRevision", expectedChildRevision)
+        requireNonBlank("title", title)
     }
 }
 
@@ -365,8 +382,7 @@ data class FocusedChecklistMutationRequest(
     val actionId: String,
     val deviceId: String,
     val expectedOccurrenceKey: String,
-    val expectedChildRevision: String,
-    val checked: Boolean
+    val expectedChildRevision: String
 ) {
     init {
         requireNonBlank("actionId", actionId)
