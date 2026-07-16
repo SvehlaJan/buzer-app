@@ -174,4 +174,4 @@ Assumptions:
 - The preserved worktree's uncommitted files form the coherent Task 9 change set described by the existing handoff. No unrelated files are staged.
 
 Next recommended step:
-- Task 9 was committed as `5b36e93 feat: expose recurring checklist task contracts`; continue with the separately planned Task 10 when directed.
+- Task 9 was committed as `8a65a55 feat: expose recurring checklist task contracts`; continue with the separately planned Task 10 when directed.
