@@ -534,9 +534,9 @@ type ChildMutation =
 - Modify: `backend/test/http/auth.test.ts`
 - Modify: `backend/test/http/rateLimit.test.ts`
 
-- [ ] Write failing snapshot tests for root-only projection, nested ordered children/revisions, progress, split user description/activity log, supported/custom recurrence, hierarchy violation, occurrence key, root revision, and reconciliation-pending state.
-- [ ] Replace raw-description and raw-JSON date extraction in `TaskSnapshotService` with typed mirror fields, `TaskDescriptionCodec`, `TaskEnforcementPolicy`, and `TaskHierarchyProjector`. Return invalid/unsupported owned roots for Morning Review; never return checklist children as top-level tasks.
-- [ ] Keep existing scheduling fields for client compatibility and add these root fields. Encode both root and child revisions as `r:<mirror_revision>` and reject malformed or mismatched values through the stale-domain error path:
+- [x] Write failing snapshot tests for root-only projection, nested ordered children/revisions, progress, split user description/activity log, supported/custom recurrence, hierarchy violation, occurrence key, root revision, and reconciliation-pending state.
+- [x] Replace raw-description and raw-JSON date extraction in `TaskSnapshotService` with typed mirror fields, `TaskDescriptionCodec`, `TaskEnforcementPolicy`, and `TaskHierarchyProjector`. Return invalid/unsupported owned roots for Morning Review; never return checklist children as top-level tasks.
+- [x] Keep existing scheduling fields for client compatibility and add these root fields. Encode both root and child revisions as `r:<mirror_revision>` and reject malformed or mismatched values through the stale-domain error path:
 
 ```ts
 occurrenceKey: string;
@@ -551,15 +551,15 @@ hierarchyViolation: HierarchyViolation | null;
 reconciliationStatus: "confirmed" | "pending";
 ```
 
-- [ ] Add Zod request schemas for all fixed routes. Validate action/device IDs as non-empty bounded strings, occurrence/revision values as opaque bounded strings, at most 30 child drafts/mutations, no unknown child scheduling fields, and IANA time zone through domain validation.
-- [ ] Make every mutation route call `TaskActionCoordinator` and return its `MutationResponse`; remove route-local construction of the old service that bypasses journaling. Reuse a server-scoped coordinator/mutex so separate requests share root serialization.
-- [ ] Keep `/health` as the only unauthenticated route and keep all route registration inside the existing Fastify plugin scope. Do not introduce an application `/buzer` prefix and do not change the trusted proxy ranges.
-- [ ] Add an unauthenticated table test covering every new route path and representative required params/body. Expected: 401 before domain validation. Also keep the unmatched-path test at 404, proving the auth hook did not leak to the not-found handler.
-- [ ] Add rate-limit tests proving child mutation responses carry rate-limit headers, 61 requests from one effective source are limited under the default config, spoofed forwarding from an untrusted peer is ignored, and the successful mutation response contains a snapshot so no follow-up GET is required.
-- [ ] Add a log-safety test or logger spy proving route errors and action journal output never include the bearer token, Todoist token, full description, or managed audit payload. Keep production Fastify `logger: false` and Ktor Authorization sanitization unchanged.
-- [ ] Run `npm test -- test/services/taskSnapshotService.test.ts test/http/routes.test.ts test/http/auth.test.ts test/http/rateLimit.test.ts`. Expected: PASS.
-- [ ] Run the full backend gate: `npm test`, `npm run typecheck`, and `npm run build`. Expected: all PASS.
-- [ ] Commit with `git commit -m "feat: expose recurring checklist task contracts"`.
+- [x] Add Zod request schemas for all fixed routes. Validate action/device IDs as non-empty bounded strings, occurrence/revision values as opaque bounded strings, at most 30 child drafts/mutations, no unknown child scheduling fields, and IANA time zone through domain validation.
+- [x] Make every mutation route call `TaskActionCoordinator` and return its `MutationResponse`; remove route-local construction of the old service that bypasses journaling. Reuse a server-scoped coordinator/mutex so separate requests share root serialization.
+- [x] Keep `/health` as the only unauthenticated route and keep all route registration inside the existing Fastify plugin scope. Do not introduce an application `/buzer` prefix and do not change the trusted proxy ranges.
+- [x] Add an unauthenticated table test covering every new route path and representative required params/body. Expected: 401 before domain validation. Also keep the unmatched-path test at 404, proving the auth hook did not leak to the not-found handler.
+- [x] Add rate-limit tests proving child mutation responses carry rate-limit headers, 61 requests from one effective source are limited under the default config, spoofed forwarding from an untrusted peer is ignored, and the successful mutation response contains a snapshot so no follow-up GET is required.
+- [x] Add a log-safety test or logger spy proving route errors and action journal output never include the bearer token, Todoist token, full description, or managed audit payload. Keep production Fastify `logger: false` and Ktor Authorization sanitization unchanged.
+- [x] Run `npm test -- test/services/taskSnapshotService.test.ts test/http/routes.test.ts test/http/auth.test.ts test/http/rateLimit.test.ts`. Expected: PASS.
+- [x] Run the full backend gate: `npm test`, `npm run typecheck`, and `npm run build`. Expected: all PASS.
+- [x] Commit with `git commit -m "feat: expose recurring checklist task contracts"`.
 
 ## Task 10: Update The Stateful Fake Backend Before Android Code
 

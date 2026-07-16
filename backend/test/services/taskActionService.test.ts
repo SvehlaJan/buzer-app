@@ -206,10 +206,13 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
 
     await expect(service.update("task-1", {
-      title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
       actionId: "edit-needs-sync", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
-      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     expect(repo.getById("task-1")?.title).toBe("Send invoice");
   });
@@ -448,9 +451,8 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
 
     await expect(service.update("task-1", {
-      title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "edit-missing", deviceId: "phone-a"
+      actionId: "edit-missing", deviceId: "phone-a", expectedOccurrenceKey: undefined as never,
+      rootPatch: { expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}` }, childMutations: []
     })).rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
     await expect(service.done("task-1", "2026-07-15T10:00:00Z", { actionId: "done-missing", deviceId: "phone-a" }))
       .rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
@@ -486,11 +488,13 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projects, adapter);
 
     await expect(service.update("task-1", {
-      title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
       actionId: "edit-with-checklist", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
-      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
-      checklistMutations: [{ type: "check", clientMutationId: "check-child", childId: "child-one", expectedChildRevision: "r:1" }]
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Updated", description: null, projectId: "project-personal", assigneeId: null,
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: [{ type: "check", clientMutationId: "check-child", childId: "child-one", expectedChildRevision: "r:1" }]
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     expect(adapter.itemCloses).toHaveLength(0);
   });
@@ -522,10 +526,13 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
 
     await expect(service.update("task-1", {
-      title: "Send invoice", description: null, projectId: "project-new", assigneeId: "user-self",
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
       actionId: "move-needs-tree-sync", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
-      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Send invoice", description: null, projectId: "project-new", assigneeId: "user-self",
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
   });
 
@@ -1012,13 +1019,13 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projectRepo, adapter);
 
     await expect(service.update("task-1", {
-      title: "Edited task",
-      description: " Updated details ",
-      projectId: "project-family",
-      assigneeId: "user-self",
-      dueDatetime: "2026-05-08T19:00:00Z",
-      durationMinutes: 45,
-      now: "2026-05-08T17:10:00Z", actionId: "edit-fields", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+      actionId: "edit-fields", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Edited task", description: " Updated details ", projectId: "project-family", assigneeId: "user-self",
+        dueDatetime: "2026-05-08T19:00:00Z", durationMinutes: 45
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(adapter.itemUpdates[0]).toMatchObject({
@@ -1057,9 +1064,13 @@ describe("TaskActionService", () => {
     const service = actionAwareService(db, repo, projects, adapter);
 
     await expect(service.update("task-1", {
-      title: "Send the invoice", description: "New details", projectId: "project-personal", assigneeId: null,
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "edit-metadata", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+      actionId: "edit-metadata", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Send the invoice", description: "New details", projectId: "project-personal", assigneeId: null,
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(adapter.itemUpdates[0]?.description).toBe(
@@ -1067,6 +1078,66 @@ describe("TaskActionService", () => {
     );
     expect(repo.getById("task-1")).toMatchObject({
       state: "started", startedAt: "2026-07-15T09:00:00Z", occurrenceKey: "occurrence-1"
+    });
+  });
+
+  it("merges a partial root patch while preserving managed description activity", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: "Private note\n--- Buzer activity (managed) ---\n2026-07-15 09:00 UTC — Extended +30 min (30 → 60 min)",
+      projectId: "project-personal", assigneeId: null, dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30,
+      updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: "user-self"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    await expect(service.update("task-1", {
+      actionId: "partial-root-patch", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: { expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`, title: "Send the invoice" },
+      childMutations: []
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(adapter.itemUpdates[0]).toMatchObject({
+      title: "Send the invoice",
+      description: "Private note\n--- Buzer activity (managed) ---\n2026-07-15 09:00 UTC — Extended +30 min (30 → 60 min)",
+      duration: { amount: 30, unit: "minute" }
+    });
+  });
+
+  it("maps checklist-only child mutations and preserves their partial outcomes", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.createChecklistChild({
+      id: "child-local", todoistTaskId: "child-1", parentTodoistTaskId: "todoist-1", projectId: null,
+      title: "Prepare invoice", description: null, childOrder: 0, updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter());
+
+    await expect(service.update("task-1", {
+      actionId: "checklist-only", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", rootPatch: null,
+      childMutations: [{ type: "check", clientMutationId: "stale-child", childId: "child-1", expectedChildRevision: "r:999" }]
+    })).resolves.toMatchObject({
+      outcome: "partial",
+      childOutcomes: [{ clientMutationId: "stale-child", childId: "child-1", outcome: "stale_child", errorCode: "stale_child" }],
+      snapshot: { source: "snapshot" }
     });
   });
 
@@ -1112,10 +1183,13 @@ describe("TaskActionService", () => {
       rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
     });
     const input = {
-      title: "Renamed invoice", description: "", projectId: "project-new", assigneeId: "user-self",
-      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
       actionId: "move-edit", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
-      expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Renamed invoice", description: "", projectId: "project-new", assigneeId: "user-self",
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: []
     };
 
     await expect(service.update("task-1", input)).rejects.toThrow("interrupted after move");

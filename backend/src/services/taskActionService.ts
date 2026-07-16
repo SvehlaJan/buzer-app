@@ -19,7 +19,8 @@ import {
   type TodoistChecklistServiceOptions,
   type ChecklistMutationRequest,
   type ChecklistMutationResult,
-  type ChecklistActionMetadata
+  type ChecklistActionMetadata,
+  type ChildMutation
 } from "./todoistChecklistService.js";
 
 export interface TaskActionServiceOptions {
@@ -67,7 +68,28 @@ export interface RescheduleTaskInput {
   expectedTaskRevision?: string;
 }
 
-export interface UpdateTaskInput {
+export interface RootEditPatch {
+  expectedTaskRevision: string;
+  title?: string;
+  description?: string | null;
+  projectId?: string;
+  assigneeId?: string | null;
+  dueDatetime?: string;
+  durationMinutes?: number;
+  recurrencePreset?: RecurrencePreset;
+  timeZone?: string;
+}
+
+/** The fixed Task 9 update wire contract. Root and checklist edits are deliberately separate. */
+export interface UpdateTaskRequest {
+  actionId: string;
+  deviceId: string;
+  expectedOccurrenceKey: string;
+  rootPatch: RootEditPatch | null;
+  childMutations: readonly ChildMutation[];
+}
+
+interface ResolvedRootEdit {
   title: string;
   description: string | null;
   projectId: string;
@@ -76,12 +98,6 @@ export interface UpdateTaskInput {
   durationMinutes: number;
   recurrencePreset?: RecurrencePreset;
   timeZone?: string;
-  expectedTaskRevision?: string;
-  expectedOccurrenceKey?: string;
-  actionId?: string;
-  deviceId?: string;
-  checklistMutations?: ChecklistMutationRequest["mutations"];
-  now: string;
 }
 
 export class TaskActionService {
@@ -541,16 +557,28 @@ export class TaskActionService {
     });
   }
 
-  async update(taskId: string, input: UpdateTaskInput): Promise<void | ChecklistMutationResult> {
+  async update(taskId: string, request: UpdateTaskRequest): Promise<void | ChecklistMutationResult> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
-    const metadata = this.rootMetadata(input, { occurrence: true, revision: true });
-    const checklistAction = input.checklistMutations === undefined
+    const metadata = this.rootMetadata({
+      actionId: request.actionId,
+      deviceId: request.deviceId,
+      expectedOccurrenceKey: request.expectedOccurrenceKey,
+      ...(request.rootPatch === null ? {} : { expectedTaskRevision: request.rootPatch.expectedTaskRevision })
+    }, { occurrence: true, revision: request.rootPatch !== null });
+    const checklistAction = request.childMutations.length === 0
       ? undefined
       : this.checklistActionForRootEdit(metadata);
     if (checklistAction !== undefined) {
-      this.assertChecklistDependencies({ action: checklistAction, mutations: input.checklistMutations ?? [] });
+      this.assertChecklistDependencies({ action: checklistAction, mutations: request.childMutations });
     }
+    if (request.rootPatch === null) {
+      return checklistAction === undefined
+        ? undefined
+        : this.mutateChecklist(taskId, { action: checklistAction, mutations: request.childMutations });
+    }
+
+    const input = this.resolveRootEdit(task, request.rootPatch);
     const project = this.projects.getActiveByTodoistProjectId(input.projectId);
     if (project === null) {
       throw Object.assign(new Error("Project not found"), {
@@ -606,7 +634,7 @@ export class TaskActionService {
         assigneeId: input.assigneeId,
         due,
         durationMinutes: input.durationMinutes,
-        checklistMutations: input.checklistMutations ?? []
+        childMutations: request.childMutations
       },
       metadata,
       isEffectPresent: () => {
@@ -645,9 +673,43 @@ export class TaskActionService {
     if (checklistAction !== undefined) {
       return this.mutateChecklist(taskId, {
         action: checklistAction,
-        mutations: input.checklistMutations ?? []
+        mutations: request.childMutations
       });
     }
+  }
+
+  private resolveRootEdit(task: TaskWithCommitment, patch: RootEditPatch): ResolvedRootEdit {
+    if (task.projectId === null && patch.projectId === undefined) {
+      throw Object.assign(new Error("Root task must have a Todoist project before editing"), {
+        code: "root_project_required",
+        statusCode: 422
+      });
+    }
+    if (task.dueDatetime === null && patch.dueDatetime === undefined) {
+      throw Object.assign(new Error("Root task must have a deadline before editing"), {
+        code: "task_missing_deadline_or_duration",
+        statusCode: 422
+      });
+    }
+    if (task.durationMinutes === null && patch.durationMinutes === undefined) {
+      throw Object.assign(new Error("Root task must have a duration before editing"), {
+        code: "task_missing_deadline_or_duration",
+        statusCode: 422
+      });
+    }
+    const decodedDescription = decodeTaskDescription(task.description);
+    return {
+      title: patch.title ?? task.title,
+      description: Object.prototype.hasOwnProperty.call(patch, "description")
+        ? patch.description ?? null
+        : decodedDescription.userDescription,
+      projectId: patch.projectId ?? task.projectId!,
+      assigneeId: Object.prototype.hasOwnProperty.call(patch, "assigneeId") ? patch.assigneeId ?? null : task.assigneeId,
+      dueDatetime: patch.dueDatetime ?? task.dueDatetime!,
+      durationMinutes: patch.durationMinutes ?? task.durationMinutes!,
+      ...(patch.recurrencePreset === undefined ? {} : { recurrencePreset: patch.recurrencePreset }),
+      ...(patch.timeZone === undefined ? {} : { timeZone: patch.timeZone })
+    };
   }
 
   private requireSchedulableTask(taskId: string): TaskWithCommitment & { dueDatetime: string; durationMinutes: number } {
@@ -890,7 +952,7 @@ function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) 
   return { kind: "replace" as const, datetime: dueDatetime, ...recurrence };
 }
 
-function recurrenceForUpdate(task: TaskWithCommitment, input: UpdateTaskInput) {
+function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit) {
   const scheduleChanged = task.dueDatetime !== input.dueDatetime || task.durationMinutes !== input.durationMinutes;
   if (input.recurrencePreset !== undefined) {
     const timeZone = input.timeZone ?? task.dueTimezone ?? "UTC";

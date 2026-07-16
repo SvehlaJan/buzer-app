@@ -91,11 +91,12 @@ describe("TaskSnapshotService", () => {
       projectId: null,
       assigneeId: "user-self",
       creatorId: "wife",
+      dueDate: "2026-07-13",
       dueDatetime: null,
       durationMinutes: 30,
       completedAt: null,
       deletedAt: null,
-      rawJson: JSON.stringify({ due: { date: "2026-07-13" } }),
+      rawJson: "{not-used}",
       updatedAt: "2026-07-13T06:00:00Z"
     });
 
@@ -254,12 +255,7 @@ describe("TaskSnapshotService", () => {
 
     const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
 
-    expect(snapshot.tasks[0]).toMatchObject({
-      id: "task-unassigned",
-      isAssignedToUser: false,
-      state: "invalid",
-      validationErrors: ["assignee_required_for_created_task"]
-    });
+    expect(snapshot.tasks).toEqual([]);
   });
 
   it("does not keep enforcing companion-owned tasks after Todoist assigns someone else", () => {
@@ -286,11 +282,112 @@ describe("TaskSnapshotService", () => {
 
     const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
 
+    expect(snapshot.tasks).toEqual([]);
+  });
+
+  it("projects only owned roots with ordered nested checklist revisions and progress", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(rootTask({
+      description: "User notes\n--- Buzer activity (managed) ---\n2026-07-15 14:05 Europe/Bratislava — Extended +30 min (60 → 90 min)",
+      isRecurring: true,
+      dueString: "every day at 18:00",
+      dueLang: "en",
+      dueTimezone: "Europe/Bratislava"
+    }));
+    repo.upsertTodoistTask(childTask({ id: "child-b", todoistTaskId: "todoist-child-b", title: "Second", childOrder: 2, completedAt: null }));
+    repo.upsertTodoistTask(childTask({ id: "child-a", todoistTaskId: "todoist-child-a", title: "First", childOrder: 1, completedAt: "2026-07-15T10:00:00Z" }));
+    db.prepare("update commitment_states set occurrence_key = ?, reconciliation_status = 'pending' where task_id = ?")
+      .run("occurrence-opaque", "root");
+
+    const snapshot = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self").getSnapshot("2026-07-15T10:00:00Z");
+
+    expect(snapshot.tasks).toHaveLength(1);
     expect(snapshot.tasks[0]).toMatchObject({
-      id: "task-reassigned",
-      isAssignedToUser: false,
-      state: "planned",
-      validationErrors: []
+      id: "root",
+      description: "User notes",
+      taskRevision: "r:1",
+      occurrenceKey: "occurrence-opaque",
+      reconciliationStatus: "pending",
+      recurrence: {
+        kind: "supported",
+        preset: "daily",
+        rule: "every day at 18:00",
+        language: "en",
+        timeZone: "Europe/Bratislava"
+      },
+      checkedCount: 1,
+      totalCount: 2,
+      hierarchyStatus: "valid",
+      hierarchyViolation: null,
+      activityLogEntries: [{
+        timestamp: "2026-07-15 14:05",
+        timeZone: "Europe/Bratislava",
+        message: "Extended +30 min (60 → 90 min)"
+      }],
+      checklistItems: [
+        { id: "child-a", childRevision: "r:1", checked: true, order: 1 },
+        { id: "child-b", childRevision: "r:1", checked: false, order: 2 }
+      ]
     });
   });
+
+  it("keeps invalid and unsupported owned roots reviewable while never projecting children as roots", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(rootTask({ id: "invalid", todoistTaskId: "todoist-invalid", dueDatetime: null, durationMinutes: null }));
+    repo.upsertTodoistTask(rootTask({ id: "unsupported", todoistTaskId: "todoist-unsupported" }));
+    repo.upsertTodoistTask(childTask({ id: "bad-child", todoistTaskId: "todoist-bad-child", parentId: "todoist-unsupported", dueDatetime: "2026-07-15T19:00:00Z" }));
+    repo.upsertTodoistTask(childTask({ id: "orphan-child", todoistTaskId: "todoist-orphan-child", parentId: "missing-root" }));
+
+    const snapshot = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self").getSnapshot("2026-07-15T10:00:00Z");
+
+    expect(snapshot.tasks.map((task) => task.id)).toEqual(["unsupported", "invalid"]);
+    expect(snapshot.tasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "invalid", state: "invalid", hierarchyStatus: "valid", hierarchyViolation: null }),
+      expect.objectContaining({ id: "unsupported", state: "invalid", hierarchyStatus: "unsupported", hierarchyViolation: "child_has_schedule" })
+    ]));
+  });
 });
+
+function rootTask(overrides: Partial<Parameters<TaskRepository["upsertTodoistTask"]>[0]> = {}) {
+  return {
+    id: "root",
+    todoistTaskId: "todoist-root",
+    title: "Root commitment",
+    description: null,
+    projectId: "project-1",
+    assigneeId: "user-self",
+    creatorId: "user-self",
+    dueDatetime: "2026-07-15T18:00:00Z",
+    durationMinutes: 60,
+    completedAt: null,
+    deletedAt: null,
+    rawJson: "{not-used}",
+    updatedAt: "2026-07-15T10:00:00Z",
+    ...overrides
+  };
+}
+
+function childTask(overrides: Partial<Parameters<TaskRepository["upsertTodoistTask"]>[0]> = {}) {
+  return {
+    id: "child",
+    todoistTaskId: "todoist-child",
+    title: "Checklist item",
+    description: "details",
+    projectId: "project-1",
+    parentId: "todoist-root",
+    childOrder: 1,
+    assigneeId: null,
+    creatorId: "user-self",
+    dueDatetime: null,
+    durationMinutes: null,
+    completedAt: null,
+    deletedAt: null,
+    rawJson: "{not-used}",
+    updatedAt: "2026-07-15T10:00:00Z",
+    ...overrides
+  };
+}

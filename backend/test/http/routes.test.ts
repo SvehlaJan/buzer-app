@@ -108,6 +108,66 @@ describe("HTTP routes", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it("authenticates every fixed non-health route before parsing invalid input", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+    const fixedRoutes = [
+      ["GET", "/tasks/snapshot"], ["GET", "/projects"], ["POST", "/tasks"], ["POST", "/tasks/task-1/start"],
+      ["POST", "/tasks/task-1/done"], ["POST", "/tasks/task-1/postpone-start"], ["POST", "/tasks/task-1/extend"],
+      ["POST", "/tasks/task-1/reschedule"], ["POST", "/tasks/task-1/update"], ["POST", "/tasks/task-1/checklist"],
+      ["POST", "/tasks/task-1/checklist/child-1/update"], ["POST", "/tasks/task-1/checklist/child-1/delete"],
+      ["POST", "/tasks/task-1/checklist/child-1/check"], ["POST", "/tasks/task-1/checklist/child-1/uncheck"],
+      ["POST", "/review/dismiss"], ["POST", "/device/check-in"]
+    ] as const;
+
+    for (const [method, url] of fixedRoutes) {
+      const response = await app.inject({ method, url, payload: { unexpected: true } });
+      expect(response.statusCode, `${method} ${url}`).toBe(401);
+    }
+    await app.close();
+  });
+
+  it("checks a direct checklist child through the authenticated mutation route and returns the authoritative snapshot", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Root", description: null, projectId: "project-family",
+      assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-07-15T18:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    repo.upsertTodoistTask({
+      id: "child-1", todoistTaskId: "todoist-child-1", title: "Checklist child", description: null, projectId: "project-family",
+      parentId: "todoist-1", childOrder: 1, assigneeId: null, creatorId: "user-self", dueDatetime: null, durationMinutes: null,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    db.prepare("update commitment_states set occurrence_key = ?, occurrence_due_datetime = ?, occurrence_recurrence_fingerprint = ? where task_id = ?")
+      .run("occurrence-1", "2026-07-15T18:00:00Z", '{"isRecurring":false,"dueString":null,"dueLang":null,"dueTimezone":null}', "task-1");
+    const childRevision = `r:${repo.getById("child-1")?.mirrorRevision}`;
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST", url: "/tasks/task-1/checklist/todoist-child-1/check", headers: { authorization: "Bearer secret" },
+      payload: {
+        actionId: "check-child-action", deviceId: "android-1", expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: childRevision
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      actionId: "check-child-action",
+      outcome: "completed",
+      childOutcomes: [{ childId: "todoist-child-1", outcome: "completed" }],
+      snapshot: { tasks: [{ id: "task-1", checklistItems: [{ id: "child-1", checked: true }] }] }
+    });
+    expect(adapter.itemCloses).toHaveLength(1);
+  });
+
   it("blocks typed snapshots until sync initialization finishes while health remains available", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -195,12 +255,13 @@ describe("HTTP routes", () => {
       rawJson: "{}",
       updatedAt: "2026-05-08T10:00:00Z"
     });
+    setOccurrence(db, "task-1", "2026-05-08T18:00:00Z");
     const adapter = new FakeTodoistAdapter();
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
     const auth = { authorization: "Bearer secret" };
 
-    const start = await app.inject({ method: "POST", url: "/tasks/task-1/start", headers: auth });
-    const extend = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth });
+    const start = await app.inject({ method: "POST", url: "/tasks/task-1/start", headers: auth, payload: action("start") });
+    const extend = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth, payload: action("extend") });
     const checkIn = await app.inject({
       method: "POST",
       url: "/device/check-in",
@@ -214,9 +275,11 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(start.statusCode).toBe(200);
-    expect(extend.statusCode).toBe(200);
+    expect(extend.statusCode).toBe(202);
     expect(checkIn.statusCode).toBe(200);
-    expect(adapter.reschedules).toHaveLength(1);
+    expect(start.json()).toMatchObject({ actionId: "action-start", outcome: "completed", snapshot: { tasks: expect.any(Array) } });
+    expect(extend.json()).toMatchObject({ actionId: "action-extend", outcome: "reconciliation_pending", snapshot: { tasks: expect.any(Array) } });
+    expect(adapter.itemUpdates).toHaveLength(1);
   });
 
   it("rejects invalid self-assigned task creation without calling Todoist", async () => {
@@ -247,7 +310,8 @@ describe("HTTP routes", () => {
         projectId: "project-family",
         assigneeId: "user-self",
         dueDatetime: null,
-        durationMinutes: null
+        durationMinutes: null,
+        ...action("invalid-create", "create")
       }
     });
     await app.close();
@@ -287,13 +351,14 @@ describe("HTTP routes", () => {
         title: "Personal strict task",
         projectId: "project-personal",
         dueDatetime: "2026-06-13T12:00:00Z",
-        durationMinutes: 30
+        durationMinutes: 30,
+        ...action("personal-create", "create")
       }
     });
     await app.close();
 
-    expect(response.statusCode).toBe(200);
-    expect(adapter.createdTasks[0]?.assigneeId).toBeNull();
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemAdds[0]).toMatchObject({ kind: "root", assigneeId: null });
   });
 
   it("passes trimmed create descriptions to Todoist", async () => {
@@ -325,13 +390,43 @@ describe("HTTP routes", () => {
         assigneeId: "user-self",
         dueDatetime: "2026-06-13T12:00:00Z",
         durationMinutes: 30,
-        description: "  Gate code: 2468  "
+        description: "  Gate code: 2468  ",
+        ...action("description-create", "create")
       }
     });
     await app.close();
 
-    expect(response.statusCode).toBe(200);
-    expect(adapter.createdTasks[0]?.description).toBe("Gate code: 2468");
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemAdds[0]?.description).toBe("Gate code: 2468");
+  });
+
+  it("accepts fixed-contract checklistDrafts while keeping child scheduling fields out of the root create command", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    new ProjectRepository(db).upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true, isInboxProject: false,
+      isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST", url: "/tasks", headers: { authorization: "Bearer secret" },
+      payload: {
+        title: "Root with checklist", description: null, projectId: "project-family", assigneeId: "user-self",
+        dueDatetime: "2026-07-15T18:00:00Z", durationMinutes: 30, recurrencePreset: "never", timeZone: "Europe/Bratislava",
+        checklistDrafts: [{ clientMutationId: "draft-child", title: "First child", description: "Details" }],
+        ...action("create-with-checklist", "create")
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemAdds).toMatchObject([
+      { kind: "root", title: "Root with checklist" },
+      { kind: "child", title: "First child", description: "Details" }
+    ]);
   });
 
   it("rejects blank create descriptions", async () => {
@@ -362,7 +457,8 @@ describe("HTTP routes", () => {
         assigneeId: "user-self",
         dueDatetime: "2026-06-13T12:00:00Z",
         durationMinutes: 30,
-        description: "   "
+        description: "   ",
+        ...action("blank-description", "create")
       }
     });
     await app.close();
@@ -371,7 +467,77 @@ describe("HTTP routes", () => {
     expect(adapter.createdTasks).toEqual([]);
   });
 
-  it("passes reschedule descriptions through with omitted, null, blank, and set semantics", async () => {
+  it("rejects unknown child scheduling fields and invalid IANA time zones", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true, isInboxProject: false,
+      isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+    const headers = { authorization: "Bearer secret" };
+    const base = {
+      title: "Strict task", projectId: "project-family", assigneeId: "user-self", dueDatetime: "2026-07-15T18:00:00Z",
+      durationMinutes: 30, ...action("strict-child", "create")
+    };
+
+    const childSchedule = await app.inject({ method: "POST", url: "/tasks", headers, payload: {
+      ...base, checklistDrafts: [{ clientMutationId: "draft-child", title: "Child", dueDatetime: "2026-07-15T19:00:00Z" }]
+    } });
+    const invalidTimeZone = await app.inject({ method: "POST", url: "/tasks", headers, payload: {
+      ...base, actionId: "action-invalid-timezone", timeZone: "Europe/Not-A-Place"
+    } });
+    await app.close();
+
+    expect(childSchedule.statusCode).toBe(400);
+    expect(invalidTimeZone.statusCode).toBe(400);
+  });
+
+  it("rejects a null occurrence key before task action execution", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+
+    const response = await app.inject({
+      method: "POST", url: "/tasks/task-1/start", headers: { authorization: "Bearer secret" },
+      payload: { actionId: "invalid-occurrence", deviceId: "android-1", expectedOccurrenceKey: null }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "validation_error" });
+  });
+
+  it("keeps bearer credentials and full task descriptions out of durable action journal output", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    new ProjectRepository(db).upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true, isInboxProject: false,
+      isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "android-secret", todoist: new FakeTodoistAdapter() });
+    const description = "full-description-do-not-journal\n--- Buzer activity (managed) ---\nprivate-audit";
+    const response = await app.inject({
+      method: "POST", url: "/tasks", headers: { authorization: "Bearer android-secret" },
+      payload: {
+        title: "Private task", projectId: "project-family", assigneeId: "user-self", dueDatetime: "2026-07-15T18:00:00Z",
+        durationMinutes: 30, description, ...action("journal-safety", "create")
+      }
+    });
+    const journalOutput = JSON.stringify(db.prepare("select * from task_action_journal union all select * from task_action_journal").all());
+    await app.close();
+
+    expect(response.statusCode).toBe(202);
+    expect(journalOutput).not.toContain("android-secret");
+    expect(journalOutput).not.toContain("Bearer");
+    expect(journalOutput).not.toContain("full-description-do-not-journal");
+    expect(journalOutput).not.toContain("private-audit");
+  });
+
+  it("passes a trimmed reschedule description through the journaled mutation route", async () => {
     const db = new Database(":memory:");
     migrate(db);
     markMirrorReady(db);
@@ -391,41 +557,26 @@ describe("HTTP routes", () => {
       rawJson: "{}",
       updatedAt: "2026-05-08T10:00:00Z"
     });
+    setOccurrence(db, "task-1", "2026-05-08T18:00:00Z");
+    db.prepare("update commitment_states set occurrence_key = ?, occurrence_due_datetime = ?, occurrence_recurrence_fingerprint = ? where task_id = ?")
+      .run("occurrence-1", "2026-05-08T18:00:00Z", '{"isRecurring":false,"dueString":null,"dueLang":null,"dueTimezone":null}', "task-1");
     const adapter = new FakeTodoistAdapter();
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
     const auth = { authorization: "Bearer secret" };
 
-    await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: "/tasks/task-1/reschedule",
       headers: auth,
-      payload: { dueDatetime: "2026-05-08T19:00:00Z", durationMinutes: 45 }
-    });
-    await app.inject({
-      method: "POST",
-      url: "/tasks/task-1/reschedule",
-      headers: auth,
-      payload: { dueDatetime: "2026-05-08T20:00:00Z", durationMinutes: 50, description: null }
-    });
-    await app.inject({
-      method: "POST",
-      url: "/tasks/task-1/reschedule",
-      headers: auth,
-      payload: { dueDatetime: "2026-05-08T21:00:00Z", durationMinutes: 55, description: "   " }
-    });
-    await app.inject({
-      method: "POST",
-      url: "/tasks/task-1/reschedule",
-      headers: auth,
-      payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  " }
+      payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  ", ...action("reschedule") }
     });
     await app.close();
 
-    expect(adapter.reschedules.map((reschedule) => reschedule.description)).toEqual([undefined, null, "", "Updated gate code: 1357"]);
-    expect(repo.getByTodoistTaskId("todoist-1")?.description).toBe("Updated gate code: 1357");
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemUpdates[0]?.description).toBe("Updated gate code: 1357");
   });
 
-  it("updates full task edit payload through update route", async () => {
+  it("updates a root patch through the fixed update route", async () => {
     const db = new Database(":memory:");
     migrate(db);
     markMirrorReady(db);
@@ -445,6 +596,8 @@ describe("HTTP routes", () => {
       rawJson: "{}",
       updatedAt: "2026-05-08T10:00:00Z"
     });
+    db.prepare("update commitment_states set occurrence_key = ?, occurrence_due_datetime = ?, occurrence_recurrence_fingerprint = ? where task_id = ?")
+      .run("occurrence-1", null, '{"isRecurring":false,"dueString":null,"dueLang":null,"dueTimezone":null}', "task-1");
     const projects = new ProjectRepository(db);
     projects.upsertProject({
       todoistProjectId: "project-family",
@@ -465,24 +618,62 @@ describe("HTTP routes", () => {
       url: "/tasks/task-1/update",
       headers: { authorization: "Bearer secret" },
       payload: {
-        title: "Edited task",
-        description: "  Updated details  ",
-        projectId: "project-family",
-        assigneeId: "user-self",
-        dueDatetime: "2026-05-08T19:00:00Z",
-        durationMinutes: 45
+        ...action("update"),
+        rootPatch: {
+          expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+          title: "Edited task",
+          description: "  Updated details  ",
+          projectId: "project-family",
+          assigneeId: "user-self",
+          dueDatetime: "2026-05-08T19:00:00Z",
+          durationMinutes: 45
+        },
+        childMutations: []
       }
     });
     await app.close();
 
-    expect(response.statusCode).toBe(200);
-    expect(adapter.updates[0]).toMatchObject({
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemUpdates[0]).toMatchObject({
       title: "Edited task",
       description: "Updated details",
-      projectId: "project-family",
-      assigneeId: "user-self",
-      dueDatetime: "2026-05-08T19:00:00Z",
-      durationMinutes: 45
+      assignment: { kind: "assign", assigneeId: "user-self" },
+      due: { kind: "replace", datetime: "2026-05-08T19:00:00Z" },
+      duration: { amount: 45, unit: "minute" }
+    });
+  });
+
+  it("rejects legacy flat update fields and only requires a task revision for root patches", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Root", description: null, projectId: "project-family",
+      assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-05-08T18:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-05-08T10:00:00Z"
+    });
+    setOccurrence(db, "task-1", "2026-05-08T18:00:00Z");
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+    const headers = { authorization: "Bearer secret" };
+
+    const legacy = await app.inject({
+      method: "POST", url: "/tasks/task-1/update", headers,
+      payload: {
+        ...action("legacy"), title: "must be rejected", projectId: "project-family", assigneeId: "user-self",
+        dueDatetime: "2026-05-08T18:00:00Z", durationMinutes: 30, childMutations: []
+      }
+    });
+    const checklistOnly = await app.inject({
+      method: "POST", url: "/tasks/task-1/update", headers,
+      payload: { ...action("checklist-only"), rootPatch: null, childMutations: [] }
+    });
+    await app.close();
+
+    expect(legacy.statusCode).toBe(400);
+    expect(checklistOnly.statusCode).toBe(200);
+    expect(checklistOnly.json()).toMatchObject({
+      actionId: "action-checklist-only", outcome: "completed", snapshot: { tasks: expect.any(Array) }
     });
   });
 
@@ -506,6 +697,7 @@ describe("HTTP routes", () => {
       rawJson: "{}",
       updatedAt: "2026-05-08T10:00:00Z"
     });
+    setOccurrence(db, "task-1", "2026-05-08T18:00:00Z");
     const sender = new DryRunSender();
     const escalationService = new EscalationService(db, repo, sender, "wife-chat");
     const app = buildServer({
@@ -517,12 +709,12 @@ describe("HTTP routes", () => {
     });
     const auth = { authorization: "Bearer secret" };
 
-    await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
-    const response = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth });
+    await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth, payload: action("postpone-1") });
+    const response = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth, payload: action("postpone-2") });
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ escalationTriggered: true });
+    expect(response.json()).toMatchObject({ actionId: "action-postpone-2", outcome: "completed", snapshot: { tasks: expect.any(Array) } });
     expect(sender.sent).toHaveLength(1);
   });
 });
@@ -532,4 +724,18 @@ function markMirrorReady(db: Database.Database): void {
     insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
     values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
   `).run();
+}
+
+function action(id: string, kind: "create" | "occurrence" | "revision" = "occurrence") {
+  return {
+    actionId: `action-${id}`,
+    deviceId: "android-1",
+    ...(kind === "create" ? {} : { expectedOccurrenceKey: "occurrence-1" }),
+    ...(kind === "revision" ? { expectedTaskRevision: "r:1" } : {})
+  };
+}
+
+function setOccurrence(db: Database.Database, taskId: string, dueDatetime: string): void {
+  db.prepare("update commitment_states set occurrence_key = ?, occurrence_due_datetime = ?, occurrence_recurrence_fingerprint = ? where task_id = ?")
+    .run("occurrence-1", dueDatetime, '{"isRecurring":false,"dueString":null,"dueLang":null,"dueTimezone":null}', taskId);
 }
