@@ -49,3 +49,6 @@ Assumptions:
 
 Next recommended step:
 - Use this fake backend in the Task 11 shared-client contract tests, then continue with occurrence-aware state/alarm work.
+
+Commit:
+- `81db945 test: model recurring checklists in fake backend`

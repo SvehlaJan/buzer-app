@@ -574,7 +574,7 @@ reconciliationStatus: "confirmed" | "pending";
 - [x] Implement all fixed routes and return the authoritative updated snapshot from mutations. Checking a child must advance that child revision only. Recurring Done must advance to a deterministic next due, create a new occurrence key, and reset all children unchecked.
 - [x] Keep test controls for forced 500 snapshot/action failures and add deterministic 202 pending, 409 stale, 422 activity-log-full, and 429-with-`Retry-After` controls for Android and shared-client tests.
 - [x] Run from `tools/fake-backend/`: `npm test` and `npm run build`. Expected: PASS.
-- [ ] Commit with `git commit -m "test: model recurring checklists in fake backend"`.
+- [x] Commit with `git commit -m "test: model recurring checklists in fake backend"`.
 
 ## Task 11: Add Shared Kotlin Contracts, Error Context, And Retry Semantics
 
