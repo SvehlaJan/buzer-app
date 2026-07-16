@@ -22,6 +22,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Foreground service that shows a blocker overlay above the current foreground app and routes
@@ -30,7 +31,9 @@ import kotlinx.coroutines.withTimeout
  */
 class OverlayBlockerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val requestGenerations = OverlayRequestGeneration()
     private var controller: BlockerOverlayController? = null
+    private var initialDisplayJob: Job? = null
     private var watcherJob: Job? = null
     private var actionInFlight = false
 
@@ -38,11 +41,12 @@ class OverlayBlockerService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundCompat()
+        val generation = replaceCurrentPresentation()
 
         val request = intent?.let { OverlayBlockerRequest.fromIntent(it) }
         if (request == null) {
             AppLog.warn("overlay_service invalid_request")
-            stopOverlay()
+            stopOverlay(generation)
             return START_NOT_STICKY
         }
 
@@ -50,25 +54,69 @@ class OverlayBlockerService : Service() {
             EnforcementDependencies.coordinator(applicationContext)
         } catch (error: Exception) {
             AppLog.error("overlay_service coordinator create failed", error)
-            stopOverlay()
+            stopOverlay(generation)
             return START_NOT_STICKY
         }
 
-        val enrichedRequest = request.withTask(coordinator.loadLatestSnapshot()?.tasks?.firstOrNull { it.id == request.taskId })
+        initialDisplayJob = scope.launch {
+            val cachedSnapshot = coordinator.loadLatestSnapshot()
+            val freshSnapshot = try {
+                withTimeoutOrNull(INITIAL_REFRESH_TIMEOUT_MS) {
+                    coordinator.refreshAndReconcile()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                AppLog.warn(
+                    "overlay_initial refresh_failed taskId=${request.taskId} " +
+                        "occurrence=${request.occurrenceKey} kind=${request.kind} ${error.message}"
+                )
+                null
+            }
+            if (!requestGenerations.isCurrent(generation)) return@launch
+            when (val decision = OverlayInitialDisplayGate.decide(request, freshSnapshot, cachedSnapshot)) {
+                OverlayInitialDisplayDecision.DismissStaleOrResolved -> {
+                    AppLog.info(
+                        "overlay_service dismissed reason=stale_or_resolved taskId=${request.taskId} " +
+                            "occurrence=${request.occurrenceKey} kind=${request.kind}"
+                    )
+                    stopOverlay(generation)
+                }
+
+                is OverlayInitialDisplayDecision.Show -> {
+                    if (decision.isOfflineFallback) {
+                        AppLog.warn(
+                            "overlay_initial offline_fallback taskId=${request.taskId} " +
+                                "occurrence=${request.occurrenceKey} kind=${request.kind}"
+                        )
+                    }
+                    showOverlay(request.withTask(decision.task), coordinator, generation)
+                }
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun showOverlay(
+        request: OverlayBlockerRequest,
+        coordinator: EnforcementCoordinator,
+        generation: Long
+    ) {
+        if (!requestGenerations.isCurrent(generation)) return
         val controller = BlockerOverlayController(this).also { this.controller = it }
-        val shown = controller.show(enrichedRequest) { action -> handleAction(action, enrichedRequest, coordinator) }
+        val shown = controller.show(request) { action -> handleAction(action, request, coordinator, generation) }
         if (!shown) {
             this.controller = null
-            stopOverlay()
-            return START_NOT_STICKY
+            stopOverlay(generation)
+            return
         }
-        startResolutionWatcher(enrichedRequest, coordinator)
-        return START_NOT_STICKY
+        startResolutionWatcher(request, coordinator, generation)
     }
 
     private fun startResolutionWatcher(
         request: OverlayBlockerRequest,
-        coordinator: EnforcementCoordinator
+        coordinator: EnforcementCoordinator,
+        generation: Long
     ) {
         watcherJob?.cancel()
         watcherJob = scope.launch {
@@ -76,45 +124,58 @@ class OverlayBlockerService : Service() {
             // total lifetime ~8 minutes. Each poll is a full backend refresh, so cadence is cost.
             repeat(MAX_WATCH_POLLS) { attempt ->
                 delay(if (attempt < WATCH_FAST_POLLS) WATCH_FAST_POLL_INTERVAL_MS else WATCH_SLOW_POLL_INTERVAL_MS)
-                if (controller == null) return@launch
+                if (!requestGenerations.isCurrent(generation) || controller == null) return@launch
                 try {
                     val snapshot = withTimeout(WATCH_REFRESH_TIMEOUT_MS) {
                         coordinator.refreshAndReconcile()
                     }
-                    if (BlockerTaskSnapshotGate.isBlockerResolved(snapshot, request.taskId, request.kind)) {
+                    if (BlockerTaskSnapshotGate.isBlockerResolved(
+                            snapshot,
+                            request.taskId,
+                            request.occurrenceKey,
+                            request.kind
+                        )) {
                         AppLog.info(
-                            "overlay_watcher resolved kind=${request.kind} taskId=${request.taskId} " +
+                            "overlay_watcher resolved kind=${request.kind} taskId=${request.taskId} occurrence=${request.occurrenceKey} " +
                                 "attempt=${attempt + 1}"
                         )
-                        stopOverlay()
+                        stopOverlay(generation)
                         return@launch
                     }
                 } catch (timeout: TimeoutCancellationException) {
                     AppLog.warn(
                         "overlay_watcher refresh_timeout kind=${request.kind} " +
-                            "taskId=${request.taskId} attempt=${attempt + 1}"
+                        "taskId=${request.taskId} occurrence=${request.occurrenceKey} attempt=${attempt + 1}"
                     )
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Throwable) {
                     AppLog.warn(
                         "overlay_watcher refresh_failed kind=${request.kind} " +
-                            "taskId=${request.taskId} attempt=${attempt + 1} ${error.message}"
+                        "taskId=${request.taskId} occurrence=${request.occurrenceKey} " +
+                            "attempt=${attempt + 1} ${error.message}"
                     )
                 }
             }
-            AppLog.warn("overlay_watcher stopped reason=max_polls kind=${request.kind} taskId=${request.taskId}")
+            AppLog.warn(
+                "overlay_watcher stopped reason=max_polls kind=${request.kind} taskId=${request.taskId} " +
+                    "occurrence=${request.occurrenceKey}"
+            )
         }
     }
 
     private fun handleAction(
         action: OverlayAction,
         request: OverlayBlockerRequest,
-        coordinator: EnforcementCoordinator
+        coordinator: EnforcementCoordinator,
+        generation: Long
     ) {
-        AppLog.info("overlay_action action=$action kind=${request.kind} taskId=${request.taskId}")
-        if (actionInFlight) {
-            AppLog.debug("overlay_action ignored reason=in_flight")
+        AppLog.info(
+            "overlay_action action=$action kind=${request.kind} taskId=${request.taskId} " +
+                "occurrence=${request.occurrenceKey}"
+        )
+        if (!requestGenerations.isCurrent(generation) || actionInFlight) {
+            AppLog.debug("overlay_action ignored reason=in_flight occurrence=${request.occurrenceKey}")
             return
         }
         actionInFlight = true
@@ -125,18 +186,21 @@ class OverlayBlockerService : Service() {
                 // the overlay dismisses, matching the blocker activities' finish-regardless flow.
                 withTimeout(ACTION_TIMEOUT_MS) {
                     when (action) {
-                        OverlayAction.START -> coordinator.startTask(request.taskId)
-                        OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId)
+                        OverlayAction.START -> coordinator.startTask(request.taskId, request.occurrenceKey)
+                        OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId, request.occurrenceKey)
                     }
                 }
             } catch (timeout: TimeoutCancellationException) {
-                AppLog.warn("overlay_action timeout action=$action taskId=${request.taskId} afterMs=$ACTION_TIMEOUT_MS")
+                AppLog.warn(
+                    "overlay_action timeout action=$action taskId=${request.taskId} " +
+                        "occurrence=${request.occurrenceKey} afterMs=$ACTION_TIMEOUT_MS"
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                AppLog.warn("overlay_action error action=$action ${error.message}")
+                AppLog.warn("overlay_action error action=$action occurrence=${request.occurrenceKey} ${error.message}")
             } finally {
-                stopOverlay()
+                stopOverlay(generation)
             }
         }
     }
@@ -161,7 +225,22 @@ class OverlayBlockerService : Service() {
         }
     }
 
-    private fun stopOverlay() {
+    private fun replaceCurrentPresentation(): Long {
+        val generation = requestGenerations.next()
+        initialDisplayJob?.cancel()
+        initialDisplayJob = null
+        watcherJob?.cancel()
+        watcherJob = null
+        controller?.remove()
+        controller = null
+        actionInFlight = false
+        return generation
+    }
+
+    private fun stopOverlay(generation: Long) {
+        if (!requestGenerations.isCurrent(generation)) return
+        initialDisplayJob?.cancel()
+        initialDisplayJob = null
         watcherJob?.cancel()
         watcherJob = null
         controller?.remove()
@@ -171,6 +250,8 @@ class OverlayBlockerService : Service() {
     }
 
     override fun onDestroy() {
+        initialDisplayJob?.cancel()
+        initialDisplayJob = null
         watcherJob?.cancel()
         watcherJob = null
         controller?.remove()
@@ -182,6 +263,7 @@ class OverlayBlockerService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 4711
         private const val ACTION_TIMEOUT_MS = 15_000L
+        private const val INITIAL_REFRESH_TIMEOUT_MS = 5_000L
         private const val WATCH_FAST_POLL_INTERVAL_MS = 2_000L
         private const val WATCH_SLOW_POLL_INTERVAL_MS = 10_000L
         private const val WATCH_FAST_POLLS = 15
@@ -197,7 +279,10 @@ class OverlayBlockerService : Service() {
 object OverlayBlockerServiceStarter {
     fun tryStart(context: Context, request: OverlayBlockerRequest): Boolean {
         if (!OverlayPermission.canDraw(context)) {
-            AppLog.warn("overlay_start skipped reason=no_permission kind=${request.kind}")
+            AppLog.warn(
+                "overlay_start skipped reason=no_permission kind=${request.kind} " +
+                    "occurrence=${request.occurrenceKey}"
+            )
             return false
         }
         return try {
@@ -209,7 +294,9 @@ object OverlayBlockerServiceStarter {
             }
             true
         } catch (error: RuntimeException) {
-            AppLog.warn("overlay_start failed kind=${request.kind} ${error.message}")
+            AppLog.warn(
+                "overlay_start failed kind=${request.kind} occurrence=${request.occurrenceKey} ${error.message}"
+            )
             false
         }
     }

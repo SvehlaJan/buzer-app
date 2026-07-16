@@ -14,6 +14,7 @@ class OverlayBlockerRequestTest {
     fun parsesStartBlockerWithCompactSurfaceData() {
         val request = OverlayBlockerRequest.fromExtras(
             taskId = "task-1",
+            occurrenceKey = "occurrence-1",
             kindName = "START_BLOCKER",
             title = "Pay apartment deposit",
             description = "Use the saved IBAN and attach receipt.",
@@ -25,6 +26,7 @@ class OverlayBlockerRequestTest {
         assertEquals(AlarmKind.START_BLOCKER, request?.kind)
         assertEquals(BlockerKind.OverlayStart, request?.blockerKind)
         assertEquals("task-1", request?.taskId)
+        assertEquals("occurrence-1", request?.occurrenceKey)
         assertEquals("Pay apartment deposit", request?.title)
         assertEquals("Use the saved IBAN and attach receipt.", request?.description)
         assertEquals("2026-07-11T10:00:00Z", request?.dueDatetime)
@@ -34,20 +36,20 @@ class OverlayBlockerRequestTest {
 
     @Test
     fun rejectsNonStartBlockers() {
-        assertNull(OverlayBlockerRequest.fromExtras("task-2", "DEADLINE_BLOCKER"))
-        assertNull(OverlayBlockerRequest.fromExtras(null, "MORNING_REVIEW"))
+        assertNull(OverlayBlockerRequest.fromExtras("task-2", "occurrence-1", "DEADLINE_BLOCKER"))
+        assertNull(OverlayBlockerRequest.fromExtras(null, "morning-review", "MORNING_REVIEW"))
     }
 
     @Test
     fun rejectsTaskBlockerWithoutTaskId() {
-        assertNull(OverlayBlockerRequest.fromExtras(null, "START_BLOCKER"))
+        assertNull(OverlayBlockerRequest.fromExtras(null, "occurrence-1", "START_BLOCKER"))
     }
 
     @Test
     fun rejectsPreStartUnknownAndMissingKind() {
-        assertNull(OverlayBlockerRequest.fromExtras("task-1", "PRE_START_WARNING"))
-        assertNull(OverlayBlockerRequest.fromExtras("task-1", "BOGUS"))
-        assertNull(OverlayBlockerRequest.fromExtras("task-1", null))
+        assertNull(OverlayBlockerRequest.fromExtras("task-1", "occurrence-1", "PRE_START_WARNING"))
+        assertNull(OverlayBlockerRequest.fromExtras("task-1", "occurrence-1", "BOGUS"))
+        assertNull(OverlayBlockerRequest.fromExtras("task-1", "occurrence-1", null))
     }
 
     @Test
@@ -55,6 +57,7 @@ class OverlayBlockerRequestTest {
         val request = OverlayBlockerRequest(
             kind = AlarmKind.START_BLOCKER,
             taskId = "task-1",
+            occurrenceKey = "occurrence-1",
             title = "Pay apartment deposit",
             description = "Use the saved IBAN and attach receipt.",
             dueDatetime = "2026-07-11T10:00:00Z",
@@ -71,7 +74,8 @@ class OverlayBlockerRequestTest {
     fun withTaskCopiesSnapshotData() {
         val request = OverlayBlockerRequest(
             kind = AlarmKind.START_BLOCKER,
-            taskId = "task-1"
+            taskId = "task-1",
+            occurrenceKey = "occurrence-1"
         )
 
         val enriched = request.withTask(
@@ -96,6 +100,7 @@ class OverlayBlockerRequestTest {
         val request = OverlayBlockerRequest(
             kind = AlarmKind.START_BLOCKER,
             taskId = "task-1",
+            occurrenceKey = "occurrence-1",
             title = "Fallback title"
         )
 

@@ -16,24 +16,20 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
             // Pixel, 2026-07-05); the status-bar alarm icon is an accepted tradeoff.
             AlarmKind.START_BLOCKER, AlarmKind.DEADLINE_BLOCKER -> alarmManager.setAlarmClock(
                 AlarmManager.AlarmClockInfo(alarm.triggerAtEpochMillis, showIntent()),
-                pendingIntent(alarm.taskId, alarm.kind)
+                pendingIntent(alarm)
             )
 
             AlarmKind.PRE_START_WARNING, AlarmKind.MORNING_REVIEW ->
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     alarm.triggerAtEpochMillis,
-                    pendingIntent(alarm.taskId, alarm.kind)
+                    pendingIntent(alarm)
                 )
         }
     }
 
-    override fun cancel(taskId: String, kind: AlarmKind) {
-        alarmManager.cancel(pendingIntent(taskId, kind))
-    }
-
-    override fun cancelAllForTask(taskId: String) {
-        AlarmKind.entries.forEach { cancel(taskId, it) }
+    override fun cancel(identity: ScheduledAlarmIdentity) {
+        alarmManager.cancel(pendingIntent(identity))
     }
 
     private fun showIntent(): PendingIntent = PendingIntent.getActivity(
@@ -43,11 +39,13 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    private fun pendingIntent(taskId: String, kind: AlarmKind): PendingIntent {
+    private fun pendingIntent(alarm: ScheduledAlarm): PendingIntent = pendingIntent(alarm.identity)
+
+    private fun pendingIntent(identity: ScheduledAlarmIdentity): PendingIntent {
         return PendingIntent.getBroadcast(
             context,
-            AlarmIntentFactory.requestCode(taskId, kind),
-            AlarmIntentFactory.receiverIntent(context, taskId, kind),
+            AlarmIntentFactory.requestCode(identity.taskId, identity.occurrenceKey, identity.kind),
+            AlarmIntentFactory.receiverIntent(context, identity.taskId, identity.occurrenceKey, identity.kind),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }

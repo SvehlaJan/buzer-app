@@ -44,7 +44,7 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
-    fun completedAndDeletedTasksCancelAlarmsAfterRefresh() = runBlocking {
+    fun completedAndDeletedTasksScheduleNoNewAlarmsAfterRefresh() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(
@@ -61,12 +61,12 @@ class EnforcementCoordinatorTest {
 
         coordinator.refreshAndReconcile()
 
-        assertEquals(listOf("done", "deleted"), scheduler.cancelledAll)
+        assertTrue(scheduler.cancelled.isEmpty())
         assertTrue(scheduler.scheduled.isEmpty())
     }
 
     @Test
-    fun refreshClearsExistingTaskAlarmsBeforeSchedulingLatestDesiredAlarms() = runBlocking {
+    fun refreshSchedulesLatestDesiredAlarmsThroughTheIdentityRegistry() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(snapshot(task("task-1"))),
@@ -78,7 +78,7 @@ class EnforcementCoordinatorTest {
 
         coordinator.refreshAndReconcile()
 
-        assertEquals(listOf("task-1"), scheduler.cancelledAll)
+        assertTrue(scheduler.cancelled.isEmpty())
         assertEquals(
             listOf(
                 scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
@@ -101,7 +101,7 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.postponeStart("task-1")
+        val result = coordinator.postponeStart("task-1", "occurrence-task-1")
 
         assertTrue(result is CoordinatorActionResult.FailedAndHidden)
         assertEquals(
@@ -124,7 +124,7 @@ class EnforcementCoordinatorTest {
         )
 
         assertFailsWith<CancellationException> {
-            coordinator.postponeStart("task-1")
+            coordinator.postponeStart("task-1", "occurrence-task-1")
         }
 
         assertTrue(scheduler.scheduled.isEmpty())
@@ -136,6 +136,44 @@ class EnforcementCoordinatorTest {
         val notifications = RecordingBlockerNotificationCleaner()
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
+            snapshotStore = FakeSnapshotStore(snapshot(task("task-1"))),
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            blockerNotificationCleaner = notifications,
+            nowProvider = { "2026-05-28T11:01:00Z" }
+        )
+
+        val result = coordinator.startTask("task-1", "occurrence-task-1")
+
+        assertEquals(CoordinatorActionResult.Success, result)
+        assertEquals(
+            listOf(NotificationCleaned("task-1", "occurrence-task-1")),
+            notifications.cleaned
+        )
+    }
+
+    @Test
+    fun actionCleansTheTriggeringOccurrenceRatherThanDifferentCachedOccurrence() = runBlocking {
+        val notifications = RecordingBlockerNotificationCleaner()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
+            snapshotStore = FakeSnapshotStore(snapshot(task("task-1", occurrenceKey = "occurrence-cached"))),
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            blockerNotificationCleaner = notifications,
+            nowProvider = { "2026-05-28T11:01:00Z" }
+        )
+
+        coordinator.startTask("task-1", "occurrence-alarm")
+
+        assertEquals(listOf(NotificationCleaned("task-1", "occurrence-alarm")), notifications.cleaned)
+    }
+
+    @Test
+    fun actionCleansTheTriggeringOccurrenceWhenCacheMisses() = runBlocking {
+        val notifications = RecordingBlockerNotificationCleaner()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
             snapshotStore = FakeSnapshotStore(),
             alarmScheduler = RecordingAlarmScheduler(),
             errorReporter = RecordingErrorReporter(),
@@ -143,10 +181,9 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T11:01:00Z" }
         )
 
-        val result = coordinator.startTask("task-1")
+        coordinator.startTask("task-1", "occurrence-alarm")
 
-        assertEquals(CoordinatorActionResult.Success, result)
-        assertEquals(listOf("task-1"), notifications.cancelledTaskIds)
+        assertEquals(listOf(NotificationCleaned("task-1", "occurrence-alarm")), notifications.cleaned)
     }
 
     @Test
@@ -161,7 +198,7 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.completeTask("task-1")
+        val result = coordinator.completeTask("task-1", "occurrence-task-1")
 
         assertTrue(result is CoordinatorActionResult.FailedAndHidden)
         assertTrue(scheduler.scheduled.isEmpty())
@@ -180,7 +217,7 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.dismissMorningReview()
+        val result = coordinator.dismissMorningReview(EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY)
 
         assertTrue(result is CoordinatorActionResult.FailedAndHidden)
         assertTrue(scheduler.scheduled.isEmpty())
@@ -211,7 +248,7 @@ class EnforcementCoordinatorTest {
         assertFalse(coordinator.reconcileLatestSnapshot())
         assertEquals(0, api.snapshotCalls)
         assertTrue(scheduler.scheduled.isEmpty())
-        assertTrue(scheduler.cancelledAll.isEmpty())
+        assertTrue(scheduler.cancelled.isEmpty())
     }
 
     @Test
@@ -228,7 +265,7 @@ class EnforcementCoordinatorTest {
 
         assertTrue(coordinator.reconcileLatestSnapshot())
         assertEquals(0, api.snapshotCalls)
-        assertEquals(listOf("task-1"), scheduler.cancelledAll)
+        assertTrue(scheduler.cancelled.isEmpty())
         assertEquals(
             listOf(
                 scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
@@ -251,7 +288,8 @@ class EnforcementCoordinatorTest {
         id: String,
         state: CommitmentState = CommitmentState.planned,
         isCompleted: Boolean = false,
-        isDeleted: Boolean = false
+        isDeleted: Boolean = false,
+        occurrenceKey: String = "occurrence-$id"
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -273,11 +311,12 @@ class EnforcementCoordinatorTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-05-28T09:00:00Z"
+            updatedAt = "2026-05-28T09:00:00Z",
+            occurrenceKey = occurrenceKey
         )
 
     private fun scheduled(taskId: String, kind: AlarmKind, triggerAtIso: String): ScheduledAlarm =
-        ScheduledAlarm(taskId, kind, Instant.parse(triggerAtIso).toEpochMilli())
+        ScheduledAlarm(taskId, "occurrence-$taskId", kind, Instant.parse(triggerAtIso).toEpochMilli())
 
     private class FakeBuzerApi(
         private val snapshot: TasksSnapshotResponse,
@@ -321,17 +360,16 @@ class EnforcementCoordinatorTest {
 
     private class RecordingAlarmScheduler : AlarmScheduler {
         val scheduled = mutableListOf<ScheduledAlarm>()
-        val cancelledAll = mutableListOf<String>()
+        val cancelled = mutableListOf<ScheduledAlarmIdentity>()
 
         override fun schedule(alarm: ScheduledAlarm) {
             scheduled += alarm
         }
 
-        override fun cancel(taskId: String, kind: AlarmKind) = Unit
-
-        override fun cancelAllForTask(taskId: String) {
-            cancelledAll += taskId
+        override fun cancel(identity: ScheduledAlarmIdentity) {
+            cancelled += identity
         }
+
     }
 
     private data class ErrorRecord(
@@ -349,10 +387,12 @@ class EnforcementCoordinatorTest {
     }
 
     private class RecordingBlockerNotificationCleaner : BlockerNotificationCleaner {
-        val cancelledTaskIds = mutableListOf<String>()
+        val cleaned = mutableListOf<NotificationCleaned>()
 
-        override fun cancelForTask(taskId: String) {
-            cancelledTaskIds += taskId
+        override fun cancelForTask(taskId: String, occurrenceKey: String) {
+            cleaned += NotificationCleaned(taskId, occurrenceKey)
         }
     }
+
+    private data class NotificationCleaned(val taskId: String, val occurrenceKey: String)
 }

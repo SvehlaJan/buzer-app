@@ -35,7 +35,15 @@ class MainActivity : ComponentActivity() {
             completeTask = { taskId ->
                 val coordinator = coordinator
                     ?: return@HomeDoneActionHandler CoordinatorActionResult.FailedAndHidden("Task completion failed")
-                coordinator.completeTask(taskId)
+                val occurrenceKey = snapshotViewState
+                    ?.tasks
+                    ?.firstOrNull { it.id == taskId }
+                    ?.occurrenceKey
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@HomeDoneActionHandler CoordinatorActionResult.FailedAndHidden(
+                        "Task occurrence is no longer current"
+                    )
+                coordinator.completeTask(taskId, occurrenceKey)
             },
             latestSnapshot = {
                 coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)

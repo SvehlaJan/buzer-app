@@ -8,6 +8,7 @@ object AndroidEnforcementMapper {
     fun toScheduledAlarm(alarm: DesiredAlarm): ScheduledAlarm =
         ScheduledAlarm(
             taskId = alarm.taskId,
+            occurrenceKey = alarm.occurrenceKey,
             kind = toAlarmKind(alarm.kind),
             triggerAtEpochMillis = Instant.parse(alarm.triggerAtIso).toEpochMilli()
         )

@@ -114,15 +114,16 @@ class MorningReviewActivity : ComponentActivity() {
         fun runRepair(
             currentCoordinator: EnforcementCoordinator,
             taskId: String,
+            occurrenceKey: String,
             request: UpdateTaskRequest
         ) {
             repairing = true
             actionErrorMessage = null
-            retryAction = { runRepair(currentCoordinator, taskId, request) }
+            retryAction = { runRepair(currentCoordinator, taskId, occurrenceKey, request) }
             lifecycleScope.launch {
                 try {
                     AppLog.info("morning_review repair start taskId=$taskId duration=${request.durationMinutes}")
-                    when (val result = currentCoordinator.updateTask(taskId, request)) {
+                    when (val result = currentCoordinator.updateTask(taskId, occurrenceKey, request)) {
                         CoordinatorActionResult.Success -> {
                             invalidTasks = invalidTasks.filterNot { it.id == taskId }
                             AppLog.info(
@@ -155,6 +156,7 @@ class MorningReviewActivity : ComponentActivity() {
                     scheduler.schedule(
                         ScheduledAlarm(
                             taskId = EnforcementCoordinator.MORNING_REVIEW_TASK_ID,
+                            occurrenceKey = EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY,
                             kind = AlarmKind.MORNING_REVIEW,
                             triggerAtEpochMillis = System.currentTimeMillis() + FIVE_MINUTES_MILLIS
                         )
@@ -163,7 +165,11 @@ class MorningReviewActivity : ComponentActivity() {
                         AppLog.debug("morning_review snooze finish reason=no_coordinator")
                         finish()
                     } else {
-                        when (val result = currentCoordinator.dismissMorningReview()) {
+                        when (
+                            val result = currentCoordinator.dismissMorningReview(
+                                EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY
+                            )
+                        ) {
                             CoordinatorActionResult.Success -> {
                                 AppLog.info("morning_review snooze dismissed_on_backend")
                                 finish()
@@ -197,7 +203,15 @@ class MorningReviewActivity : ComponentActivity() {
                         AppLog.debug("morning_review repair skipped reason=no_coordinator taskId=$taskId")
                         finish()
                     } else {
-                        runRepair(currentCoordinator, taskId, request)
+                        val occurrenceKey = invalidTasks
+                            .firstOrNull { it.id == taskId }
+                            ?.occurrenceKey
+                            ?.takeIf { it.isNotBlank() }
+                        if (occurrenceKey == null) {
+                            actionErrorMessage = "Task occurrence is no longer current"
+                        } else {
+                            runRepair(currentCoordinator, taskId, occurrenceKey, request)
+                        }
                     }
                 },
                 onSnooze = { runSnooze(coordinator) },

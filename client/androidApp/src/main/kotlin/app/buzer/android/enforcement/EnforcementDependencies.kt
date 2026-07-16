@@ -2,11 +2,15 @@ package app.buzer.android.enforcement
 
 import android.content.Context
 import app.buzer.android.BuildConfig
+import app.buzer.android.sync.DeviceIdentityStore
 import app.buzer.android.sync.SnapshotStore
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.api.BuzerApiClient
 
 object EnforcementDependencies {
+    fun deviceIdentityStore(context: Context): DeviceIdentityStore =
+        DeviceIdentityStore.fromContext(context)
+
     fun configError(): String? {
         if (BuildConfig.BUZER_BACKEND_BASE_URL.isBlank()) {
             return "BUZER_BACKEND_BASE_URL is missing from client/local.properties"
@@ -28,6 +32,7 @@ object EnforcementDependencies {
             api = BuzerEnforcementApi(client),
             snapshotStore = SnapshotStore(context),
             alarmScheduler = AndroidAlarmScheduler(context),
+            scheduledAlarmRegistry = ScheduledAlarmRegistry.fromContext(context),
             errorReporter = BlockerErrorReporter(context),
             blockerNotificationCleaner = AndroidBlockerNotificationCleaner(context),
             logger = AppLog::debug

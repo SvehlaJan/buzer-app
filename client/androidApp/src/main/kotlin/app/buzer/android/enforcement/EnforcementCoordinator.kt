@@ -19,6 +19,8 @@ class EnforcementCoordinator(
     private val api: EnforcementApi,
     private val snapshotStore: SnapshotStorage,
     private val alarmScheduler: AlarmScheduler,
+    private val scheduledAlarmRegistry: ScheduledAlarmRegistry =
+        ScheduledAlarmRegistry(InMemoryScheduledAlarmRegistryStorage()),
     private val errorReporter: BlockerErrorReporting,
     private val blockerNotificationCleaner: BlockerNotificationCleaner = NoOpBlockerNotificationCleaner,
     private val nowProvider: () -> String = { Instant.now().toString() },
@@ -56,65 +58,80 @@ class EnforcementCoordinator(
         return true
     }
 
-    suspend fun startTask(taskId: String): CoordinatorActionResult =
+    suspend fun startTask(taskId: String, occurrenceKey: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.START_TASK,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.startTask(taskId)
         }
 
-    suspend fun postponeStart(taskId: String): CoordinatorActionResult =
+    suspend fun postponeStart(taskId: String, occurrenceKey: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.POSTPONE_START,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = true
         ) {
             api.postponeStart(taskId)
         }
 
-    suspend fun completeTask(taskId: String): CoordinatorActionResult =
+    suspend fun completeTask(taskId: String, occurrenceKey: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.COMPLETE_TASK,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.completeTask(taskId)
-            alarmScheduler.cancelAllForTask(taskId)
+            scheduledAlarmRegistry.cancelAllForTask(taskId, alarmScheduler)
         }
 
-    suspend fun extendTask(taskId: String): CoordinatorActionResult =
+    suspend fun extendTask(taskId: String, occurrenceKey: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.EXTEND_TASK,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.extendTask(taskId)
         }
 
-    suspend fun rescheduleTask(taskId: String, request: RescheduleTaskRequest): CoordinatorActionResult =
+    suspend fun rescheduleTask(
+        taskId: String,
+        occurrenceKey: String,
+        request: RescheduleTaskRequest
+    ): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.RESCHEDULE_TASK,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.rescheduleTask(taskId, request)
         }
 
-    suspend fun updateTask(taskId: String, request: UpdateTaskRequest): CoordinatorActionResult =
+    suspend fun updateTask(
+        taskId: String,
+        occurrenceKey: String,
+        request: UpdateTaskRequest
+    ): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.RESCHEDULE_TASK,
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.updateTask(taskId, request)
         }
 
-    suspend fun dismissMorningReview(): CoordinatorActionResult =
+    suspend fun dismissMorningReview(occurrenceKey: String): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.MORNING_REVIEW_DISMISS,
             taskId = MORNING_REVIEW_TASK_ID,
+            occurrenceKey = occurrenceKey,
             scheduleStartRetry = false
         ) {
             api.dismissMorningReview()
@@ -122,13 +139,11 @@ class EnforcementCoordinator(
 
     private fun reconcile(snapshot: TasksSnapshotResponse) {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowProvider())
-        val cancelledTaskIds = snapshot.tasks.map { it.id }.toSet()
-        cancelledTaskIds.forEach(alarmScheduler::cancelAllForTask)
-        plan.alarms
+        val scheduledAlarms = plan.alarms
             .map(AndroidEnforcementMapper::toScheduledAlarm)
-            .forEach(alarmScheduler::schedule)
+        scheduledAlarmRegistry.reconcile(scheduledAlarms, alarmScheduler)
         logger(
-            "reconcile complete cancelled=${cancelledTaskIds.size} scheduled=${plan.alarms.size} " +
+            "reconcile complete scheduled=${plan.alarms.size} " +
                 "preStart=${plan.alarms.count { it.kind == DesiredAlarmKind.PRE_START_WARNING }} " +
                 "start=${plan.alarms.count { it.kind == DesiredAlarmKind.START_BLOCKER }} " +
                 "deadline=${plan.alarms.count { it.kind == DesiredAlarmKind.DEADLINE_BLOCKER }}"
@@ -138,39 +153,45 @@ class EnforcementCoordinator(
     private suspend fun runBackendAction(
         action: BlockerAction,
         taskId: String,
+        occurrenceKey: String,
         scheduleStartRetry: Boolean,
         call: suspend () -> Unit
     ): CoordinatorActionResult {
         return try {
-            logger("action start action=$action taskId=$taskId")
+            logger("action start action=$action taskId=$taskId occurrence=$occurrenceKey")
             call()
-            blockerNotificationCleaner.cancelForTask(taskId)
+            blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
             refreshAndReconcile()
-            logger("action success action=$action taskId=$taskId")
+            logger("action success action=$action taskId=$taskId occurrence=$occurrenceKey")
             CoordinatorActionResult.Success
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             val message = error.message ?: error::class.simpleName ?: "unknown error"
             errorReporter.report(action, taskId, message)
-            logger("action failed action=$action taskId=$taskId message=$message")
+            logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
             if (scheduleStartRetry) {
-                alarmScheduler.schedule(startRetryAlarm(taskId))
-                logger("action retry scheduled action=$action taskId=$taskId delaySeconds=$RETRY_DELAY_SECONDS")
+                alarmScheduler.schedule(startRetryAlarm(taskId, occurrenceKey))
+                logger(
+                    "action retry scheduled action=$action taskId=$taskId occurrence=$occurrenceKey " +
+                        "delaySeconds=$RETRY_DELAY_SECONDS"
+                )
             }
             CoordinatorActionResult.FailedAndHidden(message)
         }
     }
 
-    private fun startRetryAlarm(taskId: String): ScheduledAlarm =
+    private fun startRetryAlarm(taskId: String, occurrenceKey: String): ScheduledAlarm =
         ScheduledAlarm(
             taskId = taskId,
+            occurrenceKey = occurrenceKey,
             kind = AlarmKind.START_BLOCKER,
             triggerAtEpochMillis = Instant.parse(nowProvider()).plusSeconds(RETRY_DELAY_SECONDS).toEpochMilli()
         )
 
     companion object {
         const val MORNING_REVIEW_TASK_ID = "morning-review"
+        const val MORNING_REVIEW_OCCURRENCE_KEY = "morning-review"
 
         private const val RETRY_DELAY_SECONDS = 5L * 60L
     }

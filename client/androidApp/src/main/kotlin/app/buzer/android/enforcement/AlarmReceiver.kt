@@ -18,41 +18,46 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         NotificationChannels.ensureCreated(context)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
+        val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
         val kindName = intent.getStringExtra(AlarmIntentFactory.EXTRA_ALARM_KIND) ?: return
         val kind = runCatching { AlarmKind.valueOf(kindName) }.getOrNull() ?: return
+        if (occurrenceKey.isNullOrBlank()) {
+            AppLog.warn("alarm_receiver skipped reason=missing_occurrence_key kind=$kind taskId=$taskId")
+            return
+        }
 
         when (kind) {
-            AlarmKind.PRE_START_WARNING -> showPreStartNotification(context, taskId)
+            AlarmKind.PRE_START_WARNING -> showPreStartNotification(context, taskId, occurrenceKey)
             AlarmKind.MORNING_REVIEW,
             AlarmKind.START_BLOCKER,
-            AlarmKind.DEADLINE_BLOCKER -> openBlocker(context, taskId, kind)
+            AlarmKind.DEADLINE_BLOCKER -> openBlocker(context, taskId, occurrenceKey, kind)
         }
     }
 
-    private fun openBlocker(context: Context, taskId: String?, kind: AlarmKind) {
-        val request = OverlayBlockerRequest.fromExtras(taskId, kind.name)
+    private fun openBlocker(context: Context, taskId: String?, occurrenceKey: String, kind: AlarmKind) {
+        val request = OverlayBlockerRequest.fromExtras(taskId, occurrenceKey, kind.name)
         val keyguardLocked =
             context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
         if (request == null) {
-            AppLog.warn("overlay_start skipped reason=invalid_request kind=$kind taskId=$taskId")
+            AppLog.warn("overlay_start skipped reason=invalid_request kind=$kind taskId=$taskId occurrence=$occurrenceKey")
         } else if (keyguardLocked) {
             // TYPE_APPLICATION_OVERLAY does not render above the keyguard; the full-screen
             // notification below is the lock-screen surface (observed 2026-07-05).
-            AppLog.info("overlay_start skipped reason=keyguard_locked kind=$kind taskId=$taskId")
+            AppLog.info("overlay_start skipped reason=keyguard_locked kind=$kind taskId=$taskId occurrence=$occurrenceKey")
         } else {
             val started = OverlayBlockerServiceStarter.tryStart(context, request)
-            AppLog.info("overlay_start attempted result=$started kind=$kind taskId=$taskId")
+            AppLog.info("overlay_start attempted result=$started kind=$kind taskId=$taskId occurrence=$occurrenceKey")
         }
         // Always post the full-screen notification fallback. Its full-screen intent is the
         // activity launch path; we no longer start the activity directly from the broadcast,
         // which Android blocks from the background (BAL_BLOCK).
-        val targetIntent = blockerIntent(context, taskId, kind).apply {
+        val targetIntent = blockerIntent(context, taskId, occurrenceKey, kind).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        showBlockerNotification(context, taskId, kind, targetIntent)
+        showBlockerNotification(context, taskId, occurrenceKey, kind, targetIntent)
     }
 
-    private fun blockerIntent(context: Context, taskId: String?, kind: AlarmKind): Intent {
+    private fun blockerIntent(context: Context, taskId: String?, occurrenceKey: String, kind: AlarmKind): Intent {
         val targetClass = when (kind) {
             AlarmKind.MORNING_REVIEW -> MorningReviewActivity::class.java
             AlarmKind.START_BLOCKER -> StartBlockerActivity::class.java
@@ -60,11 +65,15 @@ class AlarmReceiver : BroadcastReceiver() {
             AlarmKind.PRE_START_WARNING -> error("Pre-start is not a blocker activity")
         }
         return Intent(context, targetClass).apply {
-            if (taskId != null) putExtra(AlarmIntentFactory.EXTRA_TASK_ID, taskId)
+            val identityTaskId = taskId ?: "morning-review"
+            action = "app.buzer.action.BLOCKER.${kind.name}"
+            data = AlarmIntentFactory.identityUri(identityTaskId, occurrenceKey, kind)
+            putExtra(AlarmIntentFactory.EXTRA_TASK_ID, identityTaskId)
+            putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, occurrenceKey)
         }
     }
 
-    private fun showPreStartNotification(context: Context, taskId: String?) {
+    private fun showPreStartNotification(context: Context, taskId: String?, occurrenceKey: String) {
         val notification = Notification.Builder(context, NotificationChannels.PRE_START)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Task starts soon")
@@ -72,18 +81,19 @@ class AlarmReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .build()
         context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId(taskId ?: "pre-start", AlarmKind.PRE_START_WARNING), notification)
+            .notify(notificationId(taskId ?: "pre-start", occurrenceKey, AlarmKind.PRE_START_WARNING), notification)
     }
 
     private fun showBlockerNotification(
         context: Context,
         taskId: String?,
+        occurrenceKey: String,
         kind: AlarmKind,
         targetIntent: Intent
     ) {
         val pendingIntent = PendingIntent.getActivity(
             context,
-            AlarmIntentFactory.requestCode(taskId ?: "morning-review", kind),
+            AlarmIntentFactory.requestCode(taskId ?: "morning-review", occurrenceKey, kind),
             targetIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -97,7 +107,7 @@ class AlarmReceiver : BroadcastReceiver() {
             .setAutoCancel(false)
             .build()
         context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId(taskId ?: "morning-review", kind), notification)
+            .notify(notificationId(taskId ?: "morning-review", occurrenceKey, kind), notification)
     }
 
     private fun blockerTitle(kind: AlarmKind): String {
@@ -109,7 +119,7 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun notificationId(taskId: String, kind: AlarmKind): Int {
-        return AlarmIntentFactory.requestCode(taskId, kind)
+    private fun notificationId(taskId: String, occurrenceKey: String, kind: AlarmKind): Int {
+        return AlarmIntentFactory.requestCode(taskId, occurrenceKey, kind)
     }
 }

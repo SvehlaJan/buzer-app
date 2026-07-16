@@ -649,13 +649,16 @@ val recurrenceChoices = listOf(
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/AlarmIntentFactoryTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGateTest.kt`
 
-- [ ] Add failing device tests proving one UUID is generated once and survives store reconstruction, while each explicit user intent gets a fresh action UUID. Retry code must hold the same request/action ID; `DeviceIdentityStore` must not silently reuse an action ID for a second intent.
-- [ ] Add `occurrenceKey` to `ScheduledAlarm`, PendingIntent extras, request-code input, blocker launch intents, logs, and snapshot gate. Keep Morning Review on a fixed synthetic key such as `morning-review`.
-- [ ] Add a persistent registry of scheduled alarm identities. During reconciliation, cancel registry entries not in the new desired set, including an old occurrence with the same task ID/due. Then schedule desired identities and atomically replace the registry.
-- [ ] Add failing tests proving old/new occurrence PendingIntents differ, cancellation targets the exact old occurrence, boot reconciliation restores the registry, and an alarm for a stale occurrence refreshes then dismisses without showing a blocker.
-- [ ] Keep Android release networking unchanged: production HTTPS only and no release cleartext opt-in. The debug network security config may continue allowing only `10.0.2.2` for the emulator fake backend.
+- [x] Add failing device tests proving one UUID is generated once and survives store reconstruction, while each explicit user intent gets a fresh action UUID. Retry code must hold the same request/action ID; `DeviceIdentityStore` must not silently reuse an action ID for a second intent.
+- [x] Add `occurrenceKey` to `ScheduledAlarm`, PendingIntent extras, request-code input, blocker launch intents, logs, and snapshot gate. Keep Morning Review on a fixed synthetic key such as `morning-review`.
+- [x] Add a persistent registry of scheduled alarm identities. During reconciliation, cancel registry entries not in the new desired set, including an old occurrence with the same task ID/due. Then schedule desired identities and atomically replace the registry.
+- [x] Add failing tests proving old/new occurrence PendingIntents differ, cancellation targets the exact old occurrence, boot reconciliation restores the registry, and an alarm for a stale occurrence refreshes then dismisses without showing a blocker.
+- [x] Keep Android release networking unchanged: production HTTPS only and no release cleartext opt-in. The debug network security config may continue allowing only `10.0.2.2` for the emulator fake backend.
 - [ ] Run `./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.*' --tests 'app.buzer.android.sync.*' --tests 'app.buzer.android.blockers.BlockerTaskSnapshotGateTest' --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: key Android alarms by occurrence"`.
+- [x] Commit with `git commit -m "feat: key Android alarms by occurrence"`.
+- [x] Spec-review follow-up: cancel the current occurrence-keyed blocker notification (and legacy IDs) after an action; defer overlay rendering until a bounded fresh refresh dismisses stale authority, with cached rendering only as documented offline fallback; include occurrence in per-alarm logs; and give full-screen activity PendingIntents an occurrence-keyed action/data identity as well as extras/request code.
+- [x] Code-quality follow-up: dismiss blockers for authoritative missing roots; replace overlays with generation-scoped presentation ownership so stale refresh/watcher/action work cannot tear down a newer request; pass the triggering occurrence explicitly through every coordinator action path for notification cleanup; and cancel attempted desired alarms while retaining the old durable registry on reconciliation failure.
+- [x] Final P1 follow-up: rollback reconciliation cancels only newly attempted desired identities, never an already-armed identity that remains in both the old and desired sets.
 
 ## Task 14: Consume Authoritative Mutation Responses In The Android Coordinator
 

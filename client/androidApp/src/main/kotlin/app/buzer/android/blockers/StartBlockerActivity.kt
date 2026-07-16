@@ -41,8 +41,9 @@ class StartBlockerActivity : ComponentActivity() {
         configureBlockerWindow()
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
-        if (taskId == null) {
-            AppLog.debug("start_blocker missing_task_id")
+        val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
+        if (taskId == null || occurrenceKey.isNullOrBlank()) {
+            AppLog.debug("start_blocker missing_alarm_identity")
             errorReporter.report(
                 action = BlockerAction.START_TASK,
                 taskId = null,
@@ -53,7 +54,7 @@ class StartBlockerActivity : ComponentActivity() {
         }
 
         val coordinator = createCoordinator() ?: return
-        prepareAndShowBlocker(coordinator, taskId)
+        prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
     }
 
     private fun createCoordinator(): EnforcementCoordinator? {
@@ -71,11 +72,10 @@ class StartBlockerActivity : ComponentActivity() {
         }
     }
 
-    private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String) {
-        AppLog.debug("start_blocker prepare taskId=$taskId")
+    private fun prepareAndShowBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
+        AppLog.debug("start_blocker prepare taskId=$taskId occurrence=$occurrenceKey")
         checking = true
         warningMessage = null
-        showBlocker(coordinator, taskId)
         lifecycleScope.launch {
             try {
                 coordinator.loadLatestSnapshot()?.let { snapshot ->
@@ -84,7 +84,7 @@ class StartBlockerActivity : ComponentActivity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                AppLog.error("start_blocker local snapshot load failed taskId=$taskId", error)
+                AppLog.error("start_blocker local snapshot load failed taskId=$taskId occurrence=$occurrenceKey", error)
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = taskId,
@@ -102,15 +102,16 @@ class StartBlockerActivity : ComponentActivity() {
                     BlockerTaskSnapshotGate.shouldHideAfterRefresh(
                         refreshedSnapshot,
                         taskId,
+                        occurrenceKey,
                         AlarmKind.START_BLOCKER
                     )
                 ) {
-                    AppLog.debug("start_blocker hidden reason=task_resolved taskId=$taskId")
+                    AppLog.debug("start_blocker hidden reason=stale_or_resolved taskId=$taskId occurrence=$occurrenceKey")
                     finish()
                     return@launch
                 }
                 if (refreshedSnapshot == null) {
-                    AppLog.warn("start_blocker refresh_timeout taskId=$taskId")
+                    AppLog.warn("start_blocker refresh_timeout taskId=$taskId occurrence=$occurrenceKey")
                     warningMessage = "Could not refresh task state. This blocker may be stale."
                     errorReporter.report(
                         action = BlockerAction.REFRESH_SNAPSHOT,
@@ -121,7 +122,7 @@ class StartBlockerActivity : ComponentActivity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                AppLog.error("start_blocker refresh failed taskId=$taskId", error)
+                AppLog.error("start_blocker refresh failed taskId=$taskId occurrence=$occurrenceKey", error)
                 warningMessage = "Could not refresh task state. This blocker may be stale."
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
@@ -129,22 +130,25 @@ class StartBlockerActivity : ComponentActivity() {
                     message = error.message ?: "snapshot refresh failed"
                 )
             }
+            if (!isFinishing) showBlocker(coordinator, taskId, occurrenceKey)
             if (!isFinishing) checking = false
         }
     }
 
-    private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String) {
-        AppLog.debug("start_blocker show taskId=$taskId")
+    private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
+        AppLog.debug("start_blocker show taskId=$taskId occurrence=$occurrenceKey")
         setBuzerContent {
             StartBlockerScreen(
                 model = blockerModel,
                 onStart = {
-                    AppLog.info("start_blocker start_clicked taskId=$taskId")
-                    runActionOnce("Starting...") { coordinator.startTask(taskId) }
+                    AppLog.info("start_blocker start_clicked taskId=$taskId occurrence=$occurrenceKey")
+                    runActionOnce("Starting...", occurrenceKey) { coordinator.startTask(taskId, occurrenceKey) }
                 },
                 onPostpone = {
-                    AppLog.info("start_blocker postpone_clicked taskId=$taskId")
-                    runActionOnce("Postponing...") { coordinator.postponeStart(taskId) }
+                    AppLog.info("start_blocker postpone_clicked taskId=$taskId occurrence=$occurrenceKey")
+                    runActionOnce("Postponing...", occurrenceKey) {
+                        coordinator.postponeStart(taskId, occurrenceKey)
+                    }
                 },
                 onBack = { finish() },
                 showBack = false,
@@ -158,7 +162,7 @@ class StartBlockerActivity : ComponentActivity() {
                 },
                 onRetryAction = {
                     errorMessage = null
-                    lastAction?.let { retry -> runActionOnce("Retrying...") { retry() } }
+                    lastAction?.let { retry -> runActionOnce("Retrying...", occurrenceKey) { retry() } }
                 }
             )
         }
@@ -173,9 +177,13 @@ class StartBlockerActivity : ComponentActivity() {
         )
     }
 
-    private fun runActionOnce(label: String, action: suspend () -> CoordinatorActionResult) {
+    private fun runActionOnce(
+        label: String,
+        occurrenceKey: String,
+        action: suspend () -> CoordinatorActionResult
+    ) {
         if (actionInFlight) {
-            AppLog.debug("start_blocker action ignored reason=in_flight")
+            AppLog.debug("start_blocker action ignored reason=in_flight occurrence=$occurrenceKey")
             return
         }
         actionInFlight = true
