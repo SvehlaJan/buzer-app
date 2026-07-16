@@ -96,6 +96,21 @@ class ChecklistEditorModelsTest {
     }
 
     @Test
+    fun checklistMutationBatchRejectsDuplicateIdsAcrossAddAndEdit() {
+        val duplicateIds = listOf(
+            ChecklistEditorMutationState.Add("shared-id", "Add"),
+            ChecklistEditorMutationState.Edit("shared-id", "child-1", "r:2", "Edit")
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            validateChecklistMutationBatch(duplicateIds)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            retainFailedChecklistMutations(duplicateIds, emptyList())
+        }
+    }
+
+    @Test
     fun failedMutationRetentionPreservesEveryTypedIntent() {
         val mutations = listOf(
             ChecklistEditorMutationState.Add("add-1", "Add"),

@@ -155,3 +155,43 @@ Verification:
 - Command: `git diff --check`
   - Result: PASS
   - Evidence: no whitespace errors.
+
+## Final P1 code-quality follow-up
+
+Plan/task attempted:
+
+- Closed the final Task 12 P1 review finding in the pure shared checklist editor model. AndroidApp remains untouched.
+
+Changes made:
+
+- Added `validateChecklistMutationBatch`, which rejects duplicate `clientMutationId` values across all typed mutation variants.
+- Invoked the collection-level validator before `retainFailedChecklistMutations` processes any batch, preventing ambiguous outcome-to-intent mapping.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.ui.commitment.ChecklistEditorModelsTest' --console=plain`
+  - Result: FAIL
+  - Evidence: `validateChecklistMutationBatch` was unresolved before the batch validator existed.
+- GREEN: same focused command
+  - Result: PASS
+  - Evidence: duplicate add/edit IDs are rejected both directly and through failed-mutation retention.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Files changed:
+
+- Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/ui/commitment/CommitmentEditorModels.kt`
+- Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/commitment/ChecklistEditorModelsTest.kt`
+- Modify: `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- Modify: `docs/handoffs/2026-07-16-recurring-checklists-task-12-shared-state.md`
+
+Next recommended step:
+
+- Continue Task 13 to persist device identity and reconcile Android alarms by `(taskId, occurrenceKey, kind)`.

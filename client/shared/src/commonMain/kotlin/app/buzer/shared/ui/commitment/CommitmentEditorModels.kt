@@ -161,10 +161,21 @@ sealed class ChecklistEditorMutationState {
     }
 }
 
+fun validateChecklistMutationBatch(mutations: List<ChecklistEditorMutationState>) {
+    val duplicateIds = mutations
+        .groupBy { it.clientMutationId }
+        .filterValues { it.size > 1 }
+        .keys
+    require(duplicateIds.isEmpty()) {
+        "clientMutationId values must be unique: ${duplicateIds.sorted().joinToString()}"
+    }
+}
+
 fun retainFailedChecklistMutations(
     mutations: List<ChecklistEditorMutationState>,
     outcomes: List<ChecklistMutationOutcome>
 ): List<ChecklistEditorMutationState> {
+    validateChecklistMutationBatch(mutations)
     val failedOutcomes = outcomes
         .filter { it.outcome == MutationOutcome.failed || it.outcome == MutationOutcome.stale_child }
         .associateBy { it.clientMutationId }
