@@ -55,7 +55,12 @@ data class RecurrenceEditorState(
     val canEditStartOrRecurrence: Boolean
 ) {
     fun withReplacement(preset: RecurrencePreset): RecurrenceEditorState =
-        copy(selectedPreset = preset, isReadOnly = false, canEditStartOrRecurrence = true)
+        copy(
+            selectedPreset = preset,
+            customRule = null,
+            isReadOnly = false,
+            canEditStartOrRecurrence = true
+        )
 }
 
 fun recurrenceEditorState(recurrence: TaskRecurrence): RecurrenceEditorState {
@@ -79,6 +84,111 @@ data class ChecklistDraftValidation(
     val bannerMessage: String? = null,
     val invalidDraftIds: Set<String> = emptySet()
 )
+
+sealed class ChecklistEditorMutationState {
+    abstract val clientMutationId: String
+    abstract val failureCode: String?
+
+    abstract fun withFailure(failureCode: String?): ChecklistEditorMutationState
+
+    data class Add(
+        override val clientMutationId: String,
+        val title: String,
+        val description: String? = null,
+        override val failureCode: String? = null
+    ) : ChecklistEditorMutationState() {
+        init {
+            requireChecklistMutationField("clientMutationId", clientMutationId)
+            requireChecklistMutationField("title", title)
+        }
+
+        override fun withFailure(failureCode: String?): Add = copy(failureCode = failureCode)
+    }
+
+    data class Edit(
+        override val clientMutationId: String,
+        val childId: String,
+        val expectedChildRevision: String,
+        val title: String,
+        val description: String? = null,
+        override val failureCode: String? = null
+    ) : ChecklistEditorMutationState() {
+        init {
+            requireChecklistMutationIdentity(clientMutationId, childId, expectedChildRevision)
+            requireChecklistMutationField("title", title)
+        }
+
+        override fun withFailure(failureCode: String?): Edit = copy(failureCode = failureCode)
+    }
+
+    data class Delete(
+        override val clientMutationId: String,
+        val childId: String,
+        val expectedChildRevision: String,
+        override val failureCode: String? = null
+    ) : ChecklistEditorMutationState() {
+        init {
+            requireChecklistMutationIdentity(clientMutationId, childId, expectedChildRevision)
+        }
+
+        override fun withFailure(failureCode: String?): Delete = copy(failureCode = failureCode)
+    }
+
+    data class Check(
+        override val clientMutationId: String,
+        val childId: String,
+        val expectedChildRevision: String,
+        override val failureCode: String? = null
+    ) : ChecklistEditorMutationState() {
+        init {
+            requireChecklistMutationIdentity(clientMutationId, childId, expectedChildRevision)
+        }
+
+        override fun withFailure(failureCode: String?): Check = copy(failureCode = failureCode)
+    }
+
+    data class Uncheck(
+        override val clientMutationId: String,
+        val childId: String,
+        val expectedChildRevision: String,
+        override val failureCode: String? = null
+    ) : ChecklistEditorMutationState() {
+        init {
+            requireChecklistMutationIdentity(clientMutationId, childId, expectedChildRevision)
+        }
+
+        override fun withFailure(failureCode: String?): Uncheck = copy(failureCode = failureCode)
+    }
+}
+
+fun retainFailedChecklistMutations(
+    mutations: List<ChecklistEditorMutationState>,
+    outcomes: List<ChecklistMutationOutcome>
+): List<ChecklistEditorMutationState> {
+    val failedOutcomes = outcomes
+        .filter { it.outcome == MutationOutcome.failed || it.outcome == MutationOutcome.stale_child }
+        .associateBy { it.clientMutationId }
+
+    return mutations.mapNotNull { mutation ->
+        failedOutcomes[mutation.clientMutationId]?.let { outcome ->
+            mutation.withFailure(outcome.errorCode)
+        }
+    }
+}
+
+private fun requireChecklistMutationIdentity(
+    clientMutationId: String,
+    childId: String,
+    expectedChildRevision: String
+) {
+    requireChecklistMutationField("clientMutationId", clientMutationId)
+    requireChecklistMutationField("childId", childId)
+    requireChecklistMutationField("expectedChildRevision", expectedChildRevision)
+}
+
+private fun requireChecklistMutationField(name: String, value: String) {
+    require(value.isNotBlank()) { "$name must not be blank" }
+}
 
 fun validateChecklistDrafts(drafts: List<ChecklistEditorDraft>): ChecklistDraftValidation {
     val invalidIds = buildSet {

@@ -61,6 +61,51 @@ Verification:
   - Result: PASS
   - Evidence: no whitespace errors.
 
+## Code-quality follow-up
+
+Plan/task attempted:
+
+- Completed the Task 12 code-quality review follow-up in the pure shared editor models only. AndroidApp callers remain intentionally untouched for Tasks 13–15.
+
+Changes made:
+
+- Replacing a read-only custom recurrence now clears its obsolete custom rule before enabling the selected supported preset.
+- Added `ChecklistEditorMutationState` variants for add, edit, delete, check, and uncheck. Every variant requires a nonblank client mutation id; child mutations also require child id and expected child revision.
+- Added `retainFailedChecklistMutations`, which preserves each failed or stale-child typed mutation and attaches its returned failure code for user-visible retry handling.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.ui.commitment.ChecklistEditorModelsTest' --console=plain`
+  - Result: FAIL
+  - Evidence: compilation failed before implementation because `ChecklistEditorMutationState` and `retainFailedChecklistMutations` were unresolved.
+- GREEN: same focused command
+  - Result: PASS
+  - Evidence: recurrence replacement, all five mutation intents, concurrency-field validation, and failed-intent retention passed.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.
+
+Files changed:
+
+- Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/ui/commitment/CommitmentEditorModels.kt`
+- Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/commitment/ChecklistEditorModelsTest.kt`
+- Modify: `docs/superpowers/plans/2026-07-15-recurring-tasks-checklists-and-action-correctness.md`
+- Modify: `docs/handoffs/2026-07-16-recurring-checklists-task-12-shared-state.md`
+
+Assumptions:
+
+- `MutationOutcome.failed` and `MutationOutcome.stale_child` are the retryable outcomes that must retain the local typed intent; successful outcomes are removed.
+
+Next recommended step:
+
+- Continue Task 13 to persist device identity and reconcile Android alarms by `(taskId, occurrenceKey, kind)`.
+
 Manual verification:
 
 - Inspected the boundary that only root tasks enter `SnapshotViewState`; checklist children remain nested under `TaskSnapshotItem.checklistItems`.

@@ -629,6 +629,7 @@ val recurrenceChoices = listOf(
 - [x] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
 - [x] Commit with `git commit -m "feat: make client state occurrence aware"`.
 - [x] Spec-review follow-up: require a nonblank occurrence key, expose the stable `(taskId, occurrenceKey, kind)` identity separately from trigger time, and exclude invalid-state roots even without validation errors.
+- [x] Code-quality follow-up: clear custom recurrence state on replacement and add typed checklist editor mutations with failure retention for add, edit, delete, check, and uncheck intents.
 
 ## Task 13: Persist Device Identity And Occurrence-Keyed Android Alarms
 
