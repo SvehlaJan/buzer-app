@@ -252,7 +252,11 @@ sealed class ChecklistMutation {
         override val clientMutationId: String,
         val title: String,
         val description: String? = null
-    ) : ChecklistMutation()
+    ) : ChecklistMutation() {
+        init {
+            requireNonBlank("clientMutationId", clientMutationId)
+        }
+    }
 
     @Serializable
     @kotlinx.serialization.SerialName("edit")
@@ -262,7 +266,12 @@ sealed class ChecklistMutation {
         val expectedChildRevision: String,
         val title: String? = null,
         val description: String? = null
-    ) : ChecklistMutation()
+    ) : ChecklistMutation() {
+        init {
+            requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("expectedChildRevision", expectedChildRevision)
+        }
+    }
 
     @Serializable
     @kotlinx.serialization.SerialName("delete")
@@ -270,7 +279,12 @@ sealed class ChecklistMutation {
         override val clientMutationId: String,
         val childId: String,
         val expectedChildRevision: String
-    ) : ChecklistMutation()
+    ) : ChecklistMutation() {
+        init {
+            requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("expectedChildRevision", expectedChildRevision)
+        }
+    }
 
     @Serializable
     @kotlinx.serialization.SerialName("check")
@@ -278,7 +292,12 @@ sealed class ChecklistMutation {
         override val clientMutationId: String,
         val childId: String,
         val expectedChildRevision: String
-    ) : ChecklistMutation()
+    ) : ChecklistMutation() {
+        init {
+            requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("expectedChildRevision", expectedChildRevision)
+        }
+    }
 
     @Serializable
     @kotlinx.serialization.SerialName("uncheck")
@@ -286,7 +305,12 @@ sealed class ChecklistMutation {
         override val clientMutationId: String,
         val childId: String,
         val expectedChildRevision: String
-    ) : ChecklistMutation()
+    ) : ChecklistMutation() {
+        init {
+            requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("expectedChildRevision", expectedChildRevision)
+        }
+    }
 }
 
 @Serializable

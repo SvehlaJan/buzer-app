@@ -200,6 +200,41 @@ class BuzerApiClientContractTest {
     }
 
     @Test
+    fun checklistMutationsRejectBlankMutationIdsAndRevisions() {
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Add(clientMutationId = " ", title = "Confirm notes")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Edit(
+                clientMutationId = "edit-1",
+                childId = "child-1",
+                expectedChildRevision = " "
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Delete(
+                clientMutationId = "delete-1",
+                childId = "child-1",
+                expectedChildRevision = " "
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Check(
+                clientMutationId = " ",
+                childId = "child-1",
+                expectedChildRevision = "r:2"
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ChecklistMutation.Uncheck(
+                clientMutationId = "uncheck-1",
+                childId = "child-1",
+                expectedChildRevision = " "
+            )
+        }
+    }
+
+    @Test
     fun focusedChecklistRequestSerializesReusableActionAndChildRevision() {
         val request = FocusedChecklistMutationRequest(
             actionId = "action-check-1",

@@ -93,3 +93,28 @@ Verification:
 Known failures or skipped checks:
 
 - `./gradlew :androidApp:compileDebugKotlin --console=plain` is currently FAIL because the pre-Task 14 Android coordinator/editor code still constructs legacy flat requests and calls removed no-metadata action methods. This recovery deliberately does not fabricate metadata in shared client code; migrate those UI/coordinator callers through explicit user-intent request objects in Task 14 before Android application verification.
+
+## Checklist mutation validation follow-up
+
+Plan/task attempted:
+
+- Recovered the final Task 11 checklist-mutation validation finding only. No Task 12 files were edited.
+
+Changes made:
+
+- Every `ChecklistMutation` subtype now rejects a blank `clientMutationId`; `Edit`, `Delete`, `Check`, and `Uncheck` also reject a blank `expectedChildRevision`.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --console=plain`
+  - Result: FAIL
+  - Evidence: the new mutation validation test constructed a blank-ID add mutation without throwing.
+- GREEN: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.BuzerApiClientContractTest' --console=plain`
+  - Result: PASS
+  - Evidence: all five mutation variants now reject their required blank metadata.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
