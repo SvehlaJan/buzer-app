@@ -585,14 +585,14 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientTimeoutTest.kt`
 - Create: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientErrorTest.kt`
 
-- [ ] Add failing serialization tests for the fixed snapshot fields, recurrence enums, checklist items, activity entries, action metadata, create child drafts, explicit child mutations, focused check/uncheck, mutation response, partial outcomes, and nullable assignee clearing.
-- [ ] Mirror the fixed API types with `@Serializable` Kotlin data classes. Create requests contain `actionId` and `deviceId`; existing-task requests additionally contain `expectedOccurrenceKey`; root/child mutations add their relevant expected revision. Keep these fields explicit so a captured request object can be reused unchanged on retry.
-- [ ] Replace `Unit` mutation API methods with `MutationResponse` return values and add methods for all checklist paths. Continue using the configured base URL verbatim; do not add `/buzer` inside client paths.
-- [ ] Add a typed `BuzerApiException(status, code, retryAfterSeconds, snapshot)` that parses error JSON and the `Retry-After` header. Preserve 409 snapshot context so reducers can refresh without discarding an editor draft.
-- [ ] On 429, surface retry timing and do not automatically fabricate a new request/action ID. The UI/coordinator may retry the exact captured request after the indicated time. The shared client itself must not issue hidden duplicate mutations.
-- [ ] Keep HTTP logging at headers only and keep `sanitizeHeader { it == HttpHeaders.Authorization }`. Remove the current error log that includes arbitrary response bodies if it could contain snapshot descriptions; log status/code only.
-- [ ] Run from `client/`: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.*' --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add recurring checklist client contracts"`.
+- [x] Add failing serialization tests for the fixed snapshot fields, recurrence enums, checklist items, activity entries, action metadata, create child drafts, explicit child mutations, focused check/uncheck, mutation response, partial outcomes, and nullable assignee clearing.
+- [x] Mirror the fixed API types with `@Serializable` Kotlin data classes. Create requests contain `actionId` and `deviceId`; existing-task requests additionally contain `expectedOccurrenceKey`; root/child mutations add their relevant expected revision. Keep these fields explicit so a captured request object can be reused unchanged on retry.
+- [x] Replace `Unit` mutation API methods with `MutationResponse` return values and add methods for all checklist paths. Continue using the configured base URL verbatim; do not add `/buzer` inside client paths.
+- [x] Add a typed `BuzerApiException(status, code, retryAfterSeconds, snapshot)` that parses error JSON and the `Retry-After` header. Preserve 409 snapshot context so reducers can refresh without discarding an editor draft.
+- [x] On 429, surface retry timing and do not automatically fabricate a new request/action ID. The UI/coordinator may retry the exact captured request after the indicated time. The shared client itself must not issue hidden duplicate mutations.
+- [x] Keep HTTP logging at headers only and keep `sanitizeHeader { it == HttpHeaders.Authorization }`. Remove the current error log that includes arbitrary response bodies if it could contain snapshot descriptions; log status/code only.
+- [x] Run from `client/`: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.*' --console=plain`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add recurring checklist client contracts"`.
 
 ## Task 12: Make Shared State And Alarm Plans Occurrence-Aware
 
