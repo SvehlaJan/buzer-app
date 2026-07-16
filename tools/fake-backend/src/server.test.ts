@@ -2,337 +2,222 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildServer } from "./server.js";
 
-test("snapshot requires bearer token", async (t) => {
+const auth = { authorization: "Bearer test-token" };
+
+function action(actionId: string, expectedOccurrenceKey = "occurrence-one-time-partial-1") {
+  return { actionId, deviceId: "android-test-1", expectedOccurrenceKey };
+}
+
+test("snapshot exposes deterministic nested root scenarios", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
 
-  const response = await app.inject({ method: "GET", url: "/tasks/snapshot" });
-
-  assert.equal(response.statusCode, 401);
-});
-
-test("snapshot returns deterministic tasks", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/tasks/snapshot",
-    headers: { authorization: "Bearer test-token" }
-  });
+  const response = await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth });
 
   assert.equal(response.statusCode, 200);
   const body = response.json();
-  assert.equal(body.scheduleVersion, 1);
-  assert.equal(body.tasks.length, 4);
-  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-start").description, "Bring the printed form and check opening hours.");
-  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-deadline").description, "Share the final numbers before closing the block.");
-  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-invalid").description, "Clarify the missing commitment fields.");
-  assert.match(
-    body.tasks.find((task: { id: string }) => task.id === "task-floating-time").dueDatetime,
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/
-  );
+  assert.deepEqual(body.tasks.map((task: { id: string }) => task.id), [
+    "task-one-time-empty",
+    "task-one-time-partial",
+    "task-recurring-all-checked",
+    "task-recurring-extend-disabled",
+    "task-custom-recurrence",
+    "task-unsupported-hierarchy",
+    "task-reconciliation-pending"
+  ]);
+  assert.deepEqual(body.tasks.find((task: { id: string }) => task.id === "task-one-time-empty").checklistItems, []);
+  assert.deepEqual(body.tasks.find((task: { id: string }) => task.id === "task-one-time-partial").checklistItems.map((item: { checked: boolean }) => item.checked), [true, false]);
+  assert.match(body.tasks.find((task: { id: string }) => task.id === "task-recurring-all-checked").occurrenceKey, /^occurrence-recurring-all-checked-\d+$/);
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-custom-recurrence").recurrence.kind, "custom");
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-unsupported-hierarchy").hierarchyStatus, "unsupported");
+  assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-reconciliation-pending").reconciliationStatus, "pending");
 });
 
-test("actions are recorded", async (t) => {
+test("checking a focused child advances only its child revision and returns authority", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-one-time-partial");
+  const child = before.checklistItems.find((item: { checked: boolean }) => !item.checked);
 
   const response = await app.inject({
-    method: "POST",
-    url: "/tasks/task-start/start",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 204);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls[0].path, "/tasks/task-start/start");
-});
-
-test("create task is recorded", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/tasks",
-    headers: { authorization: "Bearer test-token" },
-    payload: {
-      title: "Buy milk",
-      projectId: "project-test",
-      assigneeId: "user-me",
-      dueDatetime: "2026-06-02T16:30:00Z",
-      durationMinutes: 45,
-      description: "Gate code: 2468"
-    }
-  });
-
-  assert.equal(response.statusCode, 201);
-  assert.deepEqual(response.json(), {
-    id: "created-task",
-    todoistTaskId: "todoist-created-task"
-  });
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls[0].path, "/tasks");
-  assert.equal(calls.json().calls[0].body.title, "Buy milk");
-  assert.equal(calls.json().calls[0].body.description, "Gate code: 2468");
-});
-
-test("reschedule task records description when supplied", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/tasks/task-start/reschedule",
-    headers: { authorization: "Bearer test-token" },
-    payload: {
-      dueDatetime: "2026-06-02T17:00:00Z",
-      durationMinutes: 60,
-      description: "Updated gate code: 1357"
-    }
-  });
-  assert.equal(response.statusCode, 204);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls[0].path, "/tasks/task-start/reschedule");
-  assert.equal(calls.json().calls[0].body.description, "Updated gate code: 1357");
-});
-
-test("update task records full editable payload", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/tasks/task-invalid/update",
-    headers: { authorization: "Bearer test-token" },
-    payload: {
-      title: "Edited task",
-      description: "Updated details",
-      projectId: "project-test",
-      assigneeId: "user-me",
-      dueDatetime: "2026-06-02T17:00:00Z",
-      durationMinutes: 45
-    }
-  });
-  assert.equal(response.statusCode, 204);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls[0].path, "/tasks/task-invalid/update");
-  assert.equal(calls.json().calls[0].body.title, "Edited task");
-  assert.equal(calls.json().calls[0].body.projectId, "project-test");
-  assert.equal(calls.json().calls[0].body.assigneeId, "user-me");
-});
-
-test("projects are returned for add-task screen", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/projects",
-    headers: { authorization: "Bearer test-token" }
+    method: "POST", url: `/tasks/task-one-time-partial/checklist/${child.id}/check`, headers: auth,
+    payload: { ...action("check-child"), expectedChildRevision: child.childRevision }
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.json().projects[0].id, "project-test");
-  assert.equal(response.json().projects[0].canAssignTasks, true);
+  const updated = response.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-partial");
+  assert.equal(response.json().outcome, "completed");
+  assert.equal(updated.taskRevision, before.taskRevision);
+  assert.equal(updated.checklistItems.find((item: { id: string }) => item.id === child.id).childRevision, "r:2");
+  assert.equal(updated.checkedCount, 2);
 });
 
-test("create task accepts personal project without assignee", async (t) => {
+test("Done rejects a root with unchecked direct children and returns the current snapshot", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
 
   const response = await app.inject({
-    method: "POST",
-    url: "/tasks",
-    headers: { authorization: "Bearer test-token" },
-    payload: {
-      title: "Personal task",
-      projectId: "project-personal",
-      dueDatetime: "2026-06-02T16:30:00Z",
-      durationMinutes: 45
-    }
+    method: "POST", url: "/tasks/task-one-time-partial/done", headers: auth, payload: action("done-incomplete")
   });
 
-  assert.equal(response.statusCode, 201);
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, "incomplete_checklist");
+  assert.equal(response.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-partial").checkedCount, 1);
 });
 
-test("review dismiss is recorded", async (t) => {
+test("recurring Done advances occurrence and resets all children", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-recurring-all-checked");
 
   const response = await app.inject({
-    method: "POST",
-    url: "/review/dismiss",
-    headers: { authorization: "Bearer test-token" }
+    method: "POST", url: "/tasks/task-recurring-all-checked/done", headers: auth,
+    payload: action("done-recurring", before.occurrenceKey)
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(typeof response.json().snoozedUntil, "string");
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls[0].path, "/review/dismiss");
+  const updated = response.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-recurring-all-checked");
+  assert.equal(updated.occurrenceKey, "occurrence-recurring-all-checked-2");
+  assert.equal(updated.dueDatetime, "2026-06-02T10:00:00.000Z");
+  assert.equal(updated.checkedCount, 0);
+  assert.ok(updated.checklistItems.every((item: { checked: boolean }) => !item.checked));
 });
 
-test("forced action failures also fail task creation and still record call", async (t) => {
-  const app = await buildServer({ failActions: true });
+test("recurring Extend remains visible in the snapshot but is rejected", async (t) => {
+  const app = await buildServer();
   t.after(() => app.close());
+  const root = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-recurring-extend-disabled");
 
   const response = await app.inject({
-    method: "POST",
-    url: "/tasks",
-    headers: { authorization: "Bearer test-token" },
+    method: "POST", url: "/tasks/task-recurring-extend-disabled/extend", headers: auth,
+    payload: action("extend-recurring", root.occurrenceKey)
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, "extend_not_available");
+  assert.equal(response.json().snapshot.tasks.find((task: { id: string }) => task.id === root.id).occurrenceKey, root.occurrenceKey);
+});
+
+test("create and edit can return partial child outcomes with their updated snapshots", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const create = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
     payload: {
-      title: "Buy milk",
-      projectId: "project-test",
-      assigneeId: "user-me",
-      dueDatetime: "2026-06-02T16:30:00Z",
-      durationMinutes: 45
+      ...action("create-partial"), title: "Created root", projectId: "project-test", assigneeId: "user-me",
+      dueDatetime: "2026-06-03T10:00:00.000Z", durationMinutes: 30, recurrencePreset: "never", timeZone: "Europe/Bratislava",
+      checklistDrafts: [
+        { clientMutationId: "child-ok", title: "Works", description: null },
+        { clientMutationId: "child-fail", title: "[partial-failure]", description: null }
+      ]
     }
   });
+  assert.equal(create.statusCode, 201);
+  assert.equal(create.json().outcome, "partial");
+  assert.equal(create.json().childOutcomes[1].outcome, "failed");
+  const created = create.json().snapshot.tasks.find((task: { title: string }) => task.title === "Created root");
+  assert.equal(created.totalCount, 1);
 
-  assert.equal(response.statusCode, 500);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls.length, 1);
-  assert.equal(calls.json().calls[0].path, "/tasks");
-});
-
-test("forced action failures also fail review dismiss and still record call", async (t) => {
-  const app = await buildServer({ failActions: true });
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/review/dismiss",
-    headers: { authorization: "Bearer test-token" }
+  const edit = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-partial/update", headers: auth,
+    payload: {
+      ...action("edit-partial"), rootPatch: null,
+      childMutations: [
+        { type: "check", clientMutationId: "valid-check", childId: "child-one-time-partial-open", expectedChildRevision: "r:1" },
+        { type: "check", clientMutationId: "stale-check", childId: "child-one-time-partial-done", expectedChildRevision: "r:99" }
+      ]
+    }
   });
-
-  assert.equal(response.statusCode, 500);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls.length, 1);
-  assert.equal(calls.json().calls[0].path, "/review/dismiss");
+  assert.equal(edit.statusCode, 200);
+  assert.equal(edit.json().outcome, "partial");
+  assert.equal(edit.json().childOutcomes[1].code, "stale_child");
 });
 
-test("reset clears recorded calls", async (t) => {
+test("identical action replay returns its stored response while changed bodies conflict", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
+  const payload = { ...action("replayed-start", "occurrence-one-time-empty-1") };
+  const first = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload });
+  const replay = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload });
+  const conflict = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth,
+    payload: { ...payload, expectedOccurrenceKey: "changed-occurrence" }
+  });
 
+  assert.equal(first.statusCode, 200);
+  assert.deepEqual(replay.json(), first.json());
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(conflict.json().code, "action_id_reused");
+});
+
+test("stale occurrence and stale child responses contain authoritative snapshots", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const staleOccurrence = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth,
+    payload: action("stale-occurrence", "old-occurrence")
+  });
+  const staleChild = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-partial/checklist/child-one-time-partial-open/check", headers: auth,
+    payload: { ...action("stale-child"), expectedChildRevision: "r:999" }
+  });
+
+  assert.equal(staleOccurrence.statusCode, 409);
+  assert.equal(staleOccurrence.json().code, "stale_occurrence");
+  assert.ok(Array.isArray(staleOccurrence.json().snapshot.tasks));
+  assert.equal(staleChild.statusCode, 409);
+  assert.equal(staleChild.json().code, "stale_child");
+  assert.ok(Array.isArray(staleChild.json().snapshot.tasks));
+});
+
+test("test controls produce pending, stale, activity full, rate limit, and forced failures", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const control = async (path: string) => app.inject({ method: "POST", url: path, payload: { enabled: true } });
+  await control("/__pending-actions");
+  const pending = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("pending", "occurrence-one-time-empty-1") });
+  assert.equal(pending.statusCode, 202);
+  assert.equal(pending.json().outcome, "reconciliation_pending");
+  await control("/__stale-actions");
+  const stale = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("forced-stale", "occurrence-one-time-empty-1") });
+  assert.equal(stale.statusCode, 409);
+  await control("/__activity-log-full");
+  const full = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/extend", headers: auth, payload: action("log-full", "occurrence-one-time-empty-1") });
+  assert.equal(full.statusCode, 422);
+  await control("/__rate-limit");
+  const limited = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("limited", "occurrence-one-time-empty-1") });
+  assert.equal(limited.statusCode, 429);
+  assert.equal(limited.headers["retry-after"], "7");
+  await app.inject({ method: "POST", url: "/__fail-snapshot", payload: { enabled: true } });
+  assert.equal((await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).statusCode, 500);
+  await app.inject({ method: "POST", url: "/__fail-actions", payload: { enabled: true } });
+  assert.equal((await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("failed", "occurrence-one-time-empty-1") })).statusCode, 500);
+});
+
+test("all fixed routes require auth and recorded calls retain only action metadata", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const protectedRoutes = [
+    "/tasks/snapshot", "/projects", "/tasks", "/tasks/task-one-time-empty/start", "/tasks/task-one-time-empty/done",
+    "/tasks/task-one-time-empty/postpone-start", "/tasks/task-one-time-empty/extend", "/tasks/task-one-time-empty/reschedule",
+    "/tasks/task-one-time-empty/update", "/tasks/task-one-time-partial/checklist",
+    "/tasks/task-one-time-partial/checklist/child-one-time-partial-open/update",
+    "/tasks/task-one-time-partial/checklist/child-one-time-partial-open/delete",
+    "/tasks/task-one-time-partial/checklist/child-one-time-partial-open/check",
+    "/tasks/task-one-time-partial/checklist/child-one-time-partial-open/uncheck", "/review/dismiss", "/device/check-in"
+  ];
+  for (const url of protectedRoutes) {
+    const response = await app.inject({ method: url === "/tasks/snapshot" || url === "/projects" ? "GET" : "POST", url });
+    assert.equal(response.statusCode, 401, url);
+  }
   await app.inject({
-    method: "POST",
-    url: "/tasks/task-start/done",
-    headers: { authorization: "Bearer test-token" }
+    method: "POST", url: "/tasks/task-one-time-empty/start", headers: { ...auth, authorization: "Bearer test-token" },
+    payload: { ...action("recorded", "occurrence-one-time-empty-1"), title: "must not be recorded" }
   });
-
-  const reset = await app.inject({ method: "POST", url: "/__reset" });
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-
-  assert.equal(reset.statusCode, 200);
-  assert.deepEqual(calls.json(), { calls: [] });
-});
-
-test("forced action failures return 500 and still record call", async (t) => {
-  const app = await buildServer({ failActions: true });
-  t.after(() => app.close());
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/tasks/task-start/start",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 500);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls.length, 1);
-});
-
-test("test helper can toggle forced action failures at runtime", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const toggle = await app.inject({
-    method: "POST",
-    url: "/__fail-actions",
-    payload: { enabled: true }
-  });
-  assert.equal(toggle.statusCode, 200);
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/tasks/task-start/start",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 500);
-
-  const calls = await app.inject({ method: "GET", url: "/__calls" });
-  assert.equal(calls.json().calls.length, 1);
-  assert.equal(calls.json().calls[0].path, "/tasks/task-start/start");
-});
-
-test("test helper can toggle forced snapshot failures at runtime", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const toggle = await app.inject({
-    method: "POST",
-    url: "/__fail-snapshot",
-    payload: { enabled: true }
-  });
-  assert.equal(toggle.statusCode, 200);
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/tasks/snapshot",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 500);
-});
-
-test("test helper can toggle forced project failures at runtime", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  const toggle = await app.inject({
-    method: "POST",
-    url: "/__fail-projects",
-    payload: { enabled: true }
-  });
-  assert.equal(toggle.statusCode, 200);
-  assert.deepEqual(toggle.json(), { failProjects: true });
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/projects",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 500);
-  assert.deepEqual(response.json(), { error: "forced_project_failure" });
-});
-
-test("project failure toggle can be disabled", async (t) => {
-  const app = await buildServer();
-  t.after(() => app.close());
-
-  await app.inject({
-    method: "POST",
-    url: "/__fail-projects",
-    payload: { enabled: true }
-  });
-  await app.inject({
-    method: "POST",
-    url: "/__fail-projects",
-    payload: { enabled: false }
-  });
-
-  const response = await app.inject({
-    method: "GET",
-    url: "/projects",
-    headers: { authorization: "Bearer test-token" }
-  });
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.json().projects.length, 2);
+  const calls = (await app.inject({ method: "GET", url: "/__calls" })).json().calls;
+  assert.deepEqual(calls[0].body, { actionId: "recorded", deviceId: "android-test-1", expectedOccurrenceKey: "occurrence-one-time-empty-1" });
+  assert.doesNotMatch(JSON.stringify(calls), /Bearer|test-token|must not be recorded/);
 });

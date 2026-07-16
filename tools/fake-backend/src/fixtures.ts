@@ -1,105 +1,125 @@
-export function fixedSnapshot(nowIso = "2026-05-31T10:00:00.000Z") {
-  const now = new Date(nowIso);
-  const isoAt = (deltaMinutes: number) => new Date(now.getTime() + deltaMinutes * 60_000).toISOString();
-  const floatingIsoAt = (deltaMinutes: number) => isoAt(deltaMinutes).replace(/\.\d{3}Z$/, "");
+export type FakeChecklistItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  checked: boolean;
+  childRevision: number;
+  order: number;
+};
 
+export type FakeTask = {
+  id: string;
+  todoistTaskId: string;
+  title: string;
+  description: string | null;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
+  state: "planned" | "started" | "invalid";
+  occurrenceNumber: number;
+  occurrenceKey: string;
+  taskRevision: number;
+  recurrence: { kind: "none" | "supported" | "custom"; preset: string | null; rule: string | null; language: string | null; timeZone: string | null };
+  hierarchyStatus: "valid" | "unsupported";
+  hierarchyViolation: string | null;
+  reconciliationStatus: "none" | "pending";
+  checklistItems: FakeChecklistItem[];
+  startedAt: string | null;
+  startDismissCount: number;
+  deadlineExtensionCount: number;
+  isCompleted: boolean;
+};
+
+export type FakeState = { scheduleVersion: number; tasks: FakeTask[] };
+
+const FIXED_NOW = "2026-06-01T10:00:00.000Z";
+
+export function createFixtureState(): FakeState {
   return {
     scheduleVersion: 1,
-    serverTime: nowIso,
-    health: [],
     tasks: [
-      {
-        id: "task-start",
-        todoistTaskId: "todoist-task-start",
-        title: "Start blocker fixture",
-        description: "Bring the printed form and check opening hours.",
-        projectId: "project-test",
-        assigneeId: "user-me",
-        creatorId: "user-me",
-        dueDatetime: isoAt(120),
-        durationMinutes: 30,
-        startAt: isoAt(120),
-        state: "planned",
-        isAssignedToUser: true,
-        isCreatedByUser: true,
-        isCompleted: false,
-        isDeleted: false,
-        validationErrors: [],
-        startedAt: null,
-        startDismissCount: 0,
-        deadlineExtensionCount: 0,
-        escalationSentAt: null,
-        updatedAt: nowIso
-      },
-      {
-        id: "task-deadline",
-        todoistTaskId: "todoist-task-deadline",
-        title: "Deadline blocker fixture",
-        description: "Share the final numbers before closing the block.",
-        projectId: "project-test",
-        assigneeId: "user-me",
-        creatorId: "user-me",
-        dueDatetime: isoAt(-30),
-        durationMinutes: 60,
-        startAt: isoAt(-30),
-        state: "started",
-        isAssignedToUser: true,
-        isCreatedByUser: true,
-        isCompleted: false,
-        isDeleted: false,
-        validationErrors: [],
-        startedAt: isoAt(-29),
-        startDismissCount: 0,
-        deadlineExtensionCount: 0,
-        escalationSentAt: null,
-        updatedAt: nowIso
-      },
-      {
-        id: "task-invalid",
-        todoistTaskId: "todoist-task-invalid",
-        title: "Invalid assigned fixture",
-        description: "Clarify the missing commitment fields.",
-        projectId: "project-test",
-        assigneeId: "user-me",
-        creatorId: "user-wife",
-        dueDatetime: null,
-        durationMinutes: null,
-        startAt: null,
-        state: "invalid",
-        isAssignedToUser: true,
-        isCreatedByUser: false,
-        isCompleted: false,
-        isDeleted: false,
-        validationErrors: ["missing_due_datetime", "missing_duration"],
-        startedAt: null,
-        startDismissCount: 0,
-        deadlineExtensionCount: 0,
-        escalationSentAt: null,
-        updatedAt: nowIso
-      },
-      {
-        id: "task-floating-time",
-        todoistTaskId: "todoist-task-floating-time",
-        title: "Floating datetime fixture",
-        description: "Todoist can return local datetimes without an offset.",
-        projectId: "project-test",
-        assigneeId: "user-me",
-        creatorId: "user-me",
-        dueDatetime: floatingIsoAt(180),
-        durationMinutes: 30,
-        startAt: floatingIsoAt(180),
-        state: "planned",
-        isAssignedToUser: true,
-        isCreatedByUser: true,
-        isCompleted: false,
-        isDeleted: false,
-        validationErrors: [],
-        startedAt: null,
-        startDismissCount: 0,
-        deadlineExtensionCount: 0,
-        escalationSentAt: null,
-        updatedAt: nowIso
-      }
+      task("task-one-time-empty", { title: "One-time empty checklist", dueDatetime: "2026-06-01T12:00:00.000Z", occurrenceKey: "occurrence-one-time-empty-1" }),
+      task("task-one-time-partial", {
+        title: "One-time partially checked", dueDatetime: "2026-06-01T13:00:00.000Z", occurrenceKey: "occurrence-one-time-partial-1",
+        checklistItems: [child("child-one-time-partial-done", "Already done", true, 1), child("child-one-time-partial-open", "Still open", false, 2)]
+      }),
+      task("task-recurring-all-checked", {
+        title: "Recurring complete checklist", dueDatetime: "2026-06-01T10:00:00.000Z", occurrenceKey: "occurrence-recurring-all-checked-1",
+        recurrence: recurrence("daily", "every day at 10:00"), checklistItems: [child("child-recurring-all-checked-a", "First", true, 1), child("child-recurring-all-checked-b", "Second", true, 2)]
+      }),
+      task("task-recurring-extend-disabled", {
+        title: "Recurring extend disabled", dueDatetime: "2026-06-01T15:00:00.000Z", occurrenceKey: "occurrence-recurring-extend-disabled-1",
+        recurrence: recurrence("weekly", "every Monday at 15:00"), checklistItems: [child("child-recurring-extend-disabled", "Complete", true, 1)]
+      }),
+      task("task-custom-recurrence", {
+        title: "Custom recurring task", dueDatetime: "2026-06-02T10:00:00.000Z", occurrenceKey: "occurrence-custom-recurrence-1",
+        recurrence: { kind: "custom", preset: null, rule: "every 2 days at 10:00", language: "en", timeZone: "Europe/Bratislava" }
+      }),
+      task("task-unsupported-hierarchy", {
+        title: "Unsupported hierarchy", dueDatetime: "2026-06-02T12:00:00.000Z", occurrenceKey: "occurrence-unsupported-hierarchy-1", state: "invalid",
+        hierarchyStatus: "unsupported", hierarchyViolation: "child_has_schedule", checklistItems: [child("child-unsupported-hierarchy", "Scheduled child", false, 1)]
+      }),
+      task("task-reconciliation-pending", {
+        title: "Pending reconciliation", dueDatetime: "2026-06-02T14:00:00.000Z", occurrenceKey: "occurrence-reconciliation-pending-1", reconciliationStatus: "pending"
+      })
     ]
   };
+}
+
+export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
+  return {
+    scheduleVersion: state.scheduleVersion,
+    serverTime,
+    health: [],
+    tasks: state.tasks.filter((task) => !task.isCompleted).map((task) => ({
+      id: task.id,
+      todoistTaskId: task.todoistTaskId,
+      title: task.title,
+      description: task.description,
+      projectId: "project-test",
+      assigneeId: "user-me",
+      creatorId: "user-me",
+      dueDatetime: task.dueDatetime,
+      durationMinutes: task.durationMinutes,
+      startAt: task.dueDatetime,
+      state: task.state,
+      isAssignedToUser: true,
+      isCreatedByUser: true,
+      isCompleted: task.isCompleted,
+      isDeleted: false,
+      validationErrors: task.hierarchyStatus === "unsupported" ? [task.hierarchyViolation] : [],
+      startedAt: task.startedAt,
+      startDismissCount: task.startDismissCount,
+      deadlineExtensionCount: task.deadlineExtensionCount,
+      escalationSentAt: null,
+      updatedAt: FIXED_NOW,
+      occurrenceKey: task.occurrenceKey,
+      taskRevision: `r:${task.taskRevision}`,
+      activityLogEntries: [],
+      recurrence: { ...task.recurrence, displayLabel: task.recurrence.kind === "none" ? "Never" : task.recurrence.rule },
+      checklistItems: task.checklistItems.map((item) => ({ ...item, childRevision: `r:${item.childRevision}` })),
+      checkedCount: task.checklistItems.filter((item) => item.checked).length,
+      totalCount: task.checklistItems.length,
+      hierarchyStatus: task.hierarchyStatus,
+      hierarchyViolation: task.hierarchyViolation,
+      reconciliationStatus: task.reconciliationStatus
+    }))
+  };
+}
+
+function task(id: string, overrides: Partial<FakeTask> & Pick<FakeTask, "title" | "dueDatetime" | "occurrenceKey">): FakeTask {
+  const { title, dueDatetime, occurrenceKey, ...rest } = overrides;
+  return {
+    id, todoistTaskId: `todoist-${id}`, title, description: null, dueDatetime, durationMinutes: 30,
+    state: "planned", occurrenceNumber: 1, occurrenceKey, taskRevision: 1,
+    recurrence: { kind: "none", preset: "never", rule: null, language: null, timeZone: null }, hierarchyStatus: "valid", hierarchyViolation: null,
+    reconciliationStatus: "none", checklistItems: [], startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false, ...rest
+  };
+}
+
+function child(id: string, title: string, checked: boolean, order: number): FakeChecklistItem {
+  return { id, title, description: null, checked, childRevision: 1, order };
+}
+
+function recurrence(preset: string, rule: string): FakeTask["recurrence"] {
+  return { kind: "supported", preset, rule, language: "en", timeZone: "Europe/Bratislava" };
 }

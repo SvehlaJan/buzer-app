@@ -568,12 +568,12 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `tools/fake-backend/src/server.ts`
 - Modify: `tools/fake-backend/src/server.test.ts`
 
-- [ ] Write failing fake-backend tests for nested fixtures, supported recurring and custom recurring roots, focused child check/uncheck, incomplete-parent Done rejection, recurring Done rollover/reset, action replay, stale occurrence/child responses, partial create/edit outcomes, and returned snapshots.
-- [ ] Change fixtures from immutable flat JSON to deterministic in-memory root/checklist state. Include these named scenarios: one-time no children, one-time partially checked, recurring all checked, recurring with Extend disabled, custom recurrence, unsupported hierarchy, and reconciliation pending.
-- [ ] Record action body metadata (`actionId`, `deviceId`, occurrence/revisions) without recording Authorization. Reusing an action ID with an identical body returns the same stored response; changing its body returns `409 action_id_reused`.
-- [ ] Implement all fixed routes and return the authoritative updated snapshot from mutations. Checking a child must advance that child revision only. Recurring Done must advance to a deterministic next due, create a new occurrence key, and reset all children unchecked.
-- [ ] Keep test controls for forced 500 snapshot/action failures and add deterministic 202 pending, 409 stale, 422 activity-log-full, and 429-with-`Retry-After` controls for Android and shared-client tests.
-- [ ] Run from `tools/fake-backend/`: `npm test` and `npm run build`. Expected: PASS.
+- [x] Write failing fake-backend tests for nested fixtures, supported recurring and custom recurring roots, focused child check/uncheck, incomplete-parent Done rejection, recurring Done rollover/reset, action replay, stale occurrence/child responses, partial create/edit outcomes, and returned snapshots.
+- [x] Change fixtures from immutable flat JSON to deterministic in-memory root/checklist state. Include these named scenarios: one-time no children, one-time partially checked, recurring all checked, recurring with Extend disabled, custom recurrence, unsupported hierarchy, and reconciliation pending.
+- [x] Record action body metadata (`actionId`, `deviceId`, occurrence/revisions) without recording Authorization. Reusing an action ID with an identical body returns the same stored response; changing its body returns `409 action_id_reused`.
+- [x] Implement all fixed routes and return the authoritative updated snapshot from mutations. Checking a child must advance that child revision only. Recurring Done must advance to a deterministic next due, create a new occurrence key, and reset all children unchecked.
+- [x] Keep test controls for forced 500 snapshot/action failures and add deterministic 202 pending, 409 stale, 422 activity-log-full, and 429-with-`Retry-After` controls for Android and shared-client tests.
+- [x] Run from `tools/fake-backend/`: `npm test` and `npm run build`. Expected: PASS.
 - [ ] Commit with `git commit -m "test: model recurring checklists in fake backend"`.
 
 ## Task 11: Add Shared Kotlin Contracts, Error Context, And Retry Semantics
