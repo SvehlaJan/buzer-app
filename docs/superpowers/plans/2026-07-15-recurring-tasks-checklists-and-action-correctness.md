@@ -628,6 +628,7 @@ val recurrenceChoices = listOf(
 - [x] Extend Home/blocker UI models with checked/total progress, next unchecked child, Done enabled only when counts match, and Extend enabled only for non-recurring roots.
 - [x] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
 - [x] Commit with `git commit -m "feat: make client state occurrence aware"`.
+- [x] Spec-review follow-up: require a nonblank occurrence key, expose the stable `(taskId, occurrenceKey, kind)` identity separately from trigger time, and exclude invalid-state roots even without validation errors.
 
 ## Task 13: Persist Device Identity And Occurrence-Keyed Android Alarms
 

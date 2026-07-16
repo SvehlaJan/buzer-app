@@ -15,12 +15,24 @@ enum class DesiredAlarmKind {
     DEADLINE_BLOCKER
 }
 
+data class DesiredAlarmIdentity(
+    val taskId: String,
+    val occurrenceKey: String,
+    val kind: DesiredAlarmKind
+)
+
 data class DesiredAlarm(
     val taskId: String,
     val kind: DesiredAlarmKind,
     val triggerAtIso: String,
-    val occurrenceKey: String = ""
-)
+    val occurrenceKey: String
+) {
+    init {
+        require(occurrenceKey.isNotBlank()) { "occurrenceKey must not be blank" }
+    }
+
+    val identity: DesiredAlarmIdentity = DesiredAlarmIdentity(taskId, occurrenceKey, kind)
+}
 
 data class AlarmPlan(
     val alarms: List<DesiredAlarm>,
@@ -40,7 +52,9 @@ object AlarmPlanCalculator {
             }
             if (!task.isAssignedToUser ||
                 task.validationErrors.isNotEmpty() ||
-                task.hierarchyStatus == HierarchyStatus.unsupported
+                task.state == CommitmentState.invalid ||
+                task.hierarchyStatus == HierarchyStatus.unsupported ||
+                task.occurrenceKey.isBlank()
             ) {
                 continue
             }

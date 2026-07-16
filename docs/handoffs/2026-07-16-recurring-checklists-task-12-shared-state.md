@@ -77,3 +77,36 @@ Assumptions:
 Next recommended step:
 
 - Continue Task 13 to persist device identity and reconcile Android alarms by `(taskId, occurrenceKey, kind)`.
+
+## Spec-review follow-up
+
+Plan/task attempted:
+
+- Corrected the Task 12 alarm identity and invalid-state gaps found during spec review. No AndroidApp files were changed.
+
+Changes made:
+
+- Added `DesiredAlarmIdentity(taskId, occurrenceKey, kind)` and a stable `DesiredAlarm.identity`; trigger time is explicitly outside identity.
+- Made `DesiredAlarm.occurrenceKey` required and nonblank. The calculator skips snapshots without an occurrence key rather than throwing.
+- Excluded `CommitmentState.invalid` roots even when `validationErrors` is empty.
+
+TDD evidence:
+
+- RED: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.enforcement.AlarmPlanCalculatorTest' --console=plain`
+  - Result: FAIL
+  - Evidence: `DesiredAlarmIdentity` and `DesiredAlarm.identity` were unresolved before the stable identity type existed.
+- RED: same focused command after adding the missing-key regression
+  - Result: FAIL
+  - Evidence: a blank occurrence key caused `IllegalArgumentException` while calculating the plan.
+- GREEN: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.enforcement.AlarmPlanCalculatorTest' --console=plain`
+  - Result: PASS
+  - Evidence: strict nonblank construction, key rotation, unchanged identity across Extend, invalid-state filtering, and missing-key skipping passed.
+
+Verification:
+
+- Command: `./gradlew :shared:testAndroidHostTest --console=plain`
+  - Result: PASS
+  - Evidence: complete shared Android-host suite passed.
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace errors.

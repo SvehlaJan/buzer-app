@@ -9,11 +9,13 @@ import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AlarmPlanCalculatorTest {
     @Test
-    fun desiredAlarmIdentityIncludesOccurrenceKey() {
+    fun desiredAlarmIdentityIsStableAcrossTriggerMovementAndChangesForKeyRotation() {
         val oldOccurrence = DesiredAlarm(
             taskId = "task-1",
             occurrenceKey = "occurrence-old",
@@ -21,8 +23,22 @@ class AlarmPlanCalculatorTest {
             triggerAtIso = "2026-05-28T12:00:00Z"
         )
         val newOccurrence = oldOccurrence.copy(occurrenceKey = "occurrence-new")
+        val extended = oldOccurrence.copy(triggerAtIso = "2026-05-28T12:30:00Z")
 
-        assertTrue(oldOccurrence != newOccurrence)
+        assertEquals(
+            DesiredAlarmIdentity("task-1", "occurrence-old", DesiredAlarmKind.START_BLOCKER),
+            oldOccurrence.identity
+        )
+        assertNotEquals(oldOccurrence.identity, newOccurrence.identity)
+        assertEquals(oldOccurrence.identity, extended.identity)
+        assertNotEquals(oldOccurrence.triggerAtIso, extended.triggerAtIso)
+    }
+
+    @Test
+    fun desiredAlarmRejectsBlankOccurrenceKey() {
+        assertFailsWith<IllegalArgumentException> {
+            DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z", " ")
+        }
     }
 
     @Test
@@ -112,9 +128,9 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("task-1", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
-                DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
-                DesiredAlarm("task-1", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+                DesiredAlarm("task-1", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z", "occurrence-task-1"),
+                DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z", "occurrence-task-1"),
+                DesiredAlarm("task-1", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z", "occurrence-task-1")
             ),
             plan.alarms
         )
@@ -136,8 +152,8 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("no-duration", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
-                DesiredAlarm("no-duration", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z")
+                DesiredAlarm("no-duration", DesiredAlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z", "occurrence-no-duration"),
+                DesiredAlarm("no-duration", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z", "occurrence-no-duration")
             ),
             plan.alarms
         )
@@ -177,6 +193,26 @@ class AlarmPlanCalculatorTest {
     }
 
     @Test
+    fun skipsInvalidStateEvenWhenBackendValidationErrorsAreEmpty() {
+        val plan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "invalid-state", state = CommitmentState.invalid)),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertTrue(plan.alarms.isEmpty())
+    }
+
+    @Test
+    fun skipsTasksWithoutAnOccurrenceKeyInsteadOfCreatingAnUnidentifiableAlarm() {
+        val plan = AlarmPlanCalculator.calculate(
+            snapshot(task(id = "missing-occurrence", occurrenceKey = "")),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertTrue(plan.alarms.isEmpty())
+    }
+
+    @Test
     fun skipsTasksNotAssignedToUserForPerTaskAlarms() {
         val snapshot = snapshot(
             task(id = "other-user", isAssignedToUser = false)
@@ -203,8 +239,8 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("already-starting", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
-                DesiredAlarm("already-starting", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+                DesiredAlarm("already-starting", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z", "occurrence-already-starting"),
+                DesiredAlarm("already-starting", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z", "occurrence-already-starting")
             ),
             plan.alarms
         )
@@ -226,8 +262,8 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("in-progress", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:30:00Z"),
-                DesiredAlarm("in-progress", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+                DesiredAlarm("in-progress", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:30:00Z", "occurrence-in-progress"),
+                DesiredAlarm("in-progress", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z", "occurrence-in-progress")
             ),
             plan.alarms
         )
@@ -252,7 +288,7 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(
             listOf(
-                DesiredAlarm("in-progress-started", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+                DesiredAlarm("in-progress-started", DesiredAlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z", "occurrence-in-progress-started")
             ),
             plan.alarms
         )
@@ -295,7 +331,7 @@ class AlarmPlanCalculatorTest {
         isAssignedToUser: Boolean = true,
         validationErrors: List<String> = emptyList(),
         startedAt: String? = null,
-        occurrenceKey: String = "",
+        occurrenceKey: String = "occurrence-$id",
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
         reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
     ): TaskSnapshotItem =
