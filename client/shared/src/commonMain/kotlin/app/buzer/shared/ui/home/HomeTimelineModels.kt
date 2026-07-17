@@ -2,6 +2,7 @@ package app.buzer.shared.ui.home
 
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.ChecklistItem
 
 enum class HomeAgendaRowState {
     Overdue,
@@ -32,6 +33,7 @@ data class HomeCurrentBlock(
     val checkedCount: Int = 0,
     val totalCount: Int = 0,
     val nextUncheckedChildTitle: String? = null,
+    val checklistItems: List<ChecklistItem> = emptyList(),
     val doneEnabled: Boolean = checkedCount == totalCount,
     val extendEnabled: Boolean = true
 )

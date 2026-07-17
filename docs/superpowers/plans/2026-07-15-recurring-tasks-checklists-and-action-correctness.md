@@ -670,14 +670,40 @@ val recurrenceChoices = listOf(
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeDoneActionHandlerTest.kt`
 
-- [ ] Add failing coordinator tests proving a successful mutation saves/reconciles the returned snapshot without a follow-up `getSnapshot`, a 202 pending response cancels speculative alarms and exposes pending UI, a 409 applies current snapshot while retaining a caller draft, 429 exposes retry timing, and a retry sends the exact same action ID.
-- [ ] Change coordinator action methods to accept immutable serialized request objects that already contain action metadata. UI handlers create the request once and capture it in the retry closure.
-- [ ] Replace `runBackendAction`'s unconditional `refreshAndReconcile()` with `applyMutationResponse(response)`: save the returned snapshot, reconcile alarms, clear obsolete notifications, and return typed success/partial/pending/stale state.
-- [ ] Do not cancel all task alarms optimistically before a confirmed Done response. The returned authoritative snapshot determines cancellation or next-recurring-occurrence scheduling.
-- [ ] Add focused `checkChild` and `uncheckChild` coordinator actions. Prevent multiple simultaneous taps on one child while its action is in flight, but allow the next intent after the response with a new action ID/revision.
-- [ ] Keep offline behavior honest: cached UI may display, but mutation failure never changes checked/done/recurrence state locally. Alarm-triggered blockers show retry/offline state if refresh fails.
+- [x] Add failing coordinator tests proving a successful mutation saves/reconciles the returned snapshot without a follow-up `getSnapshot`, a 202 pending response cancels speculative alarms and exposes pending UI, a 409 applies current snapshot while retaining a caller draft, 429 exposes retry timing, and a retry sends the exact same action ID.
+- [x] Change coordinator action methods to accept immutable serialized request objects that already contain action metadata. UI handlers create the request once and capture it in the retry closure.
+- [x] Replace `runBackendAction`'s unconditional `refreshAndReconcile()` with `applyMutationResponse(response)`: save the returned snapshot, reconcile alarms, clear obsolete notifications, and return typed success/partial/pending/stale state.
+- [x] Do not cancel all task alarms optimistically before a confirmed Done response. The returned authoritative snapshot determines cancellation or next-recurring-occurrence scheduling.
+- [x] Add focused `checkChild` and `uncheckChild` coordinator actions. Prevent multiple simultaneous taps on one child while its action is in flight, but allow the next intent after the response with a new action ID/revision.
+- [x] Keep offline behavior honest: cached UI may display, but mutation failure never changes checked/done/recurrence state locally. Alarm-triggered blockers show retry/offline state if refresh fails.
 - [ ] Run `./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementCoordinatorTest' --tests 'app.buzer.android.ui.HomeDoneActionHandlerTest' --console=plain`. Expected: PASS.
 - [ ] Commit with `git commit -m "feat: reconcile authoritative action responses"`.
+- [x] Quality follow-up: distinguish post-response local persistence/reconciliation failures from backend failures; retain returned authority and never retry/re-arm a confirmed POST. Serialize only local snapshot/registry application, merge competing equal-version snapshots by root/child revisions, and verify one-time/recurring Done reconciliation from the returned authority without a GET.
+
+### Approved contract correction: durable snapshot generation
+
+The prior Task 14 equal-`scheduleVersion` merge cannot safely order deletion,
+root lifecycle, and different-child changes received out of order from two
+phones. The user approved this additive API contract correction on 2026-07-16.
+
+- [x] Add SQLite migration v3 with a durable global generation counter and
+  transaction-local insert/update/delete triggers for every projected task
+  table; expose it from GET, success/202 mutation snapshots, and 409 snapshots.
+- [x] Add `snapshotGeneration` to the shared API DTO, fake backend snapshots,
+  focused migration/snapshot/fake/shared tests, API documentation, and the
+  lasting architecture decision. Require it on every network snapshot, while
+  only `SnapshotStore` explicitly migrates an already persisted pre-v3 snapshot
+  to unorderable legacy `0`. Read rows/projects/generation under one SQLite
+  read transaction and assert the field for direct GET/success/202/409 routes.
+- [x] Write snapshots and the legacy-cache migration through a temporary file
+  plus rename; if that one-time rewrite fails, log it and retain the decoded
+  legacy `0` snapshot until server authority replaces it.
+- [ ] Replace Task 14's temporary equal-`scheduleVersion` object merge with
+  whole-snapshot increasing-generation application: a positive incoming
+  generation applies only when newer; any cached/incoming legacy zero requires
+  a fresh server snapshot before it can establish order. Add delayed response,
+  deletion, lifecycle, and legacy-cache regression tests when completing Task
+  14's Android source.
 
 ## Task 15: Add Recurrence And Checklist Editing To Add, Edit, And Repair
 

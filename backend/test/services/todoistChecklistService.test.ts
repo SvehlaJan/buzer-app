@@ -13,12 +13,15 @@ describe("TodoistChecklistService", () => {
 
     const result = await service.mutate("root", { mutations: [add("draft-1", "  First step ", " Details ")] });
 
-    expect(result).toMatchObject({ outcome: "completed", childOutcomes: [{ outcome: "completed" }] });
+    expect(result).toMatchObject({
+      root: { id: "root", todoistTaskId: "todoist-root" },
+      snapshot: { authoritative: true }
+    });
     expect(adapter.itemAdds).toHaveLength(1);
     expect(adapter.itemAdds[0]).toMatchObject({
       kind: "child", parentTodoistTaskId: "todoist-root", projectId: "project-1", title: "First step", description: "Details"
     });
-    expect(repo.getByTodoistTaskId(result.childOutcomes[0]?.childId ?? "")).toMatchObject({
+    expect(repo.getByTodoistTaskId(`created-${adapter.itemAdds[0]?.tempId}`)).toMatchObject({
       parentId: "todoist-root", projectId: "project-1", dueDatetime: null, durationMinutes: null, assigneeId: null, isRecurring: false
     });
   });
@@ -56,46 +59,36 @@ describe("TodoistChecklistService", () => {
 
     const result = await service.check("root", { type: "check", clientMutationId: "check-1", childId: "child-one", expectedChildRevision: revision });
 
-    expect(result.outcome).toBe("completed");
+    expect(result).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
     expect(adapter.itemCloses).toEqual([]);
     expect(sync).toHaveBeenCalledTimes(2);
     expect(result.snapshot).toEqual({ authoritative: true });
   });
 
-  it("retains a stale child draft while safely applying another child mutation", async () => {
+  it("rejects a stale child batch before dispatching another child mutation", async () => {
     const { service, adapter, repo } = setup({ children: [child("one"), child("two")] });
     const current = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
 
-    const result = await service.mutate("root", { mutations: [
+    await expect(service.mutate("root", { mutations: [
       { type: "edit", clientMutationId: "stale", childId: "child-one", expectedChildRevision: "r:0", title: "Ignored", description: null },
       { type: "check", clientMutationId: "safe", childId: "child-two", expectedChildRevision: current }
-    ] });
-
-    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "stale", outcome: "stale_child", errorCode: "stale_child" },
-      { clientMutationId: "safe", outcome: "completed" }
-    ] });
-    expect(adapter.itemCloses).toHaveLength(1);
+    ] })).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
+    expect(adapter.itemCloses).toHaveLength(0);
   });
 
-  it("completes a coordinated mixed stale and safe batch with terminal child outcomes", async () => {
+  it("rejects a coordinated mixed stale and safe batch before dispatch", async () => {
     const { service, adapter, db, repo } = setup({ coordinated: true, children: [child("one"), child("two")] });
     const revision = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
 
-    const result = await service.mutate("root", {
+    await expect(service.mutate("root", {
       action: { actionId: "mixed-stale-safe", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
       mutations: [
         { type: "edit", clientMutationId: "stale", childId: "child-one", expectedChildRevision: "r:0", title: "Ignored", description: null },
         { type: "check", clientMutationId: "safe", childId: "child-two", expectedChildRevision: revision }
       ]
-    });
-
-    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "stale", outcome: "stale_child", errorCode: "stale_child" },
-      { clientMutationId: "safe", outcome: "completed", errorCode: null }
-    ], snapshot: { authoritative: true } });
-    expect(adapter.itemCloses).toHaveLength(1);
-    expect(db.prepare("select status from task_action_journal where action_id = ?").get("mixed-stale-safe")).toEqual({ status: "completed" });
+    })).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
+    expect(adapter.itemCloses).toHaveLength(0);
+    expect(db.prepare("select status from task_action_journal where action_id = ?").get("mixed-stale-safe")).toEqual({ status: "failed" });
   });
 
   it("replays an interrupted mixed batch without turning a no-command stale draft into success", async () => {
@@ -115,7 +108,9 @@ describe("TodoistChecklistService", () => {
       rootTaskId: "root",
       expectedOccurrenceKey: request.action.expectedOccurrenceKey,
       actionType: "checklist_mutation",
-      requestFingerprint: actionFingerprint("checklist_mutation", { mutations: request.mutations }),
+      requestFingerprint: actionFingerprint("checklist_mutation", {
+        payload: { mutations: request.mutations }, expectedOccurrenceKey: request.action.expectedOccurrenceKey
+      }),
       now: "2026-07-15T10:00:00Z"
     });
     journal.reserveCommand({
@@ -131,10 +126,7 @@ describe("TodoistChecklistService", () => {
 
     const replay = await service.mutate("root", request);
 
-    expect(replay).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "stale", outcome: "stale_child", errorCode: "stale_child" },
-      { clientMutationId: "safe", outcome: "completed", errorCode: null }
-    ] });
+    expect(replay).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
   });
 
   it("replays an interrupted mixed batch with the exact no-command local validation failure", async () => {
@@ -155,7 +147,9 @@ describe("TodoistChecklistService", () => {
       rootTaskId: "root",
       expectedOccurrenceKey: request.action.expectedOccurrenceKey,
       actionType: "checklist_mutation",
-      requestFingerprint: actionFingerprint("checklist_mutation", { mutations: request.mutations }),
+      requestFingerprint: actionFingerprint("checklist_mutation", {
+        payload: { mutations: request.mutations }, expectedOccurrenceKey: request.action.expectedOccurrenceKey
+      }),
       now: "2026-07-15T10:00:00Z"
     });
     journal.reserveCommand({
@@ -171,10 +165,7 @@ describe("TodoistChecklistService", () => {
 
     const replay = await service.mutate("root", request);
 
-    expect(replay).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "invalid", outcome: "failed", errorCode: "child_title_required" },
-      { clientMutationId: "safe", outcome: "completed", errorCode: null }
-    ] });
+    expect(replay).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
   });
 
   it.each([
@@ -215,17 +206,16 @@ describe("TodoistChecklistService", () => {
     const first = await service.mutate("root", request);
     const replay = await service.mutate("root", request);
 
-    expect(first).toMatchObject({ outcome: "completed", childOutcomes: [{ clientMutationId: "rename", outcome: "completed" }] });
-    expect(replay).toMatchObject({ outcome: "completed", childOutcomes: [{ clientMutationId: "rename", outcome: "completed" }] });
+    expect(first).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
+    expect(replay).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
   });
 
-  it("rejects a child that is not directly under the requested root", async () => {
+  it("rejects a child that is not directly under the requested root before dispatch", async () => {
     const { service, repo } = setup({ children: [child("other", { parentTodoistTaskId: "different-root" })] });
     const revision = `r:${repo.getByTodoistTaskId("child-other")?.mirrorRevision}`;
 
-    const result = await service.mutate("root", { mutations: [{ type: "check", clientMutationId: "wrong-root", childId: "child-other", expectedChildRevision: revision }] });
-
-    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [{ outcome: "failed", errorCode: "child_not_under_root" }] });
+    await expect(service.mutate("root", { mutations: [{ type: "check", clientMutationId: "wrong-root", childId: "child-other", expectedChildRevision: revision }] }))
+      .rejects.toMatchObject({ code: "child_not_under_root", statusCode: 404 });
   });
 
   it("rejects forbidden client child fields before issuing commands", async () => {
@@ -267,35 +257,26 @@ describe("TodoistChecklistService", () => {
     } as unknown as ChildMutation] })).rejects.toMatchObject({ code: "forbidden_child_field", statusCode: 422 });
   });
 
-  it("caps a root at thirty children while allowing a batch to fill the remaining slots", async () => {
+  it("rejects an over-cap batch before adding any children", async () => {
     const { service, adapter } = setup({ children: Array.from({ length: 28 }, (_, index) => child(`seed-${index}`)) });
 
-    const result = await service.mutate("root", { mutations: [add("add-1", "Twenty-nine"), add("add-2", "Thirty"), add("add-3", "Too many")] });
-
-    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "add-1", outcome: "completed" },
-      { clientMutationId: "add-2", outcome: "completed" },
-      { clientMutationId: "add-3", outcome: "failed", errorCode: "too_many_children" }
-    ] });
-    expect(adapter.itemAdds).toHaveLength(2);
+    await expect(service.mutate("root", { mutations: [add("add-1", "Twenty-nine"), add("add-2", "Thirty"), add("add-3", "Too many")] }))
+      .rejects.toMatchObject({ code: "too_many_children", statusCode: 422 });
+    expect(adapter.itemAdds).toHaveLength(0);
   });
 
-  it("keeps successful external child commands when a local batch mutation fails", async () => {
+  it("rejects a locally invalid batch before any child command is sent", async () => {
     const { service, adapter, repo } = setup({ children: [child("one"), child("two")] });
     const revisionOne = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
     const revisionTwo = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
 
-    const result = await service.mutate("root", { mutations: [
+    await expect(service.mutate("root", { mutations: [
       { type: "edit", clientMutationId: "failed-draft", childId: "child-one", expectedChildRevision: revisionOne, title: " ", description: null },
       { type: "edit", clientMutationId: "saved-draft", childId: "child-two", expectedChildRevision: revisionTwo, title: "Saved", description: null }
-    ] });
-
-    expect(result).toMatchObject({ outcome: "partial", childOutcomes: [
-      { clientMutationId: "failed-draft", outcome: "failed", errorCode: "child_title_required" },
-      { clientMutationId: "saved-draft", outcome: "completed" }
-    ] });
+    ] })).rejects.toMatchObject({ code: "child_title_required", statusCode: 422 });
     expect(repo.getByTodoistTaskId("child-one")?.title).toBe("Child one");
-    expect(repo.getByTodoistTaskId("child-two")?.title).toBe("Saved");
+    expect(repo.getByTodoistTaskId("child-two")?.title).toBe("Child two");
+    expect(adapter.itemUpdates).toEqual([]);
   });
 
   it("allows simultaneous mutations of different direct children", async () => {
@@ -321,7 +302,7 @@ describe("TodoistChecklistService", () => {
       mutations: [add("one", "First"), add("two", "Second")]
     });
 
-    expect(result.outcome).toBe("completed");
+    expect(result).toMatchObject({ root: { id: "root" }, snapshot: { authoritative: true } });
     expect(db.prepare("select step_key as stepKey, status from task_action_commands where action_id = ? order by step_key").all("batch-add")).toEqual([
       { stepKey: "child:one:add", status: "confirmed" },
       { stepKey: "child:two:add", status: "confirmed" }
@@ -329,7 +310,54 @@ describe("TodoistChecklistService", () => {
     expect(result.snapshot).toEqual({ authoritative: true });
   });
 
-  it("hydrates a completed coordinated replay with root, child outcomes, and authoritative snapshot", async () => {
+  it("keeps a sent child add pending and reuses its durable command UUID on replay", async () => {
+    const { rawService, adapter, db } = setup({ coordinated: true });
+    const request = {
+      action: { actionId: "sent-child-add", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
+      mutations: [add("first", "First")]
+    };
+    const originalItemAdd = adapter.itemAdd.bind(adapter);
+    let shouldLoseResponse = true;
+    adapter.itemAdd = async (input) => {
+      if (input.kind === "child" && shouldLoseResponse) {
+        shouldLoseResponse = false;
+        adapter.itemAdds.push(input);
+        throw new Error("response lost after command dispatch");
+      }
+      return originalItemAdd(input);
+    };
+
+    await expect(rawService.mutate("root", request)).rejects.toMatchObject({
+      code: "reconciliation_pending",
+      statusCode: 202
+    });
+    const firstCommand = db.prepare(
+      "select command_uuid as commandUuid, temp_id as tempId, status from task_action_commands where action_id = ? and step_key = ?"
+    ).get("sent-child-add", "child:first:add");
+    expect(firstCommand).toMatchObject({ status: "sent" });
+
+    await expect(rawService.mutate("root", request)).resolves.toMatchObject({
+      root: { id: "root" },
+      snapshot: { authoritative: true }
+    });
+    expect(db.prepare(
+      "select command_uuid as commandUuid, temp_id as tempId, status from task_action_commands where action_id = ? and step_key = ?"
+    ).get("sent-child-add", "child:first:add")).toMatchObject({
+      commandUuid: (firstCommand as { commandUuid: string }).commandUuid,
+      tempId: (firstCommand as { tempId: string }).tempId,
+      status: "confirmed"
+    });
+    expect(adapter.itemAdds.filter((item) => item.kind === "child").map((item) => item.commandUuid)).toEqual([
+      (firstCommand as { commandUuid: string }).commandUuid,
+      (firstCommand as { commandUuid: string }).commandUuid
+    ]);
+    expect(adapter.itemAdds.filter((item) => item.kind === "child").map((item) => item.tempId)).toEqual([
+      (firstCommand as { tempId: string }).tempId,
+      (firstCommand as { tempId: string }).tempId
+    ]);
+  });
+
+  it("hydrates a completed coordinated replay with root and authoritative snapshot", async () => {
     const { service, repo } = setup({ coordinated: true, children: [child("one")] });
     const request = {
       action: { actionId: "replay-complete", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" },
@@ -346,7 +374,6 @@ describe("TodoistChecklistService", () => {
 
     expect(replay).toMatchObject({
       root: { id: "root", todoistTaskId: "todoist-root" },
-      childOutcomes: [{ clientMutationId: "check-one", childId: "child-one", outcome: "completed" }],
       snapshot: { authoritative: true }
     });
   });

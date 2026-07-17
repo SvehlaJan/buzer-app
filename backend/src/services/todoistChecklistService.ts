@@ -22,17 +22,8 @@ export interface ChecklistMutationRequest {
   action?: ChecklistActionMetadata;
 }
 
-export interface ChecklistChildOutcome {
-  clientMutationId: string;
-  childId: string | null;
-  outcome: "completed" | "failed" | "stale_child";
-  errorCode: string | null;
-}
-
 export interface ChecklistMutationResult {
-  outcome: "completed" | "partial";
   root: TaskWithCommitment;
-  childOutcomes: ChecklistChildOutcome[];
   snapshot: unknown;
 }
 
@@ -87,22 +78,20 @@ export class TodoistChecklistService {
       expectedOccurrenceKey: request.action.expectedOccurrenceKey,
       actionType: "checklist_mutation",
       payload: { mutations: request.mutations },
-      validate: () => this.assertProjectedTree(rootTaskId),
+      validate: () => {
+        this.assertProjectedTree(rootTaskId);
+        this.validateMutations(rootTaskId, request.mutations);
+      },
       isEffectPresent: (_root, context) => this.effectsPresent(rootTaskId, request.mutations, createdChildIds, context),
-      responseAfterReconciliation: (_root, context) => this.responseFromCurrentState(rootTaskId, request.mutations, context),
-      compactResponse: (response) => ({
-        outcome: response.outcome,
-        childOutcomes: response.childOutcomes
-      }),
+      responseAfterReconciliation: () => undefined,
+      compactResponse: () => null,
       execute: (context) => this.executeMutations(rootTaskId, request.mutations, context, createdChildIds)
     });
     if (response.kind === "pending") {
       throw DomainError.reconciliationPending(this.snapshot());
     }
     return {
-      outcome: response.response.outcome,
       root: this.requireRoot(rootTaskId),
-      childOutcomes: response.response.childOutcomes,
       snapshot: this.snapshot()
     };
   }
@@ -120,23 +109,34 @@ export class TodoistChecklistService {
     mutations: readonly ChildMutation[],
     context: TaskActionCommandContext,
     createdChildIds?: Map<string, string>
-  ): Promise<Omit<ChecklistMutationResult, "snapshot">> {
+  ): Promise<void> {
     const root = this.requireRoot(rootTaskId);
-    const outcomes: ChecklistChildOutcome[] = [];
     for (const mutation of mutations) {
-      try {
-        const outcome = await this.executeOne(root, mutation, context, createdChildIds);
-        outcomes.push(outcome);
-      } catch (error) {
-        outcomes.push(failedOutcome(mutation, error));
-      }
+      await this.executeOne(root, mutation, context, createdChildIds);
     }
-    const latestRoot = this.requireRoot(rootTaskId);
-    return {
-      outcome: outcomes.some((outcome) => outcome.outcome !== "completed") ? "partial" : "completed",
-      root: latestRoot,
-      childOutcomes: outcomes
-    };
+  }
+
+  /** Every deterministic child error is found before the first Todoist command.
+   * Once a command was sent, the coordinator must preserve the action as pending. */
+  private validateMutations(rootTaskId: string, mutations: readonly ChildMutation[]): void {
+    const root = this.requireRoot(rootTaskId);
+    let projectedChildCount = this.childrenOf(root).length;
+    for (const mutation of mutations) {
+      if (mutation.type === "add") {
+        if (projectedChildCount >= 30) {
+          throw domainError("too_many_children", "A commitment can have at most 30 checklist items");
+        }
+        requiredTitle(mutation.title);
+        requiredProjectId(root);
+        projectedChildCount += 1;
+        continue;
+      }
+      const child = this.requireChild(root, mutation.childId);
+      if (child.mirrorRevision !== parseRevision(mutation.expectedChildRevision)) {
+        throw domainError("stale_child", "Checklist item changed on another device", 409);
+      }
+      if (mutation.type === "edit") requiredTitle(mutation.title);
+    }
   }
 
   private async executeOne(
@@ -144,7 +144,7 @@ export class TodoistChecklistService {
     mutation: ChildMutation,
     context: TaskActionCommandContext,
     createdChildIds: Map<string, string> | undefined
-  ): Promise<ChecklistChildOutcome> {
+  ): Promise<void> {
     if (mutation.type === "add") {
       const children = this.childrenOf(root);
       if (children.length >= 30) {
@@ -152,11 +152,11 @@ export class TodoistChecklistService {
       }
       const title = requiredTitle(mutation.title);
       const tempId = randomUUID();
-      const created = await this.send(context, `child:${mutation.clientMutationId}:add`, tempId, (commandUuid) =>
+      const created = await this.send(context, `child:${mutation.clientMutationId}:add`, tempId, (commandUuid, reservedTempId) =>
         this.todoist.itemAdd({
           kind: "child",
           commandUuid,
-          tempId,
+          tempId: reservedTempId ?? tempId,
           title,
           description: normalizeDescription(mutation.description),
           projectId: requiredProjectId(root),
@@ -177,12 +177,12 @@ export class TodoistChecklistService {
         updatedAt: this.now()
       });
       createdChildIds?.set(mutation.clientMutationId, created.todoistTaskId);
-      return completedOutcome(mutation, created.todoistTaskId);
+      return;
     }
 
     const child = this.requireChild(root, mutation.childId);
     if (child.mirrorRevision !== parseRevision(mutation.expectedChildRevision)) {
-      return staleOutcome(mutation);
+      throw domainError("stale_child", "Checklist item changed on another device", 409);
     }
 
     if (mutation.type === "edit") {
@@ -196,7 +196,7 @@ export class TodoistChecklistService {
         assignment: { kind: "preserve" }
       }));
       this.tasks.updateChecklistChild(child.id, title, normalizeDescription(mutation.description), this.now());
-      return completedOutcome(mutation, child.todoistTaskId);
+      return;
     }
 
     if (mutation.type === "delete") {
@@ -205,76 +205,29 @@ export class TodoistChecklistService {
         todoistTaskId: child.todoistTaskId
       }));
       this.tasks.deleteChecklistChild(child.id, this.now());
-      return completedOutcome(mutation, child.todoistTaskId);
+      return;
     }
 
     const requestedChecked = mutation.type === "check";
     const observedChecked = child.completedAt !== null;
     if (requestedChecked === observedChecked) {
-      return completedOutcome(mutation, child.todoistTaskId);
+      return;
     }
     await this.send(context, `child:${child.todoistTaskId}:${mutation.type}`, null, (commandUuid) => requestedChecked
       ? this.todoist.itemClose({ commandUuid, todoistTaskId: child.todoistTaskId })
       : this.todoist.itemUncomplete({ commandUuid, todoistTaskId: child.todoistTaskId })
     );
     this.tasks.setChecklistChildChecked(child.id, requestedChecked, this.now());
-    return completedOutcome(mutation, child.todoistTaskId);
+    return;
   }
 
   private async send<TResult>(
     context: TaskActionCommandContext,
     stepKey: string,
     tempId: string | null,
-    send: (commandUuid: string) => Promise<TResult>
+    send: (commandUuid: string, tempId: string | null) => Promise<TResult>
   ): Promise<TResult> {
     return context.executeCommand(stepKey, send, { tempId });
-  }
-
-  private responseFromCurrentState(
-    rootTaskId: string,
-    mutations: readonly ChildMutation[],
-    context: TaskActionEffectContext
-  ): Omit<ChecklistMutationResult, "snapshot"> {
-    const root = this.requireRoot(rootTaskId);
-    const childOutcomes = mutations.map((mutation) => context.reservedStepKeys.has(commandStepKey(mutation))
-      ? completedOutcome(mutation, mutation.type === "add" ? null : mutation.childId)
-      : this.reconstructNoCommandOutcome(root, mutation)
-    );
-    return {
-      outcome: childOutcomes.some((outcome) => outcome.outcome !== "completed") ? "partial" : "completed",
-      root,
-      childOutcomes
-    };
-  }
-
-  private reconstructNoCommandOutcome(root: TaskWithCommitment, mutation: ChildMutation): ChecklistChildOutcome {
-    try {
-      if (mutation.type === "add") {
-        if (this.childrenOf(root).length >= 30) {
-          throw domainError("too_many_children", "A commitment can have at most 30 checklist items");
-        }
-        requiredTitle(mutation.title);
-        requiredProjectId(root);
-        return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
-      }
-      const child = this.requireChild(root, mutation.childId);
-      if (child.mirrorRevision !== parseRevision(mutation.expectedChildRevision)) {
-        return staleOutcome(mutation);
-      }
-      if (mutation.type === "edit") {
-        requiredTitle(mutation.title);
-        return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
-      }
-      if (mutation.type === "check" || mutation.type === "uncheck") {
-        const requestedChecked = mutation.type === "check";
-        if ((child.completedAt !== null) === requestedChecked) {
-          return completedOutcome(mutation, child.todoistTaskId);
-        }
-      }
-      return failedOutcome(mutation, new Error("checklist_no_command_outcome_unknown"));
-    } catch (error) {
-      return failedOutcome(mutation, error);
-    }
   }
 
   private effectsPresent(
@@ -291,11 +244,13 @@ export class TodoistChecklistService {
           const created = this.tasks.getByTodoistTaskId(createdId);
           return created?.parentId === root.todoistTaskId && created.deletedAt === null;
         }
-        return this.childrenOf(root).some((child) =>
-          child.title === mutation.title.trim() && child.description === normalizeDescription(mutation.description)
-        );
+        const command = context.commands.get(commandStepKey(mutation));
+        const todoistTaskId = command === undefined ? null : todoistTaskIdFromCommandResult(command.result);
+        if (todoistTaskId === null) return false;
+        const created = this.tasks.getByTodoistTaskId(todoistTaskId);
+        return created?.parentId === root.todoistTaskId && created.deletedAt === null;
       }
-      const child = this.tasks.getByTodoistTaskId(mutation.childId);
+      const child = this.findChild(root, mutation.childId);
       if (child === null || child.parentId !== root.todoistTaskId) return mutation.type === "delete" && child?.deletedAt !== null;
       if (mutation.type === "delete") return child.deletedAt !== null;
       if (mutation.type === "check") return child.completedAt !== null;
@@ -332,11 +287,18 @@ export class TodoistChecklistService {
   }
 
   private requireChild(root: TaskWithCommitment, childId: string): TaskWithCommitment {
-    const child = this.tasks.getByTodoistTaskId(childId);
+    const child = this.findChild(root, childId);
     if (child === null || child.parentId !== root.todoistTaskId || child.deletedAt !== null) {
       throw domainError("child_not_under_root", "Checklist item is not a direct child of this commitment", 404);
     }
     return child;
+  }
+
+  /** Snapshot/API child IDs are mirror IDs. Accept legacy Todoist IDs only for
+   * pre-v3 in-flight actions; all current clients receive and send the local ID. */
+  private findChild(root: TaskWithCommitment, childId: string): TaskWithCommitment | null {
+    const child = this.tasks.getById(childId) ?? this.tasks.getByTodoistTaskId(childId);
+    return child === null || child.parentId !== root.todoistTaskId ? null : child;
   }
 }
 
@@ -412,22 +374,14 @@ function normalizeDescription(value: string | null): string | null {
   return normalized.length === 0 ? null : normalized;
 }
 
-function completedOutcome(mutation: ChildMutation, childId: string | null): ChecklistChildOutcome {
-  return { clientMutationId: mutation.clientMutationId, childId, outcome: "completed", errorCode: null };
-}
-
-function staleOutcome(mutation: Exclude<ChildMutation, { type: "add" }>): ChecklistChildOutcome {
-  return { clientMutationId: mutation.clientMutationId, childId: mutation.childId, outcome: "stale_child", errorCode: "stale_child" };
-}
-
-function failedOutcome(mutation: ChildMutation, error: unknown): ChecklistChildOutcome {
-  const code = error instanceof DomainError ? error.code : "todoist_child_mutation_failed";
-  return {
-    clientMutationId: mutation.clientMutationId,
-    childId: mutation.type === "add" ? null : mutation.childId,
-    outcome: code === "stale_child" ? "stale_child" : "failed",
-    errorCode: code
-  };
+function todoistTaskIdFromCommandResult(result: unknown): string | null {
+  if (typeof result !== "object" || result === null) return null;
+  const value = "kind" in result && (result as { kind?: unknown }).kind === "value"
+    ? (result as { value?: unknown }).value
+    : result;
+  if (typeof value !== "object" || value === null) return null;
+  const todoistTaskId = (value as { todoistTaskId?: unknown }).todoistTaskId;
+  return typeof todoistTaskId === "string" ? todoistTaskId : null;
 }
 
 function domainError(code: string, message: string, statusCode = 422): DomainError {

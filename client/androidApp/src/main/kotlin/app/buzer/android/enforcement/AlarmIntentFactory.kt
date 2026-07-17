@@ -3,6 +3,7 @@ package app.buzer.android.enforcement
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import java.net.URLEncoder
 
 enum class AlarmKind {
     MORNING_REVIEW,
@@ -35,12 +36,13 @@ object AlarmIntentFactory {
         }
     }
 
+    /** Pure identity representation so occurrence uniqueness is also verifiable in host JVM tests. */
+    fun identityUriString(taskId: String, occurrenceKey: String, kind: AlarmKind): String =
+        "buzer://alarm/${pathSegment(taskId)}/${pathSegment(occurrenceKey)}/${pathSegment(kind.name)}"
+
     fun identityUri(taskId: String, occurrenceKey: String, kind: AlarmKind): Uri =
-        Uri.Builder()
-            .scheme("buzer")
-            .authority("alarm")
-            .appendPath(taskId)
-            .appendPath(occurrenceKey)
-            .appendPath(kind.name)
-            .build()
+        Uri.parse(identityUriString(taskId, occurrenceKey, kind))
+
+    private fun pathSegment(value: String): String =
+        URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 }

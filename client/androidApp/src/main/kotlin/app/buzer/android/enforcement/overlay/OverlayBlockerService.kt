@@ -7,11 +7,15 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import app.buzer.android.blockers.StartBlockerActivity
 import app.buzer.android.blockers.BlockerTaskSnapshotGate
+import app.buzer.android.enforcement.AlarmIntentFactory
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.TaskActionRequest
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -186,8 +190,22 @@ class OverlayBlockerService : Service() {
                 // the overlay dismisses, matching the blocker activities' finish-regardless flow.
                 withTimeout(ACTION_TIMEOUT_MS) {
                     when (action) {
-                        OverlayAction.START -> coordinator.startTask(request.taskId, request.occurrenceKey)
-                        OverlayAction.POSTPONE -> coordinator.postponeStart(request.taskId, request.occurrenceKey)
+                        OverlayAction.START -> coordinator.startTask(
+                            request.taskId,
+                            actionRequest(request.occurrenceKey)
+                        )
+                        OverlayAction.POSTPONE -> coordinator.postponeStart(
+                            request.taskId,
+                            actionRequest(request.occurrenceKey)
+                        )
+                        OverlayAction.OPEN_FULL_BLOCKER -> {
+                            startActivity(
+                                Intent(this@OverlayBlockerService, StartBlockerActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    .putExtra(AlarmIntentFactory.EXTRA_TASK_ID, request.taskId)
+                                    .putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, request.occurrenceKey)
+                            )
+                        }
                     }
                 }
             } catch (timeout: TimeoutCancellationException) {
@@ -224,6 +242,12 @@ class OverlayBlockerService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
     }
+
+    private fun actionRequest(occurrenceKey: String): TaskActionRequest = TaskActionRequest(
+        actionId = UUID.randomUUID().toString(),
+        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+        expectedOccurrenceKey = occurrenceKey
+    )
 
     private fun replaceCurrentPresentation(): Long {
         val generation = requestGenerations.next()

@@ -160,7 +160,11 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       ...(body.recurrencePreset === undefined ? {} : { recurrencePreset: body.recurrencePreset }),
       ...(body.timeZone === undefined ? {} : { timeZone: body.timeZone }),
       ...(body.checklistDrafts === undefined ? {} : {
-        checklist: body.checklistDrafts.map((draft) => ({ title: draft.title, description: draft.description }))
+        checklist: body.checklistDrafts.map((draft) => ({
+          clientMutationId: draft.clientMutationId,
+          title: draft.title,
+          description: draft.description
+        }))
       }),
       creatorId: options.currentUserId, now: new Date().toISOString()
     });
@@ -185,7 +189,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   });
   app.post("/tasks/:id/extend", async (request) => {
     const { id } = taskIdParams.parse(request.params);
-    const body = occurrenceActionMetadata.parse(request.body);
+    const body = revisionActionMetadata.parse(request.body);
     await services.actions.extend(id, new Date().toISOString(), body);
     return mutationResponse(body.actionId, undefined, services.snapshots);
   });
@@ -254,9 +258,6 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
 
 function mutationResponse(actionId: string, result: unknown, snapshots: TaskSnapshotService) {
   const snapshot = snapshots.getSnapshot(new Date().toISOString());
-  if (isChecklistMutationResult(result)) {
-    return { actionId, outcome: result.outcome, snapshot, childOutcomes: result.childOutcomes };
-  }
   return { actionId, outcome: "completed", snapshot };
 }
 
@@ -314,12 +315,6 @@ function requiredOccurrenceKey(value: string | null): string {
     });
   }
   return value;
-}
-
-function isChecklistMutationResult(value: unknown): value is { outcome: "completed" | "partial"; childOutcomes: unknown[] } {
-  return typeof value === "object" && value !== null
-    && "outcome" in value && ((value as { outcome?: unknown }).outcome === "completed" || (value as { outcome?: unknown }).outcome === "partial")
-    && "childOutcomes" in value && Array.isArray((value as { childOutcomes?: unknown }).childOutcomes);
 }
 
 function actionIdFromBody(body: unknown): string | null {

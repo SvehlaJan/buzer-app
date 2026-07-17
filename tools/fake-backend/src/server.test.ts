@@ -17,6 +17,14 @@ test("snapshot exposes deterministic nested root scenarios", async (t) => {
   assert.equal(response.statusCode, 200);
   const body = response.json();
   assert.deepEqual(body.tasks.map((task: { id: string }) => task.id), [
+    "task-start",
+    "task-deadline",
+    "task-reschedule",
+    "task-start-fail",
+    "task-deadline-fail",
+    "task-reschedule-fail",
+    "task-invalid",
+    "task-floating-time",
     "task-one-time-empty",
     "task-one-time-partial",
     "task-recurring-all-checked",
@@ -33,6 +41,18 @@ test("snapshot exposes deterministic nested root scenarios", async (t) => {
   assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-reconciliation-pending").reconciliationStatus, "pending");
 });
 
+test("reset restores fixtures at a newer snapshot generation", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const initial = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json();
+
+  await app.inject({ method: "POST", url: "/__reset" });
+
+  const reset = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json();
+  assert.equal(reset.snapshotGeneration, initial.snapshotGeneration + 1);
+  assert.deepEqual(reset.tasks.map((task: { id: string }) => task.id), initial.tasks.map((task: { id: string }) => task.id));
+});
+
 test("checking a focused child advances only its child revision and returns authority", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
@@ -46,11 +66,96 @@ test("checking a focused child advances only its child revision and returns auth
   });
 
   assert.equal(response.statusCode, 200);
+  assert.equal(response.json().outcome, "completed");
+  assert.equal("childOutcomes" in response.json(), false);
   const updated = response.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-partial");
   assert.equal(response.json().outcome, "completed");
   assert.equal(updated.taskRevision, before.taskRevision);
   assert.equal(updated.checklistItems.find((item: { id: string }) => item.id === child.id).childRevision, "r:2");
   assert.equal(updated.checkedCount, 2);
+});
+
+test("adding a focused checklist child preserves the request client mutation ID", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const root = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+
+  const response = await app.inject({
+    method: "POST", url: `/tasks/${root.id}/checklist`, headers: auth,
+    payload: { ...action("add-child", root.occurrenceKey), clientMutationId: "add-child-intent", title: "New child" }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().outcome, "completed");
+  assert.equal("childOutcomes" in response.json(), false);
+});
+
+test("every snapshot-affecting fake mutation advances its global snapshot generation", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json();
+  const root = before.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+
+  const response = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth,
+    payload: action("start-generation", root.occurrenceKey)
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().snapshot.snapshotGeneration, before.snapshotGeneration + 1);
+  const conflict = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth,
+    payload: action("stale-generation", "obsolete-occurrence")
+  });
+  assert.equal(conflict.statusCode, 409);
+  assert.ok(conflict.json().snapshot.snapshotGeneration > 0);
+  assert.equal(conflict.json().snapshot.snapshotGeneration, response.json().snapshot.snapshotGeneration);
+});
+
+test("every fake task mutation category advances the returned authoritative generation exactly once", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const initial = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json();
+  const root = initial.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  let generation = initial.snapshotGeneration;
+  const expectAdvance = (response: { statusCode: number; json: () => { snapshot: { snapshotGeneration: number } } }, statusCode: number) => {
+    assert.equal(response.statusCode, statusCode);
+    generation += 1;
+    assert.equal(response.json().snapshot.snapshotGeneration, generation);
+  };
+
+  const create = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: { actionId: "generation-create", deviceId: "android-test-1", title: "Created", projectId: "project-test", dueDatetime: "2026-06-03T10:00:00.000Z", durationMinutes: 30 }
+  });
+  expectAdvance(create, 200);
+
+  const start = await app.inject({ method: "POST", url: `/tasks/${root.id}/start`, headers: auth, payload: action("generation-start", root.occurrenceKey) });
+  expectAdvance(start, 200);
+  const postpone = await app.inject({ method: "POST", url: `/tasks/${root.id}/postpone-start`, headers: auth, payload: action("generation-postpone", root.occurrenceKey) });
+  expectAdvance(postpone, 200);
+  const extend = await app.inject({ method: "POST", url: `/tasks/${root.id}/extend`, headers: auth, payload: action("generation-extend", root.occurrenceKey) });
+  expectAdvance(extend, 200);
+  const reschedule = await app.inject({ method: "POST", url: `/tasks/${root.id}/reschedule`, headers: auth, payload: { ...action("generation-reschedule", root.occurrenceKey), dueDatetime: "2026-06-02T12:00:00.000Z", durationMinutes: 45 } });
+  expectAdvance(reschedule, 200);
+  const update = await app.inject({ method: "POST", url: `/tasks/${root.id}/update`, headers: auth, payload: { ...action("generation-update", root.occurrenceKey), rootPatch: { expectedTaskRevision: "r:3", title: "Updated" }, childMutations: [] } });
+  expectAdvance(update, 200);
+  const add = await app.inject({ method: "POST", url: `/tasks/${root.id}/checklist`, headers: auth, payload: { ...action("generation-add", root.occurrenceKey), title: "New child" } });
+  expectAdvance(add, 200);
+  const childId = add.json().snapshot.tasks
+    .find((task: { id: string }) => task.id === root.id)
+    .checklistItems.find((item: { title: string }) => item.title === "New child").id;
+  const edit = await app.inject({ method: "POST", url: `/tasks/${root.id}/checklist/${childId}/update`, headers: auth, payload: { ...action("generation-edit", root.occurrenceKey), expectedChildRevision: "r:1", title: "Renamed" } });
+  expectAdvance(edit, 200);
+  const check = await app.inject({ method: "POST", url: `/tasks/${root.id}/checklist/${childId}/check`, headers: auth, payload: { ...action("generation-check", root.occurrenceKey), expectedChildRevision: "r:2" } });
+  expectAdvance(check, 200);
+  const uncheck = await app.inject({ method: "POST", url: `/tasks/${root.id}/checklist/${childId}/uncheck`, headers: auth, payload: { ...action("generation-uncheck", root.occurrenceKey), expectedChildRevision: "r:3" } });
+  expectAdvance(uncheck, 200);
+  const remove = await app.inject({ method: "POST", url: `/tasks/${root.id}/checklist/${childId}/delete`, headers: auth, payload: { ...action("generation-delete", root.occurrenceKey), expectedChildRevision: "r:4" } });
+  expectAdvance(remove, 200);
+  const done = await app.inject({ method: "POST", url: `/tasks/${root.id}/done`, headers: auth, payload: action("generation-done", root.occurrenceKey) });
+  expectAdvance(done, 200);
 });
 
 test("Done rejects a root with unchecked direct children and returns the current snapshot", async (t) => {
@@ -101,7 +206,7 @@ test("recurring Extend remains visible in the snapshot but is rejected", async (
   assert.equal(response.json().snapshot.tasks.find((task: { id: string }) => task.id === root.id).occurrenceKey, root.occurrenceKey);
 });
 
-test("create and edit can return partial child outcomes with their updated snapshots", async (t) => {
+test("ambiguous child creates become pending and invalid child batches are terminal conflicts", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
   const create = await app.inject({
@@ -115,11 +220,10 @@ test("create and edit can return partial child outcomes with their updated snaps
       ]
     }
   });
-  assert.equal(create.statusCode, 201);
-  assert.equal(create.json().outcome, "partial");
-  assert.equal(create.json().childOutcomes[1].outcome, "failed");
-  const created = create.json().snapshot.tasks.find((task: { title: string }) => task.title === "Created root");
-  assert.equal(created.totalCount, 1);
+  assert.equal(create.statusCode, 202);
+  assert.equal(create.json().outcome, "reconciliation_pending");
+  assert.equal("createdRoot" in create.json(), false);
+  assert.equal("childOutcomes" in create.json(), false);
 
   const edit = await app.inject({
     method: "POST", url: "/tasks/task-one-time-partial/update", headers: auth,
@@ -131,9 +235,8 @@ test("create and edit can return partial child outcomes with their updated snaps
       ]
     }
   });
-  assert.equal(edit.statusCode, 200);
-  assert.equal(edit.json().outcome, "partial");
-  assert.equal(edit.json().childOutcomes[1].code, "stale_child");
+  assert.equal(edit.statusCode, 409);
+  assert.equal(edit.json().code, "stale_child");
 });
 
 test("identical action replay returns its stored response while changed bodies conflict", async (t) => {
@@ -181,6 +284,7 @@ test("test controls produce pending, stale, activity full, rate limit, and force
   const pending = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("pending", "occurrence-one-time-empty-1") });
   assert.equal(pending.statusCode, 202);
   assert.equal(pending.json().outcome, "reconciliation_pending");
+  assert.ok(pending.json().snapshot.snapshotGeneration > 0);
   await control("/__stale-actions");
   const stale = await app.inject({ method: "POST", url: "/tasks/task-one-time-empty/start", headers: auth, payload: action("forced-stale", "occurrence-one-time-empty-1") });
   assert.equal(stale.statusCode, 409);

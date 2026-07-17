@@ -26,9 +26,11 @@ export interface TaskSynchronizer {
 }
 
 export interface TaskActionCommandContext {
+  /** The durable journal reservation time: stable across retries of one action ID. */
+  readonly actionCreatedAt: string;
   executeCommand<TResult>(
     stepKey: string,
-    send: (commandUuid: string) => Promise<TResult>,
+    send: (commandUuid: string, tempId: string | null) => Promise<TResult>,
     options?: { tempId?: string | null }
   ): Promise<TResult>;
 }
@@ -36,6 +38,8 @@ export interface TaskActionCommandContext {
 export interface TaskActionEffectContext {
   /** Persisted command steps that may require an authoritative effect check. */
   reservedStepKeys: ReadonlySet<string>;
+  /** Durable command identities/results, used to prove effects without guessing from user content. */
+  commands: ReadonlyMap<string, ActionCommandEntry>;
 }
 
 export interface CoordinatedTaskAction<TResponse = unknown, TPayload = unknown> {
@@ -102,7 +106,11 @@ export class TaskActionCoordinator {
       rootTaskId: action.rootTaskId,
       expectedOccurrenceKey: action.expectedOccurrenceKey,
       actionType: action.actionType,
-      requestFingerprint: actionFingerprint(action.actionType, action.payload),
+      requestFingerprint: actionFingerprint(action.actionType, {
+        payload: action.payload,
+        expectedOccurrenceKey: action.expectedOccurrenceKey,
+        ...(action.expectedTaskRevision === undefined ? {} : { expectedTaskRevision: action.expectedTaskRevision })
+      }),
       now: this.now()
     });
 
@@ -133,9 +141,10 @@ export class TaskActionCoordinator {
       const effect = this.effectStatus(resolvedAction, root, effectContext);
       let sentCommand = false;
       const commandContext: TaskActionCommandContext = {
+        actionCreatedAt: current.createdAt,
         executeCommand: async <TResult>(
           stepKey: string,
-          send: (commandUuid: string) => Promise<TResult>,
+          send: (commandUuid: string, tempId: string | null) => Promise<TResult>,
           commandOptions?: { tempId?: string | null }
         ) => {
           if (resolvedAction.responseAfterReconciliation === undefined) {
@@ -150,7 +159,7 @@ export class TaskActionCoordinator {
             this.journal.markCommandSent(resolvedAction.actionId, stepKey, this.now());
           }
           sentCommand = true;
-          const result = await send(command.commandUuid);
+          const result = await send(command.commandUuid, command.tempId);
           this.journal.markCommandConfirmed(resolvedAction.actionId, stepKey, storedCommandResult(result), this.now());
           return result;
         }
@@ -185,7 +194,18 @@ export class TaskActionCoordinator {
         throw error;
       }
 
-      const response = await resolvedAction.execute(commandContext);
+      let response: TResponse;
+      try {
+        response = await resolvedAction.execute(commandContext);
+      } catch (error) {
+        if (sentCommand || this.journal.hasDispatchedCommand(resolvedAction.actionId)) {
+          return this.markPending(resolvedAction, pendingResponse(current.error) ?? null, error);
+        }
+        if (error instanceof DomainError && error.statusCode !== 202) {
+          this.journal.markFailed(resolvedAction.actionId, serializeDomainError(error), this.now());
+        }
+        throw error;
+      }
 
       try {
         await this.options.sync.syncOnce();
@@ -287,12 +307,13 @@ export class TaskActionCoordinator {
   }
 
   private effectContext(actionId: string): TaskActionEffectContext {
+    const commands = this.journal.listCommands(actionId);
     const reservedStepKeys = new Set(
-      this.journal.listCommands(actionId)
+      commands
         .filter((command) => command.status !== "failed")
         .map((command) => command.stepKey)
     );
-    return { reservedStepKeys };
+    return { reservedStepKeys, commands: new Map(commands.map((command) => [command.stepKey, command])) };
   }
 
   private markPending<TResponse>(

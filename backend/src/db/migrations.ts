@@ -24,6 +24,11 @@ export function migrate(db: Database.Database): void {
     }
     ensureActionJournalGuards(db);
     backfillOccurrences(db);
+    const migrationThreeApplied = db.prepare("select 1 from schema_migrations where version = 3").get() !== undefined;
+    if (!migrationThreeApplied) {
+      migrateToVersionThree(db);
+      db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(3, new Date().toISOString());
+    }
   });
 
   tx();
@@ -100,6 +105,34 @@ function ensureActionJournalGuards(db: Database.Database): void {
       select raise(abort, 'task_action_journal.action_id must not be null');
     end
   `);
+}
+
+/**
+ * The snapshot endpoint projects these three tables.  SQLite trigger bodies run
+ * in the same transaction as their originating statement, so a committed
+ * generation always identifies a complete committed projection and a rollback
+ * advances nothing.
+ */
+function migrateToVersionThree(db: Database.Database): void {
+  db.exec(`
+    create table if not exists snapshot_generations (
+      id integer primary key check (id = 1),
+      generation integer not null check (generation >= 1)
+    );
+  `);
+  db.prepare("insert or ignore into snapshot_generations (id, generation) values (1, 1)").run();
+
+  for (const table of ["todoist_tasks", "commitment_states", "todoist_projects"]) {
+    for (const operation of ["insert", "update", "delete"]) {
+      db.exec(`
+        create trigger if not exists ${table}_snapshot_generation_after_${operation}
+        after ${operation} on ${table}
+        begin
+          update snapshot_generations set generation = generation + 1 where id = 1;
+        end;
+      `);
+    }
+  }
 }
 
 function backfillOccurrences(db: Database.Database): void {

@@ -1,7 +1,5 @@
 package app.buzer.shared.ui.commitment
 
-import app.buzer.shared.model.ChecklistMutationOutcome
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskRecurrence
@@ -171,22 +169,6 @@ fun validateChecklistMutationBatch(mutations: List<ChecklistEditorMutationState>
     }
 }
 
-fun retainFailedChecklistMutations(
-    mutations: List<ChecklistEditorMutationState>,
-    outcomes: List<ChecklistMutationOutcome>
-): List<ChecklistEditorMutationState> {
-    validateChecklistMutationBatch(mutations)
-    val failedOutcomes = outcomes
-        .filter { it.outcome == MutationOutcome.failed || it.outcome == MutationOutcome.stale_child }
-        .associateBy { it.clientMutationId }
-
-    return mutations.mapNotNull { mutation ->
-        failedOutcomes[mutation.clientMutationId]?.let { outcome ->
-            mutation.withFailure(outcome.errorCode)
-        }
-    }
-}
-
 private fun requireChecklistMutationIdentity(
     clientMutationId: String,
     childId: String,
@@ -213,16 +195,4 @@ fun validateChecklistDrafts(drafts: List<ChecklistEditorDraft>): ChecklistDraftV
         bannerMessage = if (drafts.size > 30) "A checklist can have at most 30 items" else null,
         invalidDraftIds = invalidIds
     )
-}
-
-fun retainFailedChecklistDrafts(
-    drafts: List<ChecklistEditorDraft>,
-    outcomes: List<ChecklistMutationOutcome>
-): List<ChecklistEditorDraft> {
-    val failures = outcomes
-        .filter { it.outcome == MutationOutcome.failed || it.outcome == MutationOutcome.stale_child }
-        .associateBy { it.clientMutationId }
-    return drafts.mapNotNull { draft ->
-        failures[draft.clientMutationId]?.let { outcome -> draft.copy(failureCode = outcome.errorCode) }
-    }
 }

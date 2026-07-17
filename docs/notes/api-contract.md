@@ -57,9 +57,32 @@ interface TaskSnapshotItem {
   deadlineExtensionCount: number;
   escalationSentAt: string | null;
   updatedAt: string;
+  occurrenceKey: string;
+  taskRevision: string;
+  recurrence: {
+    kind: "none" | "supported" | "custom";
+    preset: "never" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly" | null;
+    rule: string | null;
+    displayLabel: string;
+  };
+  checklistItems: Array<{
+    /** Mirror-local ID. Send this value in focused checklist route paths. */
+    id: string;
+    title: string;
+    description: string | null;
+    checked: boolean;
+    childRevision: string;
+    order: number;
+  }>;
+  checkedCount: number;
+  totalCount: number;
+  activityLogEntries: Array<{ timestamp: string; message: string }>;
 }
 
 interface TasksSnapshotResponse {
+  /** Durable, global, strictly monotonic generation for the complete projection. */
+  snapshotGeneration: number;
+  /** Per-root scheduling revision retained for alarm calculation compatibility. */
   scheduleVersion: number;
   serverTime: string;
   tasks: TaskSnapshotItem[];
@@ -89,6 +112,12 @@ interface ApiError {
   message: string;
   details?: Record<string, unknown>;
 }
+
+interface MutationResponse {
+  actionId: string;
+  outcome: "completed" | "reconciliation_pending";
+  snapshot: TasksSnapshotResponse;
+}
 ```
 
 ## Endpoints
@@ -96,6 +125,27 @@ interface ApiError {
 ### `GET /tasks/snapshot`
 
 Returns the latest task snapshot for Android alarm reconciliation and UI.
+
+Every v3 task snapshot, including the nested `snapshot` in a successful
+mutation response and in a `409` conflict body, contains `snapshotGeneration`.
+It is a durable global integer maintained by SQLite in the same transaction as
+every write to `todoist_tasks`, `commitment_states`, or `todoist_projects`. It
+starts at `1` for a migrated database and never decreases; a rolled-back
+transaction does not advance it. Android treats a positive generation as an
+opaque total-order token and persists/reconciles it only when greater than the
+cached positive generation. This property is required on every network
+snapshot: a missing value rejects a GET or successful/202 mutation, and a 409
+must include both an authoritative snapshot and its generation instead of
+silently becoming zero. Only Android `SnapshotStore` may
+migrate an already-persisted pre-v3 cache by writing generation `0`; zero is
+unorderable legacy authority and must be replaced by the next positive
+authoritative snapshot, not compared as a normal generation. `scheduleVersion`
+remains a per-root scheduling compatibility value and must not be used to order
+complete snapshots across phones.
+
+The local cache rewrite uses a temporary file and rename. If that persistence
+step fails, Android logs it but retains the decoded generation-`0` cache until a
+positive server snapshot replaces it.
 
 ### `GET /projects`
 
@@ -113,9 +163,69 @@ Request:
   "projectId": "todoist-project-id-or-null",
   "assigneeId": "todoist-user-id",
   "dueDatetime": "2026-05-08T16:00:00Z",
-  "durationMinutes": 30
+  "durationMinutes": 30,
+  "recurrencePreset": "monthly",
+  "timeZone": "Europe/Bratislava",
+  "checklistDrafts": [
+    { "clientMutationId": "child-create-1", "title": "Read meter", "description": null }
+  ],
+  "actionId": "uuid-per-user-intent",
+  "deviceId": "stable-device-uuid"
 }
 ```
+
+Returns `200` plus `MutationResponse` only after every requested Todoist
+command and the following authoritative refresh are confirmed. If any command
+was sent but its result cannot be proved, it returns `202 reconciliation_pending`
+instead. Clients refresh the snapshot and reuse the same action ID; the backend
+never exposes a partial child result or asks clients to retry individual drafts.
+
+### `POST /tasks/:id/update`
+
+Edits an authoritative root and direct children. The request carries the
+root's occurrence/revision preconditions; every existing-child mutation carries
+its own child revision.
+
+```json
+{
+  "actionId": "uuid-per-user-intent",
+  "deviceId": "stable-device-uuid",
+  "expectedOccurrenceKey": "task-42:3",
+  "rootPatch": {
+    "expectedTaskRevision": "r:12",
+    "title": "Pay electricity bill",
+    "description": "Use the June reading",
+    "dueDatetime": "2026-06-08T16:00:00Z",
+    "durationMinutes": 30,
+    "recurrencePreset": "monthly",
+    "timeZone": "Europe/Bratislava"
+  },
+  "childMutations": [
+    { "type": "edit", "clientMutationId": "child-edit-1", "childId": "child-1", "expectedChildRevision": "r:2", "title": "Read meter" },
+    { "type": "check", "clientMutationId": "child-check-2", "childId": "child-2", "expectedChildRevision": "r:4" }
+  ]
+}
+```
+
+The server accepts only direct children; it does not expose a parent selector,
+child schedules, reordering, or grandchildren. A custom Todoist recurrence is
+read-only until a numbered supported preset explicitly replaces it.
+
+### Checklist routes
+
+- `POST /tasks/:id/checklist` adds one direct child.
+- `POST /tasks/:id/checklist/:childId/update` edits title/description.
+- `POST /tasks/:id/checklist/:childId/delete` removes a direct child.
+- `POST /tasks/:id/checklist/:childId/check` and `/uncheck` toggle a child.
+
+Each path requires `actionId`, `deviceId`, `expectedOccurrenceKey`, and, for an
+existing child, `expectedChildRevision`. They return `MutationResponse`; a
+focused check/uncheck advances that child's revision only. Checking the last
+child never completes its root—the explicit `/done` action remains required.
+`childId` is the snapshot's mirror-local `ChecklistItem.id`; the backend
+resolves it to Todoist's opaque task ID internally. A temporary legacy Todoist
+ID fallback exists only for already-issued older clients and is not part of the
+current client contract.
 
 ### `POST /tasks/:id/start`
 
@@ -143,6 +253,24 @@ Request:
   "durationMinutes": 45
 }
 ```
+
+## Mutation outcomes and errors
+
+- `200 completed`: apply the returned authoritative snapshot exactly
+  once; do not immediately fetch another snapshot.
+- `202 reconciliation_pending`: retain the returned snapshot, show syncing
+  state, and do not speculate on alarms or checklist state.
+- `409 stale_occurrence` / `stale_child`: body includes an authoritative
+  snapshot. Apply it, retain caller-owned editor drafts, and ask the user to
+  reapply deliberate changes.
+- `422 activity_log_full`: no local mutation; show the server's reason.
+- `429 rate_limited`: honor `Retry-After`; retry only the exact captured request
+  and its action ID after that interval.
+
+All task/checklist routes require bearer authentication. Unauthenticated calls
+return `401`; unmatched paths return `404`. Backend, local, fake, and tailnet
+base URLs serve unprefixed paths. Only the public Funnel base has `/buzer`, and
+Funnel strips that mount before the request reaches the backend.
 
 ### `POST /review/dismiss`
 

@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
@@ -50,6 +50,52 @@ describe("TaskSnapshotService", () => {
     expect(snapshot.tasks[0]?.description).toBe("Bring printed form");
     expect(snapshot.tasks[0]?.validationErrors).toEqual([]);
     expect(snapshot.scheduleVersion).toBe(1);
+    expect(snapshot.snapshotGeneration).toBeGreaterThan(1);
+  });
+
+  it("returns a newer global generation after any projected commitment-state mutation", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-generation",
+      todoistTaskId: "todoist-generation",
+      title: "Generation task",
+      description: null,
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "wife",
+      dueDatetime: "2026-07-16T12:00:00Z",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-16T10:00:00Z"
+    });
+    const service = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self");
+    const before = service.getSnapshot("2026-07-16T10:00:00Z");
+
+    repo.updateCommitmentState("task-generation", {
+      state: "started",
+      startedAt: "2026-07-16T10:05:00Z",
+      updatedAt: "2026-07-16T10:05:00Z"
+    });
+    const after = service.getSnapshot("2026-07-16T10:05:00Z");
+
+    expect(after.snapshotGeneration).toBeGreaterThan(before.snapshotGeneration);
+    expect(after.tasks[0]?.state).toBe("started");
+  });
+
+  it("reads task rows, project policy, and generation inside one SQLite read transaction", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const service = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self");
+    const transaction = vi.spyOn(db, "transaction");
+
+    service.getSnapshot("2026-07-16T10:00:00Z");
+
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it("marks assigned tasks without strict fields invalid", () => {

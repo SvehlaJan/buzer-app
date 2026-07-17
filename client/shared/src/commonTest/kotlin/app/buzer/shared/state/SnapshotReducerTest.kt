@@ -34,7 +34,8 @@ class SnapshotReducerTest {
                 scheduleVersion = 7,
                 serverTime = "2026-05-08T07:00:00Z",
                 tasks = listOf(root),
-                health = emptyList()
+                health = emptyList(),
+                snapshotGeneration = 1
             )
         )
 
@@ -52,7 +53,8 @@ class SnapshotReducerTest {
                 task("unsupported", CommitmentState.planned, hierarchyStatus = HierarchyStatus.unsupported),
                 task("pending", CommitmentState.planned, reconciliationStatus = ReconciliationStatus.pending)
             ),
-            health = emptyList()
+            health = emptyList(),
+            snapshotGeneration = 1
         )
 
         val result = SnapshotReducer.reduce(snapshot)
@@ -74,7 +76,13 @@ class SnapshotReducerTest {
         )
         val cached = SnapshotWithCallerDraft(
             viewState = SnapshotReducer.reduce(
-                TasksSnapshotResponse(1, "2026-05-08T07:00:00Z", listOf(task("task", CommitmentState.planned, occurrenceKey = "old-occurrence")), emptyList())
+                TasksSnapshotResponse(
+                    scheduleVersion = 1,
+                    serverTime = "2026-05-08T07:00:00Z",
+                    tasks = listOf(task("task", CommitmentState.planned, occurrenceKey = "old-occurrence")),
+                    health = emptyList(),
+                    snapshotGeneration = 1
+                )
             ),
             callerDraft = draft
         )
@@ -82,7 +90,8 @@ class SnapshotReducerTest {
             scheduleVersion = 2,
             serverTime = "2026-05-08T07:01:00Z",
             tasks = listOf(task("task", CommitmentState.planned, occurrenceKey = "next-occurrence")),
-            health = emptyList()
+            health = emptyList(),
+            snapshotGeneration = 2
         )
 
         val replaced = SnapshotReducer.replaceAuthoritative(cached, authoritative)
@@ -107,7 +116,8 @@ class SnapshotReducerTest {
             health = listOf(
                 HealthStatus("backend", HealthLevel.ok, "Backend OK"),
                 HealthStatus("whatsapp", HealthLevel.warning, "WhatsApp disconnected")
-            )
+            ),
+            snapshotGeneration = 1
         )
 
         val result = SnapshotReducer.reduce(snapshot)

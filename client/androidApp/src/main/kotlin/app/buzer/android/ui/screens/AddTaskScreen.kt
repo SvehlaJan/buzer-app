@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
+import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFailurePresentation
 import app.buzer.android.ui.addtask.AddTaskFormResult
@@ -38,23 +39,30 @@ import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.CommitmentEditor
+import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.RecurrencePreset
+import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.ui.commitment.ChecklistEditorDraft
+import app.buzer.shared.ui.commitment.validateChecklistDrafts
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import app.buzer.shared.ui.commitment.CommitmentEditorValidation
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskScreen(
     onBack: () -> Unit,
-    onTaskCreated: () -> Unit = {},
-    createTask: suspend (CreateTaskRequest) -> Unit = AddTaskDependencies.createTaskAction(),
+    onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
+    createTask: suspend (CreateTaskRequest) -> app.buzer.shared.model.MutationResponse = AddTaskDependencies.createTaskAction(),
     assigneeOptions: List<AddTaskAssigneeOption> = AddTaskDependencies.assigneeOptions(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -101,6 +109,12 @@ fun AddTaskScreen(
     var errorText by remember { mutableStateOf<String?>(null) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
+    var pendingCreateRequest by remember { mutableStateOf<CreateTaskRequest?>(null) }
+    var recurrencePreset by remember { mutableStateOf(RecurrencePreset.never) }
+    var checklistDrafts by remember { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
+    val deviceId = remember(context) {
+        EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
+    }
     val projectFeedbackMessage = if (projectLoadDialogMessage != null) {
         null
     } else {
@@ -182,6 +196,11 @@ fun AddTaskScreen(
 
     fun validateAndSubmit() {
         if (submitting) return
+        val checklistValidation = validateChecklistDrafts(checklistDrafts)
+        if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
+            errorText = checklistValidation.bannerMessage ?: "Each checklist item needs a title"
+            return
+        }
         AppLog.info(
             "add_task submit_clicked titleLength=${title.length} project=${selectedProject?.id} assignee=${selectedAssignee?.id} " +
                 "deadline=${deadline.receiptLabel} durationInput=$durationMinutes"
@@ -193,7 +212,12 @@ fun AddTaskScreen(
                 selectedAssignee,
                 deadline.toSelection(),
                 durationMinutes,
-                description = description
+                description = description,
+                recurrencePreset = recurrencePreset,
+                timeZone = java.time.ZoneId.systemDefault().id,
+                checklistDrafts = checklistDrafts.map { draft ->
+                    ChecklistDraft(draft.clientMutationId, draft.title.trim(), draft.description)
+                }
             )
         ) {
             is AddTaskFormResult.Invalid -> {
@@ -207,7 +231,11 @@ fun AddTaskScreen(
             }
             is AddTaskFormResult.Valid -> {
                 invalidField = null
-                submitRequest(result.request)
+                val request = pendingCreateRequest ?: result.request.copy(
+                    actionId = UUID.randomUUID().toString(),
+                    deviceId = deviceId
+                ).also { pendingCreateRequest = it }
+                submitRequest(request)
             }
         }
     }
@@ -257,12 +285,16 @@ fun AddTaskScreen(
             title = title,
             onTitleChange = {
                 title = it
+                pendingCreateRequest = null
                 errorText = null
                 invalidField = null
             },
             titleEditable = true,
             description = description,
-            onDescriptionChange = { description = it },
+            onDescriptionChange = {
+                description = it
+                pendingCreateRequest = null
+            },
             descriptionExpanded = descriptionExpanded,
             onDescriptionExpandedChange = { descriptionExpanded = it },
             projectContent = {
@@ -275,6 +307,7 @@ fun AddTaskScreen(
                     onProjectSelected = { project ->
                         selectedProject = project
                         selectedAssignee = null
+                        pendingCreateRequest = null
                         persistProjectId(project.id)
                         projectMenuExpanded = false
                         errorText = null
@@ -290,6 +323,7 @@ fun AddTaskScreen(
                     selectedAssignee = selectedAssignee,
                     onAssigneeSelected = { option ->
                         selectedAssignee = option
+                        pendingCreateRequest = null
                         errorText = null
                         invalidField = null
                     },
@@ -299,14 +333,32 @@ fun AddTaskScreen(
             start = deadline,
             onStartChange = {
                 deadline = it
+                pendingCreateRequest = null
                 errorText = null
                 invalidField = null
             },
             durationMinutes = durationMinutes,
             onDurationChange = {
                 durationMinutes = it
+                pendingCreateRequest = null
                 errorText = null
                 invalidField = null
+            },
+            recurrencePreset = recurrencePreset,
+            onRecurrencePresetChange = {
+                recurrencePreset = it
+                pendingCreateRequest = null
+            },
+            checklistContent = {
+                ChecklistEditor(
+                    drafts = checklistDrafts,
+                    onDraftsChange = {
+                        checklistDrafts = it
+                        pendingCreateRequest = null
+                    },
+                    nextClientMutationId = { UUID.randomUUID().toString() },
+                    enabled = !submitState.formDisabled
+                )
             },
             validation = CommitmentEditorValidation(
                 bannerMessage = errorText,

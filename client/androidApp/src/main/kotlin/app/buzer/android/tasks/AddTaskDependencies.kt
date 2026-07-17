@@ -6,6 +6,7 @@ import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.MutationResponse
 
 object AddTaskDependencies {
     private var cachedProjectRepository: AddTaskProjectRepository? = null
@@ -35,7 +36,7 @@ object AddTaskDependencies {
     fun projectSelectionStore(context: Context): ProjectSelectionStore =
         ProjectSelectionStore(context)
 
-    fun createTaskAction(): suspend (CreateTaskRequest) -> Unit = { request ->
+    fun createTaskAction(): suspend (CreateTaskRequest) -> MutationResponse = { request ->
         val baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/')
         AppLog.info(
             "add_task dependency create requested baseUrlConfigured=${baseUrl.isNotBlank()} " +
@@ -50,11 +51,12 @@ object AddTaskDependencies {
             "BUZER_BACKEND_TOKEN is missing from client/local.properties"
         }
         try {
-            BuzerApiClient(
+            val response = BuzerApiClient(
                 baseUrl = baseUrl,
                 token = BuildConfig.BUZER_BACKEND_TOKEN
             ).createTask(request)
-            AppLog.info("add_task dependency create completed")
+            AppLog.info("add_task dependency create completed outcome=${response.outcome}")
+            response
         } catch (error: Throwable) {
             AppLog.error("add_task dependency create failed type=${error::class.simpleName} message=${error.message}", error)
             throw error

@@ -156,7 +156,7 @@ describe("TaskActionCoordinator", () => {
       }
     });
 
-    await expect(first.execute(request)).rejects.toThrow("simulated crash");
+    await expect(first.execute(request)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
     let replaySyncCalls = 0;
     const recovered = new TaskActionCoordinator({
       db,
@@ -199,7 +199,7 @@ describe("TaskActionCoordinator", () => {
       }
     });
 
-    await expect(coordinator.execute(request)).rejects.toThrow("interrupted after move");
+    await expect(coordinator.execute(request)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
     const replay = await coordinator.execute({
       ...request,
       execute: async (context) => {
@@ -228,7 +228,7 @@ describe("TaskActionCoordinator", () => {
       return { snoozedUntil: "never" };
     }, isEffectPresent: () => effectPresent });
 
-    await expect(coordinator.execute(timeout)).rejects.toThrow("timeout");
+    await expect(coordinator.execute(timeout)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
     const retry = await coordinator.execute(action({ execute: async (context) => {
       await context.executeCommand("postpone", async (commandUuid) => {
         sentUuids.push(commandUuid);
@@ -254,7 +254,7 @@ describe("TaskActionCoordinator", () => {
       return { snoozedUntil: "never" };
     } });
 
-    await expect(coordinator.execute(timeout)).rejects.toThrow("timeout");
+    await expect(coordinator.execute(timeout)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
     const retry = await coordinator.execute(action({ execute: async (context) => {
       await context.executeCommand("postpone", async (commandUuid) => { sentUuids.push(commandUuid); });
       return { snoozedUntil: "2026-07-15T09:05:00Z" };
@@ -281,7 +281,7 @@ describe("TaskActionCoordinator", () => {
       responseAfterReconciliation: () => ({ snoozedUntil: "2026-07-15T09:05:00Z" })
     });
 
-    await expect(coordinator.execute(request)).rejects.toThrow("timeout");
+    await expect(coordinator.execute(request)).resolves.toEqual({ kind: "pending", actionId: "action-1" });
     effectPresent = true;
     const retryExecute = vi.fn();
     const replay = await coordinator.execute({ ...request, execute: retryExecute });

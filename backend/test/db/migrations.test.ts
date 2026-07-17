@@ -3,6 +3,91 @@ import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 
 describe("migrate", () => {
+  it("creates a durable global snapshot generation advanced by projected-table writes", () => {
+    const db = new Database(":memory:");
+
+    migrate(db);
+
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 1 });
+    const rolledBackWrite = db.transaction(() => {
+      db.prepare(`
+        insert into todoist_projects (
+          todoist_project_id, name, shared, can_assign_tasks, is_inbox_project,
+          is_deleted, is_archived, raw_json, updated_at
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("project-rolled-back", "Rolled back", 0, 1, 0, 0, 0, "{}", "2026-07-16T10:00:00Z");
+      throw new Error("force rollback");
+    });
+    expect(rolledBackWrite).toThrow("force rollback");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 1 });
+    db.prepare(`
+      insert into todoist_projects (
+        todoist_project_id, name, shared, can_assign_tasks, is_inbox_project,
+        is_deleted, is_archived, raw_json, updated_at
+      ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("project-generation", "Generation", 0, 1, 0, 0, 0, "{}", "2026-07-16T10:00:00Z");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 2 });
+    db.prepare("update todoist_projects set name = ? where todoist_project_id = ?").run("Renamed", "project-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 3 });
+    db.prepare("delete from todoist_projects where todoist_project_id = ?").run("project-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 4 });
+    db.prepare(`
+      insert into todoist_tasks (id, todoist_task_id, title, raw_json, updated_at)
+      values (?, ?, ?, ?, ?)
+    `).run("task-generation", "todoist-task-generation", "Task", "{}", "2026-07-16T10:00:00Z");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 5 });
+    db.prepare("update todoist_tasks set title = ? where id = ?").run("Renamed task", "task-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 6 });
+    const rolledBackCommitmentWrite = db.transaction(() => {
+      db.prepare(`
+        insert into commitment_states (task_id, state, updated_at)
+        values (?, ?, ?)
+      `).run("task-generation", "planned", "2026-07-16T10:00:00Z");
+      throw new Error("rollback commitment");
+    });
+    expect(rolledBackCommitmentWrite).toThrow("rollback commitment");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 6 });
+    db.prepare(`
+      insert into commitment_states (task_id, state, updated_at)
+      values (?, ?, ?)
+    `).run("task-generation", "planned", "2026-07-16T10:00:00Z");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 7 });
+    db.prepare("update commitment_states set state = ? where task_id = ?").run("started", "task-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 8 });
+    db.prepare("delete from commitment_states where task_id = ?").run("task-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 9 });
+    db.prepare("delete from todoist_tasks where id = ?").run("task-generation");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 10 });
+  });
+
+  it("applies the explicit v3 generation migration to an existing v2 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      drop trigger todoist_tasks_snapshot_generation_after_insert;
+      drop trigger todoist_tasks_snapshot_generation_after_update;
+      drop trigger todoist_tasks_snapshot_generation_after_delete;
+      drop trigger commitment_states_snapshot_generation_after_insert;
+      drop trigger commitment_states_snapshot_generation_after_update;
+      drop trigger commitment_states_snapshot_generation_after_delete;
+      drop trigger todoist_projects_snapshot_generation_after_insert;
+      drop trigger todoist_projects_snapshot_generation_after_update;
+      drop trigger todoist_projects_snapshot_generation_after_delete;
+      drop table snapshot_generations;
+      delete from schema_migrations where version = 3;
+    `);
+
+    migrate(db);
+
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 1 });
+    expect(db.prepare("select version from schema_migrations where version = 3").get()).toEqual({ version: 3 });
+    db.prepare(`
+      insert into todoist_tasks (id, todoist_task_id, title, raw_json, updated_at)
+      values (?, ?, ?, ?, ?)
+    `).run("v2-task", "v2-todoist-task", "V2 task", "{}", "2026-07-16T10:00:00Z");
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 2 });
+  });
+
   it("creates core tables and enables WAL", () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -12,6 +97,7 @@ describe("migrate", () => {
       "commitment_states",
       "devices",
       "schema_migrations",
+      "snapshot_generations",
       "task_action_commands",
       "task_action_journal",
       "todoist_projects",
@@ -425,7 +511,8 @@ describe("migrate", () => {
     expect(db.prepare("select * from todoist_sync_state").all()).toEqual([]);
     expect(db.prepare("select version from schema_migrations order by version").all()).toEqual([
       { version: 1 },
-      { version: 2 }
+      { version: 2 },
+      { version: 3 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;

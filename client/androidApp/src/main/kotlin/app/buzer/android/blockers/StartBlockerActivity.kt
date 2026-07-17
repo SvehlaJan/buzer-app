@@ -17,11 +17,13 @@ import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.StartBlockerScreen
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.blockers.BlockerKind
 import app.buzer.shared.ui.blockers.buildBlockerUiModel
 import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -142,13 +144,13 @@ class StartBlockerActivity : ComponentActivity() {
                 model = blockerModel,
                 onStart = {
                     AppLog.info("start_blocker start_clicked taskId=$taskId occurrence=$occurrenceKey")
-                    runActionOnce("Starting...", occurrenceKey) { coordinator.startTask(taskId, occurrenceKey) }
+                    val request = actionRequest(occurrenceKey)
+                    runActionOnce("Starting...", occurrenceKey) { coordinator.startTask(taskId, request) }
                 },
                 onPostpone = {
                     AppLog.info("start_blocker postpone_clicked taskId=$taskId occurrence=$occurrenceKey")
-                    runActionOnce("Postponing...", occurrenceKey) {
-                        coordinator.postponeStart(taskId, occurrenceKey)
-                    }
+                    val request = actionRequest(occurrenceKey)
+                    runActionOnce("Postponing...", occurrenceKey) { coordinator.postponeStart(taskId, request) }
                 },
                 onBack = { finish() },
                 showBack = false,
@@ -197,6 +199,10 @@ class StartBlockerActivity : ComponentActivity() {
                         errorMessage = result.message
                         actionState = BlockerActionState.Failed(result.message)
                     }
+                    else -> {
+                        errorMessage = "Action requires attention"
+                        actionState = BlockerActionState.Failed(errorMessage!!)
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -216,6 +222,12 @@ class StartBlockerActivity : ComponentActivity() {
     private companion object {
         const val BLOCKER_REFRESH_TIMEOUT_MILLIS = 5_000L
     }
+
+    private fun actionRequest(occurrenceKey: String): TaskActionRequest = TaskActionRequest(
+        actionId = UUID.randomUUID().toString(),
+        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+        expectedOccurrenceKey = occurrenceKey
+    )
 }
 
 private fun TasksSnapshotResponse.findTask(taskId: String): TaskSnapshotItem? =

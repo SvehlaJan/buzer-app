@@ -28,6 +28,8 @@ import app.buzer.shared.ui.commitment.CommitmentEditorValidation
 import app.buzer.shared.ui.commitment.MinuteOfDay
 import app.buzer.shared.ui.commitment.formatDurationLabel
 import app.buzer.shared.ui.commitment.formatSaveLabel
+import app.buzer.shared.model.RecurrencePreset
+import app.buzer.shared.ui.commitment.recurrenceChoices
 import java.time.format.DateTimeFormatter
 
 fun commitmentSaveLabel(start: DateTimeSelection?, durationMinutes: Int): String =
@@ -49,6 +51,9 @@ fun CommitmentEditor(
     onStartChange: (DateTimeDraftSelection) -> Unit,
     durationMinutes: Int,
     onDurationChange: (Int) -> Unit,
+    recurrencePreset: RecurrencePreset? = null,
+    onRecurrencePresetChange: ((RecurrencePreset) -> Unit)? = null,
+    checklistContent: @Composable (() -> Unit)? = null,
     validation: CommitmentEditorValidation,
     submitting: Boolean,
     enabled: Boolean,
@@ -140,6 +145,30 @@ fun CommitmentEditor(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+
+        if (onRecurrencePresetChange != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Text("Repeat", style = MaterialTheme.typography.labelMedium)
+                recurrenceChoices.forEach { choice ->
+                    val selected = recurrencePreset == choice.preset
+                    if (selected) {
+                        OutlinedButton(
+                            onClick = { onRecurrencePresetChange(choice.preset) },
+                            enabled = enabled && !submitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("${choice.number}. ${choice.label} selected") }
+                    } else {
+                        TextButton(
+                            onClick = { onRecurrencePresetChange(choice.preset) },
+                            enabled = enabled && !submitting,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("${choice.number}. ${choice.label}") }
+                    }
+                }
+            }
+        }
+
+        checklistContent?.invoke()
 
         Row(
             modifier = Modifier.fillMaxWidth(),

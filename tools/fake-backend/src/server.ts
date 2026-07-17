@@ -26,6 +26,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   });
 
   const currentSnapshot = () => snapshot(state);
+  const advanceSnapshotGeneration = () => { state.snapshotGeneration++; };
   const respond = (reply: FastifyReply, statusCode: number, body: unknown, headers?: Record<string, string>) => {
     for (const [name, value] of Object.entries(headers ?? {})) reply.header(name, value);
     return reply.code(statusCode).send(body);
@@ -67,8 +68,8 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     saveReplay(body, result);
     return respond(reply, result.statusCode, result.body, result.headers);
   }
-  function completed(actionId: unknown, outcome: "completed" | "partial" = "completed", childOutcomes?: unknown[]) {
-    return { statusCode: 200, body: { ...(typeof actionId === "string" ? { actionId } : {}), outcome, snapshot: currentSnapshot(), ...(childOutcomes === undefined ? {} : { childOutcomes }) } };
+  function completed(actionId: unknown) {
+    return { statusCode: 200, body: { ...(typeof actionId === "string" ? { actionId } : {}), outcome: "completed", snapshot: currentSnapshot() } };
   }
   function pending(actionId: unknown) { return { statusCode: 202, body: { ...(typeof actionId === "string" ? { actionId } : {}), outcome: "reconciliation_pending", snapshot: currentSnapshot() } }; }
 
@@ -81,7 +82,21 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     ] };
   });
   app.get("/__calls", async () => ({ calls }));
-  app.post("/__reset", async () => { calls.splice(0); state = createFixtureState(); replays.clear(); Object.assign(controls, { pending: false, stale: false, activityLogFull: false, rateLimit: false }); failActions = options.failActions ?? false; failSnapshot = false; failProjects = false; return { ok: true }; });
+  app.post("/__reset", async () => {
+    // Test clients retain their last authoritative snapshot. Resetting to generation 1 would
+    // deliberately be rejected as stale by the production coordinator, so fixture resets
+    // represent a new authoritative snapshot instead.
+    const nextSnapshotGeneration = state.snapshotGeneration + 1;
+    calls.splice(0);
+    state = createFixtureState();
+    state.snapshotGeneration = nextSnapshotGeneration;
+    replays.clear();
+    Object.assign(controls, { pending: false, stale: false, activityLogFull: false, rateLimit: false });
+    failActions = options.failActions ?? false;
+    failSnapshot = false;
+    failProjects = false;
+    return { ok: true };
+  });
   app.post<{ Body: { enabled?: boolean } }>("/__fail-actions", async (request) => ({ failActions: failActions = request.body?.enabled === true }));
   app.post<{ Body: { enabled?: boolean } }>("/__fail-snapshot", async (request) => ({ failSnapshot: failSnapshot = request.body?.enabled === true }));
   app.post<{ Body: { enabled?: boolean } }>("/__fail-projects", async (request) => ({ failProjects: failProjects = request.body?.enabled === true }));
@@ -94,13 +109,12 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     if (controls.pending) return pending(body.actionId);
     const id = `created-task-${state.tasks.filter((item) => item.id.startsWith("created-task-")).length + 1}`;
     const drafts = Array.isArray(body.checklistDrafts) ? body.checklistDrafts : [];
-    const items: FakeChecklistItem[] = [];
-    const childOutcomes = drafts.map((draft, index) => {
+    const hasAmbiguousChildCreate = drafts.some((draft) => (draft as Record<string, unknown>).title === "[partial-failure]");
+    if (hasAmbiguousChildCreate) return pending(body.actionId);
+    const items = drafts.map((draft, index) => {
       const item = draft as Record<string, unknown>;
-      if (item.title === "[partial-failure]") return { clientMutationId: item.clientMutationId, outcome: "failed", code: "simulated_child_failure" };
       const created = { id: `${id}-child-${index + 1}`, title: String(item.title ?? "Checklist item"), description: typeof item.description === "string" ? item.description : null, checked: false, childRevision: 1, order: index + 1 };
-      items.push(created);
-      return { clientMutationId: item.clientMutationId, childId: created.id, outcome: "completed", created };
+      return created;
     });
     state.tasks.push({
       id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null,
@@ -109,14 +123,14 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       recurrence: body.recurrencePreset && body.recurrencePreset !== "never" ? { kind: "supported", preset: String(body.recurrencePreset), rule: `every ${String(body.recurrencePreset)}`, language: "en", timeZone: typeof body.timeZone === "string" ? body.timeZone : null } : { kind: "none", preset: "never", rule: null, language: null, timeZone: null },
       hierarchyStatus: "valid", hierarchyViolation: null, reconciliationStatus: "none", checklistItems: items, startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false
     });
-    state.scheduleVersion++;
-    return { statusCode: 201, body: { actionId: body.actionId, outcome: childOutcomes.some((outcome) => outcome.outcome === "failed") ? "partial" : "completed", childOutcomes, snapshot: currentSnapshot() } };
+    state.scheduleVersion++; advanceSnapshotGeneration();
+    return completed(body.actionId);
   }));
 
   app.post("/tasks/:id/start", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
-    root.state = "started"; root.startedAt = "2026-06-01T10:00:00.000Z"; state.scheduleVersion++; return completed(body.actionId);
+    root.state = "started"; root.startedAt = "2026-06-01T10:00:00.000Z"; state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/done", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
@@ -124,37 +138,48 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     if (root.checklistItems.some((item) => !item.checked)) return error("incomplete_checklist", 409);
     if (root.recurrence.kind !== "none") { root.occurrenceNumber++; root.occurrenceKey = `occurrence-${root.id.replace(/^task-/, "")}-${root.occurrenceNumber}`; root.dueDatetime = nextDue(root.dueDatetime, root.recurrence.preset); root.checklistItems.forEach((item) => { item.checked = false; item.childRevision++; }); root.state = "planned"; root.startedAt = null; }
     else root.isCompleted = true;
-    state.scheduleVersion++; return completed(body.actionId);
+    state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/postpone-start", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
-    root.startDismissCount++; state.scheduleVersion++; return completed(body.actionId);
+    root.startDismissCount++; state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/extend", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
     if (root.recurrence.kind !== "none") return error("extend_not_available", 409);
-    root.dueDatetime = new Date(new Date(root.dueDatetime ?? "2026-06-01T10:00:00.000Z").getTime() + 30 * 60_000).toISOString(); root.deadlineExtensionCount++; root.taskRevision++; state.scheduleVersion++; return completed(body.actionId);
+    root.dueDatetime = new Date(new Date(root.dueDatetime ?? "2026-06-01T10:00:00.000Z").getTime() + 30 * 60_000).toISOString(); root.deadlineExtensionCount++; root.taskRevision++; state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/reschedule", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
-    root.dueDatetime = typeof body.dueDatetime === "string" ? body.dueDatetime : root.dueDatetime; root.durationMinutes = typeof body.durationMinutes === "number" ? body.durationMinutes : root.durationMinutes; root.taskRevision++; state.scheduleVersion++; return completed(body.actionId);
+    root.dueDatetime = typeof body.dueDatetime === "string" ? body.dueDatetime : root.dueDatetime; root.durationMinutes = typeof body.durationMinutes === "number" ? body.durationMinutes : root.durationMinutes; root.taskRevision++; state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/update", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
     const patch = body.rootPatch as Record<string, unknown> | null | undefined;
-    if (patch !== null && patch !== undefined) { if (patch.expectedTaskRevision !== `r:${root.taskRevision}`) return error("stale_task", 409); for (const key of ["title", "description", "dueDatetime", "durationMinutes"] as const) if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key]; root.taskRevision++; }
-    const outcomes = applyChildMutations(root, Array.isArray(body.childMutations) ? body.childMutations : []);
-    state.scheduleVersion++;
-    return completed(body.actionId, outcomes.some((item) => item.outcome === "failed") ? "partial" : "completed", outcomes);
+    if (patch !== null && patch !== undefined) {
+      if (patch.expectedTaskRevision !== `r:${root.taskRevision}`) return error("stale_task", 409);
+      for (const key of ["title", "description", "dueDatetime", "durationMinutes"] as const) {
+        if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
+      }
+      if (root.state === "invalid" && root.hierarchyStatus === "valid" && root.dueDatetime !== null && root.durationMinutes !== null) {
+        root.state = "planned";
+      }
+      root.taskRevision++;
+    }
+    const childMutations = Array.isArray(body.childMutations) ? body.childMutations : [];
+    if (!validChildMutations(root, childMutations)) return error("stale_child", 409);
+    applyChildMutations(root, childMutations);
+    state.scheduleVersion++; advanceSnapshotGeneration();
+    return completed(body.actionId);
   }));
   app.post("/tasks/:id/checklist", async (request, reply) => mutation(request, reply, (body) => {
     const root = task(String((request.params as { id: string }).id)); if (!root) return error("not_found", 404);
     const stale = staleFor(root, body); if (stale) return stale; if (controls.pending) return pending(body.actionId);
-    const item = addChild(root, body); state.scheduleVersion++; return completed(body.actionId, "completed", [{ childId: item.id, outcome: "completed" }]);
+    addChild(root, body); state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
   }));
   app.post("/tasks/:id/checklist/:childId/update", async (request, reply) => mutateFocused("edit", request, reply));
   app.post("/tasks/:id/checklist/:childId/delete", async (request, reply) => mutateFocused("delete", request, reply));
@@ -169,7 +194,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       if (kind === "delete") root.checklistItems = root.checklistItems.filter((candidate) => candidate !== item);
       if (kind === "check") { item.checked = true; item.childRevision++; }
       if (kind === "uncheck") { item.checked = false; item.childRevision++; }
-      state.scheduleVersion++; return completed(body.actionId, "completed", [{ childId: item.id, outcome: "completed" }]);
+      state.scheduleVersion++; advanceSnapshotGeneration(); return completed(body.actionId);
     });
   }
   app.post("/review/dismiss", async (request, reply) => mutation(request, reply, (body) => ({ statusCode: 200, body: { actionId: body.actionId, outcome: "completed", snoozedUntil: "2026-06-01T10:05:00.000Z", snapshot: currentSnapshot() } })));
@@ -182,17 +207,25 @@ function addChild(root: FakeTask, body: Record<string, unknown>): FakeChecklistI
   root.checklistItems.push(item); return item;
 }
 
-function applyChildMutations(root: FakeTask, mutations: unknown[]) {
-  return mutations.map((raw) => {
+function validChildMutations(root: FakeTask, mutations: unknown[]): boolean {
+  return mutations.every((raw) => {
+    const mutation = raw as Record<string, unknown>;
+    if (mutation.type === "add") return true;
+    const item = root.checklistItems.find((candidate) => candidate.id === mutation.childId);
+    return item !== undefined && mutation.expectedChildRevision === `r:${item.childRevision}`;
+  });
+}
+
+function applyChildMutations(root: FakeTask, mutations: unknown[]): void {
+  for (const raw of mutations) {
     const mutation = raw as Record<string, unknown>; const type = mutation.type; const item = root.checklistItems.find((candidate) => candidate.id === mutation.childId);
-    if (type === "add") { const child = addChild(root, mutation); return { clientMutationId: mutation.clientMutationId, childId: child.id, outcome: "completed" }; }
-    if (!item || mutation.expectedChildRevision !== `r:${item.childRevision}`) return { clientMutationId: mutation.clientMutationId, childId: mutation.childId, outcome: "failed", code: "stale_child" };
+    if (type === "add") { addChild(root, mutation); continue; }
+    if (!item) throw new Error("validated_child_missing");
     if (type === "edit") { item.title = typeof mutation.title === "string" ? mutation.title : item.title; item.description = typeof mutation.description === "string" ? mutation.description : item.description; item.childRevision++; }
     if (type === "delete") root.checklistItems = root.checklistItems.filter((candidate) => candidate !== item);
     if (type === "check") { item.checked = true; item.childRevision++; }
     if (type === "uncheck") { item.checked = false; item.childRevision++; }
-    return { clientMutationId: mutation.clientMutationId, childId: item.id, outcome: "completed" };
-  });
+  }
 }
 
 function nextDue(dueDatetime: string | null, preset: string | null): string | null {

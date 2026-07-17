@@ -60,6 +60,31 @@ Use this as the default deterministic Android E2E lane:
 scripts/e2e-fake-backend.sh
 ```
 
+For a physical device, use the single-command wrapper. It performs the scoped
+ADB reverse automatically when the app is configured for host loopback:
+
+```bash
+scripts/e2e-connected-device.sh
+```
+
+It safely auto-selects the sole connected device; set
+`BUZER_DEVICE_SERIAL=<serial>` only when more than one device is attached.
+
+The wrapper intentionally does not support a Tailscale HTTP override: the debug
+network-security policy permits the host-loopback test address, not arbitrary
+tailnet cleartext HTTP. Use its automatic ADB reverse path unless a separate
+TLS/debug-network-security decision explicitly changes that policy.
+
+`ANDROID_TEST_CLASS` can filter either form to one instrumentation class or
+method. The wrapper also accepts a focused filter without another shell command:
+
+```bash
+scripts/e2e-connected-device.sh --class app.buzer.android.addtask.AddTaskFakeBackendTest
+```
+
+The wrapper is intentionally the only command that needs persistent device-test
+approval in Codex.
+
 The script starts `tools/fake-backend` on port `18433` when needed, runs `pixel8Api34DebugAndroidTest`, and passes the emulator URL `http://10.0.2.2:18433` into both the app and instrumentation helper.
 
 ### Local Real-Backend Smoke

@@ -3,6 +3,7 @@ package app.buzer.shared.api
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.AddChecklistItemRequest
 import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectsResponse
@@ -32,9 +33,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonObject
 
 class BuzerApiException(
     val status: Int,
@@ -79,7 +83,7 @@ class BuzerApiClient(
     suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse =
         mutationPost("$baseUrl/tasks/$id/postpone-start", request)
 
-    suspend fun extendTask(id: String, request: TaskActionRequest): MutationResponse =
+    suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse =
         mutationPost("$baseUrl/tasks/$id/extend", request)
 
     suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest): MutationResponse =
@@ -143,7 +147,18 @@ private suspend fun HttpResponse.ensureSuccess() {
 }
 
 private fun String.toBuzerApiException(status: Int, retryAfterHeader: String?): BuzerApiException {
-    val parsed = runCatching { buzerApiJson.decodeFromString<BuzerApiErrorBody>(this) }.getOrNull()
+    val decoded = runCatching { buzerApiJson.decodeFromString<BuzerApiErrorBody>(this) }
+    if (decoded.isFailure) {
+        val containsSnapshot = runCatching {
+            val snapshotElement = buzerApiJson.parseToJsonElement(this).jsonObject["snapshot"]
+            snapshotElement != null && snapshotElement !is JsonNull
+        }.getOrDefault(false)
+        if (containsSnapshot) throw decoded.exceptionOrNull()!!
+    }
+    val parsed = decoded.getOrNull()
+    if (status == 409 && parsed?.snapshot == null) {
+        throw SerializationException("HTTP 409 response must include an authoritative snapshot")
+    }
     return BuzerApiException(
         status = status,
         code = parsed?.code,

@@ -122,8 +122,11 @@ class MorningReviewActivity : ComponentActivity() {
             retryAction = { runRepair(currentCoordinator, taskId, occurrenceKey, request) }
             lifecycleScope.launch {
                 try {
-                    AppLog.info("morning_review repair start taskId=$taskId duration=${request.durationMinutes}")
-                    when (val result = currentCoordinator.updateTask(taskId, occurrenceKey, request)) {
+                    AppLog.info(
+                        "morning_review repair start taskId=$taskId " +
+                            "duration=${request.rootPatch?.durationMinutes}"
+                    )
+                    when (val result = currentCoordinator.updateTask(taskId, request)) {
                         CoordinatorActionResult.Success -> {
                             invalidTasks = invalidTasks.filterNot { it.id == taskId }
                             AppLog.info(
@@ -134,6 +137,25 @@ class MorningReviewActivity : ComponentActivity() {
                         is CoordinatorActionResult.FailedAndHidden -> {
                             AppLog.warn("morning_review repair failed_hidden taskId=$taskId")
                             actionErrorMessage = result.message
+                        }
+                        is CoordinatorActionResult.Pending -> {
+                            invalidTasks = SnapshotReducer.reduce(result.response.snapshot).invalidTasks
+                            actionErrorMessage = "Saved; waiting for Todoist confirmation"
+                        }
+                        is CoordinatorActionResult.Stale -> {
+                            invalidTasks = SnapshotReducer.reduce(result.snapshot).invalidTasks
+                            actionErrorMessage = result.message
+                        }
+                        is CoordinatorActionResult.LocalReconciliationFailed -> {
+                            invalidTasks = SnapshotReducer.reduce(result.snapshot).invalidTasks
+                            actionErrorMessage = "Saved; local reconciliation failed: ${result.message}"
+                        }
+                        is CoordinatorActionResult.RetryAfter -> {
+                            retryAction = { lifecycleScope.launch { result.retry() } }
+                            actionErrorMessage = "Retry in ${result.retryAfterSeconds} seconds"
+                        }
+                        CoordinatorActionResult.ChildActionInFlight -> {
+                            actionErrorMessage = "Checklist update is already in progress"
                         }
                     }
                 } catch (error: CancellationException) {
@@ -177,6 +199,17 @@ class MorningReviewActivity : ComponentActivity() {
                             is CoordinatorActionResult.FailedAndHidden -> {
                                 AppLog.warn("morning_review snooze failed_hidden")
                                 actionErrorMessage = result.message
+                            }
+                            is CoordinatorActionResult.Pending -> actionErrorMessage = "Saved; waiting for Todoist confirmation"
+                            is CoordinatorActionResult.Stale -> actionErrorMessage = result.message
+                            is CoordinatorActionResult.LocalReconciliationFailed -> {
+                                actionErrorMessage = "Saved; local reconciliation failed: ${result.message}"
+                            }
+                            is CoordinatorActionResult.RetryAfter -> {
+                                actionErrorMessage = "Retry in ${result.retryAfterSeconds} seconds"
+                            }
+                            CoordinatorActionResult.ChildActionInFlight -> {
+                                actionErrorMessage = "Checklist update is already in progress"
                             }
                         }
                     }

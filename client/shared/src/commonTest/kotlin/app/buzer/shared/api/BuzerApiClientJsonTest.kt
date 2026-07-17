@@ -10,7 +10,9 @@ import app.buzer.shared.model.UpdateTaskRequest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlinx.serialization.SerializationException
 
 class BuzerApiClientJsonTest {
     @Test
@@ -140,6 +142,7 @@ class BuzerApiClientJsonTest {
             """
             {
               "scheduleVersion": 1,
+              "snapshotGeneration": 1,
               "serverTime": "2026-06-13T10:00:00Z",
               "tasks": [
                 {
@@ -172,6 +175,16 @@ class BuzerApiClientJsonTest {
         )
 
         assertEquals("Bring printed form", response.tasks.single().description)
+        assertEquals(1, response.snapshotGeneration)
+    }
+
+    @Test
+    fun networkSnapshotWithoutGenerationIsRejected() {
+        assertFailsWith<SerializationException> {
+            buzerApiJson.decodeFromString<TasksSnapshotResponse>(
+                """{"scheduleVersion":1,"serverTime":"2026-06-13T10:00:00Z","health":[],"tasks":[]}"""
+            )
+        }
     }
 
     @Test

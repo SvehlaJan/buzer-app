@@ -3,6 +3,7 @@ package app.buzer.android.ui.screens
 import app.buzer.android.ui.components.AttentionStrip
 import app.buzer.android.ui.components.AttentionStripModel
 import app.buzer.android.ui.components.BuzerScaffold
+import app.buzer.android.ui.components.ChecklistProgress
 import app.buzer.android.ui.components.IconFabAction
 import app.buzer.android.ui.components.IconFabStack
 import app.buzer.android.ui.components.PrimaryActionButton
@@ -21,7 +22,9 @@ import app.buzer.shared.ui.home.HomeAgendaRowState
 import app.buzer.shared.ui.home.HomeAttention
 import app.buzer.shared.ui.home.HomeAttentionAction
 import app.buzer.shared.ui.home.HomeCurrentBlock
+import app.buzer.shared.ui.home.homeTaskProgress
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -98,12 +101,19 @@ fun buildHomeScreenState(
     val currentBlock = agendaRows
         .firstOrNull { it.state == HomeAgendaRowState.Current }
         ?.let { current ->
+            val progress = snapshot.tasks.firstOrNull { it.id == current.taskId }?.let(::homeTaskProgress)
             HomeCurrentBlock(
                 taskId = current.taskId,
                 title = current.title,
                 blockWindow = current.timeLabel,
                 remainingLabel = current.subline.removePrefix("Current - "),
-                description = current.description
+                description = current.description,
+                checkedCount = progress?.checkedCount ?: 0,
+                totalCount = progress?.totalCount ?: 0,
+                nextUncheckedChildTitle = progress?.nextUncheckedChildTitle,
+                checklistItems = snapshot.tasks.firstOrNull { it.id == current.taskId }?.checklistItems.orEmpty(),
+                doneEnabled = progress?.doneEnabled ?: true,
+                extendEnabled = progress?.extendEnabled ?: true
             )
         }
 
@@ -125,6 +135,8 @@ fun HomeScreen(
     onAddTask: () -> Unit,
     onMorningReview: () -> Unit,
     onDoneCurrentTask: (String) -> Unit = {},
+    onEditTask: (String) -> Unit = {},
+    onToggleCurrentChild: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onRetryRefresh: () -> Unit = {},
     state: HomeScreenState
 ) {
@@ -178,7 +190,9 @@ fun HomeScreen(
 
                 HomeContentState.Ready -> HomeReadyContent(
                     state = state,
-                    onDoneCurrentTask = onDoneCurrentTask
+                    onDoneCurrentTask = onDoneCurrentTask,
+                    onEditTask = onEditTask,
+                    onToggleCurrentChild = onToggleCurrentChild
                 )
             }
         }
@@ -206,12 +220,15 @@ fun HomeScreen(
 @Composable
 private fun ColumnScope.HomeReadyContent(
     state: HomeScreenState,
-    onDoneCurrentTask: (String) -> Unit
+    onDoneCurrentTask: (String) -> Unit,
+    onEditTask: (String) -> Unit,
+    onToggleCurrentChild: (String, String, Boolean) -> Unit
 ) {
     state.currentBlock?.let { currentBlock ->
         CurrentBlockHero(
             currentBlock = currentBlock,
-            onDone = { onDoneCurrentTask(currentBlock.taskId) }
+            onDone = { onDoneCurrentTask(currentBlock.taskId) },
+            onToggleChild = { childId, checked -> onToggleCurrentChild(currentBlock.taskId, childId, checked) }
         )
     }
 
@@ -229,7 +246,7 @@ private fun ColumnScope.HomeReadyContent(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             items(state.agendaRows, key = { it.taskId }) { row ->
-                AgendaRow(row)
+                AgendaRow(row, onClick = { onEditTask(row.taskId) })
             }
         }
     }
@@ -238,7 +255,8 @@ private fun ColumnScope.HomeReadyContent(
 @Composable
 private fun CurrentBlockHero(
     currentBlock: HomeCurrentBlock,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onToggleChild: (String, Boolean) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -266,9 +284,15 @@ private fun CurrentBlockHero(
                 style = MaterialTheme.typography.bodyMedium
             )
             TaskDetailsBlock(currentBlock.description)
+            ChecklistProgress(
+                items = currentBlock.checklistItems,
+                interactive = true,
+                onCheckedChange = { item, checked -> onToggleChild(item.id, checked) }
+            )
             PrimaryActionButton(
                 label = "Done",
                 onClick = onDone,
+                enabled = currentBlock.doneEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = currentBlock.doneContentDescription }
@@ -278,7 +302,7 @@ private fun CurrentBlockHero(
 }
 
 @Composable
-private fun AgendaRow(row: HomeAgendaRow) {
+private fun AgendaRow(row: HomeAgendaRow, onClick: () -> Unit) {
     val stateColor = when (row.state) {
         HomeAgendaRowState.Overdue -> MaterialTheme.colorScheme.error
         HomeAgendaRowState.Current -> MaterialTheme.colorScheme.primary
@@ -292,7 +316,9 @@ private fun AgendaRow(row: HomeAgendaRow) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         Text(
@@ -327,6 +353,13 @@ private fun AgendaRow(row: HomeAgendaRow) {
                 }
             )
             TaskDetailsBlock(row.description)
+            if (row.totalCount > 0) {
+                Text(
+                    text = "Checklist ${row.checkedCount}/${row.totalCount}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -353,13 +386,17 @@ private fun buildAgendaRows(
             !deviceNow.isBefore(end) -> HomeAgendaRowState.Overdue
             else -> HomeAgendaRowState.Upcoming
         }
+        val progress = homeTaskProgress(task)
         HomeAgendaRow(
             taskId = task.id,
             timeLabel = "${timeFormatter.format(start)}-${timeFormatter.format(end)}",
             title = task.title,
             state = rowState,
             subline = sublineFor(rowState, deviceNow, start, end),
-            description = task.description
+            description = task.description,
+            checkedCount = progress.checkedCount,
+            totalCount = progress.totalCount,
+            nextUncheckedChildTitle = progress.nextUncheckedChildTitle
         )
     }.sortedWith(
         compareBy<HomeAgendaRow> {

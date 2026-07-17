@@ -1,6 +1,7 @@
 package app.buzer.shared.api
 
 import app.buzer.shared.model.FocusedChecklistMutationRequest
+import app.buzer.shared.model.TaskActionRequest
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.utils.io.ByteReadChannel
@@ -9,13 +10,65 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.http.content.TextContent
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertFalse
 
 class BuzerApiClientErrorTest {
+    @Test
+    fun networkSnapshotRejectsMissingSnapshotGeneration(): Unit = runBlocking {
+        val client = clientResponding(
+            status = HttpStatusCode.OK,
+            body = """{"scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}"""
+        )
+
+        assertFails { client.getSnapshot() }
+    }
+
+    @Test
+    fun networkMutationRejectsMissingSnapshotGeneration(): Unit = runBlocking {
+        val client = clientResponding(
+            status = HttpStatusCode.OK,
+            body = """
+                {"actionId":"action-start-1","outcome":"completed","snapshot":{
+                  "scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]
+                }}
+            """.trimIndent()
+        )
+
+        assertFails {
+            client.startTask(
+                "task-1",
+                TaskActionRequest("action-start-1", "device-1", "occurrence-1")
+            )
+        }
+    }
+
+    @Test
+    fun conflictSnapshotRejectsMissingSnapshotGeneration(): Unit = runBlocking {
+        val client = clientResponding(
+            status = HttpStatusCode.Conflict,
+            body = """
+                {"code":"stale_task","snapshot":{
+                  "scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]
+                }}
+            """.trimIndent()
+        )
+
+        assertFailsWith<SerializationException> { client.getSnapshot() }
+    }
+
+    @Test
+    fun conflictWithoutAuthoritativeSnapshotIsRejected(): Unit = runBlocking {
+        val client = clientResponding(HttpStatusCode.Conflict, """{"code":"stale_task"}""")
+
+        assertFailsWith<SerializationException> { client.getSnapshot() }
+    }
+
     @Test
     fun conflictRetainsAuthoritativeSnapshotForCallerRefresh() = runBlocking {
         val client = clientResponding(
@@ -23,7 +76,7 @@ class BuzerApiClientErrorTest {
             body =
                 """
                 {"code":"stale_task","message":"Task revision is stale","snapshot":{
-                  "scheduleVersion":12,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]
+                  "scheduleVersion":12,"snapshotGeneration":12,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]
                 }}
                 """.trimIndent()
         )
@@ -75,6 +128,17 @@ class BuzerApiClientErrorTest {
     }
 
     @Test
+    fun malformedNonSnapshotErrorObjectStillProducesTypedError() = runBlocking {
+        val client = clientResponding(HttpStatusCode.InternalServerError, """{"code":123}""")
+
+        val error = assertFailsWith<BuzerApiException> { client.getSnapshot() }
+
+        assertEquals(500, error.status)
+        assertNull(error.code)
+        assertNull(error.snapshot)
+    }
+
+    @Test
     fun focusedChecklistEndpointsSendOnlyActionMetadataToTheirOwnPaths() = runBlocking {
         val requests = mutableListOf<Pair<String, String>>()
         val client = BuzerApiClient(
@@ -86,7 +150,7 @@ class BuzerApiClientErrorTest {
                     requests += request.url.encodedPath to (request.body as TextContent).text
                     respond(
                         content = ByteReadChannel(
-                            """{"actionId":"action-check-1","outcome":"completed","snapshot":{"scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
+                            """{"actionId":"action-check-1","outcome":"completed","snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
                         ),
                         headers = headersOf(HttpHeaders.ContentType, "application/json")
                     )

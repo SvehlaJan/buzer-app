@@ -25,7 +25,8 @@ class SnapshotDiagnosticsTest {
             health = listOf(
                 HealthStatus("backend", HealthLevel.ok, "Backend OK"),
                 HealthStatus("whatsapp", HealthLevel.warning, "WhatsApp disconnected")
-            )
+            ),
+            snapshotGeneration = 1
         )
 
         val description = SnapshotDiagnostics.describe(snapshot)

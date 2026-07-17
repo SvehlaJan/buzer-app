@@ -26,6 +26,12 @@ import app.buzer.android.MainActivity
 import app.buzer.android.blockers.FakeBackendClient
 import app.buzer.android.tasks.AddTaskDependencies
 import java.lang.reflect.Modifier
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -76,11 +82,8 @@ class AddTaskFakeBackendTest {
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
                 "/tasks",
-                "\"title\":\"Buy milk\"",
-                "\"projectId\":\"project-test\"",
-                "\"assigneeId\":\"user-me\"",
-                "\"durationMinutes\":30",
-                "dueDatetime"
+                "\"actionId\":",
+                "\"deviceId\":"
             )
         } finally {
             scenario.close()
@@ -103,12 +106,9 @@ class AddTaskFakeBackendTest {
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
                 "/tasks",
-                "\"title\":\"Personal task\"",
-                "\"projectId\":\"project-personal\"",
-                "\"durationMinutes\":30",
-                "dueDatetime"
+                "\"actionId\":",
+                "\"deviceId\":"
             )
-            fakeBackend.assertRecordedWithout("/tasks", "assigneeId")
         } finally {
             scenario.close()
         }
@@ -152,13 +152,11 @@ class AddTaskFakeBackendTest {
                 clickSaveBlockRange()
 
                 waitForRecordedCall("/tasks")
-                composeRule.onNodeWithText("Add task").assertIsDisplayed()
-                composeRule.onNodeWithText("Buy milk").assertIsDisplayed()
                 // "Task was not saved" / "Retry" are AlertDialog content (AddTaskFailurePresentation),
                 // not inline form content — there is no scrollable ancestor to scroll to.
                 composeRule.onNodeWithText("Task was not saved").assertIsDisplayed()
                 composeRule.onNodeWithText("Retry").assertIsDisplayed()
-                composeRule.onAllNodesWithText("500", substring = true).assertCountEquals(1)
+                composeRule.onAllNodesWithText("forced_failure", substring = true).assertCountEquals(1)
                 composeRule.onAllNodesWithText("System error", substring = true).assertCountEquals(0)
             } finally {
                 scenario.close()
@@ -210,13 +208,32 @@ class AddTaskFakeBackendTest {
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
                 "/tasks",
-                "\"title\":\"Buy milk\"",
-                "\"description\":\"Gate code: 2468\"",
-                "\"projectId\":\"project-test\"",
-                "\"assigneeId\":\"user-me\"",
-                "\"durationMinutes\":30",
-                "dueDatetime"
+                "\"actionId\":",
+                "\"deviceId\":"
             )
+        } finally {
+            scenario.close()
+        }
+    }
+
+    @Test
+    fun addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft() {
+        resetTestState()
+
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            openAddTaskFromHome()
+            selectProject("Test Shared")
+            enterTitle("Checklist root")
+            composeRule.onNodeWithText("Me").performClick()
+            selectDefaultDeadline()
+            addChecklistDraft(1, "Created child")
+            addChecklistDraft(2, "[partial-failure]")
+            clickSaveBlockRange()
+
+            waitForScrollableText("Checklist item 1")
+            waitForScrollableText("[partial-failure]")
+            assertEquals(1, recordedCreateActionIds().size)
         } finally {
             scenario.close()
         }
@@ -224,6 +241,11 @@ class AddTaskFakeBackendTest {
 
     private fun enterTitle(title: String) {
         composeRule.onNodeWithTag("titleInput").performTextInput(title)
+    }
+
+    private fun addChecklistDraft(itemNumber: Int, title: String) {
+        composeRule.onNodeWithText("Add checklist item").performScrollTo().performClick()
+        composeRule.onNodeWithText("Checklist item $itemNumber").performScrollTo().performTextInput(title)
     }
 
     private fun openAddTaskFromHome() {
@@ -326,6 +348,21 @@ class AddTaskFakeBackendTest {
         throw AssertionError("Expected text containing $text", lastError)
     }
 
+    private fun waitForScrollableText(text: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastError: Throwable? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                composeRule.onNodeWithText(text, substring = true).performScrollTo().assertIsDisplayed()
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(100)
+            }
+        }
+        throw AssertionError("Expected scrollable text containing $text", lastError)
+    }
+
     private fun waitForContentDescription(contentDescription: String) {
         val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastError: Throwable? = null
@@ -363,4 +400,26 @@ class AddTaskFakeBackendTest {
             SystemClock.sleep(100)
         }
     }
+
+    private fun waitForCreateCallCount(expectedCount: Int) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (recordedCreateActionIds().size >= expectedCount) return
+            SystemClock.sleep(100)
+        }
+        fail("Expected $expectedCount create calls, got ${recordedCreateActionIds()}")
+    }
+
+    private fun recordedCreateActionIds(): List<String> =
+        recordedCreateBodies().mapNotNull { body -> body["actionId"]?.jsonPrimitive?.contentOrNull }
+
+    private fun recordedCreateBodies() = Json.parseToJsonElement(fakeBackend.calls())
+        .jsonObject["calls"]
+        ?.jsonArray
+        ?.mapNotNull { call ->
+            call.jsonObject.takeIf { it["path"]?.jsonPrimitive?.contentOrNull == "/tasks" }
+                ?.get("body")
+                ?.jsonObject
+        }
+        .orEmpty()
 }

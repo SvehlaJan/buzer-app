@@ -317,7 +317,8 @@ class AlarmPlanCalculatorTest {
             scheduleVersion = 1,
             serverTime = "2026-05-28T09:00:00Z",
             tasks = tasks.toList(),
-            health = emptyList<HealthStatus>()
+            health = emptyList<HealthStatus>(),
+            snapshotGeneration = 1
         )
 
     private fun task(

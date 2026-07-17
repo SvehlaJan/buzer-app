@@ -150,7 +150,9 @@ describe("HTTP routes", () => {
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
 
     const response = await app.inject({
-      method: "POST", url: "/tasks/task-1/checklist/todoist-child-1/check", headers: { authorization: "Bearer secret" },
+      // Android sends the `ChecklistItem.id` from the authoritative snapshot,
+      // which is the mirror-local child ID rather than Todoist's opaque ID.
+      method: "POST", url: "/tasks/task-1/checklist/child-1/check", headers: { authorization: "Bearer secret" },
       payload: {
         actionId: "check-child-action", deviceId: "android-1", expectedOccurrenceKey: "occurrence-1",
         expectedChildRevision: childRevision
@@ -162,10 +164,13 @@ describe("HTTP routes", () => {
     expect(response.json()).toMatchObject({
       actionId: "check-child-action",
       outcome: "completed",
-      childOutcomes: [{ childId: "todoist-child-1", outcome: "completed" }],
       snapshot: { tasks: [{ id: "task-1", checklistItems: [{ id: "child-1", checked: true }] }] }
     });
-    expect(adapter.itemCloses).toHaveLength(1);
+    expect(response.json()).not.toHaveProperty("childOutcomes");
+    expect(response.json().snapshot.snapshotGeneration).toBeGreaterThan(0);
+    expect(adapter.itemCloses).toEqual([
+      expect.objectContaining({ todoistTaskId: "todoist-child-1" })
+    ]);
   });
 
   it("blocks typed snapshots until sync initialization finishes while health remains available", async () => {
@@ -197,6 +202,7 @@ describe("HTTP routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tasks: [] });
+    expect(response.json().snapshotGeneration).toBeGreaterThan(0);
   });
 
   it("returns active projects with auth token", async () => {
@@ -260,8 +266,18 @@ describe("HTTP routes", () => {
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
     const auth = { authorization: "Bearer secret" };
 
+    const stale = await app.inject({
+      method: "POST",
+      url: "/tasks/task-1/start",
+      headers: auth,
+      payload: { ...action("stale"), expectedOccurrenceKey: "obsolete-occurrence" }
+    });
     const start = await app.inject({ method: "POST", url: "/tasks/task-1/start", headers: auth, payload: action("start") });
-    const extend = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth, payload: action("extend") });
+    const startReplay = await app.inject({ method: "POST", url: "/tasks/task-1/start", headers: auth, payload: action("start") });
+    const postpone = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth, payload: action("postpone") });
+    const postponeReplay = await app.inject({ method: "POST", url: "/tasks/task-1/postpone-start", headers: auth, payload: action("postpone") });
+    const extend = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth, payload: action("extend", "revision") });
+    const extendReplay = await app.inject({ method: "POST", url: "/tasks/task-1/extend", headers: auth, payload: action("extend", "revision") });
     const checkIn = await app.inject({
       method: "POST",
       url: "/device/check-in",
@@ -275,10 +291,20 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(start.statusCode).toBe(200);
+    expect(startReplay.statusCode).toBe(200);
+    expect(postpone.statusCode).toBe(200);
+    expect(postponeReplay.statusCode).toBe(200);
     expect(extend.statusCode).toBe(202);
+    expect(extendReplay.statusCode).toBe(202);
     expect(checkIn.statusCode).toBe(200);
     expect(start.json()).toMatchObject({ actionId: "action-start", outcome: "completed", snapshot: { tasks: expect.any(Array) } });
+    expect(startReplay.json()).toMatchObject({ actionId: "action-start", outcome: "completed" });
+    expect(postponeReplay.json()).toMatchObject({ actionId: "action-postpone", outcome: "completed" });
     expect(extend.json()).toMatchObject({ actionId: "action-extend", outcome: "reconciliation_pending", snapshot: { tasks: expect.any(Array) } });
+    expect(start.json().snapshot.snapshotGeneration).toBeGreaterThan(0);
+    expect(extend.json().snapshot.snapshotGeneration).toBeGreaterThan(0);
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().snapshot.snapshotGeneration).toBeGreaterThan(0);
     expect(adapter.itemUpdates).toHaveLength(1);
   });
 

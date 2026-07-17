@@ -40,8 +40,8 @@ class AlarmIntentFactoryTest {
     @Test
     fun identityUrisAlsoDifferForTwoOccurrencesDespitePotentialHashCollisions() {
         assertNotEquals(
-            AlarmIntentFactory.identityUri("task-1", "occurrence-old", AlarmKind.START_BLOCKER),
-            AlarmIntentFactory.identityUri("task-1", "occurrence-new", AlarmKind.START_BLOCKER)
+            AlarmIntentFactory.identityUriString("task-1", "occurrence-old", AlarmKind.START_BLOCKER),
+            AlarmIntentFactory.identityUriString("task-1", "occurrence-new", AlarmKind.START_BLOCKER)
         )
     }
 }

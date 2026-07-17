@@ -29,14 +29,52 @@ export type FakeTask = {
   isCompleted: boolean;
 };
 
-export type FakeState = { scheduleVersion: number; tasks: FakeTask[] };
+export type FakeState = { scheduleVersion: number; snapshotGeneration: number; tasks: FakeTask[] };
 
 const FIXED_NOW = "2026-06-01T10:00:00.000Z";
 
 export function createFixtureState(): FakeState {
+  const legacyNow = new Date();
+  const legacyIsoAt = (minutes: number) => new Date(legacyNow.getTime() + minutes * 60_000).toISOString();
   return {
     scheduleVersion: 1,
+    snapshotGeneration: 1,
     tasks: [
+      // Preserve the focused Android activity fixtures while the broader recurrent/checklist
+      // scenarios below exercise the new contract.
+      task("task-start", {
+        title: "Start blocker fixture", description: "Bring the printed form and check opening hours.",
+        dueDatetime: legacyIsoAt(120), occurrenceKey: "occurrence-task-start-1"
+      }),
+      task("task-deadline", {
+        title: "Deadline blocker fixture", description: "Share the final numbers before closing the block.",
+        dueDatetime: legacyIsoAt(-30), occurrenceKey: "occurrence-task-deadline-1",
+        state: "started", startedAt: legacyIsoAt(-29), durationMinutes: 60
+      }),
+      task("task-reschedule", {
+        title: "Reschedule blocker fixture", description: null,
+        dueDatetime: legacyIsoAt(-30), occurrenceKey: "occurrence-task-reschedule-1",
+        state: "started", startedAt: legacyIsoAt(-29), durationMinutes: 60
+      }),
+      task("task-start-fail", {
+        title: "Start failure fixture", dueDatetime: legacyIsoAt(150), occurrenceKey: "occurrence-task-start-fail-1"
+      }),
+      task("task-deadline-fail", {
+        title: "Deadline failure fixture", dueDatetime: legacyIsoAt(-30), occurrenceKey: "occurrence-task-deadline-fail-1",
+        state: "started", startedAt: legacyIsoAt(-29), durationMinutes: 60
+      }),
+      task("task-reschedule-fail", {
+        title: "Reschedule failure fixture", dueDatetime: legacyIsoAt(-30), occurrenceKey: "occurrence-task-reschedule-fail-1",
+        state: "started", startedAt: legacyIsoAt(-29), durationMinutes: 60
+      }),
+      task("task-invalid", {
+        title: "Invalid assigned fixture", description: "Clarify the missing commitment fields.",
+        dueDatetime: null, durationMinutes: null, occurrenceKey: "occurrence-task-invalid-1", state: "invalid"
+      }),
+      task("task-floating-time", {
+        title: "Canonical datetime fixture", description: "Snapshot datetimes are normalized to RFC3339 instants.",
+        dueDatetime: legacyIsoAt(180), occurrenceKey: "occurrence-task-floating-time-1"
+      }),
       task("task-one-time-empty", { title: "One-time empty checklist", dueDatetime: "2026-06-01T12:00:00.000Z", occurrenceKey: "occurrence-one-time-empty-1" }),
       task("task-one-time-partial", {
         title: "One-time partially checked", dueDatetime: "2026-06-01T13:00:00.000Z", occurrenceKey: "occurrence-one-time-partial-1",
@@ -68,6 +106,7 @@ export function createFixtureState(): FakeState {
 export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
   return {
     scheduleVersion: state.scheduleVersion,
+    snapshotGeneration: state.snapshotGeneration,
     serverTime,
     health: [],
     tasks: state.tasks.filter((task) => !task.isCompleted).map((task) => ({
@@ -86,7 +125,10 @@ export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
       isCreatedByUser: true,
       isCompleted: task.isCompleted,
       isDeleted: false,
-      validationErrors: task.hierarchyStatus === "unsupported" ? [task.hierarchyViolation] : [],
+      validationErrors: task.hierarchyStatus === "unsupported" ? [task.hierarchyViolation] : [
+        ...(task.dueDatetime === null ? ["missing_due_datetime"] : []),
+        ...(task.durationMinutes === null ? ["missing_duration"] : [])
+      ],
       startedAt: task.startedAt,
       startDismissCount: task.startDismissCount,
       deadlineExtensionCount: task.deadlineExtensionCount,

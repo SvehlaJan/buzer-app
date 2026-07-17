@@ -4,7 +4,6 @@ import app.buzer.shared.model.ActivityLogEntry
 import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
-import app.buzer.shared.model.ChecklistMutationOutcome
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.MutationOutcome
@@ -31,6 +30,7 @@ class BuzerApiClientContractTest {
             """
             {
               "scheduleVersion": 7,
+              "snapshotGeneration": 42,
               "serverTime": "2026-07-16T10:00:00Z",
               "health": [],
               "tasks": [{
@@ -53,6 +53,7 @@ class BuzerApiClientContractTest {
         )
 
         val task = response.tasks.single()
+        assertEquals(42, response.snapshotGeneration)
         assertEquals("occurrence-opaque", task.occurrenceKey)
         assertEquals("r:9", task.taskRevision)
         assertEquals("Every Monday", task.recurrence.displayLabel)
@@ -140,38 +141,27 @@ class BuzerApiClientContractTest {
     }
 
     @Test
-    fun mutationResponseDecodesPartialChildOutcomes() {
+    fun mutationResponseDecodesCompletedAuthority() {
         val response = buzerApiJson.decodeFromString<MutationResponse>(
             """
             {
-              "actionId": "action-create-1", "outcome": "partial",
-              "childOutcomes": [
-                {"clientMutationId":"draft-1","childId":"child-1","outcome":"completed","errorCode":null},
-                {"clientMutationId":"draft-2","childId":null,"outcome":"failed","errorCode":"simulated_child_failure"}
-              ],
-              "snapshot": {"scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}
+              "actionId": "action-create-1", "outcome": "completed",
+              "snapshot": {"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}
             }
             """.trimIndent()
         )
 
-        assertEquals(MutationOutcome.partial, response.outcome)
-        assertEquals("simulated_child_failure", response.childOutcomes[1].errorCode)
-        assertEquals(null, response.childOutcomes[1].childId)
+        assertEquals(MutationOutcome.completed, response.outcome)
+        assertEquals(1, response.snapshot.snapshotGeneration)
     }
 
     @Test
-    fun childOutcomeDecodesStaleChildWithoutRejectingTheWholeResponse() {
-        val response = buzerApiJson.decodeFromString<MutationResponse>(
-            """
-            {
-              "actionId":"action-edit-1", "outcome":"partial",
-              "childOutcomes":[{"clientMutationId":"check-1","childId":"child-1","outcome":"stale_child","errorCode":"stale_child"}],
-              "snapshot":{"scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}
-            }
-            """.trimIndent()
-        )
-
-        assertEquals(MutationOutcome.stale_child, response.childOutcomes.single().outcome)
+    fun mutationResponseRejectsPartialTransportOutcomes() {
+        assertFailsWith<Exception> {
+            buzerApiJson.decodeFromString<MutationResponse>(
+                """{"actionId":"action-edit-1","outcome":"partial","snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
+            )
+        }
     }
 
     @Test

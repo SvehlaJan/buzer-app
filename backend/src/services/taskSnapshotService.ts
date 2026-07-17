@@ -17,34 +17,37 @@ export class TaskSnapshotService {
 
   getSnapshot(serverTime: string) {
     this.assertMirrorReady();
-    const rows = this.tasks.listAll();
-    const projectsById = new Map(
-      this.projects.listActive().map((project) => [project.todoistProjectId, project])
-    );
-    const policy = new TaskEnforcementPolicy({
-      currentUserId: this.currentUserId,
-      projectsById
-    });
-    const projections = new TaskHierarchyProjector(policy).project(rows);
-    const items = projections.flatMap((projection) => {
-      if (projection.classification === "NOT_OWNED" || projection.classification === "CHECKLIST_CHILD") {
-        return [];
-      }
-      return [this.projectRoot(projection.root, projection.children, {
-        classification: projection.classification,
-        violation: projection.violation,
-        checkedCount: projection.checkedCount,
-        totalCount: projection.totalCount,
-        isCompanionOwned: policy.isCompanionOwned(projection.root)
-      })];
-    });
+    return this.tasks.withSnapshotRead(() => {
+      const rows = this.tasks.listAll();
+      const projectsById = new Map(
+        this.projects.listActive().map((project) => [project.todoistProjectId, project])
+      );
+      const policy = new TaskEnforcementPolicy({
+        currentUserId: this.currentUserId,
+        projectsById
+      });
+      const projections = new TaskHierarchyProjector(policy).project(rows);
+      const items = projections.flatMap((projection) => {
+        if (projection.classification === "NOT_OWNED" || projection.classification === "CHECKLIST_CHILD") {
+          return [];
+        }
+        return [this.projectRoot(projection.root, projection.children, {
+          classification: projection.classification,
+          violation: projection.violation,
+          checkedCount: projection.checkedCount,
+          totalCount: projection.totalCount,
+          isCompanionOwned: policy.isCompanionOwned(projection.root)
+        })];
+      });
 
-    return {
-      scheduleVersion: Math.max(0, ...rows.map((row) => row.scheduleVersion)),
-      serverTime,
-      tasks: items,
-      health: []
-    };
+      return {
+        scheduleVersion: Math.max(0, ...rows.map((row) => row.scheduleVersion)),
+        snapshotGeneration: this.tasks.currentSnapshotGeneration(),
+        serverTime,
+        tasks: items,
+        health: []
+      };
+    });
   }
 
   private projectRoot(

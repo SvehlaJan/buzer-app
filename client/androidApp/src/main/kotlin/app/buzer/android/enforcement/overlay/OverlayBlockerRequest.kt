@@ -22,7 +22,10 @@ data class OverlayBlockerRequest(
     val description: String? = null,
     val dueDatetime: String? = null,
     val durationMinutes: Int? = null,
-    val startAt: String? = null
+    val startAt: String? = null,
+    val checkedCount: Int = 0,
+    val totalCount: Int = 0,
+    val nextUncheckedChildTitle: String? = null
 ) {
     init {
         require(taskId.isNotBlank()) { "taskId is required" }
@@ -48,7 +51,10 @@ data class OverlayBlockerRequest(
             description = task.description,
             dueDatetime = task.dueDatetime,
             durationMinutes = task.durationMinutes,
-            startAt = task.startAt
+            startAt = task.startAt,
+            checkedCount = task.checkedCount,
+            totalCount = task.totalCount,
+            nextUncheckedChildTitle = task.checklistItems.filterNot { it.checked }.minByOrNull { it.order }?.title
         )
     }
 

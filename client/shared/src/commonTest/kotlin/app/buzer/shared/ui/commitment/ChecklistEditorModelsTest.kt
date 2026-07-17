@@ -1,7 +1,5 @@
 package app.buzer.shared.ui.commitment
 
-import app.buzer.shared.model.ChecklistMutationOutcome
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskRecurrence
@@ -57,26 +55,6 @@ class ChecklistEditorModelsTest {
     }
 
     @Test
-    fun failedChecklistDraftsAreRetainedWithTheirOriginalIdentity() {
-        val drafts = listOf(
-            ChecklistEditorDraft("draft-ok", "Saved"),
-            ChecklistEditorDraft("draft-failed", "Keep me", "Unsaved detail")
-        )
-
-        val retained = retainFailedChecklistDrafts(
-            drafts,
-            listOf(
-                ChecklistMutationOutcome("draft-ok", "child-1", MutationOutcome.completed),
-                ChecklistMutationOutcome("draft-failed", null, MutationOutcome.failed, "simulated_failure")
-            )
-        )
-
-        assertEquals(listOf("draft-failed"), retained.map { it.clientMutationId })
-        assertEquals("Keep me", retained.single().title)
-        assertEquals("simulated_failure", retained.single().failureCode)
-    }
-
-    @Test
     fun typedChecklistMutationStateCoversEveryIntentWithRequiredConcurrencyFields() {
         val mutations = listOf(
             ChecklistEditorMutationState.Add("add-1", "Add", "Description"),
@@ -105,38 +83,5 @@ class ChecklistEditorModelsTest {
         assertFailsWith<IllegalArgumentException> {
             validateChecklistMutationBatch(duplicateIds)
         }
-        assertFailsWith<IllegalArgumentException> {
-            retainFailedChecklistMutations(duplicateIds, emptyList())
-        }
-    }
-
-    @Test
-    fun failedMutationRetentionPreservesEveryTypedIntent() {
-        val mutations = listOf(
-            ChecklistEditorMutationState.Add("add-1", "Add"),
-            ChecklistEditorMutationState.Edit("edit-1", "child-1", "r:2", "Edit"),
-            ChecklistEditorMutationState.Delete("delete-1", "child-1", "r:2"),
-            ChecklistEditorMutationState.Check("check-1", "child-1", "r:2"),
-            ChecklistEditorMutationState.Uncheck("uncheck-1", "child-1", "r:2")
-        )
-
-        val retained = retainFailedChecklistMutations(
-            mutations,
-            listOf(
-                ChecklistMutationOutcome("add-1", "child-new", MutationOutcome.failed, "add_failed"),
-                ChecklistMutationOutcome("edit-1", "child-1", MutationOutcome.stale_child, "edit_stale"),
-                ChecklistMutationOutcome("delete-1", "child-1", MutationOutcome.failed, "network_failed"),
-                ChecklistMutationOutcome("check-1", "child-1", MutationOutcome.stale_child, "stale_child"),
-                ChecklistMutationOutcome("uncheck-1", "child-1", MutationOutcome.failed, "uncheck_failed")
-            )
-        )
-
-        assertEquals(listOf("add-1", "edit-1", "delete-1", "check-1", "uncheck-1"), retained.map { it.clientMutationId })
-        assertTrue(retained[0] is ChecklistEditorMutationState.Add)
-        assertTrue(retained[1] is ChecklistEditorMutationState.Edit)
-        assertTrue(retained[2] is ChecklistEditorMutationState.Delete)
-        assertTrue(retained[3] is ChecklistEditorMutationState.Check)
-        assertTrue(retained[4] is ChecklistEditorMutationState.Uncheck)
-        assertEquals(listOf("add_failed", "edit_stale", "network_failed", "stale_child", "uncheck_failed"), retained.map { it.failureCode })
     }
 }

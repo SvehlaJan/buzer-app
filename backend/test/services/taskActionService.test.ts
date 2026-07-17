@@ -69,9 +69,10 @@ function actionAwareService(
   projects: ProjectRepository,
   adapter: FakeTodoistAdapter,
   synchronize: () => Promise<void> = async () => undefined,
-  escalation: EscalationService | null = null
+  escalation: EscalationService | null = null,
+  now: (() => string) | undefined = undefined
 ): TaskActionService {
-  const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize } });
+  const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize }, ...(now === undefined ? {} : { now }) });
   return new TaskActionService(db, repo, projects, adapter, "user-self", escalation, false, {
     rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) },
     checklist: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
@@ -167,6 +168,57 @@ describe("TaskActionService", () => {
       .toEqual({ rootTaskId: "sync-root" });
   });
 
+  it("keeps a create with a sent child failure in reconciliation pending", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    class OneChildFailsAdapter extends FakeTodoistAdapter {
+      override async itemAdd(input: Parameters<FakeTodoistAdapter["itemAdd"]>[0]) {
+        if (input.kind === "child" && input.title === "Fails") {
+          this.itemAdds.push(input);
+          throw Object.assign(new Error("Todoist rejected child"), { code: "todoist_child_create_failed" });
+        }
+        return super.itemAdd(input);
+      }
+    }
+    const adapter = new OneChildFailsAdapter();
+    let syncCalls = 0;
+    const service = actionAwareService(db, repo, projects, adapter, async () => {
+      syncCalls += 1;
+      if (syncCalls !== 2) return;
+      const todoistTaskId = `created-${adapter.itemAdds[0]?.tempId}`;
+      repo.upsertTodoistTask({
+        id: "sync-root", todoistTaskId, title: "Root", description: null, projectId: "project-personal",
+        assigneeId: null, creatorId: "user-self", dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30,
+        completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z", commitmentOwnerId: "user-self"
+      });
+      repo.initializeOccurrence("sync-root", {
+        occurrenceKey: "occurrence-created-root", occurrenceDueDatetime: "2026-07-16T08:30:00Z",
+        occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T10:00:00Z"
+      });
+    });
+    const input = {
+      title: "Root", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30, creatorId: "user-self", now: "2026-07-15T09:00:00Z",
+      actionId: "create-partial-children", deviceId: "phone-a", checklist: [
+        { clientMutationId: "child-created", title: "Created" },
+        { clientMutationId: "child-failed", title: "Fails" }
+      ]
+    };
+
+    await expect(service.create(input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+    await expect(service.create(input)).resolves.toEqual({
+      id: "sync-root",
+      todoistTaskId: `created-${adapter.itemAdds[0]?.tempId}`
+    });
+    expect(adapter.itemAdds).toHaveLength(3);
+  });
+
   it("keeps action-aware reschedule pending without authoritative mirror confirmation", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -260,7 +312,7 @@ describe("TaskActionService", () => {
       rawJson: "{}", updatedAt: "2026-07-15T09:30:00Z"
     });
     const adapter = new FakeTodoistAdapter();
-    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, null, () => "2026-05-08T18:00:00Z");
 
     await expect(service.done("task-1", "2026-07-15T10:00:00Z", {
       actionId: "done-invalid-child", deviceId: "phone-a", expectedOccurrenceKey: null
@@ -295,7 +347,7 @@ describe("TaskActionService", () => {
     expect(adapter.itemAdds).toEqual([]);
   });
 
-  it("rejects an unconfirmed Todoist checklist child instead of silently dropping it", async () => {
+  it("keeps an unconfirmed checklist child reconciliation pending instead of silently dropping it", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -318,7 +370,7 @@ describe("TaskActionService", () => {
       dueDatetime: "2026-07-16T08:30:00Z", durationMinutes: 30, recurrencePreset: "never",
       timeZone: "Europe/Bratislava", checklist: [{ title: "Child" }], creatorId: "user-self", now: "2026-07-15T09:00:00Z",
       actionId: "create-unconfirmed-child", deviceId: "phone-a"
-    })).rejects.toMatchObject({ code: "todoist_child_create_unconfirmed", statusCode: 502 });
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(adapter.itemAdds.map((input) => input.kind)).toEqual(["root", "child"]);
   });
@@ -339,7 +391,7 @@ describe("TaskActionService", () => {
     });
 
     await expect(service.extend("task-1", "2026-07-15T10:00:00Z", {
-      actionId: "extend-pending", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+      actionId: "extend-pending", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: "r:1"
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(repo.getById("task-1")).toMatchObject({ durationMinutes: 30, deadlineExtensionCount: 0, state: "planned" });
@@ -364,7 +416,7 @@ describe("TaskActionService", () => {
         completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
       });
     });
-    const action = { actionId: "extend-confirmed", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" };
+    const action = { actionId: "extend-confirmed", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: "r:1" };
 
     await expect(service.extend("task-1", "2026-07-15T10:00:00Z", action)).resolves.toBeUndefined();
 
@@ -786,7 +838,7 @@ describe("TaskActionService", () => {
       creatorId: "user-self", now: "2026-07-15T09:00:00Z"
     };
 
-    await expect(service.create(input)).rejects.toThrow("ambiguous create timeout");
+    await expect(service.create(input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     adapter.timeout = false;
     await expect(service.create(input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
@@ -799,7 +851,7 @@ describe("TaskActionService", () => {
       .get("create-retry")).toMatchObject({ tempId: adapter.itemAdds[0]?.tempId });
   });
 
-  it("replays an interrupted action-aware checklist create without skipping its unfinished child", async () => {
+  it("does not duplicate an ambiguous checklist child create while reconciliation is pending", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -832,7 +884,7 @@ describe("TaskActionService", () => {
       deviceId: "phone-a", creatorId: "user-self", now: "2026-07-15T09:00:00Z"
     };
 
-    await expect(service.create(input)).rejects.toThrow("ambiguous child create timeout");
+    await expect(service.create(input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     adapter.timeoutChild = false;
     await expect(service.create(input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
@@ -867,9 +919,9 @@ describe("TaskActionService", () => {
     });
     const adapter = new FakeTodoistAdapter();
     repo.initializeOccurrence("task-1", { occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T18:00:00Z", occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z" });
-    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, null, () => "2026-05-08T18:00:00Z");
 
-    await expect(service.extend("task-1", "2026-05-08T18:00:00Z", { actionId: "extend-command", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1" }))
+    await expect(service.extend("task-1", "2026-05-08T18:00:00Z", { actionId: "extend-command", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: "r:1" }))
       .rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(adapter.itemUpdates).toEqual([{
@@ -886,6 +938,22 @@ describe("TaskActionService", () => {
     expect(repo.getById("task-1")?.dueDatetime).toBe("2026-05-08T18:00:00Z");
     expect(repo.getById("task-1")?.durationMinutes).toBe(60);
     expect(repo.getById("task-1")?.deadlineExtensionCount).toBe(0);
+  });
+
+  it("rejects an extend whose authoritative task revision changed before the action", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.initializeOccurrence("task-1", { occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T18:00:00Z", occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-05-08T10:00:00Z" });
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter);
+
+    await expect(service.extend("task-1", "2026-05-08T18:00:00Z", {
+      actionId: "extend-stale-revision", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", expectedTaskRevision: "r:0"
+    })).rejects.toMatchObject({ code: "stale_task", statusCode: 409 });
+
+    expect(adapter.itemUpdates).toEqual([]);
   });
 
   it("reschedules a supported recurring commitment with its recurrence and rotates the occurrence", async () => {
@@ -1116,7 +1184,7 @@ describe("TaskActionService", () => {
     });
   });
 
-  it("maps checklist-only child mutations and preserves their partial outcomes", async () => {
+  it("rejects a stale checklist-only child mutation before sending a command", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -1134,11 +1202,7 @@ describe("TaskActionService", () => {
     await expect(service.update("task-1", {
       actionId: "checklist-only", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1", rootPatch: null,
       childMutations: [{ type: "check", clientMutationId: "stale-child", childId: "child-1", expectedChildRevision: "r:999" }]
-    })).resolves.toMatchObject({
-      outcome: "partial",
-      childOutcomes: [{ clientMutationId: "stale-child", childId: "child-1", outcome: "stale_child", errorCode: "stale_child" }],
-      snapshot: { source: "snapshot" }
-    });
+    })).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
   });
 
   it("replays an action-aware project edit without repeating its confirmed move step", async () => {
@@ -1192,7 +1256,7 @@ describe("TaskActionService", () => {
       childMutations: []
     };
 
-    await expect(service.update("task-1", input)).rejects.toThrow("interrupted after move");
+    await expect(service.update("task-1", input)).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     adapter.failUpdate = false;
     await service.update("task-1", input);
 
@@ -1225,7 +1289,7 @@ describe("TaskActionService", () => {
     insertCommittedTask(repo);
     const sender = new DryRunSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation, () => "2026-05-08T15:05:00Z");
 
     await Promise.all([
       service.postponeStart("task-1", "2026-05-08T15:00:00Z", {
@@ -1248,7 +1312,7 @@ describe("TaskActionService", () => {
     insertCommittedTask(repo);
     const sender = new DryRunSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter(), async () => undefined, escalation, () => "2026-05-08T15:05:00Z");
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z", {
       actionId: "crash-first", deviceId: "phone-a", expectedOccurrenceKey: null
     });
@@ -1281,7 +1345,7 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new DeferredSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation, () => "2026-05-08T15:05:00Z");
 
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z", { actionId: "overlap-first", deviceId: "phone-a", expectedOccurrenceKey: null });
     const first = service.postponeStart("task-1", "2026-05-08T15:05:00Z", { actionId: "overlap-second", deviceId: "phone-a", expectedOccurrenceKey: null });
@@ -1303,7 +1367,7 @@ describe("TaskActionService", () => {
     const adapter = new FakeTodoistAdapter();
     const sender = new FailingSender();
     const escalation = new EscalationService(db, repo, sender, "wife-chat");
-    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation);
+    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter, async () => undefined, escalation, () => "2026-05-08T15:05:00Z");
 
     await service.postponeStart("task-1", "2026-05-08T15:00:00Z", { actionId: "fail-first", deviceId: "phone-a", expectedOccurrenceKey: null });
     await expect(service.postponeStart("task-1", "2026-05-08T15:05:00Z", { actionId: "fail-second", deviceId: "phone-a", expectedOccurrenceKey: null })).resolves.toEqual({
@@ -1320,7 +1384,7 @@ describe("TaskActionService", () => {
     expect(sender.sentCount).toBe(1);
     expect(repo.getById("task-1")).toMatchObject({
       startDismissCount: 3,
-      lastSnoozedAt: "2026-05-08T15:15:00.000Z"
+      lastSnoozedAt: "2026-05-08T15:10:00.000Z"
     });
   });
 

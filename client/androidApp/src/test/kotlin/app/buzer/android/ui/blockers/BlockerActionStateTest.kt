@@ -93,6 +93,10 @@ class BlockerActionStateTest {
     @Test
     fun updateTaskRequestUsesAllEditedTodoistFields() {
         val request = updateTaskRequestFromEditorStart(
+            actionId = "action-update-test",
+            deviceId = "device-test",
+            expectedOccurrenceKey = "occurrence-test",
+            expectedTaskRevision = "opaque-root-revision",
             title = " Edited title ",
             description = " Updated details ",
             selectedProject = ProjectItem(
@@ -112,11 +116,14 @@ class BlockerActionStateTest {
             zoneId = ZoneOffset.UTC
         )
 
-        assertEquals("Edited title", request.title)
-        assertEquals("Updated details", request.description)
-        assertEquals("project-family", request.projectId)
-        assertEquals("user-me", request.assigneeId)
-        assertEquals("2026-07-10T08:05:00Z", request.dueDatetime)
-        assertEquals(45, request.durationMinutes)
+        val patch = requireNotNull(request.rootPatch)
+        assertEquals("action-update-test", request.actionId)
+        assertEquals("device-test", request.deviceId)
+        assertEquals("occurrence-test", request.expectedOccurrenceKey)
+        assertEquals("opaque-root-revision", patch.expectedTaskRevision)
+        assertEquals("Edited title", patch.title)
+        assertEquals("project-family", patch.projectId)
+        assertEquals("2026-07-10T08:05:00Z", patch.dueDatetime)
+        assertEquals(45, patch.durationMinutes)
     }
 }

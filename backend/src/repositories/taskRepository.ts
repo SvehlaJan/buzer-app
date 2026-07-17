@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { SnapshotGenerationRepository } from "./snapshotGenerationRepository.js";
 
 export interface TodoistTaskUpsert {
   id: string;
@@ -94,6 +95,15 @@ const taskWithCommitmentSelect = `
 
 export class TaskRepository {
   constructor(private readonly db: Database.Database) {}
+
+  currentSnapshotGeneration(): number {
+    return new SnapshotGenerationRepository(this.db).current();
+  }
+
+  /** Executes the complete projection read in one SQLite transaction. */
+  withSnapshotRead<T>(read: () => T): T {
+    return this.db.transaction(read).deferred();
+  }
 
   isMirrorContractReady(): boolean {
     const row = this.db.prepare(`

@@ -112,7 +112,8 @@ data class TasksSnapshotResponse(
     val scheduleVersion: Long,
     val serverTime: String,
     val tasks: List<TaskSnapshotItem>,
-    val health: List<HealthStatus>
+    val health: List<HealthStatus>,
+    val snapshotGeneration: Long
 )
 
 @Serializable
@@ -333,12 +334,29 @@ sealed class ChecklistMutation {
 data class TaskActionRequest(
     val actionId: String,
     val deviceId: String,
-    val expectedOccurrenceKey: String
+    val expectedOccurrenceKey: String,
+    val expectedTaskRevision: String? = null
 ) {
     init {
         requireNonBlank("actionId", actionId)
         requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        expectedTaskRevision?.let { requireNonBlank("expectedTaskRevision", it) }
+    }
+}
+
+@Serializable
+data class ExtendTaskRequest(
+    val actionId: String,
+    val deviceId: String,
+    val expectedOccurrenceKey: String,
+    val expectedTaskRevision: String
+) {
+    init {
+        requireNonBlank("actionId", actionId)
+        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        requireNonBlank("expectedTaskRevision", expectedTaskRevision)
     }
 }
 
@@ -393,22 +411,13 @@ data class FocusedChecklistMutationRequest(
 }
 
 @Serializable
-enum class MutationOutcome { completed, partial, reconciliation_pending, failed, stale_child }
-
-@Serializable
-data class ChecklistMutationOutcome(
-    val clientMutationId: String? = null,
-    val childId: String? = null,
-    val outcome: MutationOutcome,
-    val errorCode: String? = null
-)
+enum class MutationOutcome { completed, reconciliation_pending }
 
 @Serializable
 data class MutationResponse(
     val actionId: String,
     val outcome: MutationOutcome,
     val snapshot: TasksSnapshotResponse,
-    val childOutcomes: List<ChecklistMutationOutcome> = emptyList(),
     val snoozedUntil: String? = null
 )
 

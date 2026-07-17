@@ -50,7 +50,7 @@ export interface CreateTaskInput {
   description: string | null;
   recurrencePreset?: RecurrencePreset;
   timeZone?: string;
-  checklist?: ReadonlyArray<{ title: string; description?: string | null }>;
+  checklist?: ReadonlyArray<{ clientMutationId?: string; title: string; description?: string | null }>;
   actionId?: string;
   deviceId?: string;
   creatorId: string;
@@ -339,7 +339,7 @@ export class TaskActionService {
       allowRootAbsent: true,
       useAuthoritativeResponse: true,
       resolveRootTaskId: () => this.syncedCreatedRootId(metadata.actionId),
-      isEffectPresent: () => this.isCreatedTaskTreePresent(this.syncedCreatedRootId(metadata.actionId), checklist),
+      isEffectPresent: () => this.syncedCreatedRootId(metadata.actionId) !== null,
       responseAfterReconciliation: () => {
         const rootId = this.syncedCreatedRootId(metadata.actionId);
         const root = rootId === null ? null : this.tasks.getById(rootId);
@@ -368,26 +368,26 @@ export class TaskActionService {
       }
       const createdTodoistTaskId = created.todoistTaskId;
       for (const [childOrder, child] of checklist.entries()) {
-      const childTitle = child.title.trim();
-      if (childTitle.length === 0) {
-        throw Object.assign(new Error("Checklist item title is required"), { code: "child_title_required", statusCode: 422 });
-      }
-      const childTempId = actionStableUuid(metadata.actionId, `child_add:${childOrder}`);
-      const childCreated = await context.executeCommand(`child_add:${childOrder}`, (commandUuid) => this.todoist.itemAdd({
-        kind: "child",
-        commandUuid,
-        tempId: childTempId,
-        title: childTitle,
-        description: normalizeOptionalText(child.description ?? null),
-        projectId: input.projectId,
-        parentTodoistTaskId: createdTodoistTaskId
-      }), { tempId: childTempId });
-      if (childCreated.todoistTaskId === null) {
-        throw Object.assign(new Error("Todoist did not return a checklist item ID"), {
-          code: "todoist_child_create_unconfirmed",
-          statusCode: 502
-        });
-      }
+        const childTitle = child.title.trim();
+        const childTempId = actionStableUuid(metadata.actionId, `child_add:${childOrder}`);
+        if (childTitle.length === 0) {
+          throw Object.assign(new Error("Checklist item title is required"), { code: "child_title_required", statusCode: 422 });
+        }
+        const childCreated = await context.executeCommand(`child_add:${childOrder}`, (commandUuid, reservedTempId) => this.todoist.itemAdd({
+            kind: "child",
+            commandUuid,
+            tempId: reservedTempId ?? childTempId,
+            title: childTitle,
+            description: normalizeOptionalText(child.description ?? null),
+            projectId: input.projectId,
+            parentTodoistTaskId: createdTodoistTaskId
+        }), { tempId: childTempId });
+        if (childCreated.todoistTaskId === null) {
+          throw Object.assign(new Error("Todoist did not return a checklist item ID"), {
+            code: "todoist_child_create_unconfirmed",
+            statusCode: 502
+          });
+        }
       }
       return { id, todoistTaskId: createdTodoistTaskId };
     });
@@ -397,11 +397,11 @@ export class TaskActionService {
     this.assertMirrorReady();
     const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
     await this.executeRootAction({
-      rootTaskId: taskId, actionType: "start", payload: { now }, metadata,
+      rootTaskId: taskId, actionType: "start", payload: {}, metadata,
       isEffectPresent: () => this.tasks.getById(taskId)?.state === "started",
       responseAfterReconciliation: () => true
-    }, async () => {
-      this.tasks.updateCommitmentState(taskId, { state: "started", startedAt: now, incrementScheduleVersion: true, updatedAt: now });
+    }, async (context) => {
+      this.tasks.updateCommitmentState(taskId, { state: "started", startedAt: context.actionCreatedAt, incrementScheduleVersion: true, updatedAt: context.actionCreatedAt });
       return true;
     });
   }
@@ -432,13 +432,12 @@ export class TaskActionService {
 
   async postponeStart(taskId: string, now: string, action?: RootActionMetadata): Promise<{ snoozedUntil: string; escalationTriggered: boolean }> {
     this.assertMirrorReady();
-    const snoozedUntil = addMinutes(now, 5);
     const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
     return this.executeRootAction({
-      rootTaskId: taskId, actionType: "postpone_start", payload: { snoozedUntil }, metadata,
-      isEffectPresent: () => this.tasks.getById(taskId)?.lastSnoozedAt === snoozedUntil,
+      rootTaskId: taskId, actionType: "postpone_start", payload: {}, metadata,
+      isEffectPresent: () => this.tasks.getById(taskId)?.lastSnoozedAt !== null,
       responseAfterReconciliation: () => ({
-        snoozedUntil,
+        snoozedUntil: this.requireTask(taskId).lastSnoozedAt ?? addMinutes(now, 5),
         escalationTriggered: (this.tasks.getById(taskId)?.startDismissCount ?? 0) >= 2
       }),
       reconcile: async (context) => {
@@ -446,10 +445,12 @@ export class TaskActionService {
         await this.sendPostponeEscalation(taskId, current.startDismissCount, context);
       }
     }, async (context) => {
+      const actionNow = context.actionCreatedAt;
+      const snoozedUntil = addMinutes(actionNow, 5);
       const current = this.requireTask(taskId);
       const nextDismissCount = current.startDismissCount + 1;
       const escalationTriggered = nextDismissCount >= 2;
-      this.tasks.updateCommitmentState(taskId, { startDismissDelta: 1, lastSnoozedAt: snoozedUntil, incrementScheduleVersion: true, updatedAt: now });
+      this.tasks.updateCommitmentState(taskId, { startDismissDelta: 1, lastSnoozedAt: snoozedUntil, incrementScheduleVersion: true, updatedAt: actionNow });
       await this.sendPostponeEscalation(taskId, nextDismissCount, context);
       return { snoozedUntil, escalationTriggered };
     });
@@ -479,29 +480,11 @@ export class TaskActionService {
       });
     }
     const newDuration = task.durationMinutes + 30;
-    let description: string;
-    try {
-      description = appendExtension({
-        description: task.description,
-        timestamp: now,
-        timeZone: task.dueTimezone,
-        oldDurationMinutes: task.durationMinutes,
-        newDurationMinutes: newDuration
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message === "activity_log_full") {
-        throw Object.assign(new Error("Activity log has reached its description limit"), {
-          code: "activity_log_full",
-          statusCode: 422
-        });
-      }
-      throw error;
-    }
-    const metadata = this.rootMetadata(action ?? {}, { occurrence: true });
+    const metadata = this.rootMetadata(action ?? {}, { occurrence: true, revision: true });
     await this.executeRootAction({
       rootTaskId: taskId,
       actionType: "extend",
-      payload: { durationMinutes: newDuration },
+      payload: {},
       metadata,
       isEffectPresent: () => this.tasks.getById(taskId)?.durationMinutes === newDuration,
       responseAfterReconciliation: () => true
@@ -514,6 +497,23 @@ export class TaskActionService {
         });
       }
     }, async (context) => {
+      let description: string;
+      try {
+        description = appendExtension({
+          description: task.description,
+          timestamp: context.actionCreatedAt,
+          timeZone: task.dueTimezone,
+          oldDurationMinutes: task.durationMinutes,
+          newDurationMinutes: newDuration
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "activity_log_full") {
+          throw Object.assign(new Error("Activity log has reached its description limit"), {
+            code: "activity_log_full", statusCode: 422
+          });
+        }
+        throw error;
+      }
       await context.executeCommand("item_update", (commandUuid) => this.todoist.itemUpdate({
         commandUuid,
         todoistTaskId: task.todoistTaskId,
@@ -758,22 +758,6 @@ export class TaskActionService {
     return task;
   }
 
-  private isCreatedTaskTreePresent(
-    rootId: string | null,
-    checklist: ReadonlyArray<{ title: string; description?: string | null }>
-  ): boolean {
-    const root = rootId === null ? null : this.tasks.getById(rootId);
-    if (root === null) return false;
-    const children = this.tasks.listAll();
-    return checklist.every((draft, childOrder) => children.some((child) =>
-      child.parentId === root.todoistTaskId
-      && child.childOrder === childOrder
-      && child.deletedAt === null
-      && child.title === draft.title.trim()
-      && child.description === normalizeOptionalText(draft.description ?? null)
-    ));
-  }
-
   private syncedCreatedRootId(actionId: string): string | null {
     const rootCommand = this.actionJournal.listCommands(actionId).find((command) => command.stepKey === "item_add");
     const todoistTaskId = rootCommand === undefined ? null : todoistTaskIdFromCommandResult(rootCommand.result);
@@ -871,6 +855,13 @@ function sameDueDatetime(actual: string | null, expected: string): boolean {
     return false;
   }
   return Math.floor(actualTimestamp / 1000) === Math.floor(expectedTimestamp / 1000);
+}
+
+function createChildFailureCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return "todoist_child_create_failed";
 }
 
 interface TaskWithTodoistFields {

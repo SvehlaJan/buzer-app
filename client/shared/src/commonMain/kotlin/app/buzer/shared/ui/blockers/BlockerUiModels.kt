@@ -1,6 +1,7 @@
 package app.buzer.shared.ui.blockers
 
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.ui.commitment.formatDurationLabel
 import kotlin.time.Duration.Companion.minutes
@@ -29,6 +30,7 @@ data class BlockerUiModel(
     val checkedCount: Int,
     val totalCount: Int,
     val nextUncheckedChildTitle: String?,
+    val checklistItems: List<ChecklistItem>,
     val doneEnabled: Boolean,
     val extendEnabled: Boolean
 )
@@ -61,6 +63,7 @@ fun buildBlockerUiModel(
             ?.sortedBy { it.order }
             ?.firstOrNull()
             ?.title,
+        checklistItems = task?.checklistItems?.sortedBy { it.order }.orEmpty(),
         doneEnabled = task?.let { it.checkedCount == it.totalCount } ?: false,
         extendEnabled = task?.recurrence?.kind == RecurrenceKind.none
     )

@@ -43,7 +43,8 @@ class OverlayInitialDisplayGateTest {
             scheduleVersion = 1,
             serverTime = "2026-07-16T10:00:00Z",
             tasks = tasks.toList(),
-            health = emptyList<HealthStatus>()
+            health = emptyList<HealthStatus>(),
+            snapshotGeneration = 1
         )
 
     private fun task(id: String, occurrenceKey: String): TaskSnapshotItem =
