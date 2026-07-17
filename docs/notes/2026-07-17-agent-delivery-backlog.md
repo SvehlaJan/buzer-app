@@ -89,6 +89,20 @@ required_checks:
 
 **Dependencies:** None.
 
+**Status:**
+
+- Brainstormed 2026-07-17 and scoped down to documentation-only: no manifest schema, no
+  preflight script, no `.agents/tasks/` tooling — the user opted for manual worktree
+  discipline instead of enforcement. See
+  `docs/superpowers/specs/2026-07-17-agent-workspaces-design.md` for the full rationale.
+- Shipped at that narrowed scope: `docs/notes/agent-workspaces.md` documents the
+  convention (why, when to isolate, informal manifest shape, integration/merge review,
+  cleanup), and `AGENTS.md` points to it from the start-of-session routine and engineering
+  standards. Plan: `docs/superpowers/plans/2026-07-17-agent-workspaces.md` (complete).
+- The suggested files below (schema, preflight script, `.agents/tasks/` convention) were
+  explicitly rejected as non-goals, not merely deferred — re-attempting them should start
+  with a new brainstorming pass, not a resumption of this one.
+
 ---
 
 ## P0-2: Create a `buzer-subagent-delivery` skill
