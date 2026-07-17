@@ -1,5 +1,7 @@
 # Agent Workspaces
 
+Date: 2026-07-17
+
 Convention for isolating independently-assignable tasks into separate git worktrees, and
 how integration/merge-back works once a task is done.
 
@@ -22,12 +24,16 @@ i.e., its file changes don't need to interleave commit-by-commit with another in
 task. Use the primary checkout only for integration work: reviewing, merging, and
 resolving cross-cutting concerns across finished child branches.
 
-Naming convention already in use in this repo:
+Naming convention this doc recommends going forward, already followed by the most
+directly related recent worktrees (`feature/recurring-checklists` and its `-task2`/
+`-task3` splits) — other branches active during the same period used other prefixes
+(`feat/android-vps-enforcement`, `codex/vps-deployment`, `codex/android-overlay-boot-
+recovery`) that predate this convention:
 
 - Branch: `feature/<topic>` for a standalone task, or `feature/<topic>-taskN` for a
   subtask split off a larger effort.
-- Worktree path: `.worktrees/<topic>` or `.worktrees/<topic>-taskN`, matching the branch
-  name.
+- Worktree path: `.worktrees/<topic>` or `.worktrees/<topic>-taskN`, matching the branch's
+  topic segment (not any earlier prefix a branch might already carry).
 
 ```bash
 git worktree add .worktrees/my-topic -b feature/my-topic
@@ -67,22 +73,32 @@ out of `git status` entirely.
 ## Integration/Merge Review
 
 A parent/integration session — normally one running in the primary checkout on `master` —
-reviews each child worktree once its task is done, merges it, and records the merge with a
-descriptive commit before removing the worktree. This is the actual pattern already used
-in this repo; from `master`'s own history:
+reviews each child worktree once its task is done. What happens next depends on whether
+the branch still has work worth folding in:
+
+**Still-current work gets a real merge**, an ordinary merge commit carrying the actual
+diff:
+
+```text
+f21f8a9 merge: consolidate recurring checklist implementation
+```
+
+**Superseded or already-redundant branches still get recorded, not silently dropped** —
+via a history-only merge (`git merge -s ours <branch>`) that preserves the branch in
+history without reintroducing obsolete code:
 
 ```text
 merge: record recurring checklist planning branch
 merge: record recurring checklist task2 branch
 merge: record superseded VPS deployment branch
 merge: record superseded overlay recovery branch
-docs: record master integration
 ```
 
-Each `merge: record <branch> branch` commit is the integration session's record that it
-reviewed that specific child branch's changes before folding them in. A closing
+Both kinds of commit are the integration session's record that it reviewed that specific
+child branch before deciding whether to fold it in or close it out. A closing
 `docs: record master integration` (or equivalent) commit is a good place to note anything
-that needed cross-branch reconciliation.
+that needed cross-branch reconciliation — see `docs/handoffs/2026-07-17-master-integration.md`
+for the worked example this section is drawn from.
 
 ## Cleanup
 
