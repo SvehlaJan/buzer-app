@@ -15,9 +15,11 @@ Before changing code, every agent must:
 2. Read the approved spec.
 3. Read the plan file for the task being executed.
 4. Read recent handoffs in `docs/handoffs/`.
-5. Run `git status --short`.
-6. Identify files already changed by others and avoid overwriting them.
-7. State in the handoff which plan/task/steps were attempted.
+5. Run `git worktree list`. For independently-assignable subtasks, work in a dedicated
+   worktree per `docs/notes/agent-workspaces.md` rather than the primary checkout.
+6. Run `git status --short`.
+7. Identify files already changed by others and avoid overwriting them.
+8. State in the handoff which plan/task/steps were attempted.
 
 ## Documentation Culture
 
@@ -64,6 +66,9 @@ If no code changed, still write a handoff explaining what was investigated and w
 - Do not leave placeholder code, unchecked boxes for completed work, or TODO comments without a linked plan item.
 - Do not commit secrets, tokens, QR sessions, `.env` files, databases, generated build output, or WhatsApp auth folders.
 - Do not overwrite or revert files changed by another agent unless explicitly instructed.
+- Independently-assignable tasks run in a dedicated git worktree, not the primary
+  checkout — see `docs/notes/agent-workspaces.md` for the manifest convention and
+  integration/merge-back pattern.
 
 ## Documentation Lookup
 
