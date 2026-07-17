@@ -31,7 +31,7 @@ created in Task 1, so do Task 1 first.
 **Files:**
 - Create: `docs/notes/agent-workspaces.md`
 
-- [ ] **Step 1: Write the file**
+- [x] **Step 1: Write the file**
 
 ```markdown
 # Agent Workspaces
@@ -149,12 +149,12 @@ Stale registered worktrees make it harder for the next session to tell what's st
 active — don't leave them behind after a merge.
 ```
 
-- [ ] **Step 2: Verify all five sections are present**
+- [x] **Step 2: Verify all five sections are present**
 
 Run: `grep -c "^## " docs/notes/agent-workspaces.md`
 Expected: `5`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/notes/agent-workspaces.md
@@ -168,7 +168,7 @@ git commit -m "docs: add agent workspaces convention"
 **Files:**
 - Modify: `AGENTS.md`
 
-- [ ] **Step 1: Add a worktree-check step to the Required Start-Of-Session Routine**
+- [x] **Step 1: Add a worktree-check step to the Required Start-Of-Session Routine**
 
 Current text (lines 10-20):
 
@@ -200,7 +200,7 @@ Before changing code, every agent must:
 8. State in the handoff which plan/task/steps were attempted.
 ```
 
-- [ ] **Step 2: Add a worktree bullet to Engineering Standards**
+- [x] **Step 2: Add a worktree bullet to Engineering Standards**
 
 Current text (within the `## Engineering Standards` section):
 
@@ -217,12 +217,12 @@ Replace with:
   integration/merge-back pattern.
 ```
 
-- [ ] **Step 3: Verify the diff contains only these two additions**
+- [x] **Step 3: Verify the diff contains only these two additions**
 
 Run: `git diff AGENTS.md`
 Expected: two added lines/blocks matching Steps 1 and 2 above; nothing else changed.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add AGENTS.md
