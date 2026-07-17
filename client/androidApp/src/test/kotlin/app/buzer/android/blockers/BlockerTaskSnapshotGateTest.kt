@@ -36,21 +36,68 @@ class BlockerTaskSnapshotGateTest {
     fun startBlockerIsResolvedWhenTaskHasStarted() {
         val snapshot = snapshot(task("task-1", state = CommitmentState.started))
 
-        assertTrue(BlockerTaskSnapshotGate.isBlockerResolved(snapshot, "task-1", AlarmKind.START_BLOCKER))
+        assertTrue(
+            BlockerTaskSnapshotGate.isBlockerResolved(
+                snapshot,
+                "task-1",
+                "occurrence-current",
+                AlarmKind.START_BLOCKER
+            )
+        )
     }
 
     @Test
     fun startBlockerActivityIsHiddenWhenTaskHasStarted() {
         val snapshot = snapshot(task("task-1", state = CommitmentState.started))
 
-        assertTrue(BlockerTaskSnapshotGate.shouldHideAfterRefresh(snapshot, "task-1", AlarmKind.START_BLOCKER))
+        assertTrue(
+            BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                snapshot,
+                "task-1",
+                "occurrence-current",
+                AlarmKind.START_BLOCKER
+            )
+        )
     }
 
     @Test
     fun deadlineBlockerIsNotResolvedWhenTaskHasStarted() {
         val snapshot = snapshot(task("task-1", state = CommitmentState.started))
 
-        assertFalse(BlockerTaskSnapshotGate.isBlockerResolved(snapshot, "task-1", AlarmKind.DEADLINE_BLOCKER))
+        assertFalse(
+            BlockerTaskSnapshotGate.isBlockerResolved(
+                snapshot,
+                "task-1",
+                "occurrence-current",
+                AlarmKind.DEADLINE_BLOCKER
+            )
+        )
+    }
+
+    @Test
+    fun staleOccurrenceIsHiddenAfterRefreshEvenWhenTaskIsOtherwiseActive() {
+        val snapshot = snapshot(task("task-1", occurrenceKey = "occurrence-current"))
+
+        assertTrue(
+            BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                snapshot,
+                "task-1",
+                "occurrence-stale",
+                AlarmKind.DEADLINE_BLOCKER
+            )
+        )
+    }
+
+    @Test
+    fun missingRootIsHiddenAfterAuthoritativeRefresh() {
+        assertTrue(
+            BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                snapshot(),
+                "task-omitted-after-unassignment",
+                "occurrence-alarm",
+                AlarmKind.DEADLINE_BLOCKER
+            )
+        )
     }
 
     @Test
@@ -59,6 +106,7 @@ class BlockerTaskSnapshotGateTest {
             BlockerTaskSnapshotGate.isBlockerResolved(
                 snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true)),
                 "task-1",
+                "occurrence-current",
                 AlarmKind.START_BLOCKER
             )
         )
@@ -66,6 +114,7 @@ class BlockerTaskSnapshotGateTest {
             BlockerTaskSnapshotGate.isBlockerResolved(
                 snapshot(task("task-1", state = CommitmentState.deleted, isDeleted = true)),
                 "task-1",
+                "occurrence-current",
                 AlarmKind.DEADLINE_BLOCKER
             )
         )
@@ -76,14 +125,16 @@ class BlockerTaskSnapshotGateTest {
             scheduleVersion = 1,
             serverTime = "2026-05-28T09:00:00Z",
             tasks = tasks.toList(),
-            health = emptyList<HealthStatus>()
+            health = emptyList<HealthStatus>(),
+            snapshotGeneration = 1
         )
 
     private fun task(
         id: String,
         state: CommitmentState = CommitmentState.planned,
         isCompleted: Boolean = false,
-        isDeleted: Boolean = false
+        isDeleted: Boolean = false,
+        occurrenceKey: String = "occurrence-current"
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -105,6 +156,7 @@ class BlockerTaskSnapshotGateTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-05-28T09:00:00Z"
+            updatedAt = "2026-05-28T09:00:00Z",
+            occurrenceKey = occurrenceKey
         )
 }

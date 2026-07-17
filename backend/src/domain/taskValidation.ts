@@ -5,6 +5,7 @@ export interface StrictTaskInput {
   dueDatetime: string | null;
   durationMinutes: number | null;
   currentUserId: string;
+  isCompanionOwned?: boolean;
 }
 
 export interface ValidationResult {
@@ -16,13 +17,13 @@ export function validateTaskStrictness(input: StrictTaskInput): ValidationResult
   const errors: string[] = [];
   const title = input.title.trim();
   const createdByUser = input.creatorId === input.currentUserId;
-  const assignedToUser = input.assigneeId === input.currentUserId;
+  const assignedToUser = input.assigneeId === input.currentUserId || input.isCompanionOwned === true;
 
   if (title.length === 0) {
     errors.push("title_required");
   }
 
-  if (createdByUser && input.assigneeId === null) {
+  if (createdByUser && input.assigneeId === null && !input.isCompanionOwned) {
     errors.push("assignee_required_for_created_task");
   }
 

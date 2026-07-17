@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { SnapshotGenerationRepository } from "./snapshotGenerationRepository.js";
 
 export interface TodoistTaskUpsert {
   id: string;
@@ -94,6 +95,24 @@ const taskWithCommitmentSelect = `
 
 export class TaskRepository {
   constructor(private readonly db: Database.Database) {}
+
+  currentSnapshotGeneration(): number {
+    return new SnapshotGenerationRepository(this.db).current();
+  }
+
+  /** Executes the complete projection read in one SQLite transaction. */
+  withSnapshotRead<T>(read: () => T): T {
+    return this.db.transaction(read).deferred();
+  }
+
+  isMirrorContractReady(): boolean {
+    const row = this.db.prepare(`
+      select mirror_contract_version as mirrorContractVersion
+      from todoist_sync_state
+      where id = 1
+    `).get() as { mirrorContractVersion: number } | undefined;
+    return row?.mirrorContractVersion === 2;
+  }
 
   upsertTodoistTask(task: TodoistTaskUpsert): void {
     const taskParams = {
@@ -269,6 +288,90 @@ export class TaskRepository {
     this.db.prepare(`update commitment_states set ${sets.join(", ")} where task_id = @id`).run(params);
   }
 
+  rotateOccurrence(
+    id: string,
+    values: {
+      occurrenceKey: string;
+      occurrenceDueDatetime: string | null;
+      occurrenceRecurrenceFingerprint: string;
+      updatedAt: string;
+    }
+  ): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        state = 'planned',
+        started_at = null,
+        start_dismiss_count = 0,
+        deadline_extension_count = 0,
+        last_snoozed_at = null,
+        escalation_sent_at = null,
+        occurrence_key = @occurrenceKey,
+        occurrence_due_datetime = @occurrenceDueDatetime,
+        occurrence_recurrence_fingerprint = @occurrenceRecurrenceFingerprint,
+        reconciliation_status = 'confirmed',
+        schedule_version = schedule_version + 1,
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, ...values });
+  }
+
+  markOccurrenceReconciliationPending(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set reconciliation_status = 'pending', updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
+  confirmOccurrenceReconciliation(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set reconciliation_status = 'confirmed', updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
+  leaveOccurrenceOwnership(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        state = 'planned',
+        started_at = null,
+        start_dismiss_count = 0,
+        deadline_extension_count = 0,
+        last_snoozed_at = null,
+        escalation_sent_at = null,
+        reconciliation_status = 'confirmed',
+        schedule_version = schedule_version + 1,
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, updatedAt });
+  }
+
+  initializeOccurrence(
+    id: string,
+    values: {
+      occurrenceKey: string;
+      occurrenceDueDatetime: string | null;
+      occurrenceRecurrenceFingerprint: string;
+      updatedAt: string;
+    }
+  ): void {
+    this.db.prepare(`
+      update commitment_states
+      set
+        occurrence_key = coalesce(nullif(trim(occurrence_key), ''), @occurrenceKey),
+        occurrence_due_datetime = coalesce(occurrence_due_datetime, @occurrenceDueDatetime),
+        occurrence_recurrence_fingerprint = coalesce(
+          nullif(trim(occurrence_recurrence_fingerprint), ''),
+          @occurrenceRecurrenceFingerprint
+        ),
+        updated_at = @updatedAt
+      where task_id = @id
+    `).run({ id, ...values });
+  }
+
   updateTaskSchedule(
     id: string,
     dueDatetime: string,
@@ -350,6 +453,74 @@ export class TaskRepository {
         updated_at = @completedAt
       where id = @id
     `).run({ id, completedAt });
+  }
+
+  createChecklistChild(input: {
+    id: string;
+    todoistTaskId: string;
+    parentTodoistTaskId: string;
+    projectId: string | null;
+    title: string;
+    description: string | null;
+    childOrder: number;
+    updatedAt: string;
+  }): void {
+    this.upsertTodoistTask({
+      id: input.id,
+      todoistTaskId: input.todoistTaskId,
+      title: input.title,
+      description: input.description,
+      projectId: input.projectId,
+      parentId: input.parentTodoistTaskId,
+      childOrder: input.childOrder,
+      assigneeId: null,
+      creatorId: null,
+      dueDate: null,
+      dueDatetime: null,
+      dueString: null,
+      dueLang: null,
+      dueTimezone: null,
+      isRecurring: false,
+      durationAmount: null,
+      durationUnit: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: input.updatedAt
+    });
+  }
+
+  updateChecklistChild(id: string, title: string, description: string | null, updatedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set title = @title,
+          description = @description,
+          mirror_revision = mirror_revision + case when title is not @title or description is not @description then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, title, description, updatedAt });
+  }
+
+  setChecklistChildChecked(id: string, checked: boolean, updatedAt: string): void {
+    const completedAt = checked ? updatedAt : null;
+    this.db.prepare(`
+      update todoist_tasks
+      set completed_at = @completedAt,
+          mirror_revision = mirror_revision + case when completed_at is not @completedAt then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, completedAt, updatedAt });
+  }
+
+  deleteChecklistChild(id: string, updatedAt: string): void {
+    this.db.prepare(`
+      update todoist_tasks
+      set deleted_at = @updatedAt,
+          mirror_revision = mirror_revision + case when deleted_at is not @updatedAt then 1 else 0 end,
+          updated_at = @updatedAt
+      where id = @id
+    `).run({ id, updatedAt });
   }
 }
 

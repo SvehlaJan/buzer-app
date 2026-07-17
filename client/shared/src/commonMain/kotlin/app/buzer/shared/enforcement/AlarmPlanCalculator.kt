@@ -1,6 +1,8 @@
 package app.buzer.shared.enforcement
 
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.HierarchyStatus
+import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.time.Duration.Companion.hours
@@ -13,11 +15,24 @@ enum class DesiredAlarmKind {
     DEADLINE_BLOCKER
 }
 
+data class DesiredAlarmIdentity(
+    val taskId: String,
+    val occurrenceKey: String,
+    val kind: DesiredAlarmKind
+)
+
 data class DesiredAlarm(
     val taskId: String,
     val kind: DesiredAlarmKind,
-    val triggerAtIso: String
-)
+    val triggerAtIso: String,
+    val occurrenceKey: String
+) {
+    init {
+        require(occurrenceKey.isNotBlank()) { "occurrenceKey must not be blank" }
+    }
+
+    val identity: DesiredAlarmIdentity = DesiredAlarmIdentity(taskId, occurrenceKey, kind)
+}
 
 data class AlarmPlan(
     val alarms: List<DesiredAlarm>,
@@ -35,7 +50,12 @@ object AlarmPlanCalculator {
                 cancelTaskIds += task.id
                 continue
             }
-            if (!task.isAssignedToUser || task.validationErrors.isNotEmpty()) {
+            if (!task.isAssignedToUser ||
+                task.validationErrors.isNotEmpty() ||
+                task.state == CommitmentState.invalid ||
+                task.hierarchyStatus == HierarchyStatus.unsupported ||
+                task.occurrenceKey.isBlank()
+            ) {
                 continue
             }
 
@@ -56,7 +76,8 @@ object AlarmPlanCalculator {
         isCompleted ||
             isDeleted ||
             state == CommitmentState.completed ||
-            state == CommitmentState.deleted
+            state == CommitmentState.deleted ||
+            reconciliationStatus == ReconciliationStatus.pending
 
     private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm> {
         val startAt = task.startAt?.let(Instant::parse)
@@ -72,10 +93,10 @@ object AlarmPlanCalculator {
         if (startAt != null) {
             val preStartAt = startAt.minus(1.hours)
             if (preStartAt > now) {
-                alarms += DesiredAlarm(task.id, DesiredAlarmKind.PRE_START_WARNING, preStartAt.toString())
+                alarms += DesiredAlarm(task.id, DesiredAlarmKind.PRE_START_WARNING, preStartAt.toString(), task.occurrenceKey)
             }
             if (startAt > now) {
-                alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, startAt.toString())
+                alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, startAt.toString(), task.occurrenceKey)
             } else if (
                 task.state == CommitmentState.planned &&
                 deadlineAt != null &&
@@ -89,12 +110,12 @@ object AlarmPlanCalculator {
                 // never sets the intermediate pre_start_warning/start_blocker_active/
                 // deadline_blocker_active states. If the backend ever starts advancing state
                 // on blocker fire, this guard must widen or the nag silently stops.
-                alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, now.toString())
+                alarms += DesiredAlarm(task.id, DesiredAlarmKind.START_BLOCKER, now.toString(), task.occurrenceKey)
             }
         }
 
         if (deadlineAt != null && deadlineAt > now) {
-            alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, deadlineAt.toString())
+            alarms += DesiredAlarm(task.id, DesiredAlarmKind.DEADLINE_BLOCKER, deadlineAt.toString(), task.occurrenceKey)
         }
 
         return alarms

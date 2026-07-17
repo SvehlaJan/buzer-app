@@ -114,14 +114,18 @@ class MorningReviewActivity : ComponentActivity() {
         fun runRepair(
             currentCoordinator: EnforcementCoordinator,
             taskId: String,
+            occurrenceKey: String,
             request: UpdateTaskRequest
         ) {
             repairing = true
             actionErrorMessage = null
-            retryAction = { runRepair(currentCoordinator, taskId, request) }
+            retryAction = { runRepair(currentCoordinator, taskId, occurrenceKey, request) }
             lifecycleScope.launch {
                 try {
-                    AppLog.info("morning_review repair start taskId=$taskId duration=${request.durationMinutes}")
+                    AppLog.info(
+                        "morning_review repair start taskId=$taskId " +
+                            "duration=${request.rootPatch?.durationMinutes}"
+                    )
                     when (val result = currentCoordinator.updateTask(taskId, request)) {
                         CoordinatorActionResult.Success -> {
                             invalidTasks = invalidTasks.filterNot { it.id == taskId }
@@ -133,6 +137,25 @@ class MorningReviewActivity : ComponentActivity() {
                         is CoordinatorActionResult.FailedAndHidden -> {
                             AppLog.warn("morning_review repair failed_hidden taskId=$taskId")
                             actionErrorMessage = result.message
+                        }
+                        is CoordinatorActionResult.Pending -> {
+                            invalidTasks = SnapshotReducer.reduce(result.response.snapshot).invalidTasks
+                            actionErrorMessage = "Saved; waiting for Todoist confirmation"
+                        }
+                        is CoordinatorActionResult.Stale -> {
+                            invalidTasks = SnapshotReducer.reduce(result.snapshot).invalidTasks
+                            actionErrorMessage = result.message
+                        }
+                        is CoordinatorActionResult.LocalReconciliationFailed -> {
+                            invalidTasks = SnapshotReducer.reduce(result.snapshot).invalidTasks
+                            actionErrorMessage = "Saved; local reconciliation failed: ${result.message}"
+                        }
+                        is CoordinatorActionResult.RetryAfter -> {
+                            retryAction = { lifecycleScope.launch { result.retry() } }
+                            actionErrorMessage = "Retry in ${result.retryAfterSeconds} seconds"
+                        }
+                        CoordinatorActionResult.ChildActionInFlight -> {
+                            actionErrorMessage = "Checklist update is already in progress"
                         }
                     }
                 } catch (error: CancellationException) {
@@ -155,6 +178,7 @@ class MorningReviewActivity : ComponentActivity() {
                     scheduler.schedule(
                         ScheduledAlarm(
                             taskId = EnforcementCoordinator.MORNING_REVIEW_TASK_ID,
+                            occurrenceKey = EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY,
                             kind = AlarmKind.MORNING_REVIEW,
                             triggerAtEpochMillis = System.currentTimeMillis() + FIVE_MINUTES_MILLIS
                         )
@@ -163,7 +187,11 @@ class MorningReviewActivity : ComponentActivity() {
                         AppLog.debug("morning_review snooze finish reason=no_coordinator")
                         finish()
                     } else {
-                        when (val result = currentCoordinator.dismissMorningReview()) {
+                        when (
+                            val result = currentCoordinator.dismissMorningReview(
+                                EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY
+                            )
+                        ) {
                             CoordinatorActionResult.Success -> {
                                 AppLog.info("morning_review snooze dismissed_on_backend")
                                 finish()
@@ -171,6 +199,17 @@ class MorningReviewActivity : ComponentActivity() {
                             is CoordinatorActionResult.FailedAndHidden -> {
                                 AppLog.warn("morning_review snooze failed_hidden")
                                 actionErrorMessage = result.message
+                            }
+                            is CoordinatorActionResult.Pending -> actionErrorMessage = "Saved; waiting for Todoist confirmation"
+                            is CoordinatorActionResult.Stale -> actionErrorMessage = result.message
+                            is CoordinatorActionResult.LocalReconciliationFailed -> {
+                                actionErrorMessage = "Saved; local reconciliation failed: ${result.message}"
+                            }
+                            is CoordinatorActionResult.RetryAfter -> {
+                                actionErrorMessage = "Retry in ${result.retryAfterSeconds} seconds"
+                            }
+                            CoordinatorActionResult.ChildActionInFlight -> {
+                                actionErrorMessage = "Checklist update is already in progress"
                             }
                         }
                     }
@@ -197,7 +236,15 @@ class MorningReviewActivity : ComponentActivity() {
                         AppLog.debug("morning_review repair skipped reason=no_coordinator taskId=$taskId")
                         finish()
                     } else {
-                        runRepair(currentCoordinator, taskId, request)
+                        val occurrenceKey = invalidTasks
+                            .firstOrNull { it.id == taskId }
+                            ?.occurrenceKey
+                            ?.takeIf { it.isNotBlank() }
+                        if (occurrenceKey == null) {
+                            actionErrorMessage = "Task occurrence is no longer current"
+                        } else {
+                            runRepair(currentCoordinator, taskId, occurrenceKey, request)
+                        }
                     }
                 },
                 onSnooze = { runSnooze(coordinator) },

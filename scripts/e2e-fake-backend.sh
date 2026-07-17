@@ -6,6 +6,8 @@ PORT="${PORT:-18433}"
 TOKEN="test-token"
 FAKE_BACKEND_URL="http://127.0.0.1:${PORT}"
 EMULATOR_BACKEND_URL="http://10.0.2.2:${PORT}"
+# A physical device reaches the host fake backend through adb reverse.
+CONNECTED_DEVICE_BACKEND_URL="${CONNECTED_DEVICE_BACKEND_URL:-http://127.0.0.1:${PORT}}"
 STARTED_PID=""
 
 cleanup() {
@@ -55,10 +57,27 @@ fi
 GMD_GPU_ARG="${BUZER_GMD_GPU:+-Pandroid.testoptions.manageddevices.emulator.gpu=${BUZER_GMD_GPU}}"
 
 cd "${ROOT_DIR}/client"
-./gradlew pixel8Api34DebugAndroidTest --rerun-tasks \
-  ${GMD_GPU_ARG:+"${GMD_GPU_ARG}"} \
-  -PBUZER_BACKEND_BASE_URL="${EMULATOR_BACKEND_URL}" \
-  -PBUZER_BACKEND_TOKEN="${TOKEN}" \
-  -PBUZER_ASSIGNEE_ME_ID="${BUZER_ASSIGNEE_ME_ID:-user-me}" \
-  -PBUZER_ASSIGNEE_WIFE_ID="${BUZER_ASSIGNEE_WIFE_ID:-user-wife}" \
-  -PFAKE_BACKEND_BASE_URL="${EMULATOR_BACKEND_URL}"
+if [[ -n "${ANDROID_SERIAL:-}" ]]; then
+  TEST_TASK=":androidApp:connectedDebugAndroidTest"
+  DEVICE_BACKEND_URL="${CONNECTED_DEVICE_BACKEND_URL}"
+else
+  TEST_TASK="pixel8Api34DebugAndroidTest"
+  DEVICE_BACKEND_URL="${EMULATOR_BACKEND_URL}"
+fi
+
+GRADLE_ARGS=("${TEST_TASK}" "--rerun-tasks")
+if [[ -n "${GMD_GPU_ARG}" ]]; then
+  GRADLE_ARGS+=("${GMD_GPU_ARG}")
+fi
+if [[ -n "${ANDROID_TEST_CLASS:-}" ]]; then
+  GRADLE_ARGS+=("-Pandroid.testInstrumentationRunnerArguments.class=${ANDROID_TEST_CLASS}")
+fi
+GRADLE_ARGS+=(
+  "-PBUZER_BACKEND_BASE_URL=${DEVICE_BACKEND_URL}"
+  "-PBUZER_BACKEND_TOKEN=${TOKEN}"
+  "-PBUZER_ASSIGNEE_ME_ID=${BUZER_ASSIGNEE_ME_ID:-user-me}"
+  "-PBUZER_ASSIGNEE_WIFE_ID=${BUZER_ASSIGNEE_WIFE_ID:-user-wife}"
+  "-PFAKE_BACKEND_BASE_URL=${DEVICE_BACKEND_URL}"
+)
+
+./gradlew "${GRADLE_ARGS[@]}"

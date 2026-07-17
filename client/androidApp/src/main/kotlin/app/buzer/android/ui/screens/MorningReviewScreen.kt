@@ -23,10 +23,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.components.BuzerPanel
 import app.buzer.android.ui.components.CommitmentEditor
+import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
@@ -41,14 +45,25 @@ import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.NullablePatch
+import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.model.ChecklistDraft
+import app.buzer.shared.model.ChecklistMutation
+import app.buzer.shared.model.ChecklistItem
+import app.buzer.shared.model.RecurrenceKind
+import app.buzer.shared.model.RecurrencePreset
+import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import app.buzer.shared.ui.commitment.CommitmentEditorValidation
+import app.buzer.shared.ui.commitment.ChecklistEditorDraft
+import app.buzer.shared.ui.commitment.validateChecklistDrafts
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 sealed interface MorningReviewContentState {
@@ -202,13 +217,22 @@ fun buildMorningReviewRepairValidation(
     )
 }
 
-fun updateTaskRequestFromEditorStart(
+internal fun updateTaskRequestFromEditorStart(
+    actionId: String,
+    deviceId: String,
+    expectedOccurrenceKey: String,
+    expectedTaskRevision: String,
     title: String,
     description: String,
     selectedProject: ProjectItem,
     selectedAssignee: AddTaskAssigneeOption?,
     start: DateTimeSelection,
     durationMinutes: Int,
+    recurrencePreset: RecurrencePreset? = null,
+    existingChecklistItems: List<ChecklistItem> = emptyList(),
+    existingDrafts: List<ExistingChecklistDraft> = emptyList(),
+    deletedChildIds: Set<String> = emptySet(),
+    checklistDrafts: List<ChecklistEditorDraft> = emptyList(),
     zoneId: ZoneId = ZoneId.systemDefault()
 ): UpdateTaskRequest {
     val dueDatetime = start.date.atTime(start.hour, start.minute)
@@ -216,13 +240,53 @@ fun updateTaskRequestFromEditorStart(
         .toInstant()
         .toString()
     return UpdateTaskRequest(
-        title = title.trim(),
-        description = description.trim().takeIf { it.isNotEmpty() },
-        projectId = selectedProject.id,
-        assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
-        dueDatetime = dueDatetime,
-        durationMinutes = durationMinutes
+        actionId = actionId,
+        deviceId = deviceId,
+        expectedOccurrenceKey = expectedOccurrenceKey,
+        rootPatch = RootTaskPatch(
+            expectedTaskRevision = expectedTaskRevision,
+            title = title.trim(),
+            description = NullablePatch.Value(description.trim().takeIf { it.isNotEmpty() }),
+            projectId = selectedProject.id,
+            assigneeId = NullablePatch.Value(
+                selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks }
+            ),
+            dueDatetime = dueDatetime,
+            durationMinutes = durationMinutes,
+            recurrencePreset = recurrencePreset,
+            timeZone = zoneId.id
+        ),
+        childMutations = existingChildMutations(
+            existingChecklistItems = existingChecklistItems,
+            existingDrafts = existingDrafts,
+            deletedChildIds = deletedChildIds
+        ) + checklistDrafts.map { draft ->
+            ChecklistMutation.Add(draft.clientMutationId, draft.title.trim(), draft.description)
+        }
     )
+}
+
+private fun existingChildMutations(
+    existingChecklistItems: List<ChecklistItem>,
+    existingDrafts: List<ExistingChecklistDraft>,
+    deletedChildIds: Set<String>
+): List<ChecklistMutation> {
+    val originalById = existingChecklistItems.associateBy { it.id }
+    val changes = existingDrafts.filterNot { it.id in deletedChildIds }.flatMap { draft ->
+        val original = originalById.getValue(draft.id)
+        buildList {
+            if (draft.title.trim() != original.title || draft.description != original.description) {
+                add(ChecklistMutation.Edit(UUID.randomUUID().toString(), draft.id, draft.childRevision, draft.title.trim(), draft.description))
+            }
+            if (draft.checked != original.checked) {
+                add(if (draft.checked) ChecklistMutation.Check(UUID.randomUUID().toString(), draft.id, draft.childRevision)
+                else ChecklistMutation.Uncheck(UUID.randomUUID().toString(), draft.id, draft.childRevision))
+            }
+        }
+    }
+    return changes + existingChecklistItems.filter { it.id in deletedChildIds }.map {
+        ChecklistMutation.Delete(UUID.randomUUID().toString(), it.id, it.childRevision)
+    }
 }
 
 private fun plainLanguageProblem(validationErrors: List<String>): String {
@@ -255,6 +319,10 @@ fun MorningReviewScreen(
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null
 ) {
+    val context = LocalContext.current
+    val deviceId = remember(context) {
+        EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
+    }
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
@@ -293,6 +361,14 @@ fun MorningReviewScreen(
     var descriptionExpanded by remember(repairingTask?.id) {
         mutableStateOf(false)
     }
+    var recurrencePreset by remember(repairingTask?.id) {
+        mutableStateOf(repairingTask?.recurrence?.preset)
+    }
+    var checklistDrafts by remember(repairingTask?.id) { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
+    var existingChecklistDrafts by remember(repairingTask?.id) {
+        mutableStateOf(repairingTask?.checklistItems?.sortedBy { it.order }?.map(ChecklistItem::toEditorDraft).orEmpty())
+    }
+    var deletedChecklistChildIds by remember(repairingTask?.id) { mutableStateOf<Set<String>>(emptySet()) }
     var errorText by remember(repairingTask?.id) { mutableStateOf<String?>(null) }
 
     fun retryProjects() {
@@ -328,6 +404,15 @@ fun MorningReviewScreen(
         title = task.title
         selectedProject = projects.firstOrNull { it.id == task.projectId }
         selectedAssignee = assigneeOptions.firstOrNull { it.id == task.assigneeId }
+    }
+
+    // A successful repair updates the authoritative invalid-task list in the hosting activity.
+    // Do not leave an editor open for a task that no longer requires repair.
+    LaunchedEffect(invalidTasks) {
+        if (repairingTask != null && invalidTasks.none { it.id == repairingTask?.id }) {
+            repairingTask = null
+            errorText = null
+        }
     }
 
     Column(
@@ -371,7 +456,11 @@ fun MorningReviewScreen(
                 contentState = contentState
             )
         } else {
+            val customRecurrence = task.recurrence.kind == RecurrenceKind.custom
             projectLoadError?.let { WarningStatus("Projects did not load: $it", onRetry = { retryProjects() }) }
+            if (task.hierarchyStatus == HierarchyStatus.unsupported) {
+                WarningStatus(task.hierarchyViolation ?: "This task has unsupported nested checklist items")
+            }
             val editorState = buildMorningReviewRepairEditorState(
                 task = task,
                 start = start,
@@ -432,6 +521,30 @@ fun MorningReviewScreen(
                     durationMinutes = it
                     errorText = null
                 },
+                recurrencePreset = recurrencePreset,
+                onRecurrencePresetChange = { recurrencePreset = it; errorText = null },
+                checklistContent = {
+                    if (customRecurrence && recurrencePreset == null) {
+                        Text("Custom recurrence: ${task.recurrence.rule ?: task.recurrence.displayLabel}")
+                        Text("Choose a numbered option only to replace it.")
+                    }
+                    ExistingChecklistEditor(
+                        drafts = existingChecklistDrafts.filterNot { it.id in deletedChecklistChildIds },
+                        onDraftsChange = { existingChecklistDrafts = it; errorText = null },
+                        onDelete = { childId ->
+                            deletedChecklistChildIds = deletedChecklistChildIds + childId
+                            errorText = null
+                        },
+                        enabled = !repairing && !snoozing && task.hierarchyStatus == HierarchyStatus.valid
+                    )
+                    ChecklistEditor(
+                        drafts = checklistDrafts,
+                        onDraftsChange = { checklistDrafts = it; errorText = null },
+                        nextClientMutationId = { UUID.randomUUID().toString() },
+                        enabled = !repairing && !snoozing && task.hierarchyStatus == HierarchyStatus.valid,
+                        maxItems = (30 - existingChecklistDrafts.count { it.id !in deletedChecklistChildIds }).coerceAtLeast(0)
+                    )
+                },
                 validation = buildMorningReviewRepairValidation(
                     title = title,
                     selectedProject = selectedProject,
@@ -458,16 +571,31 @@ fun MorningReviewScreen(
                     )
                     if (validation.firstInvalidField != null) {
                         errorText = validation.bannerMessage
+                    } else if (validateChecklistDrafts(checklistDrafts).let { it.bannerMessage != null || it.invalidDraftIds.isNotEmpty() }) {
+                        errorText = "Each checklist item needs a title (maximum 30)"
                     } else if (project != null && selectedStart != null) {
                         onRepair(
                             task.id,
                             updateTaskRequestFromEditorStart(
+                                actionId = UUID.randomUUID().toString(),
+                                deviceId = deviceId,
+                                expectedOccurrenceKey = task.occurrenceKey,
+                                expectedTaskRevision = task.taskRevision,
                                 title = title,
                                 description = description,
                                 selectedProject = project,
                                 selectedAssignee = selectedAssignee,
                                 start = selectedStart,
-                                durationMinutes = durationMinutes
+                                durationMinutes = durationMinutes,
+                                recurrencePreset = when {
+                                    task.recurrence.kind == RecurrenceKind.custom -> recurrencePreset
+                                    recurrencePreset != task.recurrence.preset -> recurrencePreset
+                                    else -> null
+                                },
+                                existingChecklistItems = task.checklistItems,
+                                existingDrafts = existingChecklistDrafts,
+                                deletedChildIds = deletedChecklistChildIds,
+                                checklistDrafts = checklistDrafts
                             )
                         )
                     }
@@ -478,6 +606,7 @@ fun MorningReviewScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             )
+            ActivityLogSection(task)
         }
     }
 
@@ -489,6 +618,17 @@ fun MorningReviewScreen(
             retryLabel = "Retry",
             onRetry = onRetryAction
         )
+    }
+}
+
+@Composable
+internal fun ActivityLogSection(task: TaskSnapshotItem) {
+    if (task.activityLogEntries.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs), modifier = Modifier.fillMaxWidth()) {
+        Text("Activity", style = MaterialTheme.typography.labelLarge)
+        task.activityLogEntries.forEach { entry ->
+            Text("${entry.timestamp}: ${entry.message}", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -596,12 +736,16 @@ private fun MorningReviewRepairCard(
                     loading = false,
                     onClick = onRepair,
                     enabled = !snoozing,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("morning-repair-${state.task.id}")
                 )
                 TextButton(
                     onClick = onSnooze,
                     enabled = !snoozing,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("morning-snooze-${state.task.id}")
                 ) {
                     Text(state.snoozeActionLabel)
                 }

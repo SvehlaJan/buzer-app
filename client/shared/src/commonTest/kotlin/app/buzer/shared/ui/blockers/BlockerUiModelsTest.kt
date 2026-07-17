@@ -1,12 +1,56 @@
 package app.buzer.shared.ui.blockers
 
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.ChecklistItem
+import app.buzer.shared.model.RecurrenceKind
+import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.TaskRecurrence
+import app.buzer.shared.ui.home.homeTaskProgress
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class BlockerUiModelsTest {
+    @Test
+    fun blockerShowsProgressAndDisablesDoneAndExtendForIncompleteRecurringChecklist() {
+        val model = buildBlockerUiModel(
+            kind = BlockerKind.Deadline,
+            task = taskSnapshot(
+                checklistItems = listOf(
+                    ChecklistItem("child-done", "Done", checked = true, order = 1, childRevision = "r:1"),
+                    ChecklistItem("child-next", "Next", checked = false, order = 2, childRevision = "r:2")
+                ),
+                checkedCount = 1,
+                totalCount = 2,
+                recurrence = TaskRecurrence(kind = RecurrenceKind.supported, preset = RecurrencePreset.weekly)
+            )
+        )
+
+        assertEquals(1, model.checkedCount)
+        assertEquals(2, model.totalCount)
+        assertEquals("Next", model.nextUncheckedChildTitle)
+        assertFalse(model.doneEnabled)
+        assertFalse(model.extendEnabled)
+    }
+
+    @Test
+    fun homeProgressEnablesDoneAndExtendForCompletedOneTimeChecklist() {
+        val progress = homeTaskProgress(
+            taskSnapshot(
+                checklistItems = listOf(ChecklistItem("child", "Done", checked = true, order = 1, childRevision = "r:1")),
+                checkedCount = 1,
+                totalCount = 1,
+                recurrence = TaskRecurrence(kind = RecurrenceKind.none, preset = RecurrencePreset.never)
+            )
+        )
+
+        assertEquals("1/1", progress.countLabel)
+        assertEquals(null, progress.nextUncheckedChildTitle)
+        assertTrue(progress.doneEnabled)
+        assertTrue(progress.extendEnabled)
+    }
     @Test
     fun startBlockerUsesStartNowEyebrow() {
         val model = buildBlockerUiModel(
@@ -89,7 +133,11 @@ class BlockerUiModelsTest {
         startAt: String? = "2026-07-10T09:35:00Z",
         dueDatetime: String? = "2026-07-10T09:35:00Z",
         durationMinutes: Int? = 30,
-        description: String? = null
+        description: String? = null,
+        checklistItems: List<ChecklistItem> = emptyList(),
+        checkedCount: Int = 0,
+        totalCount: Int = 0,
+        recurrence: TaskRecurrence = TaskRecurrence()
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = "task-start",
@@ -112,6 +160,10 @@ class BlockerUiModelsTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-07-10T07:00:00Z"
+            updatedAt = "2026-07-10T07:00:00Z",
+            checklistItems = checklistItems,
+            checkedCount = checkedCount,
+            totalCount = totalCount,
+            recurrence = recurrence
         )
 }

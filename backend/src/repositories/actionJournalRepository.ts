@@ -105,6 +105,41 @@ export class ActionJournalRepository {
     return row === undefined ? null : mapJournalRow(row);
   }
 
+  hasDispatchedCommand(actionId: string): boolean {
+    const row = this.db.prepare(`
+      select 1 as present
+      from task_action_commands
+      where action_id = ? and status in ('sent', 'confirmed')
+      limit 1
+    `).get(actionId) as { present: number } | undefined;
+    return row !== undefined;
+  }
+
+  listCommands(actionId: string): ActionCommandEntry[] {
+    const rows = this.db.prepare(`
+      select
+        action_id as actionId,
+        step_key as stepKey,
+        command_uuid as commandUuid,
+        temp_id as tempId,
+        status,
+        result_json as resultJson,
+        updated_at as updatedAt
+      from task_action_commands
+      where action_id = ?
+    `).all(actionId) as ActionCommandRow[];
+    return rows.map(mapCommandRow);
+  }
+
+  reassignRootTask(actionId: string, rootTaskId: string, updatedAt: string): void {
+    const result = this.db.prepare(`
+      update task_action_journal
+      set root_task_id = ?, updated_at = ?
+      where action_id = ?
+    `).run(rootTaskId, updatedAt, actionId);
+    if (result.changes !== 1) throw new Error("action_journal_reservation_missing");
+  }
+
   reserveCommand(input: ReserveCommandInput): ActionCommandReservation {
     const tx = this.db.transaction((): ActionCommandReservation => {
       const existing = this.getCommand(input.actionId, input.stepKey);

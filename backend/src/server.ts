@@ -9,6 +9,9 @@ import { registerRoutes } from "./http/routes.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
+import { TaskActionCoordinator } from "./services/taskActionCoordinator.js";
+import { TaskActionService } from "./services/taskActionService.js";
+import { TaskSnapshotService } from "./services/taskSnapshotService.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
 import { TodoistSyncService } from "./services/todoistSyncService.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
@@ -35,8 +38,34 @@ export function buildServer(options: BuildServerOptions) {
     max: options.rateLimit?.max ?? 60,
     timeWindow: options.rateLimit?.timeWindowMs ?? 60_000
   });
+  const tasks = new TaskRepository(options.db);
+  const projects = new ProjectRepository(options.db);
+  const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true);
+  const synchronizer = new TodoistSyncService(options.db, tasks, projects, options.todoist, options.currentUserId);
+  const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
+  const actions = new TaskActionService(
+    options.db,
+    tasks,
+    projects,
+    options.todoist,
+    options.currentUserId,
+    options.escalationService ?? null,
+    true,
+    {
+      rootActions: {
+        coordinator,
+        synchronize: () => synchronizer.syncOnce(),
+        snapshot: () => snapshots.getSnapshot(new Date().toISOString())
+      },
+      checklist: {
+        coordinator,
+        synchronize: () => synchronizer.syncOnce(),
+        snapshot: () => snapshots.getSnapshot(new Date().toISOString())
+      }
+    }
+  );
   app.register(async (scope) => {
-    registerRoutes(scope, options);
+    registerRoutes(scope, options, { actions, snapshots });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
@@ -81,7 +110,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     escalationService
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, tasks, projects, todoist),
+    new TodoistSyncService(db, tasks, projects, todoist, currentUserId),
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")

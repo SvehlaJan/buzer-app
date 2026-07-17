@@ -164,7 +164,8 @@ class HomeScreenStateTest {
                         durationMinutes = 30
                     )
                 ),
-                health = emptyList()
+                health = emptyList(),
+                snapshotGeneration = 4
             )
         )
 
@@ -218,7 +219,8 @@ class HomeScreenStateTest {
                         isCompleted = true
                     )
                 ),
-                health = emptyList()
+                health = emptyList(),
+                snapshotGeneration = 5
             )
         )
 
@@ -292,7 +294,9 @@ class HomeScreenStateTest {
                     description = "Cover release risk",
                     dueDatetime = "2026-07-08T11:30:00Z",
                     durationMinutes = 60,
-                    state = CommitmentState.started
+                    state = CommitmentState.started,
+                    checkedCount = 1,
+                    totalCount = 2
                 )
             ),
             startingToday = emptyList(),
@@ -308,6 +312,9 @@ class HomeScreenStateTest {
         assertEquals("30m remaining", currentBlock.remainingLabel)
         assertEquals("Cover release risk", currentBlock.description)
         assertEquals("Finish current task", currentBlock.doneContentDescription)
+        assertEquals(1, currentBlock.checkedCount)
+        assertEquals(2, currentBlock.totalCount)
+        assertFalse(currentBlock.doneEnabled)
         assertEquals(
             listOf(HomeAgendaRowState.Current),
             state.agendaRows.map { it.state }
@@ -392,7 +399,9 @@ class HomeScreenStateTest {
         dueDatetime: String? = null,
         durationMinutes: Int? = null,
         state: CommitmentState = CommitmentState.planned,
-        isCompleted: Boolean = false
+        isCompleted: Boolean = false,
+        checkedCount: Int = 0,
+        totalCount: Int = 0
     ): app.buzer.shared.model.TaskSnapshotItem =
         app.buzer.shared.model.TaskSnapshotItem(
             id = id,
@@ -415,7 +424,9 @@ class HomeScreenStateTest {
             startDismissCount = 0,
             deadlineExtensionCount = 0,
             escalationSentAt = null,
-            updatedAt = "2026-05-08T07:00:00Z"
+            updatedAt = "2026-05-08T07:00:00Z",
+            checkedCount = checkedCount,
+            totalCount = totalCount
         )
 
     private companion object {

@@ -17,8 +17,12 @@ import app.buzer.android.ui.HomeDoneActionHandler
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.TaskActionRequest
+import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
+import java.util.UUID
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -32,10 +36,10 @@ class MainActivity : ComponentActivity() {
                 val coordinator = requireCoordinator("snapshot refresh")
                 SnapshotReducer.reduce(coordinator.refreshAndReconcile())
             },
-            completeTask = { taskId ->
+            completeTask = { taskId, request ->
                 val coordinator = coordinator
                     ?: return@HomeDoneActionHandler CoordinatorActionResult.FailedAndHidden("Task completion failed")
-                coordinator.completeTask(taskId)
+                coordinator.completeTask(taskId, request)
             },
             latestSnapshot = {
                 coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)
@@ -70,7 +74,13 @@ class MainActivity : ComponentActivity() {
                 homeRefreshError = homeRefreshError,
                 onRetryHomeRefresh = ::refreshEnforcement,
                 onDoneCurrentTask = ::completeCurrentTask,
-                onTaskCreated = ::refreshEnforcement
+                onTaskCreated = { returnedSnapshot ->
+                    val applied = coordinator?.applyReturnedSnapshot(returnedSnapshot) ?: returnedSnapshot
+                    snapshotViewState = SnapshotReducer.reduce(applied)
+                },
+                onToggleCurrentChild = ::toggleCurrentChild,
+                deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+                onUpdateTask = ::updateTask
             )
         }
     }
@@ -103,8 +113,47 @@ class MainActivity : ComponentActivity() {
 
     private fun completeCurrentTask(taskId: String) {
         AppLog.info("main current_done_clicked taskId=$taskId")
+        val occurrenceKey = snapshotViewState
+            ?.tasks
+            ?.firstOrNull { it.id == taskId }
+            ?.occurrenceKey
+            ?.takeIf { it.isNotBlank() }
+            ?: run {
+                homeRefreshError = "Task occurrence is no longer current"
+                return
+            }
+        val request = TaskActionRequest(
+            actionId = UUID.randomUUID().toString(),
+            deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+            expectedOccurrenceKey = occurrenceKey
+        )
         lifecycleScope.launch {
-            homeActionHandler.completeCurrentTask(taskId)
+            homeActionHandler.completeCurrentTask(taskId, request)
+        }
+    }
+
+    private suspend fun updateTask(taskId: String, request: UpdateTaskRequest): CoordinatorActionResult {
+        val activeCoordinator = coordinator
+            ?: return CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
+        val result = activeCoordinator.updateTask(taskId, request)
+        activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let { snapshotViewState = it }
+        return result
+    }
+
+    private fun toggleCurrentChild(taskId: String, childId: String, checked: Boolean) {
+        val task = snapshotViewState?.tasks?.firstOrNull { it.id == taskId } ?: return
+        val child = task.checklistItems.firstOrNull { it.id == childId } ?: return
+        val request = FocusedChecklistMutationRequest(
+            actionId = UUID.randomUUID().toString(),
+            deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+            expectedOccurrenceKey = task.occurrenceKey,
+            expectedChildRevision = child.childRevision
+        )
+        lifecycleScope.launch {
+            val activeCoordinator = coordinator ?: return@launch
+            if (checked) activeCoordinator.checkChild(taskId, childId, request)
+            else activeCoordinator.uncheckChild(taskId, childId, request)
+            activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let { snapshotViewState = it }
         }
     }
 

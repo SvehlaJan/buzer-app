@@ -28,7 +28,7 @@ import app.buzer.shared.ui.blockers.buildBlockerUiModel
 import java.time.ZoneId
 
 /** Action a user can take from the blocker overlay. */
-enum class OverlayAction { START, POSTPONE }
+enum class OverlayAction { START, POSTPONE, OPEN_FULL_BLOCKER }
 
 internal interface OverlayHostHandle {
     val view: View
@@ -98,17 +98,24 @@ class BlockerOverlayController internal constructor(
             overlayHost.markAttached()
             host = overlayHost
             view = overlayHost.view
-            AppLog.info("overlay shown kind=${request.kind} taskId=${request.taskId}")
+            AppLog.info(
+                "overlay shown kind=${request.kind} taskId=${request.taskId} " +
+                    "occurrence=${request.occurrenceKey}"
+            )
             true
         }.getOrElse { error ->
             runCatching { overlayHost.destroy() }
                 .onFailure { destroyError ->
-                    AppLog.warn("overlay host destroy after add failure failed ${destroyError.message}")
+                    AppLog.warn(
+                        "overlay host destroy after add failure failed occurrence=${request.occurrenceKey} " +
+                            "${destroyError.message}"
+                    )
                 }
             host = null
             view = null
             AppLog.warn(
                 "overlay show failed kind=${request.kind} taskId=${request.taskId} " +
+                    "occurrence=${request.occurrenceKey} " +
                     "message=${error.message ?: error::class.simpleName}"
             )
             false
@@ -153,6 +160,10 @@ private fun CompactOverlayBlocker(
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
             ) {
+                if (request.totalCount > 0) {
+                    Text("Checklist ${request.checkedCount}/${request.totalCount}")
+                    request.nextUncheckedChildTitle?.let { Text("Next: $it") }
+                }
                 Button(
                     onClick = { onAction(OverlayAction.START) },
                     modifier = Modifier.fillMaxWidth()
@@ -171,6 +182,10 @@ private fun CompactOverlayBlocker(
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
+                OutlinedButton(
+                    onClick = { onAction(OverlayAction.OPEN_FULL_BLOCKER) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open full task") }
             }
         }
     }

@@ -9,6 +9,12 @@ import app.buzer.android.ui.screens.buildMorningReviewRepairEditorState
 import app.buzer.android.ui.screens.buildMorningReviewRepairValidation
 import app.buzer.android.ui.screens.buildMorningReviewContentState
 import app.buzer.android.ui.screens.initialRepairStartDraft
+import app.buzer.android.ui.screens.updateTaskRequestFromEditorStart
+import app.buzer.android.ui.screens.ExistingChecklistDraft
+import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.shared.model.ChecklistItem
+import app.buzer.shared.model.ChecklistMutation
+import app.buzer.shared.ui.commitment.ChecklistEditorDraft
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
@@ -18,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertIs
 
 class MorningReviewScreenStateTest {
     @Test
@@ -181,6 +188,39 @@ class MorningReviewScreenStateTest {
         assertEquals("All commitments are valid", state.headerText)
         assertEquals(emptyList(), state.cards)
         assertEquals(listOf("Done"), state.actionLabels)
+    }
+
+    @Test
+    fun repairRequestIncludesExplicitExistingAndNewDirectChildMutations() {
+        val task = invalidTask(id = "task-repair").copy(
+            occurrenceKey = "occurrence-repair",
+            taskRevision = "r:7",
+            checklistItems = listOf(
+                ChecklistItem("child-edit", "Before", null, false, 1, "r:2"),
+                ChecklistItem("child-delete", "Delete", null, false, 2, "r:3")
+            )
+        )
+        val request = updateTaskRequestFromEditorStart(
+            actionId = "repair-action",
+            deviceId = "device-1",
+            expectedOccurrenceKey = task.occurrenceKey,
+            expectedTaskRevision = task.taskRevision,
+            title = task.title,
+            description = "",
+            selectedProject = ProjectItem("project-1", "Family", true, true, false),
+            selectedAssignee = AddTaskAssigneeOption("Me", "user-1"),
+            start = DateTimeSelection(LocalDate.of(2026, 7, 13), 10, 0),
+            durationMinutes = 30,
+            existingChecklistItems = task.checklistItems,
+            existingDrafts = listOf(ExistingChecklistDraft("child-edit", "r:2", "After", null, true)),
+            deletedChildIds = setOf("child-delete"),
+            checklistDrafts = listOf(ChecklistEditorDraft("new-child", "New"))
+        )
+
+        assertIs<ChecklistMutation.Edit>(request.childMutations[0])
+        assertIs<ChecklistMutation.Check>(request.childMutations[1])
+        assertIs<ChecklistMutation.Delete>(request.childMutations[2])
+        assertIs<ChecklistMutation.Add>(request.childMutations[3])
     }
 
     private fun invalidTask(

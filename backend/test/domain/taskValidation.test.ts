@@ -45,4 +45,18 @@ describe("validateTaskStrictness", () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
+
+  it("validates a normalized companion-owned personal-project task as assigned to the user", () => {
+    const result = validateTaskStrictness({
+      title: "Personal strict task",
+      creatorId: currentUserId,
+      assigneeId: null,
+      dueDatetime: "2026-07-15T12:00:00Z",
+      durationMinutes: 30,
+      currentUserId,
+      isCompanionOwned: true
+    });
+
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
 });

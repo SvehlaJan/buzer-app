@@ -4,6 +4,7 @@ import type { AccountabilitySender } from "../accountability/accountabilitySende
 import { buildEscalationMessage } from "../accountability/escalationMessage.js";
 import { computeDeadlineAt } from "../domain/time.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
+import { recurrenceFingerprint } from "./occurrenceReconciler.js";
 
 export type EscalationResult =
   | { status: "sent"; escalationId: string; sentAt: string }
@@ -23,7 +24,7 @@ export class EscalationService {
   }
 
   async sendForTask(taskId: string, dismissCount: number): Promise<EscalationResult> {
-    const task = this.tasks.getById(taskId);
+    let task = this.tasks.getById(taskId);
     if (task === null) {
       throw Object.assign(new Error("Task not found"), { code: "task_not_found", statusCode: 404 });
     }
@@ -33,21 +34,42 @@ export class EscalationService {
         statusCode: 422
       });
     }
+    if (task.occurrenceKey === null || task.occurrenceKey.trim() === "") {
+      this.tasks.initializeOccurrence(task.id, {
+        occurrenceKey: randomUUID(),
+        occurrenceDueDatetime: task.dueDatetime,
+        occurrenceRecurrenceFingerprint: recurrenceFingerprint(task),
+        updatedAt: new Date().toISOString()
+      });
+      task = this.tasks.getById(taskId);
+      if (task === null || task.occurrenceKey === null) {
+        throw new Error("Task occurrence initialization failed");
+      }
+    }
+    const dueDatetime = task.dueDatetime;
+    const durationMinutes = task.durationMinutes;
+    const occurrenceKey = task.occurrenceKey;
+    if (dueDatetime === null || durationMinutes === null || occurrenceKey === null) {
+      throw new Error("Task occurrence initialization failed");
+    }
 
     const message = buildEscalationMessage({
       taskTitle: task.title,
-      deadlineAt: computeDeadlineAt(task.dueDatetime, task.durationMinutes),
+      deadlineAt: computeDeadlineAt(dueDatetime, durationMinutes),
       dismissCount
     });
     const id = randomUUID();
     const createdAt = new Date().toISOString();
 
     const claim = this.db.prepare(`
-      insert or ignore into whatsapp_escalations (id, task_id, recipient_id, message, status, created_at)
-      values (?, ?, ?, ?, 'pending', ?)
-    `).run(id, taskId, this.recipientId, message, createdAt);
+      insert or ignore into whatsapp_escalations (
+        id, task_id, occurrence_key, recipient_id, message, status, created_at
+      ) values (?, ?, ?, ?, ?, 'pending', ?)
+    `).run(id, taskId, occurrenceKey, this.recipientId, message, createdAt);
     if (claim.changes === 0) {
-      const row = this.db.prepare("select id from whatsapp_escalations where task_id = ?").get(taskId) as
+      const row = this.db.prepare(
+        "select id from whatsapp_escalations where task_id = ? and occurrence_key = ?"
+      ).get(taskId, occurrenceKey) as
         | { id: string }
         | undefined;
       return { status: "already_claimed", escalationId: row?.id ?? null };
@@ -56,7 +78,7 @@ export class EscalationService {
     try {
       await this.sender.sendEscalation({
         taskTitle: task.title,
-        deadlineAt: computeDeadlineAt(task.dueDatetime, task.durationMinutes),
+        deadlineAt: computeDeadlineAt(dueDatetime, durationMinutes),
         dismissCount,
         recipient: this.recipientId
       });

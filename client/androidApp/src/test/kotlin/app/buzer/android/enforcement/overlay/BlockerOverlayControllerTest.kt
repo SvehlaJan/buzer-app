@@ -19,6 +19,7 @@ class BlockerOverlayControllerTest {
             request = OverlayBlockerRequest(
                 kind = AlarmKind.START_BLOCKER,
                 taskId = "task-1",
+                occurrenceKey = "occurrence-1",
                 title = "Pay apartment deposit"
             ),
             onAction = {}

@@ -2,7 +2,9 @@ package app.buzer.android.ui.addtask
 
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.RecurrencePreset
 import java.time.ZoneId
 
 data class AddTaskAssigneeOption(
@@ -34,7 +36,12 @@ object AddTaskFormValidator {
         deadline: DateTimeSelection?,
         durationMinutes: Int,
         zoneId: ZoneId = ZoneId.systemDefault(),
-        description: String = ""
+        description: String = "",
+        actionId: String = "test-action-id",
+        deviceId: String = "test-device-id",
+        recurrencePreset: RecurrencePreset = RecurrencePreset.never,
+        timeZone: String? = zoneId.id,
+        checklistDrafts: List<ChecklistDraft> = emptyList()
     ): AddTaskFormResult {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isEmpty()) {
@@ -68,7 +75,12 @@ object AddTaskFormValidator {
                 projectId = selectedProject.id,
                 assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
                 dueDatetime = deadline.toIsoInstantString(zoneId),
-                durationMinutes = durationMinutes
+                durationMinutes = durationMinutes,
+                actionId = actionId,
+                deviceId = deviceId,
+                recurrencePreset = recurrencePreset,
+                timeZone = timeZone,
+                checklistDrafts = checklistDrafts
             )
         )
     }

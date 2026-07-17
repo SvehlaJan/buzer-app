@@ -348,8 +348,8 @@ type TodoistDueMutation =
 - Create: `backend/test/domain/taskRecurrence.test.ts`
 - Create: `backend/test/domain/taskDescriptionCodec.test.ts`
 
-- [ ] Write failing table-driven recurrence tests for Never, Daily, Weekdays, Weekly, Monthly, and Yearly; DST-zone preservation; exact recognition of Buzer-generated rules; and custom Todoist recurrence preservation. Run `npm test -- test/domain/taskRecurrence.test.ts`. Expected: FAIL because the module does not exist.
-- [ ] Define `RecurrencePreset` as the six fixed values in the API section. Translate supported presets on the backend using the selected start interpreted in the supplied IANA time zone, `due_lang = "en"`, and these canonical rule forms:
+- [x] Write failing table-driven recurrence tests for Never, Daily, Weekdays, Weekly, Monthly, and Yearly; DST-zone preservation; exact recognition of Buzer-generated rules; and custom Todoist recurrence preservation. Run `npm test -- test/domain/taskRecurrence.test.ts`. Expected: FAIL because the module does not exist.
+- [x] Define `RecurrencePreset` as the six fixed values in the API section. Translate supported presets on the backend using the selected start interpreted in the supplied IANA time zone, `due_lang = "en"`, and these canonical rule forms:
 
 ```text
 daily     -> every day at HH:mm
@@ -360,9 +360,9 @@ yearly    -> every year on <month> <ordinal-day> at HH:mm
 ```
 
 Use English weekday/month names and a tested ordinal formatter (`1st`, `2nd`, `3rd`, `4th`, `11th`, `12th`, `13th`, `21st`). Never calculate future occurrences in Buzer.
-- [ ] Return `{kind: "custom", preset: null}` when a Todoist rule cannot be recognized exactly. Metadata/checklist edits preserve its full rule/lang/time zone; schedule or recurrence edits reject it until the request selects a supported preset or Never.
-- [ ] Write failing codec tests for no marker, one valid marker, malformed activity suffix, duplicate/corrupt markers, whitespace preservation, reconstruction, append, Unicode arrow text, and description overflow. Run `npm test -- test/domain/taskDescriptionCodec.test.ts`. Expected: FAIL.
-- [ ] Implement the exact delimiter and event model. The 16,384-character constant is grounded in Todoist's current official [task-description documentation](https://www.todoist.com/help/articles/add-a-task-description-in-todoist-rOryWIHn), not inferred from an error string:
+- [x] Return `{kind: "custom", preset: null}` when a Todoist rule cannot be recognized exactly. Metadata/checklist edits preserve its full rule/lang/time zone; schedule or recurrence edits reject it until the request selects a supported preset or Never.
+- [x] Write failing codec tests for no marker, one valid marker, malformed activity suffix, duplicate/corrupt markers, whitespace preservation, reconstruction, append, Unicode arrow text, and description overflow. Run `npm test -- test/domain/taskDescriptionCodec.test.ts`. Expected: FAIL.
+- [x] Implement the exact delimiter and event model. The 16,384-character constant is grounded in Todoist's current official [task-description documentation](https://www.todoist.com/help/articles/add-a-task-description-in-todoist-rOryWIHn), not inferred from an error string:
 
 ```ts
 export const BUZER_ACTIVITY_DELIMITER = "--- Buzer activity (managed) ---";
@@ -375,10 +375,10 @@ interface ActivityLogEntry {
 }
 ```
 
-- [ ] Treat the suffix as managed only when the delimiter is at a line boundary and every non-empty following line parses as an activity entry. Otherwise preserve the complete description as user text. On the next extension, append a fresh delimiter and entry rather than deleting or guessing at malformed content.
-- [ ] Implement `appendExtension` to produce `YYYY-MM-DD HH:mm <IANA-zone> — Extended +30 min (<old> → <new> min)`, using the task's Todoist zone and UTC fallback. Reject before calling Todoist if the reconstructed full description exceeds 16,384 characters.
-- [ ] Run both focused tests and `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add recurrence and task description codecs"`.
+- [x] Treat the suffix as managed only when the delimiter is at a line boundary and every non-empty following line parses as an activity entry. Otherwise preserve the complete description as user text. On the next extension, append a fresh delimiter and entry rather than deleting or guessing at malformed content.
+- [x] Implement `appendExtension` to produce `YYYY-MM-DD HH:mm <IANA-zone> — Extended +30 min (<old> → <new> min)`, using the task's Todoist zone and UTC fallback. Reject before calling Todoist if the reconstructed full description exceeds 16,384 characters.
+- [x] Run both focused tests and `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add recurrence and task description codecs"`.
 
 ## Task 4: Classify And Project Root Commitments With Checklist Children
 
@@ -389,9 +389,9 @@ interface ActivityLogEntry {
 - Create: `backend/test/domain/taskEnforcementPolicy.test.ts`
 - Create: `backend/test/services/taskHierarchyProjector.test.ts`
 
-- [ ] Write failing policy tests for an eligible root, a repairable root candidate, an eligible child, not-owned tasks, scheduled/recurring/assigned/duration-bearing children, a grandchild, 31 direct children, and a valid 30-child tree. Expected classification names: `ROOT_COMMITMENT`, `ROOT_CANDIDATE_INVALID`, `CHECKLIST_CHILD`, `UNSUPPORTED_HIERARCHY`, and `NOT_OWNED`.
-- [ ] Move personal-project ownership normalization out of `TaskSnapshotService` into `TaskEnforcementPolicy`. Preserve the current rule that a task created by the configured user in a non-assignable personal project can be companion-owned through `commitment_owner_id`.
-- [ ] Give hierarchy violations stable codes suitable for API/UI tests:
+- [x] Write failing policy tests for an eligible root, a repairable root candidate, an eligible child, not-owned tasks, scheduled/recurring/assigned/duration-bearing children, a grandchild, 31 direct children, and a valid 30-child tree. Expected classification names: `ROOT_COMMITMENT`, `ROOT_CANDIDATE_INVALID`, `CHECKLIST_CHILD`, `UNSUPPORTED_HIERARCHY`, and `NOT_OWNED`.
+- [x] Move personal-project ownership normalization out of `TaskSnapshotService` into `TaskEnforcementPolicy`. Preserve the current rule that a task created by the configured user in a non-assignable personal project can be companion-owned through `commitment_owner_id`.
+- [x] Give hierarchy violations stable codes suitable for API/UI tests:
 
 ```ts
 type HierarchyViolation =
@@ -404,12 +404,12 @@ type HierarchyViolation =
   | "child_project_mismatch";
 ```
 
-- [ ] Write failing projector tests proving only roots appear at top level, direct children are ordered by `child_order` then stable ID, child progress is derived, grandchildren are detected rather than flattened, and changing one child's checked state does not change the root revision.
-- [ ] Implement a pure projector returning root, children, checked/total counts, policy classification, and violation. Do not place alarm, recurrence mutation, or SQLite writes in this component.
-- [ ] Keep the underlying mirror uniform for every task. Do not create a checklist-only table or schema branch; future scheduled-child support must require a new policy classification, not a mirror migration.
-- [ ] Run `npm test -- test/domain/taskEnforcementPolicy.test.ts test/services/taskHierarchyProjector.test.ts test/domain/taskValidation.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: project checklist task hierarchies"`.
+- [x] Write failing projector tests proving only roots appear at top level, direct children are ordered by `child_order` then stable ID, child progress is derived, grandchildren are detected rather than flattened, and changing one child's checked state does not change the root revision.
+- [x] Implement a pure projector returning root, children, checked/total counts, policy classification, and violation. Do not place alarm, recurrence mutation, or SQLite writes in this component.
+- [x] Keep the underlying mirror uniform for every task. Do not create a checklist-only table or schema branch; future scheduled-child support must require a new policy classification, not a mirror migration.
+- [x] Run `npm test -- test/domain/taskEnforcementPolicy.test.ts test/services/taskHierarchyProjector.test.ts test/domain/taskValidation.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: project checklist task hierarchies"`.
 
 ## Task 5: Reconcile Occurrence Identity And Per-Occurrence Accountability
 
@@ -423,9 +423,9 @@ type HierarchyViolation =
 - Create: `backend/test/services/occurrenceReconciler.test.ts`
 - Modify: `backend/test/services/escalationService.test.ts`
 
-- [ ] Write failing occurrence tests for first backfill, unchanged sync, external one-time schedule edit, recurring due advance, recurrence-rule change, title-only edit, explicit Buzer schedule replan, Extend 30 exception, leaving ownership, and returning to ownership.
-- [ ] Compute a stable recurrence fingerprint from `isRecurring`, due rule, language, and time zone. Treat `occurrence_key` as opaque random identity; do not derive it from due datetime.
-- [ ] Implement these reconciler decisions:
+- [x] Write failing occurrence tests for first backfill, unchanged sync, external one-time schedule edit, recurring due advance, recurrence-rule change, title-only edit, explicit Buzer schedule replan, Extend 30 exception, leaving ownership, and returning to ownership.
+- [x] Compute a stable recurrence fingerprint from `isRecurring`, due rule, language, and time zone. Treat `occurrence_key` as opaque random identity; do not derive it from due datetime.
+- [x] Implement these reconciler decisions:
 
 ```ts
 type OccurrenceDecision =
@@ -435,14 +435,14 @@ type OccurrenceDecision =
   | { kind: "leave_ownership" };
 ```
 
-- [ ] On rotation, generate a new key, copy current due/fingerprint anchors, set state to `planned`, clear started/dismiss/extension/snooze/escalation fields, increment schedule version, and mark reconciliation confirmed only after the tree is authoritative.
-- [ ] For an externally advanced recurring root with checked children, mark the root pending, reserve a system action and per-child `item_uncomplete` commands through the same journal/gateway, synchronize again, and rotate only after every direct eligible child is confirmed unchecked. Do not schedule the next occurrence while pending.
-- [ ] Serialize `TodoistSyncService.syncOnce()` so two action coordinators cannot race the shared sync token. Read the token inside the serialized section and update it only after the corresponding mirror transaction commits.
-- [ ] After migration, require a successful `sync("*")` before writing `mirror_contract_version = 2`. Until then, snapshot and mutation services return `503 sync_initializing`; `/health` remains available. This prevents typed policy from reading partially backfilled raw JSON.
-- [ ] Change escalation lookup and insert to `(task_id, occurrence_key)`. Verify an existing migrated occurrence cannot resend, while the next rotated occurrence can send once.
-- [ ] Run `npm test -- test/services/occurrenceReconciler.test.ts test/services/todoistSyncService.test.ts test/services/escalationService.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: reconcile recurring task occurrences"`.
+- [x] On rotation, generate a new key, copy current due/fingerprint anchors, set state to `planned`, clear started/dismiss/extension/snooze/escalation fields, increment schedule version, and mark reconciliation confirmed only after the tree is authoritative.
+- [x] For an externally advanced recurring root with checked children, mark the root pending, reserve a system action and per-child `item_uncomplete` commands through the same journal/gateway, synchronize again, and rotate only after every direct eligible child is confirmed unchecked. Do not schedule the next occurrence while pending.
+- [x] Serialize `TodoistSyncService.syncOnce()` so two action coordinators cannot race the shared sync token. Read the token inside the serialized section and update it only after the corresponding mirror transaction commits.
+- [x] After migration, require a successful `sync("*")` before writing `mirror_contract_version = 2`. Until then, snapshot and mutation services return `503 sync_initializing`; `/health` remains available. This prevents typed policy from reading partially backfilled raw JSON.
+- [x] Change escalation lookup and insert to `(task_id, occurrence_key)`. Verify an existing migrated occurrence cannot resend, while the next rotated occurrence can send once.
+- [x] Run `npm test -- test/services/occurrenceReconciler.test.ts test/services/todoistSyncService.test.ts test/services/escalationService.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: reconcile recurring task occurrences"`.
 
 ## Task 6: Add Durable Root Serialization And Replay Coordination
 
@@ -453,16 +453,16 @@ type OccurrenceDecision =
 - Create: `backend/test/services/rootTaskMutex.test.ts`
 - Create: `backend/test/services/taskActionCoordinator.test.ts`
 
-- [ ] Write failing mutex tests proving same-root operations execute in submission order, different-root operations may overlap, rejection releases the queue, and completed roots are removed from the lock map.
-- [ ] Implement an in-process per-root promise queue. Keep SQLite as the durable journal; the mutex is only the single-process Todoist race guard.
-- [ ] Write failing coordinator tests for first reservation, same-action replay, different-payload reuse rejection, same-action retry after process-like reconstruction, ambiguous Todoist timeout, sync failure after Todoist success, completed response replay, and two-phone distinct postponements.
-- [ ] Fingerprint a canonical JSON object containing action type and parsed domain payload with SHA-256. Do not fingerprint HTTP headers. Do not log or persist descriptions outside the existing mirrored task content and compact durable result required by the product.
-- [ ] Implement `TaskActionCoordinator.execute` in this order: reserve/replay journal, lock root, synchronize, validate readiness/revisions/occurrence, reserve command IDs before sending, execute domain action, synchronize and verify, store compact response, then return. A replayed completed action returns its stored response without incrementing counters or sending Todoist commands.
-- [ ] On successful Todoist response followed by sync failure, mark journal and root `reconciliation_pending` and return the HTTP-layer pending result. On retry, synchronize first; if the effect is present, confirm without resending. If the earlier send timed out ambiguously, reuse the persisted command UUID only after synchronization proves the effect absent.
-- [ ] Add `DomainError` factories for `stale_task`, `stale_child`, `stale_occurrence`, `action_id_reused`, `reconciliation_pending`, `unsupported_hierarchy`, `children_incomplete`, and `activity_log_full`, including current snapshot context where the contract requires it.
-- [ ] Run `npm test -- test/services/rootTaskMutex.test.ts test/services/taskActionCoordinator.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: coordinate idempotent task actions"`.
+- [x] Write failing mutex tests proving same-root operations execute in submission order, different-root operations may overlap, rejection releases the queue, and completed roots are removed from the lock map.
+- [x] Implement an in-process per-root promise queue. Keep SQLite as the durable journal; the mutex is only the single-process Todoist race guard.
+- [x] Write failing coordinator tests for first reservation, same-action replay, different-payload reuse rejection, same-action retry after process-like reconstruction, ambiguous Todoist timeout, sync failure after Todoist success, completed response replay, and two-phone distinct postponements.
+- [x] Fingerprint a canonical JSON object containing action type and parsed domain payload with SHA-256. Do not fingerprint HTTP headers. Do not log or persist descriptions outside the existing mirrored task content and compact durable result required by the product.
+- [x] Implement `TaskActionCoordinator.execute` in this order: reserve/replay journal, lock root, synchronize, validate readiness/revisions/occurrence, reserve command IDs before sending, execute domain action, synchronize and verify, store compact response, then return. A replayed completed action returns its stored response without incrementing counters or sending Todoist commands.
+- [x] On successful Todoist response followed by sync failure, mark journal and root `reconciliation_pending` and return the HTTP-layer pending result. On retry, synchronize first; if the effect is present, confirm without resending. If the earlier send timed out ambiguously, reuse the persisted command UUID only after synchronization proves the effect absent.
+- [x] Add `DomainError` factories for `stale_task`, `stale_child`, `stale_occurrence`, `action_id_reused`, `reconciliation_pending`, `unsupported_hierarchy`, `children_incomplete`, and `activity_log_full`, including current snapshot context where the contract requires it.
+- [x] Run `npm test -- test/services/rootTaskMutex.test.ts test/services/taskActionCoordinator.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: coordinate idempotent task actions"`.
 
 ## Task 7: Implement Checklist Creation, Editing, And Focused Check Actions
 
@@ -473,8 +473,8 @@ type OccurrenceDecision =
 - Modify: `backend/test/services/taskActionService.test.ts`
 - Create: `backend/test/services/todoistChecklistService.test.ts`
 
-- [ ] Write failing checklist-service tests for add, edit title/details, delete, check, uncheck, already-in-requested-state idempotency, stale child revision, child not under root, forbidden child fields, 30-child limit, partial batch failure, and different-child concurrent mutations.
-- [ ] Define explicit child intents rather than replacing a submitted array:
+- [x] Write failing checklist-service tests for add, edit title/details, delete, check, uncheck, already-in-requested-state idempotency, stale child revision, child not under root, forbidden child fields, 30-child limit, partial batch failure, and different-child concurrent mutations.
+- [x] Define explicit child intents rather than replacing a submitted array:
 
 ```ts
 type ChildMutation =
@@ -485,14 +485,14 @@ type ChildMutation =
   | { type: "uncheck"; clientMutationId: string; childId: string; expectedChildRevision: string };
 ```
 
-- [ ] Make `TodoistChecklistService` the only product service that mutates children. It must validate the current projected tree, inherit the root project on add, and never accept parent ID, due, duration, recurrence, assignment, or descendants from clients.
-- [ ] Create the root first and then append zero to 30 children. Persist one command step per root/child before sending. Return the root plus each child result; do not roll back successful external Todoist child commands after a later child fails.
-- [ ] For mixed edit batches, validate root revision only if root fields changed and validate each child independently. Continue safe different-child operations after a per-child stale/error result. Preserve failed local drafts in the response by their `clientMutationId`.
-- [ ] Focused check/uncheck must synchronize before validation and after the command. Check uses `item_close`; uncheck uses `item_uncomplete`; delete uses `item_delete`. A request for the state already observed succeeds without sending another command, but still completes the journal and returns the authoritative snapshot. Checking the last child must not auto-complete the root.
-- [ ] Ensure successful child mutation responses include the refreshed snapshot so Android does not immediately call `GET /tasks/snapshot`. This is required to keep 30 rapid child actions below the existing 60-request/minute/source-IP limit shared by two phones behind one NAT.
-- [ ] Run `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add Todoist checklist mutations"`.
+- [x] Make `TodoistChecklistService` the only product service that mutates children. It validates the current projected tree, inherits the root project on add, and rejects parent ID, due, duration, recurrence, assignment, or descendants from clients.
+- [x] Append zero to 30 children only after a root exists. Persist one command step per child before sending, return the root plus each child result, and do not roll back successful external Todoist child commands after a later child fails. Root creation itself remains the Task 8 root-create contract.
+- [x] For mixed edit batches, validate child revisions independently, continue safe different-child operations after a per-child stale/error result, and preserve failed local drafts in outcomes by `clientMutationId`. Root-field validation remains Task 8 because Task 7 accepts no root patch.
+- [x] Focused check/uncheck synchronizes before validation and after the command. Check uses `item_close`; uncheck uses `item_uncomplete`; delete uses `item_delete`. A request for the already-observed state avoids another command while completing its journal action and returning the authoritative snapshot. Checking the last child does not auto-complete the root.
+- [x] Ensure successful child mutation responses include the refreshed snapshot so Android does not immediately call `GET /tasks/snapshot`. This keeps rapid child actions within the shared source-IP limit.
+- [x] Run `npm test -- test/services/todoistChecklistService.test.ts test/services/taskActionService.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add Todoist checklist mutations"`.
 
 ## Task 8: Correct Root Create, Edit, Done, Reschedule, And Extend Semantics
 
@@ -505,18 +505,23 @@ type ChildMutation =
 - Modify: `backend/test/todoist/httpTodoistAdapter.test.ts`
 
 - [ ] Add failing tests proving root create maps recurrence on the backend; metadata-only edit preserves lifecycle/occurrence; schedule edit rotates; custom recurrence schedule edit is rejected; project move and field update use separate journal steps; explicit unassignment sends null; leaving ownership cancels enforcement; returning creates a fresh occurrence; and partial move/update recovery executes only the unfinished step.
-- [ ] Update create input to include `recurrencePreset`, `timeZone`, child drafts, `actionId`, and `deviceId`. Validate a real IANA time zone, a supported preset, and 0-30 children. Keep recurrence rule construction server-side.
-- [ ] Update edit input to include expected task revision, expected occurrence key, root-field changes, supported/custom recurrence replacement intent, and explicit child mutations. Reconstruct the full description through `TaskDescriptionCodec` so ordinary edits cannot overwrite managed activity.
-- [ ] Classify root edits before mutation. Title, description, project, assignee, and checklist-only changes preserve lifecycle while ownership remains. Start, duration, or recurrence changes replan and rotate. `item_move` and `item_update` use distinct durable step keys, then sync verifies root and direct children share the authoritative project.
+- [x] Update create input to include `recurrencePreset`, `timeZone`, child drafts, `actionId`, and `deviceId`. Validate a real IANA time zone, a supported preset, and 0-30 children. Keep recurrence rule construction server-side.
+- [x] Update edit input to include expected task revision, expected occurrence key, root-field changes, supported/custom recurrence replacement intent, and explicit child mutations. Reconstruct the full description through `TaskDescriptionCodec` so ordinary edits cannot overwrite managed activity.
+- [x] Classify root edits before mutation. Title, description, project, assignee, and checklist-only changes preserve lifecycle while ownership remains. Start, duration, or recurrence changes replan and rotate. `item_move` and `item_update` use distinct durable step keys, then sync verifies root and direct children share the authoritative project.
 - [ ] Add failing Done tests for incomplete children, stale external child state corrected by pre-action sync, unsupported hierarchy, one-time `item_close`, recurring `item_update_date_complete` with hard-coded reset, terminal old occurrence, immediate next-occurrence sync, and pending recurring completion.
-- [ ] Implement Done exactly in the approved order: reserve/lock, sync tree, validate expected occurrence/hierarchy/all checked, issue one-time or recurring command, prevent further old-occurrence actions, sync, rotate recurring state from Todoist authority, and return the snapshot.
+- [x] Implement Done exactly in the approved order: reserve/lock, sync tree, validate expected occurrence/hierarchy/all checked, issue one-time or recurring command, prevent further old-occurrence actions, sync, rotate recurring state from Todoist authority, and return the snapshot.
+- [x] Quality follow-up: require durable metadata/coordinator for every root mutation, recover a create journal onto a sync-reconstructed local root ID, and leave create/reschedule/non-move-edit mirrors unchanged until authoritative confirmation.
+- [x] Quality follow-up: coordinate Start and Postpone with occurrence metadata, finalize confirmed Extend lifecycle/alarm state exactly once, and return canonical create identity after root reassociation.
+- [x] Quality follow-up: after create recovery reassociates a journal from its provisional ID, hand off its active mutex tail to the canonical root ID so existing and newly queued canonical actions cannot overlap the remaining recovery work.
+- [x] Quality follow-up: derive Postpone dismiss/escalation state inside the root mutex, replay a durable escalation command after a post-mutation crash, and atomically persist Extend finalization with journal completion.
+- [x] Quality follow-up: a restored confirmed command remains effect-bearing during replay, so a second authoritative sync must verify the effect before completion.
 - [ ] Add failing reschedule tests proving supported recurrence/time zone is preserved, Never remains one-time, custom recurrence rejects schedule mutation, and a schedule generation change rotates the occurrence.
 - [ ] Add failing extension tests proving recurring tasks reject, one-time due remains byte-for-byte unchanged, duration increases by 30, one audit line is appended once, retry does not duplicate, new intentional action appends a second line, state becomes/remains started, counters/schedule version advance only after sync confirmation, and description overflow sends no Todoist command.
-- [ ] Implement Extend as one `item_update` with duration and reconstructed description while omitting due. Use task timezone or UTC for the audit timestamp and keep the occurrence key unchanged.
-- [ ] Assert create, edit, check, uncheck, start, postpone, reschedule, Done, project move, and assignment changes do not append managed activity entries. The MVP activity log records extension events only.
-- [ ] Run `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
-- [ ] Run `npm run typecheck`. Expected: PASS.
-- [ ] Commit with `git commit -m "fix: make task actions occurrence safe"`.
+- [x] Implement Extend as one `item_update` with duration and reconstructed description while omitting due. Use task timezone or UTC for the audit timestamp and keep the occurrence key unchanged.
+- [x] Assert create, edit, check, uncheck, start, postpone, reschedule, Done, project move, and assignment changes do not append managed activity entries. The MVP activity log records extension events only.
+- [x] Run `npm test -- test/services/taskActionService.test.ts test/services/taskActionCoordinator.test.ts test/todoist/httpTodoistAdapter.test.ts`. Expected: PASS.
+- [x] Run `npm run typecheck`. Expected: PASS.
+- [x] Commit with `git commit -m "fix: make task actions occurrence safe"`.
 
 ## Task 9: Publish The Nested Snapshot And Authenticated Mutation Routes
 
@@ -529,9 +534,9 @@ type ChildMutation =
 - Modify: `backend/test/http/auth.test.ts`
 - Modify: `backend/test/http/rateLimit.test.ts`
 
-- [ ] Write failing snapshot tests for root-only projection, nested ordered children/revisions, progress, split user description/activity log, supported/custom recurrence, hierarchy violation, occurrence key, root revision, and reconciliation-pending state.
-- [ ] Replace raw-description and raw-JSON date extraction in `TaskSnapshotService` with typed mirror fields, `TaskDescriptionCodec`, `TaskEnforcementPolicy`, and `TaskHierarchyProjector`. Return invalid/unsupported owned roots for Morning Review; never return checklist children as top-level tasks.
-- [ ] Keep existing scheduling fields for client compatibility and add these root fields. Encode both root and child revisions as `r:<mirror_revision>` and reject malformed or mismatched values through the stale-domain error path:
+- [x] Write failing snapshot tests for root-only projection, nested ordered children/revisions, progress, split user description/activity log, supported/custom recurrence, hierarchy violation, occurrence key, root revision, and reconciliation-pending state.
+- [x] Replace raw-description and raw-JSON date extraction in `TaskSnapshotService` with typed mirror fields, `TaskDescriptionCodec`, `TaskEnforcementPolicy`, and `TaskHierarchyProjector`. Return invalid/unsupported owned roots for Morning Review; never return checklist children as top-level tasks.
+- [x] Keep existing scheduling fields for client compatibility and add these root fields. Encode both root and child revisions as `r:<mirror_revision>` and reject malformed or mismatched values through the stale-domain error path:
 
 ```ts
 occurrenceKey: string;
@@ -546,15 +551,15 @@ hierarchyViolation: HierarchyViolation | null;
 reconciliationStatus: "confirmed" | "pending";
 ```
 
-- [ ] Add Zod request schemas for all fixed routes. Validate action/device IDs as non-empty bounded strings, occurrence/revision values as opaque bounded strings, at most 30 child drafts/mutations, no unknown child scheduling fields, and IANA time zone through domain validation.
-- [ ] Make every mutation route call `TaskActionCoordinator` and return its `MutationResponse`; remove route-local construction of the old service that bypasses journaling. Reuse a server-scoped coordinator/mutex so separate requests share root serialization.
-- [ ] Keep `/health` as the only unauthenticated route and keep all route registration inside the existing Fastify plugin scope. Do not introduce an application `/buzer` prefix and do not change the trusted proxy ranges.
-- [ ] Add an unauthenticated table test covering every new route path and representative required params/body. Expected: 401 before domain validation. Also keep the unmatched-path test at 404, proving the auth hook did not leak to the not-found handler.
-- [ ] Add rate-limit tests proving child mutation responses carry rate-limit headers, 61 requests from one effective source are limited under the default config, spoofed forwarding from an untrusted peer is ignored, and the successful mutation response contains a snapshot so no follow-up GET is required.
-- [ ] Add a log-safety test or logger spy proving route errors and action journal output never include the bearer token, Todoist token, full description, or managed audit payload. Keep production Fastify `logger: false` and Ktor Authorization sanitization unchanged.
-- [ ] Run `npm test -- test/services/taskSnapshotService.test.ts test/http/routes.test.ts test/http/auth.test.ts test/http/rateLimit.test.ts`. Expected: PASS.
-- [ ] Run the full backend gate: `npm test`, `npm run typecheck`, and `npm run build`. Expected: all PASS.
-- [ ] Commit with `git commit -m "feat: expose recurring checklist task contracts"`.
+- [x] Add Zod request schemas for all fixed routes. Validate action/device IDs as non-empty bounded strings, occurrence/revision values as opaque bounded strings, at most 30 child drafts/mutations, no unknown child scheduling fields, and IANA time zone through domain validation.
+- [x] Make every mutation route call `TaskActionCoordinator` and return its `MutationResponse`; remove route-local construction of the old service that bypasses journaling. Reuse a server-scoped coordinator/mutex so separate requests share root serialization.
+- [x] Keep `/health` as the only unauthenticated route and keep all route registration inside the existing Fastify plugin scope. Do not introduce an application `/buzer` prefix and do not change the trusted proxy ranges.
+- [x] Add an unauthenticated table test covering every new route path and representative required params/body. Expected: 401 before domain validation. Also keep the unmatched-path test at 404, proving the auth hook did not leak to the not-found handler.
+- [x] Add rate-limit tests proving child mutation responses carry rate-limit headers, 61 requests from one effective source are limited under the default config, spoofed forwarding from an untrusted peer is ignored, and the successful mutation response contains a snapshot so no follow-up GET is required.
+- [x] Add a log-safety test or logger spy proving route errors and action journal output never include the bearer token, Todoist token, full description, or managed audit payload. Keep production Fastify `logger: false` and Ktor Authorization sanitization unchanged.
+- [x] Run `npm test -- test/services/taskSnapshotService.test.ts test/http/routes.test.ts test/http/auth.test.ts test/http/rateLimit.test.ts`. Expected: PASS.
+- [x] Run the full backend gate: `npm test`, `npm run typecheck`, and `npm run build`. Expected: all PASS.
+- [x] Commit with `git commit -m "feat: expose recurring checklist task contracts"`.
 
 ## Task 10: Update The Stateful Fake Backend Before Android Code
 
@@ -563,13 +568,13 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `tools/fake-backend/src/server.ts`
 - Modify: `tools/fake-backend/src/server.test.ts`
 
-- [ ] Write failing fake-backend tests for nested fixtures, supported recurring and custom recurring roots, focused child check/uncheck, incomplete-parent Done rejection, recurring Done rollover/reset, action replay, stale occurrence/child responses, partial create/edit outcomes, and returned snapshots.
-- [ ] Change fixtures from immutable flat JSON to deterministic in-memory root/checklist state. Include these named scenarios: one-time no children, one-time partially checked, recurring all checked, recurring with Extend disabled, custom recurrence, unsupported hierarchy, and reconciliation pending.
-- [ ] Record action body metadata (`actionId`, `deviceId`, occurrence/revisions) without recording Authorization. Reusing an action ID with an identical body returns the same stored response; changing its body returns `409 action_id_reused`.
-- [ ] Implement all fixed routes and return the authoritative updated snapshot from mutations. Checking a child must advance that child revision only. Recurring Done must advance to a deterministic next due, create a new occurrence key, and reset all children unchecked.
-- [ ] Keep test controls for forced 500 snapshot/action failures and add deterministic 202 pending, 409 stale, 422 activity-log-full, and 429-with-`Retry-After` controls for Android and shared-client tests.
-- [ ] Run from `tools/fake-backend/`: `npm test` and `npm run build`. Expected: PASS.
-- [ ] Commit with `git commit -m "test: model recurring checklists in fake backend"`.
+- [x] Write failing fake-backend tests for nested fixtures, supported recurring and custom recurring roots, focused child check/uncheck, incomplete-parent Done rejection, recurring Done rollover/reset, action replay, stale occurrence/child responses, partial create/edit outcomes, and returned snapshots.
+- [x] Change fixtures from immutable flat JSON to deterministic in-memory root/checklist state. Include these named scenarios: one-time no children, one-time partially checked, recurring all checked, recurring with Extend disabled, custom recurrence, unsupported hierarchy, and reconciliation pending.
+- [x] Record action body metadata (`actionId`, `deviceId`, occurrence/revisions) without recording Authorization. Reusing an action ID with an identical body returns the same stored response; changing its body returns `409 action_id_reused`.
+- [x] Implement all fixed routes and return the authoritative updated snapshot from mutations. Checking a child must advance that child revision only. Recurring Done must advance to a deterministic next due, create a new occurrence key, and reset all children unchecked.
+- [x] Keep test controls for forced 500 snapshot/action failures and add deterministic 202 pending, 409 stale, 422 activity-log-full, and 429-with-`Retry-After` controls for Android and shared-client tests.
+- [x] Run from `tools/fake-backend/`: `npm test` and `npm run build`. Expected: PASS.
+- [x] Commit with `git commit -m "test: model recurring checklists in fake backend"`.
 
 ## Task 11: Add Shared Kotlin Contracts, Error Context, And Retry Semantics
 
@@ -580,14 +585,14 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientTimeoutTest.kt`
 - Create: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientErrorTest.kt`
 
-- [ ] Add failing serialization tests for the fixed snapshot fields, recurrence enums, checklist items, activity entries, action metadata, create child drafts, explicit child mutations, focused check/uncheck, mutation response, partial outcomes, and nullable assignee clearing.
-- [ ] Mirror the fixed API types with `@Serializable` Kotlin data classes. Create requests contain `actionId` and `deviceId`; existing-task requests additionally contain `expectedOccurrenceKey`; root/child mutations add their relevant expected revision. Keep these fields explicit so a captured request object can be reused unchanged on retry.
-- [ ] Replace `Unit` mutation API methods with `MutationResponse` return values and add methods for all checklist paths. Continue using the configured base URL verbatim; do not add `/buzer` inside client paths.
-- [ ] Add a typed `BuzerApiException(status, code, retryAfterSeconds, snapshot)` that parses error JSON and the `Retry-After` header. Preserve 409 snapshot context so reducers can refresh without discarding an editor draft.
-- [ ] On 429, surface retry timing and do not automatically fabricate a new request/action ID. The UI/coordinator may retry the exact captured request after the indicated time. The shared client itself must not issue hidden duplicate mutations.
-- [ ] Keep HTTP logging at headers only and keep `sanitizeHeader { it == HttpHeaders.Authorization }`. Remove the current error log that includes arbitrary response bodies if it could contain snapshot descriptions; log status/code only.
-- [ ] Run from `client/`: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.*' --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: add recurring checklist client contracts"`.
+- [x] Add failing serialization tests for the fixed snapshot fields, recurrence enums, checklist items, activity entries, action metadata, create child drafts, explicit child mutations, focused check/uncheck, mutation response, partial outcomes, and nullable assignee clearing.
+- [x] Mirror the fixed API types with `@Serializable` Kotlin data classes. Create requests contain `actionId` and `deviceId`; existing-task requests additionally contain `expectedOccurrenceKey`; root/child mutations add their relevant expected revision. Keep these fields explicit so a captured request object can be reused unchanged on retry.
+- [x] Replace `Unit` mutation API methods with `MutationResponse` return values and add methods for all checklist paths. Continue using the configured base URL verbatim; do not add `/buzer` inside client paths.
+- [x] Add a typed `BuzerApiException(status, code, retryAfterSeconds, snapshot)` that parses error JSON and the `Retry-After` header. Preserve 409 snapshot context so reducers can refresh without discarding an editor draft.
+- [x] On 429, surface retry timing and do not automatically fabricate a new request/action ID. The UI/coordinator may retry the exact captured request after the indicated time. The shared client itself must not issue hidden duplicate mutations.
+- [x] Keep HTTP logging at headers only and keep `sanitizeHeader { it == HttpHeaders.Authorization }`. Remove the current error log that includes arbitrary response bodies if it could contain snapshot descriptions; log status/code only.
+- [x] Run from `client/`: `./gradlew :shared:testAndroidHostTest --tests 'app.buzer.shared.api.*' --console=plain`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: add recurring checklist client contracts"`.
 
 ## Task 12: Make Shared State And Alarm Plans Occurrence-Aware
 
@@ -603,10 +608,10 @@ reconciliationStatus: "confirmed" | "pending";
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/blockers/BlockerUiModelsTest.kt`
 - Create: `client/shared/src/commonTest/kotlin/app/buzer/shared/ui/commitment/ChecklistEditorModelsTest.kt`
 
-- [ ] Add failing reducer tests proving nested children are not independent invalid/active tasks, unsupported and pending roots appear in Morning Review, a recurring next occurrence is distinct from the old key, and stale mutation snapshots replace cached authority without losing a caller-owned draft object.
-- [ ] Add `occurrenceKey` to `DesiredAlarm` and define alarm identity as `(taskId, occurrenceKey, kind)`. Exclude invalid, unsupported, completed/deleted, and reconciliation-pending roots from alarm creation.
-- [ ] Add alarm-plan tests for key rotation at the same due timestamp, recurring rollover, pending cancellation, checklist-only mutation with unchanged key, and Extend 30 with unchanged key but changed deadline.
-- [ ] Add pure editor models for recurrence choices in numbered order and explicit checklist draft/mutation state:
+- [x] Add failing reducer tests proving nested children are not independent invalid/active tasks, unsupported and pending roots appear in Morning Review, a recurring next occurrence is distinct from the old key, and stale mutation snapshots replace cached authority without losing a caller-owned draft object.
+- [x] Add `occurrenceKey` to `DesiredAlarm` and define alarm identity as `(taskId, occurrenceKey, kind)`. Exclude invalid, unsupported, completed/deleted, and reconciliation-pending roots from alarm creation.
+- [x] Add alarm-plan tests for key rotation at the same due timestamp, recurring rollover, pending cancellation, checklist-only mutation with unchanged key, and Extend 30 with unchanged key but changed deadline.
+- [x] Add pure editor models for recurrence choices in numbered order and explicit checklist draft/mutation state:
 
 ```kotlin
 val recurrenceChoices = listOf(
@@ -619,10 +624,13 @@ val recurrenceChoices = listOf(
 )
 ```
 
-- [ ] Model custom recurrence as read-only and require an explicit supported replacement before a start/recurrence edit. Validate 30 children, nonblank child titles, stable `clientMutationId`, and retention of failed drafts.
-- [ ] Extend Home/blocker UI models with checked/total progress, next unchecked child, Done enabled only when counts match, and Extend enabled only for non-recurring roots.
-- [ ] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: make client state occurrence aware"`.
+- [x] Model custom recurrence as read-only and require an explicit supported replacement before a start/recurrence edit. Validate 30 children, nonblank child titles, stable `clientMutationId`, and retention of failed drafts.
+- [x] Extend Home/blocker UI models with checked/total progress, next unchecked child, Done enabled only when counts match, and Extend enabled only for non-recurring roots.
+- [x] Run `./gradlew :shared:testAndroidHostTest --console=plain`. Expected: PASS.
+- [x] Commit with `git commit -m "feat: make client state occurrence aware"`.
+- [x] Spec-review follow-up: require a nonblank occurrence key, expose the stable `(taskId, occurrenceKey, kind)` identity separately from trigger time, and exclude invalid-state roots even without validation errors.
+- [x] Code-quality follow-up: clear custom recurrence state on replacement and add typed checklist editor mutations with failure retention for add, edit, delete, check, and uncheck intents.
+- [x] Final P1 follow-up: reject duplicate `clientMutationId` values across every typed checklist mutation before failed-intent retention/batch processing.
 
 ## Task 13: Persist Device Identity And Occurrence-Keyed Android Alarms
 
@@ -641,13 +649,16 @@ val recurrenceChoices = listOf(
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/AlarmIntentFactoryTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGateTest.kt`
 
-- [ ] Add failing device tests proving one UUID is generated once and survives store reconstruction, while each explicit user intent gets a fresh action UUID. Retry code must hold the same request/action ID; `DeviceIdentityStore` must not silently reuse an action ID for a second intent.
-- [ ] Add `occurrenceKey` to `ScheduledAlarm`, PendingIntent extras, request-code input, blocker launch intents, logs, and snapshot gate. Keep Morning Review on a fixed synthetic key such as `morning-review`.
-- [ ] Add a persistent registry of scheduled alarm identities. During reconciliation, cancel registry entries not in the new desired set, including an old occurrence with the same task ID/due. Then schedule desired identities and atomically replace the registry.
-- [ ] Add failing tests proving old/new occurrence PendingIntents differ, cancellation targets the exact old occurrence, boot reconciliation restores the registry, and an alarm for a stale occurrence refreshes then dismisses without showing a blocker.
-- [ ] Keep Android release networking unchanged: production HTTPS only and no release cleartext opt-in. The debug network security config may continue allowing only `10.0.2.2` for the emulator fake backend.
+- [x] Add failing device tests proving one UUID is generated once and survives store reconstruction, while each explicit user intent gets a fresh action UUID. Retry code must hold the same request/action ID; `DeviceIdentityStore` must not silently reuse an action ID for a second intent.
+- [x] Add `occurrenceKey` to `ScheduledAlarm`, PendingIntent extras, request-code input, blocker launch intents, logs, and snapshot gate. Keep Morning Review on a fixed synthetic key such as `morning-review`.
+- [x] Add a persistent registry of scheduled alarm identities. During reconciliation, cancel registry entries not in the new desired set, including an old occurrence with the same task ID/due. Then schedule desired identities and atomically replace the registry.
+- [x] Add failing tests proving old/new occurrence PendingIntents differ, cancellation targets the exact old occurrence, boot reconciliation restores the registry, and an alarm for a stale occurrence refreshes then dismisses without showing a blocker.
+- [x] Keep Android release networking unchanged: production HTTPS only and no release cleartext opt-in. The debug network security config may continue allowing only `10.0.2.2` for the emulator fake backend.
 - [ ] Run `./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.*' --tests 'app.buzer.android.sync.*' --tests 'app.buzer.android.blockers.BlockerTaskSnapshotGateTest' --console=plain`. Expected: PASS.
-- [ ] Commit with `git commit -m "feat: key Android alarms by occurrence"`.
+- [x] Commit with `git commit -m "feat: key Android alarms by occurrence"`.
+- [x] Spec-review follow-up: cancel the current occurrence-keyed blocker notification (and legacy IDs) after an action; defer overlay rendering until a bounded fresh refresh dismisses stale authority, with cached rendering only as documented offline fallback; include occurrence in per-alarm logs; and give full-screen activity PendingIntents an occurrence-keyed action/data identity as well as extras/request code.
+- [x] Code-quality follow-up: dismiss blockers for authoritative missing roots; replace overlays with generation-scoped presentation ownership so stale refresh/watcher/action work cannot tear down a newer request; pass the triggering occurrence explicitly through every coordinator action path for notification cleanup; and cancel attempted desired alarms while retaining the old durable registry on reconciliation failure.
+- [x] Final P1 follow-up: rollback reconciliation cancels only newly attempted desired identities, never an already-armed identity that remains in both the old and desired sets.
 
 ## Task 14: Consume Authoritative Mutation Responses In The Android Coordinator
 
@@ -659,14 +670,40 @@ val recurrenceChoices = listOf(
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeDoneActionHandlerTest.kt`
 
-- [ ] Add failing coordinator tests proving a successful mutation saves/reconciles the returned snapshot without a follow-up `getSnapshot`, a 202 pending response cancels speculative alarms and exposes pending UI, a 409 applies current snapshot while retaining a caller draft, 429 exposes retry timing, and a retry sends the exact same action ID.
-- [ ] Change coordinator action methods to accept immutable serialized request objects that already contain action metadata. UI handlers create the request once and capture it in the retry closure.
-- [ ] Replace `runBackendAction`'s unconditional `refreshAndReconcile()` with `applyMutationResponse(response)`: save the returned snapshot, reconcile alarms, clear obsolete notifications, and return typed success/partial/pending/stale state.
-- [ ] Do not cancel all task alarms optimistically before a confirmed Done response. The returned authoritative snapshot determines cancellation or next-recurring-occurrence scheduling.
-- [ ] Add focused `checkChild` and `uncheckChild` coordinator actions. Prevent multiple simultaneous taps on one child while its action is in flight, but allow the next intent after the response with a new action ID/revision.
-- [ ] Keep offline behavior honest: cached UI may display, but mutation failure never changes checked/done/recurrence state locally. Alarm-triggered blockers show retry/offline state if refresh fails.
+- [x] Add failing coordinator tests proving a successful mutation saves/reconciles the returned snapshot without a follow-up `getSnapshot`, a 202 pending response cancels speculative alarms and exposes pending UI, a 409 applies current snapshot while retaining a caller draft, 429 exposes retry timing, and a retry sends the exact same action ID.
+- [x] Change coordinator action methods to accept immutable serialized request objects that already contain action metadata. UI handlers create the request once and capture it in the retry closure.
+- [x] Replace `runBackendAction`'s unconditional `refreshAndReconcile()` with `applyMutationResponse(response)`: save the returned snapshot, reconcile alarms, clear obsolete notifications, and return typed success/partial/pending/stale state.
+- [x] Do not cancel all task alarms optimistically before a confirmed Done response. The returned authoritative snapshot determines cancellation or next-recurring-occurrence scheduling.
+- [x] Add focused `checkChild` and `uncheckChild` coordinator actions. Prevent multiple simultaneous taps on one child while its action is in flight, but allow the next intent after the response with a new action ID/revision.
+- [x] Keep offline behavior honest: cached UI may display, but mutation failure never changes checked/done/recurrence state locally. Alarm-triggered blockers show retry/offline state if refresh fails.
 - [ ] Run `./gradlew :androidApp:testDebugUnitTest --tests 'app.buzer.android.enforcement.EnforcementCoordinatorTest' --tests 'app.buzer.android.ui.HomeDoneActionHandlerTest' --console=plain`. Expected: PASS.
 - [ ] Commit with `git commit -m "feat: reconcile authoritative action responses"`.
+- [x] Quality follow-up: distinguish post-response local persistence/reconciliation failures from backend failures; retain returned authority and never retry/re-arm a confirmed POST. Serialize only local snapshot/registry application, merge competing equal-version snapshots by root/child revisions, and verify one-time/recurring Done reconciliation from the returned authority without a GET.
+
+### Approved contract correction: durable snapshot generation
+
+The prior Task 14 equal-`scheduleVersion` merge cannot safely order deletion,
+root lifecycle, and different-child changes received out of order from two
+phones. The user approved this additive API contract correction on 2026-07-16.
+
+- [x] Add SQLite migration v3 with a durable global generation counter and
+  transaction-local insert/update/delete triggers for every projected task
+  table; expose it from GET, success/202 mutation snapshots, and 409 snapshots.
+- [x] Add `snapshotGeneration` to the shared API DTO, fake backend snapshots,
+  focused migration/snapshot/fake/shared tests, API documentation, and the
+  lasting architecture decision. Require it on every network snapshot, while
+  only `SnapshotStore` explicitly migrates an already persisted pre-v3 snapshot
+  to unorderable legacy `0`. Read rows/projects/generation under one SQLite
+  read transaction and assert the field for direct GET/success/202/409 routes.
+- [x] Write snapshots and the legacy-cache migration through a temporary file
+  plus rename; if that one-time rewrite fails, log it and retain the decoded
+  legacy `0` snapshot until server authority replaces it.
+- [ ] Replace Task 14's temporary equal-`scheduleVersion` object merge with
+  whole-snapshot increasing-generation application: a positive incoming
+  generation applies only when newer; any cached/incoming legacy zero requires
+  a fresh server snapshot before it can establish order. Add delayed response,
+  deletion, lifecycle, and legacy-cache regression tests when completing Task
+  14's Android source.
 
 ## Task 15: Add Recurrence And Checklist Editing To Add, Edit, And Repair
 

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.buzer.android.ui.components.BlockerSurface
+import app.buzer.android.ui.components.ChecklistProgress
 import app.buzer.android.ui.components.CommitmentEditor
 import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
@@ -21,6 +22,7 @@ import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.shared.model.RescheduleTaskRequest
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.ui.blockers.BlockerKind
 import app.buzer.shared.ui.blockers.BlockerUiModel
 import app.buzer.shared.ui.blockers.buildBlockerUiModel
@@ -66,6 +68,10 @@ fun StartBlockerScreen(
         if (checking) {
             return@BlockerSurface
         }
+        if (model.totalCount > 0) {
+            Text("Checklist ${model.checkedCount}/${model.totalCount}")
+            model.nextUncheckedChildTitle?.let { Text("Next: $it") }
+        }
         LoadingActionButton(
             label = "I'm starting",
             loadingLabel = actionState.loadingLabel ?: "Starting...",
@@ -110,6 +116,10 @@ fun DeadlineBlockerScreen(
     onDone: () -> Unit = {},
     onExtend: () -> Unit = {},
     onReschedule: (RescheduleTaskRequest) -> Unit = {},
+    onToggleChild: (ChecklistItem, Boolean) -> Unit = { _, _ -> },
+    actionIdFactory: () -> String = { "test-action-id" },
+    deviceId: String = "test-device-id",
+    occurrenceKey: String = "test-occurrence-key",
     model: BlockerUiModel = buildBlockerUiModel(BlockerKind.Deadline, null),
     showBack: Boolean = true,
     checking: Boolean = false,
@@ -182,6 +192,9 @@ fun DeadlineBlockerScreen(
                     } else {
                         onReschedule(
                             rescheduleRequestFromEditorStart(
+                                actionId = actionIdFactory(),
+                                deviceId = deviceId,
+                                expectedOccurrenceKey = occurrenceKey,
                                 start = selectedStart,
                                 durationMinutes = durationMinutes,
                                 initialDescription = initialDescription,
@@ -206,20 +219,26 @@ fun DeadlineBlockerScreen(
             if (checking) {
                 return@BlockerSurface
             }
+            ChecklistProgress(
+                items = model.checklistItems,
+                interactive = true,
+                enabled = !actionState.actionsDisabled,
+                onCheckedChange = onToggleChild
+            )
             LoadingActionButton(
                 label = "Done",
                 loadingLabel = actionState.loadingLabel ?: "Completing...",
                 loading = actionState is BlockerActionState.Loading,
                 onClick = onDone,
-                enabled = !actionState.actionsDisabled,
+                enabled = !actionState.actionsDisabled && model.doneEnabled,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedButton(
                 onClick = onExtend,
-                enabled = !actionState.actionsDisabled,
+                enabled = !actionState.actionsDisabled && model.extendEnabled,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Extend 30m")
+                Text(if (model.extendEnabled) "Extend 30m" else "Extend 30m unavailable for recurring tasks")
             }
             OutlinedButton(
                 onClick = {
@@ -258,6 +277,9 @@ fun DeadlineBlockerScreen(
 }
 
 fun descriptionAwareRescheduleRequest(
+    actionId: String = "test-action-id",
+    deviceId: String = "test-device-id",
+    expectedOccurrenceKey: String = "test-occurrence-key",
     dueDatetime: String,
     durationMinutes: Int,
     initialDescription: String?,
@@ -268,21 +290,33 @@ fun descriptionAwareRescheduleRequest(
     return when {
         edited == initial -> RescheduleTaskRequest(
             dueDatetime = dueDatetime,
-            durationMinutes = durationMinutes
+            durationMinutes = durationMinutes,
+            actionId = actionId,
+            deviceId = deviceId,
+            expectedOccurrenceKey = expectedOccurrenceKey
         )
         edited.isBlank() -> RescheduleTaskRequest.clearDescription(
             dueDatetime = dueDatetime,
-            durationMinutes = durationMinutes
+            durationMinutes = durationMinutes,
+            actionId = actionId,
+            deviceId = deviceId,
+            expectedOccurrenceKey = expectedOccurrenceKey
         )
         else -> RescheduleTaskRequest.setDescription(
             dueDatetime = dueDatetime,
             durationMinutes = durationMinutes,
-            description = edited
+            description = edited,
+            actionId = actionId,
+            deviceId = deviceId,
+            expectedOccurrenceKey = expectedOccurrenceKey
         )
     }
 }
 
 fun rescheduleRequestFromEditorStart(
+    actionId: String = "test-action-id",
+    deviceId: String = "test-device-id",
+    expectedOccurrenceKey: String = "test-occurrence-key",
     start: DateTimeSelection,
     durationMinutes: Int,
     initialDescription: String?,
@@ -294,6 +328,9 @@ fun rescheduleRequestFromEditorStart(
         .toInstant()
         .toString()
     return descriptionAwareRescheduleRequest(
+        actionId = actionId,
+        deviceId = deviceId,
+        expectedOccurrenceKey = expectedOccurrenceKey,
         dueDatetime = dueDatetime,
         durationMinutes = durationMinutes,
         initialDescription = initialDescription,

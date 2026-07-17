@@ -16,16 +16,26 @@ import app.buzer.shared.ui.blockers.BlockerKind
 data class OverlayBlockerRequest(
     val kind: AlarmKind,
     val taskId: String,
+    val occurrenceKey: String,
     val blockerKind: BlockerKind = BlockerKind.OverlayStart,
     val title: String? = null,
     val description: String? = null,
     val dueDatetime: String? = null,
     val durationMinutes: Int? = null,
-    val startAt: String? = null
+    val startAt: String? = null,
+    val checkedCount: Int = 0,
+    val totalCount: Int = 0,
+    val nextUncheckedChildTitle: String? = null
 ) {
+    init {
+        require(taskId.isNotBlank()) { "taskId is required" }
+        require(occurrenceKey.isNotBlank()) { "occurrenceKey is required" }
+    }
+
     fun writeTo(intent: Intent): Intent =
         intent.apply {
             putExtra(AlarmIntentFactory.EXTRA_TASK_ID, taskId)
+            putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, occurrenceKey)
             putExtra(AlarmIntentFactory.EXTRA_ALARM_KIND, kind.name)
             title?.let { putExtra(EXTRA_TITLE, it) }
             description?.let { putExtra(EXTRA_DESCRIPTION, it) }
@@ -41,7 +51,10 @@ data class OverlayBlockerRequest(
             description = task.description,
             dueDatetime = task.dueDatetime,
             durationMinutes = task.durationMinutes,
-            startAt = task.startAt
+            startAt = task.startAt,
+            checkedCount = task.checkedCount,
+            totalCount = task.totalCount,
+            nextUncheckedChildTitle = task.checklistItems.filterNot { it.checked }.minByOrNull { it.order }?.title
         )
     }
 
@@ -79,6 +92,7 @@ data class OverlayBlockerRequest(
 
         fun fromExtras(
             taskId: String?,
+            occurrenceKey: String?,
             kindName: String?,
             title: String? = null,
             description: String? = null,
@@ -88,10 +102,11 @@ data class OverlayBlockerRequest(
         ): OverlayBlockerRequest? {
             val kind = kindName?.let { runCatching { AlarmKind.valueOf(it) }.getOrNull() } ?: return null
             return when (kind) {
-                AlarmKind.START_BLOCKER -> taskId?.let {
+                AlarmKind.START_BLOCKER -> taskId?.takeIf { !occurrenceKey.isNullOrBlank() }?.let {
                     OverlayBlockerRequest(
                         kind = kind,
                         taskId = it,
+                        occurrenceKey = occurrenceKey.orEmpty(),
                         title = title,
                         description = description,
                         dueDatetime = dueDatetime,
@@ -108,6 +123,7 @@ data class OverlayBlockerRequest(
         fun fromIntent(intent: Intent): OverlayBlockerRequest? =
             fromExtras(
                 taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID),
+                occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY),
                 kindName = intent.getStringExtra(AlarmIntentFactory.EXTRA_ALARM_KIND),
                 title = intent.getStringExtra(EXTRA_TITLE),
                 description = intent.getStringExtra(EXTRA_DESCRIPTION),
