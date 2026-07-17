@@ -25,10 +25,10 @@ task. Use the primary checkout only for integration work: reviewing, merging, an
 resolving cross-cutting concerns across finished child branches.
 
 Naming convention this doc recommends going forward, already followed by the most
-directly related recent worktrees (`feature/recurring-checklists` and its `-task2`/
-`-task3` splits) — other branches active during the same period used other prefixes
-(`feat/android-vps-enforcement`, `codex/vps-deployment`, `codex/android-overlay-boot-
-recovery`) that predate this convention:
+directly related recent worktrees (`feature/recurring-checklists` and its
+`-task2`/`-task3` splits) — other branches active during the same period used other
+prefixes (`feat/android-vps-enforcement`, `codex/vps-deployment`,
+`codex/android-overlay-boot-recovery`) that predate this convention:
 
 - Branch: `feature/<topic>` for a standalone task, or `feature/<topic>-taskN` for a
   subtask split off a larger effort.
