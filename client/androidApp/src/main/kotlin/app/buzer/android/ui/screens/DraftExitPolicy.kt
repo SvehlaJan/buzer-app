@@ -22,7 +22,7 @@ internal data class ChecklistDraftFingerprint(
     val checked: Boolean
 )
 
-internal data class AddTaskDraftFingerprint(
+internal class AddTaskDraftFingerprint(
     val title: String,
     val description: String,
     val projectId: String?,
@@ -30,8 +30,51 @@ internal data class AddTaskDraftFingerprint(
     val start: DateTimeDraftSelection,
     val durationMinutes: Int,
     val recurrencePreset: RecurrencePreset,
-    val checklistItems: List<ChecklistDraftFingerprint>
+    checklistItems: List<ChecklistDraftFingerprint>
 ) {
+    val checklistItems: List<ChecklistDraftFingerprint> = checklistItems.toList()
+
+    fun copy(
+        title: String = this.title,
+        description: String = this.description,
+        projectId: String? = this.projectId,
+        assigneeId: String? = this.assigneeId,
+        start: DateTimeDraftSelection = this.start,
+        durationMinutes: Int = this.durationMinutes,
+        recurrencePreset: RecurrencePreset = this.recurrencePreset,
+        checklistItems: List<ChecklistDraftFingerprint> = this.checklistItems
+    ): AddTaskDraftFingerprint = AddTaskDraftFingerprint(
+        title = title,
+        description = description,
+        projectId = projectId,
+        assigneeId = assigneeId,
+        start = start,
+        durationMinutes = durationMinutes,
+        recurrencePreset = recurrencePreset,
+        checklistItems = checklistItems
+    )
+
+    override fun equals(other: Any?): Boolean = other is AddTaskDraftFingerprint &&
+        title == other.title &&
+        description == other.description &&
+        projectId == other.projectId &&
+        assigneeId == other.assigneeId &&
+        start == other.start &&
+        durationMinutes == other.durationMinutes &&
+        recurrencePreset == other.recurrencePreset &&
+        checklistItems == other.checklistItems
+
+    override fun hashCode(): Int = listOf(
+        title,
+        description,
+        projectId,
+        assigneeId,
+        start,
+        durationMinutes,
+        recurrencePreset,
+        checklistItems
+    ).hashCode()
+
     companion object {
         fun empty(projectId: String?): AddTaskDraftFingerprint = AddTaskDraftFingerprint(
             title = "",
@@ -46,16 +89,61 @@ internal data class AddTaskDraftFingerprint(
     }
 }
 
-internal data class EditTaskDraftFingerprint(
+internal class EditTaskDraftFingerprint(
     val title: String,
     val description: String,
     val start: DateTimeDraftSelection,
     val durationMinutes: Int,
     val recurrencePreset: RecurrencePreset?,
-    val existingChildren: List<ChecklistDraftFingerprint>,
-    val deletedChildIds: Set<String>,
-    val addedChildren: List<ChecklistDraftFingerprint>
-)
+    existingChildren: List<ChecklistDraftFingerprint>,
+    deletedChildIds: Set<String>,
+    addedChildren: List<ChecklistDraftFingerprint>
+) {
+    val existingChildren: List<ChecklistDraftFingerprint> = existingChildren.toList()
+    val deletedChildIds: Set<String> = deletedChildIds.toSet()
+    val addedChildren: List<ChecklistDraftFingerprint> = addedChildren.toList()
+
+    fun copy(
+        title: String = this.title,
+        description: String = this.description,
+        start: DateTimeDraftSelection = this.start,
+        durationMinutes: Int = this.durationMinutes,
+        recurrencePreset: RecurrencePreset? = this.recurrencePreset,
+        existingChildren: List<ChecklistDraftFingerprint> = this.existingChildren,
+        deletedChildIds: Set<String> = this.deletedChildIds,
+        addedChildren: List<ChecklistDraftFingerprint> = this.addedChildren
+    ): EditTaskDraftFingerprint = EditTaskDraftFingerprint(
+        title = title,
+        description = description,
+        start = start,
+        durationMinutes = durationMinutes,
+        recurrencePreset = recurrencePreset,
+        existingChildren = existingChildren,
+        deletedChildIds = deletedChildIds,
+        addedChildren = addedChildren
+    )
+
+    override fun equals(other: Any?): Boolean = other is EditTaskDraftFingerprint &&
+        title == other.title &&
+        description == other.description &&
+        start == other.start &&
+        durationMinutes == other.durationMinutes &&
+        recurrencePreset == other.recurrencePreset &&
+        existingChildren == other.existingChildren &&
+        deletedChildIds == other.deletedChildIds &&
+        addedChildren == other.addedChildren
+
+    override fun hashCode(): Int = listOf(
+        title,
+        description,
+        start,
+        durationMinutes,
+        recurrencePreset,
+        existingChildren,
+        deletedChildIds,
+        addedChildren
+    ).hashCode()
+}
 
 internal fun addTaskDraftFingerprint(
     title: String,

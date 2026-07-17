@@ -109,6 +109,8 @@ class DraftExitPolicyTest {
 
     @Test
     fun screenFactoriesCaptureOnlyDraftData() {
+        val addedChild = ChecklistDraftFingerprint("new-child", "New child", "Details", false)
+        val existingChild = ChecklistDraftFingerprint("child-1", "Child", "Details", false)
         val add = addTaskDraftFingerprint(
             title = "Root",
             description = "Description",
@@ -117,7 +119,7 @@ class DraftExitPolicyTest {
             start = start,
             durationMinutes = 30,
             recurrencePreset = RecurrencePreset.never,
-            checklistItems = listOf(ChecklistDraftFingerprint("new-child", "New child", "Details", false))
+            checklistItems = listOf(addedChild)
         )
         val edit = editTaskDraftFingerprint(
             title = "Root",
@@ -125,14 +127,77 @@ class DraftExitPolicyTest {
             start = start,
             durationMinutes = 30,
             recurrencePreset = RecurrencePreset.never,
-            existingChildren = listOf(ChecklistDraftFingerprint("child-1", "Child", "Details", false)),
+            existingChildren = listOf(existingChild),
             deletedChildIds = setOf("deleted-child"),
-            addedChildren = listOf(ChecklistDraftFingerprint("new-child", "New child", "Details", false))
+            addedChildren = listOf(addedChild)
         )
 
-        assertEquals(listOf(ChecklistDraftFingerprint("new-child", "New child", "Details", false)), add.checklistItems)
-        assertEquals(listOf(ChecklistDraftFingerprint("child-1", "Child", "Details", false)), edit.existingChildren)
-        assertEquals(listOf(ChecklistDraftFingerprint("new-child", "New child", "Details", false)), edit.addedChildren)
+        assertEquals(
+            AddTaskDraftFingerprint(
+                title = "Root",
+                description = "Description",
+                projectId = "project-personal",
+                assigneeId = "me",
+                start = start,
+                durationMinutes = 30,
+                recurrencePreset = RecurrencePreset.never,
+                checklistItems = listOf(addedChild)
+            ),
+            add
+        )
+        assertEquals(
+            EditTaskDraftFingerprint(
+                title = "Root",
+                description = "Description",
+                start = start,
+                durationMinutes = 30,
+                recurrencePreset = RecurrencePreset.never,
+                existingChildren = listOf(existingChild),
+                deletedChildIds = setOf("deleted-child"),
+                addedChildren = listOf(addedChild)
+            ),
+            edit
+        )
+    }
+
+    @Test
+    fun fingerprintsSnapshotMutableCollectionInputs() {
+        val initialChild = ChecklistDraftFingerprint("child-1", "Child", null, false)
+        val newChild = ChecklistDraftFingerprint("child-2", "New child", null, false)
+        val checklistItems = mutableListOf(initialChild)
+        val existingChildren = mutableListOf(initialChild)
+        val deletedChildIds = mutableSetOf("deleted-child")
+        val addedChildren = mutableListOf(newChild)
+        val add = AddTaskDraftFingerprint(
+            title = "Add",
+            description = "",
+            projectId = null,
+            assigneeId = null,
+            start = DateTimeDraftSelection.Empty,
+            durationMinutes = 30,
+            recurrencePreset = RecurrencePreset.never,
+            checklistItems = checklistItems
+        )
+        val edit = EditTaskDraftFingerprint(
+            title = "Edit",
+            description = "",
+            start = DateTimeDraftSelection.Empty,
+            durationMinutes = 30,
+            recurrencePreset = RecurrencePreset.never,
+            existingChildren = existingChildren,
+            deletedChildIds = deletedChildIds,
+            addedChildren = addedChildren
+        )
+
+        checklistItems += newChild
+        existingChildren.clear()
+        deletedChildIds += "another-deleted-child"
+        addedChildren.clear()
+
+        assertEquals(listOf(initialChild), add.checklistItems)
+        assertEquals(listOf(initialChild), edit.existingChildren)
+        assertEquals(setOf("deleted-child"), edit.deletedChildIds)
+        assertEquals(listOf(newChild), edit.addedChildren)
     }
 
     private fun addDraft() = AddTaskDraftFingerprint.empty(projectId = "project-personal")
