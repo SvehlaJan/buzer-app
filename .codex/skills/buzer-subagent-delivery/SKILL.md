@@ -48,8 +48,8 @@ dispatching a read-only final reviewer.
 
 `docs/handoffs/2026-07-17-agent-workspaces-convention.md` is a real worked example of
 this protocol in action: a delivering agent produced `docs/notes/agent-workspaces.md`,
-a spec-compliance pass independently verified it byte-for-byte against its
-specification, and a code-quality pass caught two real, substantive issues — an
+a spec-compliance pass independently verified it byte-for-byte against its plan,
+and a code-quality pass caught two real, substantive issues — an
 overclaimed branch-naming convention, and a merge-history example that cited no-op
 branch closures as "the" merge pattern while omitting the one commit that actually
 merged real code — both fixed and re-verified before the work was considered done. A
