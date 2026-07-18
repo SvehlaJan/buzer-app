@@ -42,7 +42,7 @@ independent of each other and could be done in either order.
 - Create: `.codex/skills/buzer-subagent-delivery/review-prompt-template.md`
 - Create: `.claude/skills/buzer-subagent-delivery/review-prompt-template.md`
 
-- [ ] **Step 1: Write `SKILL.md` to both `.codex/skills/buzer-subagent-delivery/` and
+- [x] **Step 1: Write `SKILL.md` to both `.codex/skills/buzer-subagent-delivery/` and
   `.claude/skills/buzer-subagent-delivery/`** (identical content at both paths)
 
 ```markdown
@@ -106,7 +106,7 @@ introduced. See that handoff plus the commit history on
 `docs/superpowers/plans/2026-07-17-agent-workspaces.md` for the full sequence.
 ```
 
-- [ ] **Step 2: Write `task-prompt-template.md` to both `.codex/skills/buzer-subagent-delivery/`
+- [x] **Step 2: Write `task-prompt-template.md` to both `.codex/skills/buzer-subagent-delivery/`
   and `.claude/skills/buzer-subagent-delivery/`** (identical content at both paths)
 
 ```markdown
@@ -184,7 +184,7 @@ Task tool (general-purpose):
 ```
 ```
 
-- [ ] **Step 3: Write `review-prompt-template.md` to both `.codex/skills/buzer-subagent-delivery/`
+- [x] **Step 3: Write `review-prompt-template.md` to both `.codex/skills/buzer-subagent-delivery/`
   and `.claude/skills/buzer-subagent-delivery/`** (identical content at both paths)
 
 ```markdown
@@ -245,7 +245,7 @@ Task tool (general-purpose):
 ```
 ```
 
-- [ ] **Step 4: Verify all six files exist and each runtime pair is identical**
+- [x] **Step 4: Verify all six files exist and each runtime pair is identical**
 
 Run:
 ```bash
@@ -255,7 +255,7 @@ diff .codex/skills/buzer-subagent-delivery/review-prompt-template.md .claude/ski
 ```
 Expected: no output from any `diff` (files identical).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .codex/skills/buzer-subagent-delivery .claude/skills/buzer-subagent-delivery
@@ -271,7 +271,7 @@ git commit -m "docs: add buzer-subagent-delivery skill (Codex + Claude Code)"
 - Create: `.claude/skills/buzer-action-reconciliation/SKILL.md`
 - Create: `docs/notes/action-reconciliation-protocol.md`
 
-- [ ] **Step 1: Write `SKILL.md` to both `.codex/skills/buzer-action-reconciliation/`
+- [x] **Step 1: Write `SKILL.md` to both `.codex/skills/buzer-action-reconciliation/`
   and `.claude/skills/buzer-action-reconciliation/`** (identical content at both paths)
 
 ```markdown
@@ -326,7 +326,7 @@ See `docs/notes/action-reconciliation-protocol.md` for a full walkthrough of
 above.
 ```
 
-- [ ] **Step 2: Write `docs/notes/action-reconciliation-protocol.md`**
+- [x] **Step 2: Write `docs/notes/action-reconciliation-protocol.md`**
 
 ```markdown
 # Action Reconciliation Protocol
@@ -428,7 +428,7 @@ five scenarios (4xx pre-send rejection, sent timeout, replay, stale revision, du
 user-visible child content) there or in an equivalent test file.
 ```
 
-- [ ] **Step 3: Verify all three files exist and the SKILL.md pair is identical**
+- [x] **Step 3: Verify all three files exist and the SKILL.md pair is identical**
 
 Run:
 ```bash
@@ -438,7 +438,7 @@ grep -c "^## " docs/notes/action-reconciliation-protocol.md
 Expected: no output from `diff`; `grep -c` returns `5` (Why This Exists, The 7-Item
 Checklist, Hard Bans, Sources Of Truth, Worked Example: TodoistChecklistService.mutate()).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .codex/skills/buzer-action-reconciliation docs/notes/action-reconciliation-protocol.md
