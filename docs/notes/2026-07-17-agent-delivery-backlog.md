@@ -133,6 +133,19 @@ agreement.
 
 **Dependencies:** P0-1 recommended, but not required.
 
+**Status:**
+
+- Brainstormed and shipped 2026-07-17/18, combined with P0-3 in one spec. See
+  `docs/superpowers/specs/2026-07-17-delivery-and-reconciliation-skills-design.md`.
+- Shipped as a dual-runtime skill (`.codex/skills/buzer-subagent-delivery/` and
+  `.claude/skills/buzer-subagent-delivery/`, identical content), with a task prompt
+  template and a review prompt template. Plan:
+  `docs/superpowers/plans/2026-07-17-delivery-and-reconciliation-skills.md` (complete).
+- Rule 1 was adapted from this section's original "run P0-1 preflight" wording — P0-1
+  shipped documentation-only with no preflight script, so the shipped rule instead
+  references `docs/notes/agent-workspaces.md`.
+- The dry-run example cites the real P0-1 execution rather than a synthetic scenario.
+
 ---
 
 ## P0-3: Create a `buzer-action-reconciliation` skill
@@ -170,6 +183,22 @@ repository-local skill.
 - A sample endpoint walkthrough uses the existing checklist mutation flow.
 
 **Dependencies:** None.
+
+**Status:**
+
+- Brainstormed and shipped 2026-07-17/18, combined with P0-2 in one spec. See
+  `docs/superpowers/specs/2026-07-17-delivery-and-reconciliation-skills-design.md`.
+- Shipped as a dual-runtime skill (`.codex/skills/buzer-action-reconciliation/` and
+  `.claude/skills/buzer-action-reconciliation/`, identical content) plus
+  `docs/notes/action-reconciliation-protocol.md`. Plan:
+  `docs/superpowers/plans/2026-07-17-delivery-and-reconciliation-skills.md` (complete).
+- The 7-item checklist, hard bans, and sources of truth shipped unmodified from this
+  section. The sample walkthrough uses the real `TodoistChecklistService.mutate()`
+  (`backend/src/services/todoistChecklistService.ts:56`), with every line-number and
+  behavior claim independently verified against the actual backend source, not assumed.
+- The suggested "test-case template under `backend/test/helpers/`" artifact was
+  explicitly deferred to backlog task P1-4 (a full reusable action-replay test
+  harness), not shipped here — avoid duplicating it if picking up P0-3 material again.
 
 ---
 
