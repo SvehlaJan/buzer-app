@@ -64,12 +64,14 @@ class BlockerActivityFakeBackendTest {
     fun startBlocker_systemBackDoesNotCloseProductionBlocker() {
         resetTestState()
         val scenario = launchStartBlocker("task-start")
+        try {
+            waitForText("I'm starting")
+            pressBack()
 
-        waitForText("I'm starting")
-        pressBack()
-
-        assertActivityNotDestroyed(scenario)
-        scenario.close()
+            assertActivityNotDestroyed(scenario)
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
@@ -97,13 +99,15 @@ class BlockerActivityFakeBackendTest {
     fun deadlineBlocker_systemBackDoesNotCloseProductionBlocker() {
         resetTestState()
         val scenario = launchDeadlineBlocker("task-deadline")
+        try {
+            waitForText("Done")
+            pressBack()
 
-        waitForText("Done")
-        pressBack()
-
-        composeRule.onNodeWithText("Done").assertIsDisplayed()
-        assertActivityNotDestroyed(scenario)
-        scenario.close()
+            composeRule.onNodeWithText("Done").assertIsDisplayed()
+            assertActivityNotDestroyed(scenario)
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
@@ -138,16 +142,18 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.setFailActions(true)
         try {
             val scenario = launchStartBlocker("task-start-fail")
+            try {
+                waitForText("I'm starting")
+                composeRule.onNodeWithText("I'm starting").assertIsDisplayed()
+                composeRule.onNodeWithText("I'm starting").performClick()
 
-            waitForText("I'm starting")
-            composeRule.onNodeWithText("I'm starting").assertIsDisplayed()
-            composeRule.onNodeWithText("I'm starting").performClick()
-
-            waitForRecordedCall("/tasks/task-start-fail/start")
-            waitForErrorLog("action=START_TASK taskId=task-start-fail", "forced_failure")
-            waitForText("Action failed")
-            assertFailureDialogSurvivesBack(scenario)
-            scenario.close()
+                waitForRecordedCall("/tasks/task-start-fail/start")
+                waitForErrorLog("action=START_TASK taskId=task-start-fail", "forced_failure")
+                waitForText("Action failed")
+                assertFailureDialogSurvivesBack(scenario)
+            } finally {
+                scenario.close()
+            }
         } finally {
             fakeBackend.setFailActions(false)
         }
@@ -159,17 +165,19 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.setFailActions(true)
         try {
             val scenario = launchDeadlineBlocker("task-reschedule-fail")
+            try {
+                composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
+                selectDefaultDeadline()
+                val saveLabel = waitForComputedSaveLabel()
+                composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
 
-            composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
-            selectDefaultDeadline()
-            val saveLabel = waitForComputedSaveLabel()
-            composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
-
-            waitForRecordedCall("/tasks/task-reschedule-fail/reschedule")
-            waitForErrorLog("action=RESCHEDULE_TASK taskId=task-reschedule-fail", "forced_failure")
-            waitForText("Action failed")
-            assertFailureDialogSurvivesBack(scenario)
-            scenario.close()
+                waitForRecordedCall("/tasks/task-reschedule-fail/reschedule")
+                waitForErrorLog("action=RESCHEDULE_TASK taskId=task-reschedule-fail", "forced_failure")
+                waitForText("Action failed")
+                assertFailureDialogSurvivesBack(scenario)
+            } finally {
+                scenario.close()
+            }
         } finally {
             fakeBackend.setFailActions(false)
         }
@@ -181,16 +189,18 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.setFailActions(true)
         try {
             val scenario = launchDeadlineBlocker("task-deadline-fail")
+            try {
+                waitForText("Done")
+                composeRule.onNodeWithText("Done").assertIsDisplayed()
+                composeRule.onNodeWithText("Done").performClick()
 
-            waitForText("Done")
-            composeRule.onNodeWithText("Done").assertIsDisplayed()
-            composeRule.onNodeWithText("Done").performClick()
-
-            waitForRecordedCall("/tasks/task-deadline-fail/done")
-            waitForErrorLog("action=COMPLETE_TASK taskId=task-deadline-fail", "forced_failure")
-            waitForText("Action failed")
-            assertFailureDialogSurvivesBack(scenario)
-            scenario.close()
+                waitForRecordedCall("/tasks/task-deadline-fail/done")
+                waitForErrorLog("action=COMPLETE_TASK taskId=task-deadline-fail", "forced_failure")
+                waitForText("Action failed")
+                assertFailureDialogSurvivesBack(scenario)
+            } finally {
+                scenario.close()
+            }
         } finally {
             fakeBackend.setFailActions(false)
         }
