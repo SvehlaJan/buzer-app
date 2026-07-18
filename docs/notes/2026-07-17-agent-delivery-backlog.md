@@ -192,8 +192,10 @@ repository-local skill.
   `.claude/skills/buzer-action-reconciliation/`, identical content) plus
   `docs/notes/action-reconciliation-protocol.md`. Plan:
   `docs/superpowers/plans/2026-07-17-delivery-and-reconciliation-skills.md` (complete).
-- The 7-item checklist, hard bans, and sources of truth shipped unmodified from this
-  section. The sample walkthrough uses the real `TodoistChecklistService.mutate()`
+- The 7-item checklist, hard bans, and sources of truth shipped matching the design
+  spec's wording (which already condensed this section's item 6 slightly, dropping the
+  circular "as required by the API contract" clause). The sample walkthrough uses the
+  real `TodoistChecklistService.mutate()`
   (`backend/src/services/todoistChecklistService.ts:56`), with every line-number and
   behavior claim independently verified against the actual backend source, not assumed.
 - The suggested "test-case template under `backend/test/helpers/`" artifact was
