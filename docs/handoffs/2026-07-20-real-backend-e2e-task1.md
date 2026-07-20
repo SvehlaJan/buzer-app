@@ -158,6 +158,40 @@ Verification:
   - Result: PASS
   - Evidence: 29 test files and 341 tests passed.
 
+## Follow-up reset lifecycle fix
+
+`E2ETodoistWorld.load()` is used by the planned E2E reset flow while the adapter
+instance is retained. The accepted-command ledger now observes a world-load generation
+and clears itself before the next command when the world is replaced. This keeps the
+world responsible only for its own lifecycle and the adapter responsible for its replay
+ledger.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: FAIL (expected RED)
+  - Evidence: replaying a prior `itemAdd` UUID after a fresh `world.load` returned its
+    stale result while the new world contained zero tasks.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 1 test file and 13 tests passed; the replay now adds a valid task to the
+    reloaded world.
+
+Verification:
+
+- Command: `cd backend && npm run typecheck`
+  - Result: PASS
+  - Evidence: no TypeScript diagnostics.
+
+Verification:
+
+- Command: `cd backend && npm test`
+  - Result: PASS
+  - Evidence: 29 test files and 342 tests passed.
+
 ## Next recommended step
 
 Proceed with Task 2 in the same isolated worktree: add the fixture seed module and its

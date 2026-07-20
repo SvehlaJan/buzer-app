@@ -43,6 +43,7 @@ export class E2ETodoistWorld {
   private tasks = new Map<string, TodoistTaskMirror>();
   private projects = new Map<string, TodoistProjectMirror>();
   private createdCount = 0;
+  private loadGeneration = 0;
 
   constructor(private readonly currentUserId: string) {}
 
@@ -60,6 +61,7 @@ export class E2ETodoistWorld {
       ])
     );
     this.createdCount = 0;
+    this.loadGeneration += 1;
   }
 
   state(): { tasks: TodoistTaskMirror[]; projects: TodoistProjectMirror[] } {
@@ -200,6 +202,10 @@ export class E2ETodoistWorld {
     return structuredClone(this.require(todoistTaskId));
   }
 
+  generation(): number {
+    return this.loadGeneration;
+  }
+
   private nextCreatedId(): string {
     this.createdCount += 1;
     return `e2e-created-${this.createdCount}`;
@@ -248,6 +254,7 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   private scenario: E2EScenario = "none";
   private syncCount = 0;
   private readonly acceptedCommandOutcomes = new Map<string, unknown>();
+  private acceptedCommandGeneration = 0;
 
   constructor(currentUserId: string) {
     this.world = new E2ETodoistWorld(currentUserId);
@@ -398,6 +405,7 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   }
 
   private runAcceptedCommand<T>(commandUuid: string, mutation: () => T): T {
+    this.clearAcceptedCommandsForWorldLoad();
     this.guardCommand();
     if (this.acceptedCommandOutcomes.has(commandUuid)) {
       return structuredClone(this.acceptedCommandOutcomes.get(commandUuid)) as T;
@@ -405,6 +413,14 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     const outcome = mutation();
     this.acceptedCommandOutcomes.set(commandUuid, structuredClone(outcome));
     return outcome;
+  }
+
+  private clearAcceptedCommandsForWorldLoad(): void {
+    const generation = this.world.generation();
+    if (generation !== this.acceptedCommandGeneration) {
+      this.acceptedCommandOutcomes.clear();
+      this.acceptedCommandGeneration = generation;
+    }
   }
 
   private guardCommand(): void {

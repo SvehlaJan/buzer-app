@@ -258,6 +258,27 @@ describe("E2ETodoistWorld semantics", () => {
     expect((await syncedTask(adapter, "t-1")).completedAt).toBeNull();
   });
 
+  it("forgets accepted commands when a fresh world is loaded", async () => {
+    const adapter = adapterWith();
+    const add = {
+      kind: "root" as const,
+      commandUuid: "c-add",
+      tempId: "tmp-1",
+      title: "Created root",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      due: { kind: "clear" as const },
+      duration: null
+    };
+    await adapter.itemAdd(add);
+    adapter.world.load({ tasks: [], projects: [project] });
+
+    const replayAfterLoad = await adapter.itemAdd(add);
+    const state = await adapter.sync("*");
+    expect(state.tasks).toHaveLength(1);
+    expect(state.tasks[0]?.todoistTaskId).toBe(replayAfterLoad.todoistTaskId);
+  });
+
   it("itemMove changes the project and itemDelete tombstones", async () => {
     const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
     await adapter.itemMove({
