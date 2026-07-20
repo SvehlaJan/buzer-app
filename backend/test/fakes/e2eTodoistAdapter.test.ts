@@ -153,6 +153,28 @@ describe("E2ETodoistWorld semantics", () => {
     expect((await syncedTask(adapter, "t-1")).deletedAt).not.toBeNull();
   });
 
+  it("legacy update preserves the project without a move identity and moves with one", async () => {
+    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
+    const update = {
+      todoistTaskId: "t-1",
+      title: "Renamed",
+      description: null,
+      projectId: "project-personal",
+      assigneeId: "user-me",
+      dueDatetime: "2026-07-19T08:00:00.000Z",
+      durationMinutes: 45
+    };
+
+    await adapter.updateTask(update, { updateCommandUuid: "c-update" });
+    expect((await syncedTask(adapter, "t-1")).projectId).toBe("project-test");
+
+    await adapter.updateTask(update, {
+      updateCommandUuid: "c-update-2",
+      moveCommandUuid: "c-move"
+    });
+    expect((await syncedTask(adapter, "t-1")).projectId).toBe("project-personal");
+  });
+
   it("itemUpdateDateComplete advances a daily recurring due by one day", async () => {
     const task = mirror({
       todoistTaskId: "t-1",

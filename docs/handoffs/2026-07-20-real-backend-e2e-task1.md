@@ -86,6 +86,38 @@ Verification:
   add fixtures, server wiring, and the execution script.
 - No failures are known within Task 1 scope.
 
+## Follow-up review fix
+
+A Task 1 spec review found that legacy `updateTask` moved a task even when its
+`moveCommandUuid` was absent. The real `HttpTodoistAdapter` makes that move only when
+the identity is supplied. The E2E adapter now applies the same conditional behavior.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: FAIL (expected RED)
+  - Evidence: the new legacy-update test observed `project-personal` after an update
+    without `moveCommandUuid`, where `project-test` was required.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 1 test file and 9 tests passed; the test also confirms that a supplied
+    `moveCommandUuid` still moves the task.
+
+Verification:
+
+- Command: `cd backend && npm run typecheck`
+  - Result: PASS
+  - Evidence: no TypeScript diagnostics.
+
+Verification:
+
+- Command: `cd backend && npm test`
+  - Result: PASS
+  - Evidence: 29 test files and 338 tests passed.
+
 ## Next recommended step
 
 Proceed with Task 2 in the same isolated worktree: add the fixture seed module and its

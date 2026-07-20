@@ -350,10 +350,12 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 
   async updateTask(
     input: TodoistUpdateTaskInput,
-    _commands: TodoistLegacyUpdateCommandIdentities
+    commands: TodoistLegacyUpdateCommandIdentities
   ): Promise<void> {
     this.guardCommand();
-    this.world.move(input.todoistTaskId, input.projectId);
+    if (commands.moveCommandUuid !== undefined) {
+      this.world.move(input.todoistTaskId, input.projectId);
+    }
     this.world.applyUpdate({
       commandUuid: "e2e-legacy-update",
       todoistTaskId: input.todoistTaskId,
