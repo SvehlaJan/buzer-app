@@ -1187,7 +1187,7 @@ git commit -m "test(e2e): prove every mutation happy path completes against the 
 - Modify: `backend/test/e2eServer.ts` (fill in `registerDebugSurface`)
 - Modify: `backend/test/e2eServer.test.ts` (append a `describe` block)
 
-- [ ] **Step 1: Append the failing tests**
+- [x] **Step 1: Append the failing tests**
 
 ```typescript
 describe("debug surface parity", () => {
@@ -1273,12 +1273,12 @@ describe("debug surface parity", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify the new block fails**
+- [x] **Step 2: Run to verify the new block fails**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: the `debug surface parity` tests FAIL (404 on `/__calls` etc.); earlier blocks stay green.
 
-- [ ] **Step 3: Implement `registerDebugSurface`**
+- [x] **Step 3: Implement `registerDebugSurface`**
 
 Replace the empty `registerDebugSurface` body in `backend/test/e2eServer.ts`:
 
@@ -1345,12 +1345,12 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
 }
 ```
 
-- [ ] **Step 4: Run the file, then the full suite**
+- [x] **Step 4: Run the file, then the full suite**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts && npm test`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/e2eServer.ts backend/test/e2eServer.test.ts
