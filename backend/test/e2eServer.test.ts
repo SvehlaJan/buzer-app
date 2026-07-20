@@ -122,8 +122,11 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       expect(body.outcome).toBe("completed");
       expect(after.isCompleted).toBe(false);
       expect(after.dueDatetime).not.toBe(before.dueDatetime);
+      expect(Date.parse(after.dueDatetime) - Date.parse(before.dueDatetime)).toBe(24 * 60 * 60_000);
       expect(after.occurrenceKey).not.toBe(before.occurrenceKey);
       expect(after.checkedCount).toBe(0);
+      expect(after.checklistItems).toHaveLength(before.checklistItems.length);
+      expect(after.checklistItems.every((child: { checked: boolean }) => !child.checked)).toBe(true);
     });
   });
 
@@ -154,7 +157,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       );
 
       expect(body.outcome).toBe("completed");
-      expect((await snapshotTask(server, "task-deadline")).durationMinutes).toBe(90);
+      expect((await snapshotTask(server, "task-deadline")).durationMinutes).toBe(task.durationMinutes + 30);
     });
   });
 
@@ -212,6 +215,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
 
   it("creates a root with a checklist child", async () => {
     await withServer(async (server) => {
+      const dueDatetime = new Date(Date.now() + 240 * 60_000).toISOString();
       const body = await mutate(
         server,
         "/tasks",
@@ -219,7 +223,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
           title: "E2E created task",
           projectId: "project-test",
           assigneeId: "user-me",
-          dueDatetime: new Date(Date.now() + 240 * 60_000).toISOString(),
+          dueDatetime,
           durationMinutes: 30,
           description: null,
           checklistDrafts: [{
@@ -235,6 +239,10 @@ describe("happy-path mutation conformance (every action completes, never goes pe
 
       expect(body.outcome).toBe("completed");
       expect(created).toMatchObject({
+        projectId: "project-test",
+        assigneeId: "user-me",
+        dueDatetime,
+        durationMinutes: 30,
         checklistItems: [{ title: "Created child", description: "Created with the root" }]
       });
     });
@@ -326,9 +334,14 @@ describe("happy-path mutation conformance (every action completes, never goes pe
 
   it("dismisses morning review", async () => {
     await withServer(async (server) => {
+      const before = Date.now();
       const body = await mutate(server, "/review/dismiss", {});
+      const after = Date.now();
+      const snoozedUntil = Date.parse(body.snoozedUntil);
 
       expect(typeof body.snoozedUntil).toBe("string");
+      expect(snoozedUntil).toBeGreaterThanOrEqual(before + 5 * 60_000 - 1_000);
+      expect(snoozedUntil).toBeLessThanOrEqual(after + 5 * 60_000 + 1_000);
     });
   });
 });
