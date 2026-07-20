@@ -506,7 +506,7 @@ git commit -m "feat(e2e): add stateful E2E Todoist world adapter with scenario p
 - Create: `backend/test/fakes/e2eFixtures.ts`
 - Test: `backend/test/fakes/e2eFixtures.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -573,12 +573,12 @@ describe("e2eFixtureSeed", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
 Expected: FAIL — cannot resolve `./e2eFixtures.js`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `backend/test/fakes/e2eFixtures.ts`:
 
@@ -761,12 +761,12 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/fakes/e2eFixtures.ts backend/test/fakes/e2eFixtures.test.ts
