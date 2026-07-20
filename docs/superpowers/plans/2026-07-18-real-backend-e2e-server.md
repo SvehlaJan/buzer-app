@@ -781,7 +781,7 @@ git commit -m "feat(e2e): add fixture seed module deriving the 15 fake-backend f
 - Create: `backend/test/e2eServer.ts`
 - Test: `backend/test/e2eServer.test.ts`
 
-- [ ] **Step 1: Write the failing seeding-conformance test**
+- [x] **Step 1: Write the failing seeding-conformance test**
 
 `backend/test/e2eServer.test.ts`:
 
@@ -850,12 +850,12 @@ describe("seeding", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: FAIL — cannot resolve `./e2eServer.js`.
 
-- [ ] **Step 3: Write the implementation (core server, debug routes come in Task 5)**
+- [x] **Step 3: Write the implementation (core server, debug routes come in Task 5)**
 
 `backend/test/e2eServer.ts`:
 
@@ -983,12 +983,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: PASS (2 tests). If `task-deadline` is not `started`, the nudge ran before sync — nudges and pins must run after `syncOnce()`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/e2eServer.ts backend/test/e2eServer.test.ts
