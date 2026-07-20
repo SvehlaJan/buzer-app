@@ -121,9 +121,9 @@ Verification:
 
 ## Assumptions
 
-- A root `dueDatetime` with a null `dueDate` faithfully models the existing mirrored
-  Todoist datetime facts; all non-null fixture dates are relative ISO strings derived
-  from the supplied `now`.
+- Every scheduled E2E mirror keeps `dueDate` aligned with `dueDatetime`, matching the
+  real `HttpTodoistAdapter` mirror facts; all non-null fixture dates are relative ISO
+  strings derived from the supplied `now`.
 - Task 3 will apply the returned nudges and occurrence pins only after production sync,
   as prescribed by the plan.
 
