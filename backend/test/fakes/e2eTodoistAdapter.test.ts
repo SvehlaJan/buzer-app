@@ -107,6 +107,100 @@ describe("E2ETodoistWorld semantics", () => {
     expect(task.isRecurring).toBe(false);
   });
 
+  it("keeps dueDate aligned with datetime root creation, replacement, and clearing", async () => {
+    const adapter = adapterWith();
+    const root = await adapter.itemAdd({
+      kind: "root",
+      commandUuid: "c-add",
+      tempId: "tmp-1",
+      title: "Dated root",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      due: {
+        kind: "replace",
+        datetime: "2026-07-19T08:00:00.000Z",
+        string: null,
+        lang: null,
+        timezone: null
+      },
+      duration: null
+    });
+    const todoistTaskId = root.todoistTaskId as string;
+    expect((await syncedTask(adapter, todoistTaskId)).dueDate).toBe(
+      "2026-07-19T08:00:00.000Z"
+    );
+
+    await adapter.itemUpdate({
+      commandUuid: "c-replace",
+      todoistTaskId,
+      due: {
+        kind: "replace",
+        datetime: "2026-07-20T09:00:00.000Z",
+        string: null,
+        lang: null,
+        timezone: null
+      },
+      assignment: { kind: "preserve" }
+    });
+    expect((await syncedTask(adapter, todoistTaskId)).dueDate).toBe(
+      "2026-07-20T09:00:00.000Z"
+    );
+
+    await adapter.itemUpdate({
+      commandUuid: "c-clear",
+      todoistTaskId,
+      due: { kind: "clear" },
+      assignment: { kind: "preserve" }
+    });
+    const cleared = await syncedTask(adapter, todoistTaskId);
+    expect(cleared.dueDate).toBeNull();
+    expect(cleared.dueDatetime).toBeNull();
+  });
+
+  it("normalizes minute and hour durations for root, item, and legacy updates", async () => {
+    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
+    const root = await adapter.itemAdd({
+      kind: "root",
+      commandUuid: "c-add",
+      tempId: "tmp-1",
+      title: "Two hours",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      due: { kind: "clear" },
+      duration: { amount: 2, unit: "hour" }
+    });
+    expect((await syncedTask(adapter, root.todoistTaskId as string)).durationMinutes).toBe(120);
+
+    await adapter.itemUpdate({
+      commandUuid: "c-minute",
+      todoistTaskId: "t-1",
+      duration: { amount: 45, unit: "minute" },
+      due: { kind: "preserve" },
+      assignment: { kind: "preserve" }
+    });
+    expect((await syncedTask(adapter, "t-1")).durationMinutes).toBe(45);
+
+    await adapter.itemUpdate({
+      commandUuid: "c-hour",
+      todoistTaskId: "t-1",
+      duration: { amount: 2, unit: "hour" },
+      due: { kind: "preserve" },
+      assignment: { kind: "preserve" }
+    });
+    expect((await syncedTask(adapter, "t-1")).durationMinutes).toBe(120);
+
+    await adapter.updateTask({
+      todoistTaskId: "t-1",
+      title: "Legacy",
+      description: null,
+      projectId: "project-test",
+      assigneeId: "user-me",
+      dueDatetime: "2026-07-20T09:00:00.000Z",
+      durationMinutes: 75
+    }, { updateCommandUuid: "c-legacy" });
+    expect((await syncedTask(adapter, "t-1")).durationMinutes).toBe(75);
+  });
+
   it("itemAdd creates a root and a child under it", async () => {
     const adapter = adapterWith();
     const root = await adapter.itemAdd({
@@ -139,6 +233,29 @@ describe("E2ETodoistWorld semantics", () => {
     expect(childTask.parentId).toBe(root.todoistTaskId);
     expect(childTask.childOrder).toBe(1);
     expect(childTask.dueDatetime).toBeNull();
+  });
+
+  it("replays accepted commands without duplicating additions or reapplying closes", async () => {
+    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
+    const add = {
+      kind: "root" as const,
+      commandUuid: "c-add",
+      tempId: "tmp-1",
+      title: "Created root",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      due: { kind: "clear" as const },
+      duration: null
+    };
+    const first = await adapter.itemAdd(add);
+    const replay = await adapter.itemAdd(add);
+    expect(replay.todoistTaskId).toBe(first.todoistTaskId);
+    expect((await adapter.sync("*")).tasks).toHaveLength(2);
+
+    await adapter.itemClose({ commandUuid: "c-close", todoistTaskId: "t-1" });
+    await adapter.itemUncomplete({ commandUuid: "c-uncomplete", todoistTaskId: "t-1" });
+    await adapter.itemClose({ commandUuid: "c-close", todoistTaskId: "t-1" });
+    expect((await syncedTask(adapter, "t-1")).completedAt).toBeNull();
   });
 
   it("itemMove changes the project and itemDelete tombstones", async () => {
@@ -179,6 +296,7 @@ describe("E2ETodoistWorld semantics", () => {
     const task = mirror({
       todoistTaskId: "t-1",
       title: "Daily",
+      dueDate: "2026-07-18T10:00:00.000Z",
       isRecurring: true,
       dueString: "every day at 10:00",
       dueLang: "en",
@@ -188,6 +306,9 @@ describe("E2ETodoistWorld semantics", () => {
     await adapter.itemUpdateDateComplete({ commandUuid: "c-1", task });
 
     expect((await syncedTask(adapter, "t-1")).dueDatetime).toBe(
+      "2026-07-19T10:00:00.000Z"
+    );
+    expect((await syncedTask(adapter, "t-1")).dueDate).toBe(
       "2026-07-19T10:00:00.000Z"
     );
   });
@@ -204,6 +325,8 @@ describe("scenario presets", () => {
     adapter.setScenario("none");
 
     expect((await syncedTask(adapter, "t-1")).completedAt).toBeNull();
+    await adapter.itemClose({ commandUuid: "c-1", todoistTaskId: "t-1" });
+    expect((await syncedTask(adapter, "t-1")).completedAt).not.toBeNull();
   });
 
   it("sync_lag_effect_unknown applies mutations but hides them from sync", async () => {

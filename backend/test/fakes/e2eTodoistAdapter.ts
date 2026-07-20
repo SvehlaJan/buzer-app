@@ -80,7 +80,7 @@ export class E2ETodoistWorld {
       childOrder: null,
       assigneeId: input.assigneeId,
       creatorId: this.currentUserId,
-      dueDate: null,
+      dueDate: input.due.kind === "replace" ? input.due.datetime : null,
       dueDatetime: input.due.kind === "replace" ? input.due.datetime : null,
       dueString: input.due.kind === "replace" ? input.due.string : null,
       dueLang: input.due.kind === "replace" ? input.due.lang : null,
@@ -88,7 +88,10 @@ export class E2ETodoistWorld {
       isRecurring: input.due.kind === "replace" && input.due.string !== null,
       durationAmount: input.duration?.amount ?? null,
       durationUnit: input.duration?.unit ?? null,
-      durationMinutes: input.duration?.amount ?? null,
+      durationMinutes: normalizeDurationMinutes(
+        input.duration?.amount ?? null,
+        input.duration?.unit ?? null
+      ),
       completedAt: null,
       deletedAt: null,
       rawJson: {},
@@ -135,7 +138,10 @@ export class E2ETodoistWorld {
     if (input.duration !== undefined) {
       task.durationAmount = input.duration.amount;
       task.durationUnit = input.duration.unit;
-      task.durationMinutes = input.duration.amount;
+      task.durationMinutes = normalizeDurationMinutes(
+        input.duration.amount,
+        input.duration.unit
+      );
     }
     this.applyDue(task, input.due);
     if (input.assignment.kind === "assign") task.assigneeId = input.assignment.assigneeId;
@@ -184,6 +190,9 @@ export class E2ETodoistWorld {
     task.dueDatetime = new Date(
       new Date(task.dueDatetime).getTime() + days * 86_400_000
     ).toISOString();
+    if (task.dueDate !== null) {
+      task.dueDate = task.dueDatetime;
+    }
     task.updatedAt = new Date().toISOString();
   }
 
@@ -207,6 +216,7 @@ export class E2ETodoistWorld {
       task.isRecurring = false;
       return;
     }
+    task.dueDate = due.datetime;
     task.dueDatetime = due.datetime;
     task.dueString = due.string;
     task.dueLang = due.lang;
@@ -223,10 +233,21 @@ export class E2ETodoistWorld {
   }
 }
 
+function normalizeDurationMinutes(
+  amount: number | null,
+  unit: string | null
+): number | null {
+  if (amount === null) return null;
+  if (unit === "minute") return amount;
+  if (unit === "hour") return amount * 60;
+  return null;
+}
+
 export class E2ETodoistAdapter implements TodoistAdapter {
   readonly world: E2ETodoistWorld;
   private scenario: E2EScenario = "none";
   private syncCount = 0;
+  private readonly acceptedCommandOutcomes = new Map<string, unknown>();
 
   constructor(currentUserId: string) {
     this.world = new E2ETodoistWorld(currentUserId);
@@ -251,45 +272,42 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   }
 
   async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
-    this.guardCommand();
-    return {
+    return this.runAcceptedCommand(input.commandUuid, () => ({
       todoistTaskId:
         input.kind === "root"
           ? this.world.addRoot(input)
           : this.world.addChild(input)
-    };
+    }));
   }
 
   async itemUpdate(input: TodoistItemUpdateInput): Promise<void> {
-    this.guardCommand();
-    this.world.applyUpdate(input);
+    this.runAcceptedCommand(input.commandUuid, () => this.world.applyUpdate(input));
   }
 
   async itemMove(input: TodoistItemMoveInput): Promise<void> {
-    this.guardCommand();
-    this.world.move(input.todoistTaskId, input.projectId);
+    this.runAcceptedCommand(input.commandUuid, () =>
+      this.world.move(input.todoistTaskId, input.projectId)
+    );
   }
 
   async itemClose(input: TodoistItemIdentityInput): Promise<void> {
-    this.guardCommand();
-    this.world.close(input.todoistTaskId);
+    this.runAcceptedCommand(input.commandUuid, () => this.world.close(input.todoistTaskId));
   }
 
   async itemUncomplete(input: TodoistItemIdentityInput): Promise<void> {
-    this.guardCommand();
-    this.world.uncomplete(input.todoistTaskId);
+    this.runAcceptedCommand(input.commandUuid, () => this.world.uncomplete(input.todoistTaskId));
   }
 
   async itemDelete(input: TodoistItemIdentityInput): Promise<void> {
-    this.guardCommand();
-    this.world.tombstone(input.todoistTaskId);
+    this.runAcceptedCommand(input.commandUuid, () => this.world.tombstone(input.todoistTaskId));
   }
 
   async itemUpdateDateComplete(
     input: TodoistRecurringCompletionInput
   ): Promise<void> {
-    this.guardCommand();
-    this.world.advanceRecurringDue(input.task.todoistTaskId);
+    this.runAcceptedCommand(input.commandUuid, () =>
+      this.world.advanceRecurringDue(input.task.todoistTaskId)
+    );
   }
 
   async createTask(
@@ -323,57 +341,70 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   }
 
   async completeTask(todoistTaskId: string, _commandUuid: string): Promise<void> {
-    this.guardCommand();
-    this.world.close(todoistTaskId);
+    this.runAcceptedCommand(_commandUuid, () => this.world.close(todoistTaskId));
   }
 
   async rescheduleTask(
     input: TodoistRescheduleInput,
     _commandUuid: string
   ): Promise<void> {
-    this.guardCommand();
-    this.world.applyUpdate({
-      commandUuid: "e2e-legacy-reschedule",
-      todoistTaskId: input.todoistTaskId,
-      ...(input.description === undefined ? {} : { description: input.description }),
-      duration: { amount: input.durationMinutes, unit: "minute" },
-      due: {
-        kind: "replace",
-        datetime: input.dueDatetime,
-        string: null,
-        lang: null,
-        timezone: null
-      },
-      assignment: { kind: "preserve" }
-    });
+    this.runAcceptedCommand(_commandUuid, () =>
+      this.world.applyUpdate({
+        commandUuid: "e2e-legacy-reschedule",
+        todoistTaskId: input.todoistTaskId,
+        ...(input.description === undefined ? {} : { description: input.description }),
+        duration: { amount: input.durationMinutes, unit: "minute" },
+        due: {
+          kind: "replace",
+          datetime: input.dueDatetime,
+          string: null,
+          lang: null,
+          timezone: null
+        },
+        assignment: { kind: "preserve" }
+      })
+    );
   }
 
   async updateTask(
     input: TodoistUpdateTaskInput,
     commands: TodoistLegacyUpdateCommandIdentities
   ): Promise<void> {
-    this.guardCommand();
     if (commands.moveCommandUuid !== undefined) {
-      this.world.move(input.todoistTaskId, input.projectId);
+      this.runAcceptedCommand(commands.moveCommandUuid, () =>
+        this.world.move(input.todoistTaskId, input.projectId)
+      );
     }
-    this.world.applyUpdate({
-      commandUuid: "e2e-legacy-update",
-      todoistTaskId: input.todoistTaskId,
-      title: input.title,
-      description: input.description,
-      duration: { amount: input.durationMinutes, unit: "minute" },
-      due: {
-        kind: "replace",
-        datetime: input.dueDatetime,
-        string: null,
-        lang: null,
-        timezone: null
-      },
-      assignment:
-        input.assigneeId === null
-          ? { kind: "unassign" }
-          : { kind: "assign", assigneeId: input.assigneeId }
-    });
+    this.runAcceptedCommand(commands.updateCommandUuid, () =>
+      this.world.applyUpdate({
+        commandUuid: "e2e-legacy-update",
+        todoistTaskId: input.todoistTaskId,
+        title: input.title,
+        description: input.description,
+        duration: { amount: input.durationMinutes, unit: "minute" },
+        due: {
+          kind: "replace",
+          datetime: input.dueDatetime,
+          string: null,
+          lang: null,
+          timezone: null
+        },
+        assignment:
+          input.assigneeId === null
+            ? { kind: "unassign" }
+            : { kind: "assign", assigneeId: input.assigneeId }
+      })
+    );
+  }
+
+  private runAcceptedCommand<T>(commandUuid: string, mutation: () => T): T {
+    this.guardCommand();
+    if (this.acceptedCommandOutcomes.has(commandUuid)) {
+      return structuredClone(this.acceptedCommandOutcomes.get(commandUuid)) as T;
+    }
+    const outcome = mutation();
+    this.acceptedCommandOutcomes.set(commandUuid, structuredClone(outcome));
+    return outcome;
   }
 
   private guardCommand(): void {

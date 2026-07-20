@@ -118,6 +118,46 @@ Verification:
   - Result: PASS
   - Evidence: 29 test files and 338 tests passed.
 
+## Follow-up fidelity fixes
+
+A code-quality review found three Todoist-boundary fidelity gaps in the Task 1 world.
+All remain test-tree-only:
+
+- Datetime due replacements and root additions now set `dueDate` to the same raw
+  Todoist date value as `HttpTodoistAdapter`; clearing removes both date fields.
+  Recurring completion advances an existing `dueDate` alongside `dueDatetime`.
+- `durationMinutes` now follows production normalization: minutes remain unchanged,
+  hours multiply by 60, and unsupported units yield `null`.
+- Accepted command UUIDs are recorded after a successful mutation. Replays return the
+  stored result (including the original `itemAdd` ID) without mutating state; a timeout
+  is guarded before ledger insertion, so retrying its UUID after reset executes.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: FAIL (expected RED)
+  - Evidence: 4 expected failures exposed missing root `dueDate`, raw hour duration,
+    duplicate `itemAdd` ID allocation, and stale recurring `dueDate` behavior.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
+  - Result: PASS
+  - Evidence: 1 test file and 12 tests passed, including the new due, duration,
+    idempotence, replayed-close, and timeout-retry coverage.
+
+Verification:
+
+- Command: `cd backend && npm run typecheck`
+  - Result: PASS
+  - Evidence: no TypeScript diagnostics.
+
+Verification:
+
+- Command: `cd backend && npm test`
+  - Result: PASS
+  - Evidence: 29 test files and 341 tests passed.
+
 ## Next recommended step
 
 Proceed with Task 2 in the same isolated worktree: add the fixture seed module and its
