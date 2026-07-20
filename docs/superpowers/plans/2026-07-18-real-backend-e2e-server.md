@@ -1008,7 +1008,7 @@ sync, effect confirmation). Every happy path must return `outcome: "completed"` 
 whole point of Phase 1. Failures here are world-semantics bugs; debug with the real
 services, do not weaken assertions to `202`.
 
-- [ ] **Step 1: Append the failing conformance tests**
+- [x] **Step 1: Append the failing conformance tests**
 
 ```typescript
 const device = { deviceId: "e2e-device" };
@@ -1156,7 +1156,7 @@ describe("happy-path conformance (every action must complete, not go pending)", 
 });
 ```
 
-- [ ] **Step 2: Run and fix until green**
+- [x] **Step 2: Run and fix until green**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: initially some failures are plausible (this task exists to find them). Debug
@@ -1167,12 +1167,12 @@ satisfy that action's `isEffectPresent` (`taskActionService.ts:342,401,418,438,4
 means the request payload violates `backend/src/http/routes.ts` schemas — fix the test
 payload against the zod schemas at `routes.ts:10-92`.
 
-- [ ] **Step 3: Run the full backend suite to confirm nothing regressed**
+- [x] **Step 3: Run the full backend suite to confirm nothing regressed**
 
 Run: `cd backend && npm test`
 Expected: PASS in full (the diff so far touches only new `test/` files).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/test/e2eServer.test.ts backend/test/fakes/e2eTodoistAdapter.ts
