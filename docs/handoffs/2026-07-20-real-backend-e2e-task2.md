@@ -89,3 +89,34 @@ Verification:
 
 Proceed with Task 3: seed the E2E Todoist world from `e2eFixtureSeed(now)`, invoke the
 production sync path, then apply nudges and occurrence pins through repositories.
+
+## Follow-up review fix
+
+A spec review found that the fixture-count assertion could not detect a wrong 15-root
+set. The focused test now asserts the exact ordered legacy root ID set, including
+`task-reconciliation-pending`.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
+  - Result: FAIL (expected regression-test proof)
+  - Evidence: an intentionally incomplete expected set failed with the missing
+    `task-reconciliation-pending` root shown in the received list.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
+  - Result: PASS
+  - Evidence: 1 test file and 6 tests passed with the complete exact ID contract.
+
+Verification:
+
+- Command: `cd backend && npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` completed with no diagnostics.
+
+Verification:
+
+- Command: `cd backend && npm test`
+  - Result: PASS
+  - Evidence: 30 test files and 348 tests passed.

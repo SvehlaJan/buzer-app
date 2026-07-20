@@ -13,6 +13,23 @@ describe("e2eFixtureSeed", () => {
 
     expect(roots).toHaveLength(15);
     expect(children).toHaveLength(6);
+    expect(roots.map((task) => task.id)).toEqual([
+      "task-start",
+      "task-deadline",
+      "task-reschedule",
+      "task-start-fail",
+      "task-deadline-fail",
+      "task-reschedule-fail",
+      "task-invalid",
+      "task-floating-time",
+      "task-one-time-empty",
+      "task-one-time-partial",
+      "task-recurring-all-checked",
+      "task-recurring-extend-disabled",
+      "task-custom-recurrence",
+      "task-unsupported-hierarchy",
+      "task-reconciliation-pending"
+    ]);
     expect(byId.get("task-start")?.title).toBe("Start blocker fixture");
     for (const { id, mirror } of seed.tasks) {
       expect(mirror.todoistTaskId).toBe(`todoist-${id}`);
