@@ -49,7 +49,7 @@ Key facts the implementer must know (verified against the codebase, do not redis
 - Create: `backend/test/fakes/e2eTodoistAdapter.ts`
 - Test: `backend/test/fakes/e2eTodoistAdapter.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -177,12 +177,12 @@ describe("scenario presets", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
 Expected: FAIL — cannot resolve `./e2eTodoistAdapter.js`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `backend/test/fakes/e2eTodoistAdapter.ts`:
 
@@ -486,12 +486,12 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
 Expected: PASS (8 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/fakes/e2eTodoistAdapter.ts backend/test/fakes/e2eTodoistAdapter.test.ts
