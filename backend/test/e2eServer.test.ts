@@ -345,3 +345,119 @@ describe("happy-path mutation conformance (every action completes, never goes pe
     });
   });
 });
+
+describe("debug surface parity", () => {
+  it("selects each supported scenario and rejects an unknown name", async () => {
+    await withServer(async (server) => {
+      for (const name of ["after_command_sent_timeout", "sync_lag_effect_unknown"] as const) {
+        const response = await server.app.inject({ method: "POST", url: "/__scenario", payload: { name } });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ scenario: name });
+      }
+
+      const unknown = await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "nope" } });
+      expect(unknown.statusCode).toBe(400);
+    });
+  });
+
+  it("records only action metadata for a task mutation", async () => {
+    await withServer(async (server) => {
+      await mutate(server, "/tasks", action({
+        title: "Recorded task",
+        description: "must-not-be-recorded",
+        projectId: "project-test",
+        assigneeId: "user-me",
+        dueDatetime: new Date(Date.now() + 120 * 60_000).toISOString(),
+        durationMinutes: 30
+      }));
+
+      const calls = (await server.app.inject({ method: "GET", url: "/__calls" })).json().calls;
+      const recorded = calls.find((call: { path: string }) => call.path === "/tasks");
+      expect(recorded).toMatchObject({ method: "POST", path: "/tasks" });
+      expect(Object.keys(recorded.body).sort()).toEqual(["actionId", "deviceId"]);
+      expect(recorded.body).not.toHaveProperty("title");
+    });
+  });
+
+  it("records a forced action failure and includes the current snapshot", async () => {
+    await withServer(async (server) => {
+      const task = await snapshotTask(server, "task-start");
+      await server.app.inject({ method: "POST", url: "/__fail-actions", payload: { enabled: true } });
+
+      const failed = await mutate(server, "/tasks/task-start/start", action({ expectedOccurrenceKey: task.occurrenceKey }), 500);
+      expect(failed).toMatchObject({ code: "forced_failure", snapshot: expect.any(Object) });
+      const calls = (await server.app.inject({ method: "GET", url: "/__calls" })).json().calls;
+      expect(calls.some((call: { path: string }) => call.path === "/tasks/task-start/start")).toBe(true);
+    });
+  });
+
+  it("forces old-fake-compatible snapshot and project failures", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__fail-snapshot", payload: { enabled: true } });
+      const failedSnapshot = await server.app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth });
+      expect(failedSnapshot.statusCode).toBe(500);
+      expect(failedSnapshot.json()).toEqual({ error: "forced_snapshot_failure" });
+
+      await server.app.inject({ method: "POST", url: "/__fail-projects", payload: { enabled: true } });
+      const failedProjects = await server.app.inject({ method: "GET", url: "/projects", headers: auth });
+      expect(failedProjects.statusCode).toBe(500);
+      expect(failedProjects.json()).toEqual({ error: "forced_project_failure" });
+    });
+  });
+
+  it("drives after_command_sent_timeout through real reconciliation", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "after_command_sent_timeout" } });
+      const task = await snapshotTask(server, "task-one-time-empty");
+
+      const body = await mutate(
+        server,
+        "/tasks/task-one-time-empty/done",
+        action({ expectedOccurrenceKey: task.occurrenceKey }),
+        202
+      );
+      expect(body.outcome).toBe("reconciliation_pending");
+      expect((await snapshotTask(server, "task-one-time-empty")).reconciliationStatus).toBe("pending");
+    });
+  });
+
+  it("drives sync_lag_effect_unknown through real reconciliation", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "sync_lag_effect_unknown" } });
+      const task = await snapshotTask(server, "task-reschedule");
+      const dueDatetime = new Date(Date.now() + 90 * 60_000).toISOString();
+
+      const body = await mutate(
+        server,
+        "/tasks/task-reschedule/reschedule",
+        action({ expectedOccurrenceKey: task.occurrenceKey, dueDatetime, durationMinutes: 45 }),
+        202
+      );
+      expect(body.outcome).toBe("reconciliation_pending");
+      expect((await snapshotTask(server, "task-reschedule")).reconciliationStatus).toBe("pending");
+    });
+  });
+
+  it("resets calls and controls, reseeds state, and keeps snapshot generation monotonic", async () => {
+    await withServer(async (server) => {
+      const task = await snapshotTask(server, "task-start");
+      await mutate(server, "/tasks/task-start/start", action({ expectedOccurrenceKey: task.occurrenceKey }));
+      const before = (await snapshot(server)).snapshotGeneration;
+      await server.app.inject({ method: "POST", url: "/__fail-snapshot", payload: { enabled: true } });
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "after_command_sent_timeout" } });
+
+      const reset = await server.app.inject({ method: "POST", url: "/__reset", payload: {} });
+      expect(reset.statusCode).toBe(200);
+      const after = await snapshot(server);
+      expect(after.snapshotGeneration).toBeGreaterThan(before);
+      const reseeded = await snapshotTask(server, "task-start");
+      expect(reseeded.state).toBe("planned");
+      expect((await server.app.inject({ method: "GET", url: "/__calls" })).json().calls).toHaveLength(0);
+      expect((await mutate(
+        server,
+        "/tasks/task-start/start",
+        action({ expectedOccurrenceKey: reseeded.occurrenceKey })
+      )).outcome).toBe("completed");
+    });
+  });
+});

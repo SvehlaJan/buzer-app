@@ -8,7 +8,7 @@ import { EscalationService } from "../src/services/escalationService.js";
 import { TaskSnapshotService } from "../src/services/taskSnapshotService.js";
 import { TodoistSyncService } from "../src/services/todoistSyncService.js";
 import { e2eFixtureSeed } from "./fakes/e2eFixtures.js";
-import { E2ETodoistAdapter } from "./fakes/e2eTodoistAdapter.js";
+import { E2E_SCENARIOS, E2ETodoistAdapter, type E2EScenario } from "./fakes/e2eTodoistAdapter.js";
 
 const CURRENT_USER_ID = "user-me";
 const ANDROID_API_TOKEN = "test-token";
@@ -117,8 +117,74 @@ interface DebugSurfaceOptions {
   reset: () => Promise<void>;
 }
 
-function registerDebugSurface(_app: ReturnType<typeof buildServer>, _options: DebugSurfaceOptions): void {
-  // Task 5 registers the old-fake-parity debug endpoints outside production code.
+const ACTION_METADATA_KEYS = [
+  "actionId",
+  "deviceId",
+  "expectedOccurrenceKey",
+  "expectedTaskRevision",
+  "expectedChildRevision"
+] as const;
+
+function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
+  const { adapter, calls, controls, snapshots, reset } = options;
+
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? request.url;
+    if (path.startsWith("/__")) return;
+
+    if (request.method === "POST" && (path.startsWith("/tasks") || path.startsWith("/review"))) {
+      const body = typeof request.body === "object" && request.body !== null
+        ? request.body as Record<string, unknown>
+        : {};
+      calls.push({
+        method: request.method,
+        path,
+        body: Object.fromEntries(
+          ACTION_METADATA_KEYS
+            .filter((key) => body[key] !== undefined)
+            .map((key) => [key, body[key]])
+        ),
+        at: new Date().toISOString()
+      });
+      if (controls.failActions) {
+        return reply.code(500).send({
+          code: "forced_failure",
+          message: "Forced action failure",
+          snapshot: snapshots.getSnapshot(new Date().toISOString())
+        });
+      }
+    }
+
+    if (controls.failSnapshot && request.method === "GET" && path === "/tasks/snapshot") {
+      return reply.code(500).send({ error: "forced_snapshot_failure" });
+    }
+    if (controls.failProjects && request.method === "GET" && path === "/projects") {
+      return reply.code(500).send({ error: "forced_project_failure" });
+    }
+  });
+
+  app.post("/__scenario", async (request, reply) => {
+    const name = (request.body as { name?: unknown } | null)?.name;
+    if (typeof name !== "string" || !E2E_SCENARIOS.includes(name as E2EScenario)) {
+      return reply.code(400).send({ error: "unknown_scenario", known: E2E_SCENARIOS });
+    }
+    adapter.setScenario(name as E2EScenario);
+    return { scenario: name };
+  });
+  app.post("/__reset", async () => {
+    await reset();
+    return { ok: true };
+  });
+  app.get("/__calls", async () => ({ calls }));
+  app.post("/__fail-actions", async (request) => ({
+    failActions: controls.failActions = (request.body as { enabled?: unknown } | null)?.enabled === true
+  }));
+  app.post("/__fail-snapshot", async (request) => ({
+    failSnapshot: controls.failSnapshot = (request.body as { enabled?: unknown } | null)?.enabled === true
+  }));
+  app.post("/__fail-projects", async (request) => ({
+    failProjects: controls.failProjects = (request.body as { enabled?: unknown } | null)?.enabled === true
+  }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
