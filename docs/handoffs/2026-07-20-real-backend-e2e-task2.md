@@ -50,6 +50,54 @@ Verification:
   - Result: PASS
   - Evidence: 30 test files and 348 tests passed.
 
+## Follow-up fidelity fixes
+
+A quality review found that scheduled seed mirrors did not match the real
+`HttpTodoistAdapter` representation because `dueDate` remained null, and that recurring
+due instants did not respect their declared local rules. The seed now:
+
+- Aligns every non-null `dueDate` with its `dueDatetime`, including the scheduled child
+  and recurring roots.
+- Derives the next daily, Monday-weekly, and every-two-days fixture occurrences from
+  the supplied `now` at their stated `Europe/Bratislava` wall-clock times.
+- Uses the same platform `Intl.DateTimeFormat(...).formatToParts()` pattern as
+  `taskRecurrence.ts`; its timezone offset data preserves the local fixture time across
+  the March DST transition.
+- Returns freshly constructed task and project mirrors on each call.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
+  - Result: FAIL (expected RED)
+  - Evidence: before the seed implementation changed, the new assertions observed a
+    null `dueDate` for a scheduled mirror and a daily recurrence due at Bratislava
+    13:00 instead of its declared 10:00.
+
+Verification:
+
+- Command: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
+  - Result: PASS
+  - Evidence: 1 test file and 9 tests passed, including exact local date, weekday, and
+    time checks for regular and DST-boundary seeds.
+
+Verification:
+
+- Command: `cd backend && npm run typecheck`
+  - Result: PASS
+  - Evidence: `tsc -p tsconfig.json --noEmit` completed with no diagnostics.
+
+Verification:
+
+- Command: `cd backend && npm test`
+  - Result: PASS
+  - Evidence: 30 test files and 351 tests passed.
+
+Verification:
+
+- Command: `git diff --check`
+  - Result: PASS
+  - Evidence: no whitespace diagnostics.
+
 Verification:
 
 - Command: `cd backend && npm run typecheck`

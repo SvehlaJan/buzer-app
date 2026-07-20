@@ -6,6 +6,27 @@ const now = new Date("2026-07-18T10:00:00.000Z");
 const seed = e2eFixtureSeed(now);
 const byId = new Map(seed.tasks.map((task) => [task.id, task.mirror]));
 
+function localDateTimeParts(value: string, timeZone = "Europe/Bratislava") {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value;
+
+  return {
+    weekday: part("weekday"),
+    date: `${part("year")}-${part("month")}-${part("day")}`,
+    time: `${part("hour")}:${part("minute")}`
+  };
+}
+
 describe("e2eFixtureSeed", () => {
   it("defines the 15 fixture roots plus 6 checklist children with pinned Todoist ids", () => {
     const roots = seed.tasks.filter((task) => task.mirror.parentId === null);
@@ -61,6 +82,62 @@ describe("e2eFixtureSeed", () => {
     })).toEqual({ kind: "custom", preset: null });
   });
 
+  it("keeps each scheduled Todoist dueDate aligned with its dueDatetime", () => {
+    for (const { mirror } of seed.tasks) {
+      if (mirror.dueDatetime !== null) {
+        expect(mirror.dueDate).toBe(mirror.dueDatetime);
+      }
+    }
+  });
+
+  it("derives recurring due instants at their Bratislava rule times across DST", () => {
+    expect(localDateTimeParts(
+      byId.get("task-recurring-all-checked")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Sunday",
+      date: "2026-07-19",
+      time: "10:00"
+    });
+    expect(localDateTimeParts(
+      byId.get("task-recurring-extend-disabled")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Monday",
+      date: "2026-07-20",
+      time: "15:00"
+    });
+    expect(localDateTimeParts(
+      byId.get("task-custom-recurrence")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Monday",
+      date: "2026-07-20",
+      time: "10:00"
+    });
+
+    const dstSeed = e2eFixtureSeed(new Date("2026-03-28T12:00:00.000Z"));
+    const dstById = new Map(dstSeed.tasks.map((task) => [task.id, task.mirror]));
+    expect(localDateTimeParts(
+      dstById.get("task-recurring-all-checked")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Sunday",
+      date: "2026-03-29",
+      time: "10:00"
+    });
+    expect(localDateTimeParts(
+      dstById.get("task-recurring-extend-disabled")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Monday",
+      date: "2026-03-30",
+      time: "15:00"
+    });
+    expect(localDateTimeParts(
+      dstById.get("task-custom-recurrence")?.dueDatetime ?? ""
+    )).toEqual({
+      weekday: "Monday",
+      date: "2026-03-30",
+      time: "10:00"
+    });
+  });
+
   it("marks checklist children and pins an occurrence key for every root", () => {
     expect(byId.get("child-one-time-partial-done")?.completedAt).toBe(now.toISOString());
     expect(byId.get("child-one-time-partial-open")?.completedAt).toBeNull();
@@ -110,5 +187,20 @@ describe("e2eFixtureSeed", () => {
     expect(later.nudges.find((nudge) => nudge.id === "task-deadline")?.startedAt).toBe(
       "2026-07-19T11:31:00.000Z"
     );
+  });
+
+  it("returns fresh mirror and project objects on every call", () => {
+    const first = e2eFixtureSeed(now);
+    const firstTask = first.tasks[0];
+    const firstProject = first.projects[0];
+    if (firstTask === undefined || firstProject === undefined) {
+      throw new Error("missing fixture");
+    }
+    firstTask.mirror.rawJson = { changed: true };
+    firstProject.rawJson = { changed: true };
+
+    const second = e2eFixtureSeed(now);
+    expect(second.tasks[0]?.mirror.rawJson).toEqual({});
+    expect(second.projects[0]?.rawJson).toEqual({});
   });
 });

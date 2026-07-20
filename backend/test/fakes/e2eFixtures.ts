@@ -28,6 +28,90 @@ export interface E2EFixtureSeed {
 
 const TIME_ZONE = "Europe/Bratislava";
 
+interface LocalDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function localDateAt(now: Date, timeZone: string): LocalDate {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value;
+
+  return {
+    year: Number(part("year")),
+    month: Number(part("month")),
+    day: Number(part("day"))
+  };
+}
+
+function addCalendarDays(date: LocalDate, days: number): LocalDate {
+  const next = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return {
+    year: next.getUTCFullYear(),
+    month: next.getUTCMonth() + 1,
+    day: next.getUTCDate()
+  };
+}
+
+function timeZoneOffsetMilliseconds(instant: Date, timeZone: string): number {
+  const offset = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "longOffset"
+  }).formatToParts(instant).find((part) => part.type === "timeZoneName")?.value;
+  const match = /^GMT([+-])(\d{2}):(\d{2})$/.exec(offset ?? "");
+  if (match === null) throw new Error(`Unable to determine ${timeZone} offset`);
+
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return (match[1] === "+" ? 1 : -1) * minutes * 60_000;
+}
+
+function zonedIso(date: LocalDate, hour: number, minute: number, timeZone: string): string {
+  // Let Intl resolve the IANA-zone offset on this calendar date so wall-clock recurrence
+  // times remain stable when Bratislava crosses DST; never add a fixed day in UTC.
+  const utcWallTime = Date.UTC(date.year, date.month - 1, date.day, hour, minute);
+  const offset = timeZoneOffsetMilliseconds(new Date(utcWallTime), timeZone);
+  return new Date(utcWallTime - offset).toISOString();
+}
+
+function nextDailyOccurrence(now: Date, hour: number, minute: number): string {
+  let date = localDateAt(now, TIME_ZONE);
+  let occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  if (Date.parse(occurrence) <= now.getTime()) {
+    date = addCalendarDays(date, 1);
+    occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  }
+  return occurrence;
+}
+
+function nextWeeklyOccurrence(now: Date, weekday: number, hour: number, minute: number): string {
+  let date = localDateAt(now, TIME_ZONE);
+  const currentWeekday = new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+  date = addCalendarDays(date, (weekday - currentWeekday + 7) % 7);
+  let occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  if (Date.parse(occurrence) <= now.getTime()) {
+    date = addCalendarDays(date, 7);
+    occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  }
+  return occurrence;
+}
+
+function nextEveryTwoDaysOccurrence(now: Date, hour: number, minute: number): string {
+  let date = localDateAt(now, TIME_ZONE);
+  let occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  if (Date.parse(occurrence) <= now.getTime()) {
+    date = addCalendarDays(date, 2);
+    occurrence = zonedIso(date, hour, minute, TIME_ZONE);
+  }
+  return occurrence;
+}
+
 /**
  * The same 15 fixture tasks tools/fake-backend/src/fixtures.ts serves today, expressed
  * as Todoist mirrors so the real backend derives every state (invalid, unsupported
@@ -40,32 +124,40 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
   const root = (
     id: string,
     overrides: Partial<TodoistTaskMirror> & Pick<TodoistTaskMirror, "title">
-  ): E2EFixtureTask => ({
-    id,
-    mirror: {
-      todoistTaskId: `todoist-${id}`,
-      description: null,
-      projectId: "project-test",
-      parentId: null,
-      childOrder: null,
-      assigneeId: "user-me",
-      creatorId: "user-me",
-      dueDate: null,
-      dueDatetime: null,
-      dueString: null,
-      dueLang: null,
-      dueTimezone: null,
-      isRecurring: false,
-      durationAmount: 30,
-      durationUnit: "minute",
-      durationMinutes: 30,
-      completedAt: null,
-      deletedAt: null,
-      rawJson: {},
-      updatedAt: nowIso,
-      ...overrides
-    }
-  });
+  ): E2EFixtureTask => {
+    const {
+      dueDate: _dueDate,
+      dueDatetime: overrideDueDatetime,
+      ...rest
+    } = overrides;
+    const dueDatetime = overrideDueDatetime ?? null;
+    return {
+      id,
+      mirror: {
+        todoistTaskId: `todoist-${id}`,
+        description: null,
+        projectId: "project-test",
+        parentId: null,
+        childOrder: null,
+        assigneeId: "user-me",
+        creatorId: "user-me",
+        dueDate: dueDatetime,
+        dueDatetime,
+        dueString: null,
+        dueLang: null,
+        dueTimezone: null,
+        isRecurring: false,
+        durationAmount: 30,
+        durationUnit: "minute",
+        durationMinutes: 30,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: {},
+        updatedAt: nowIso,
+        ...rest
+      }
+    };
+  };
 
   const child = (
     id: string,
@@ -74,33 +166,41 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     order: number,
     checked: boolean,
     overrides: Partial<TodoistTaskMirror> = {}
-  ): E2EFixtureTask => ({
-    id,
-    mirror: {
-      todoistTaskId: `todoist-${id}`,
-      title,
-      description: null,
-      projectId: "project-test",
-      parentId: `todoist-${parentFixtureId}`,
-      childOrder: order,
-      assigneeId: null,
-      creatorId: "user-me",
-      dueDate: null,
-      dueDatetime: null,
-      dueString: null,
-      dueLang: null,
-      dueTimezone: null,
-      isRecurring: false,
-      durationAmount: null,
-      durationUnit: null,
-      durationMinutes: null,
-      completedAt: checked ? nowIso : null,
-      deletedAt: null,
-      rawJson: {},
-      updatedAt: nowIso,
-      ...overrides
-    }
-  });
+  ): E2EFixtureTask => {
+    const {
+      dueDate: _dueDate,
+      dueDatetime: overrideDueDatetime,
+      ...rest
+    } = overrides;
+    const dueDatetime = overrideDueDatetime ?? null;
+    return {
+      id,
+      mirror: {
+        todoistTaskId: `todoist-${id}`,
+        title,
+        description: null,
+        projectId: "project-test",
+        parentId: `todoist-${parentFixtureId}`,
+        childOrder: order,
+        assigneeId: null,
+        creatorId: "user-me",
+        dueDate: dueDatetime,
+        dueDatetime,
+        dueString: null,
+        dueLang: null,
+        dueTimezone: null,
+        isRecurring: false,
+        durationAmount: null,
+        durationUnit: null,
+        durationMinutes: null,
+        completedAt: checked ? nowIso : null,
+        deletedAt: null,
+        rawJson: {},
+        updatedAt: nowIso,
+        ...rest
+      }
+    };
+  };
 
   const recurring = (rule: string): Partial<TodoistTaskMirror> => ({
     isRecurring: true,
@@ -168,20 +268,20 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     child("child-one-time-partial-open", "task-one-time-partial", "Still open", 2, false),
     root("task-recurring-all-checked", {
       title: "Recurring complete checklist",
-      dueDatetime: iso(60),
+      dueDatetime: nextDailyOccurrence(now, 10, 0),
       ...recurring("every day at 10:00")
     }),
     child("child-recurring-all-checked-a", "task-recurring-all-checked", "First", 1, true),
     child("child-recurring-all-checked-b", "task-recurring-all-checked", "Second", 2, true),
     root("task-recurring-extend-disabled", {
       title: "Recurring extend disabled",
-      dueDatetime: iso(300),
+      dueDatetime: nextWeeklyOccurrence(now, 1, 15, 0),
       ...recurring("every Monday at 15:00")
     }),
     child("child-recurring-extend-disabled", "task-recurring-extend-disabled", "Complete", 1, true),
     root("task-custom-recurrence", {
       title: "Custom recurring task",
-      dueDatetime: iso(1440),
+      dueDatetime: nextEveryTwoDaysOccurrence(now, 10, 0),
       ...recurring("every 2 days at 10:00")
     }),
     root("task-unsupported-hierarchy", {
