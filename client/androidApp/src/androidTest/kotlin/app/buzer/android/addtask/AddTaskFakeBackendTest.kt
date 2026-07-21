@@ -54,9 +54,7 @@ class AddTaskFakeBackendTest {
             waitForText("Select project")
             enterTitle("Buy milk")
             selectDefaultDeadline()
-            clickSaveBlockRange()
-
-            composeRule.onNodeWithText("Project is required").performScrollTo().assertIsDisplayed()
+            submitUntilValidation("Project is required")
             assertNoRecordedCall("/tasks")
         } finally {
             scenario.close()
@@ -73,8 +71,7 @@ class AddTaskFakeBackendTest {
             selectProject("Test Shared")
             enterTitle("Buy milk")
             selectDefaultDeadline()
-            clickSaveBlockRange()
-            composeRule.onNodeWithText("Assignee is required before saving").performScrollTo().assertIsDisplayed()
+            submitUntilValidation("Assignee is required before saving")
 
             composeRule.onNodeWithText("Me").performClick()
             clickSaveBlockRange()
@@ -264,20 +261,54 @@ class AddTaskFakeBackendTest {
     private fun selectDefaultDeadline() {
         // "Start picker" is a row of two side-by-side buttons (date, time); performClick() on
         // the row itself lands at its geometric center, which falls in the gap between the two
-        // buttons and never opens the dialog. Click the first actual clickable child instead.
-        composeRule.onNodeWithContentDescription("Start picker")
-            .performScrollTo()
-            .onChildren()
-            .filter(hasClickAction())
-            .onFirst()
-            .performClick()
-        waitForText("OK")
+        // buttons and never opens the dialog. The form can recompose immediately after Details
+        // receives input, so retry the child click until the dialog is actually visible.
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastError: Throwable? = null
+        var dialogVisible = false
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                composeRule.onNodeWithContentDescription("Start picker")
+                    .performScrollTo()
+                    .onChildren()
+                    .filter(hasClickAction())
+                    .onFirst()
+                    .performClick()
+                composeRule.onNodeWithText("OK").assertIsDisplayed()
+                dialogVisible = true
+                break
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(100)
+            }
+        }
+        if (!dialogVisible) {
+            throw AssertionError("Expected date picker dialog", lastError)
+        }
         composeRule.onNodeWithText("OK").performClick()
     }
 
     private fun clickSaveBlockRange() {
         val label = waitForSaveBlockRangeLabel()
         composeRule.onNodeWithText(label).performScrollTo().performClick()
+    }
+
+    private fun submitUntilValidation(validationText: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastError: Throwable? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                clickSaveBlockRange()
+                composeRule.onNodeWithText(validationText, substring = true)
+                    .performScrollTo()
+                    .assertIsDisplayed()
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(100)
+            }
+        }
+        throw AssertionError("Expected validation containing $validationText", lastError)
     }
 
     private fun waitForSaveBlockRangeLabel(): String {

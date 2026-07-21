@@ -1695,22 +1695,22 @@ git commit -m "test(e2e): scenario-preset instrumentation tests with old-fake se
 **Files:**
 - Create: `docs/notes/2026-07-18-e2e-real-backend-validation.md` (triage record)
 
-- [ ] **Step 1: Run the full backend gate**
+- [x] **Step 1: Run the full backend gate**
 
 Run: `cd backend && npm test && npm run typecheck`
 Expected: PASS in full. `git diff --stat master -- backend/src backend/test/fakes/fakeTodoistAdapter.ts` must show **no changes** to `backend/src/` or `fakeTodoistAdapter.ts` (spec acceptance criterion).
 
-- [ ] **Step 2: Run the old fake-backend E2E suite as a control**
+- [x] **Step 2: Run the old fake-backend E2E suite as a control**
 
 Run: `scripts/e2e-fake-backend.sh`
 Expected: all pre-existing tests pass; the 2 new `RealBackendScenarioTest` tests report **skipped** (assumption failure). This proves Phase 1 breaks nothing existing.
 
-- [ ] **Step 3: Run the new real-backend E2E suite**
+- [x] **Step 3: Run the new real-backend E2E suite**
 
 Run: `scripts/e2e-real-backend.sh`
 Expected: the 25 existing tests plus the 2 preset tests run against the real backend.
 
-- [ ] **Step 4: Triage every failure into the spec's three buckets**
+- [x] **Step 4: Triage every failure into the spec's three buckets**
 
 For each failing test, record in `docs/notes/2026-07-18-e2e-real-backend-validation.md`:
 test name, observed behavior, bucket — (a) real bug in the new server/world → fix it
@@ -1723,14 +1723,14 @@ real backend; `reconciliationStatus` idle value is `confirmed`, not `none`) → 
 as evidence, do not "fix" the backend to match the fake. Re-run after each (a)/(b) fix
 until only (c) entries remain.
 
-- [ ] **Step 5: Commit the validation record**
+- [x] **Step 5: Commit the validation record**
 
 ```bash
 git add docs/notes/2026-07-18-e2e-real-backend-validation.md
 git commit -m "docs(e2e): record real-backend E2E validation triage"
 ```
 
-- [ ] **Step 6: Verify the spec's acceptance criteria one by one**
+- [x] **Step 6: Verify the spec's acceptance criteria one by one**
 
 Walk `docs/superpowers/specs/2026-07-18-real-backend-e2e-server-design.md` §Acceptance
 Criteria; each bullet must be demonstrably true (file exists / suite output / diff

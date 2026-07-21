@@ -31,7 +31,7 @@ ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk \
 scripts/e2e-fake-backend.sh
 ```
 
-Result: **PASS**. The managed-device JUnit XML reported 27 tests, 0 failures, 0
+Final result: **PASS**. The managed-device JUnit XML reported 27 tests, 0 failures, 0
 errors, and 2 expected skips: both `RealBackendScenarioTest` methods self-skip because
 the old fake intentionally has no `/__scenario` endpoint. This was the control run
 before the real lane; its normal managed-device XML location was later overwritten by
@@ -56,13 +56,14 @@ Initial result: 27 tests, 9 failures, 0 errors, 0 skips. Both new
 parity defect; four were old-fake discrepancies listed below.
 
 The defect was fixed in `2aabcb7 fix(e2e): preserve forced action error code parity`.
-The final rerun reported **27 tests, 4 failures, 0 errors, 0 skips**. Both
+The final rerun reported **27 tests, 1 failure, 0 errors, 0 skips**. Both
 `RealBackendScenarioTest` cases pass:
 
 - `deadlineDone_underCommandTimeout_goesReconciliationPending`
 - `deadlineDone_underSyncLag_goesReconciliationPending`
 
-Final Android evidence:
+The sole failure is `addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft`,
+the documented `[partial-failure]` fake-only convention below. Final Android evidence:
 
 - XML: `client/androidApp/build/outputs/androidTest-results/managedDevice/debug/pixel8Api34/TEST-pixel8Api34-_androidApp-.xml`
 - Test log: `client/androidApp/build/outputs/androidTest-results/managedDevice/debug/pixel8Api34/testlog/test-results.log`
@@ -107,28 +108,16 @@ gate passed afterward. The final Android rerun confirms all five failures are fi
      partial-create failure. No such Todoist or production-backend behavior exists.
    - Resolution: document only; do not teach the real E2E world this fake convention.
 
-2. `homeMorningReviewButtonOpensLiveMorningReview`
-3. `morningReview_showsInvalidTaskFromSnapshot`
-   - Observed: both expect the fake-derived copy `No start time or duration set`.
-   - Cause: the old fake projects `missing_due_datetime` / `missing_duration`; the
-     production validation and real E2E snapshot use
-     `due_datetime_required` / `duration_required`. The Android presentation maps only
-     the old names to that sentence.
-   - Resolution: document only; the E2E backend must retain production validation
-     names rather than emulate obsolete fake codes.
+### Fixed client contract and test-control defects
 
-4. `morningReview_repairCallsFakeBackend`
-   - Observed: after recording `POST /tasks/task-invalid/update`, the real endpoint
-     returns HTTP 400 `validation_error`; the invalid card remains. Android logcat
-     records `message=Request validation failed`.
-   - Cause: Kotlin serialization omits the default empty `childMutations` list, while
-     the production route's strict `updateTaskBody` schema requires `childMutations`.
-     The old fake accepts the omitted field. This is a genuine production
-     client/server-contract issue exposed by the realistic lane, but the old fake's
-     leniency is the reason the existing test was green.
-   - Resolution: bucket c for this plan: no real-backend shim or production change was
-     made. A separate product-contract decision should decide whether the client emits
-     `childMutations: []` or the production route defaults it.
+- The production validation codes `due_datetime_required` and `duration_required` are
+  now mapped by `MorningReviewScreen` alongside the old fake aliases; the two morning
+  review tests pass against both backends.
+- `UpdateTaskRequest.childMutations` is annotated with `@EncodeDefault`, so an empty
+  list is sent to the strict production update route; the repair test passes.
+- The AddTask instrumentation helper now retries managed-emulator host startup and
+  local validation submits. This resolved intermittent lost-picker/submit clicks and
+  initial `10.0.2.2` readiness failures without changing production behavior.
 
 No fixture-seeding defect (bucket b) was found.
 
@@ -143,6 +132,5 @@ No fixture-seeding defect (bucket b) was found.
 | Runner exercises old + real scenarios | old-fake control: 27 tests, no failures, 2 expected scenario skips; real final lane: both scenario tests pass and all remaining failures are triaged bucket-c discrepancies. | PASS WITH DOCUMENTED DISCREPANCIES |
 | Protected source untouched | protected `git diff --stat` was empty. | PASS |
 
-The four remaining real-lane failures are intentionally left visible as evidence of
-old-fake/client-contract drift; they are not a reason to make the real backend behave
-like the fake.
+The one remaining real-lane failure is intentionally left visible as evidence of
+old-fake drift; it is not a reason to make the real backend behave like the fake.

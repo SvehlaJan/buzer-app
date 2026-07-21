@@ -105,8 +105,8 @@ class FakeBackendClient(
         body: String = "{}",
         authorized: Boolean = false
     ): String {
-        // The CI emulator's guest network can drop for several seconds at a time; all
-        // control endpoints are idempotent, so ride out connectivity blips by retrying.
+        // The CI emulator's guest network can take tens of seconds to reach the host after
+        // managed-device startup. All control endpoints are idempotent, so ride it out.
         val deadline = System.currentTimeMillis() + CONNECTIVITY_RETRY_WINDOW_MILLIS
         while (true) {
             try {
@@ -147,7 +147,7 @@ class FakeBackendClient(
     }
 
     private companion object {
-        const val CONNECTIVITY_RETRY_WINDOW_MILLIS = 20_000L
+        const val CONNECTIVITY_RETRY_WINDOW_MILLIS = 45_000L
         const val AUTH_TOKEN = "test-token"
     }
 }
