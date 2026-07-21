@@ -15,7 +15,12 @@ import type {
   TodoistItemUpdateInput,
   TodoistRecurringCompletionInput
 } from "./todoistMutationGateway.js";
-import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
+import type {
+  TodoistCollaboratorMirror,
+  TodoistCollaboratorStateMirror,
+  TodoistProjectMirror,
+  TodoistTaskMirror
+} from "./todoistTypes.js";
 
 interface TodoistApiTask {
   id: string;
@@ -49,9 +54,12 @@ interface TodoistApiTask {
 
 interface SyncResponse {
   sync_token?: string;
+  updated_at?: string;
   items?: TodoistApiTask[];
   tasks?: TodoistApiTask[];
   projects?: TodoistApiProject[];
+  collaborators?: TodoistApiCollaborator[];
+  collaborator_states?: TodoistApiCollaboratorState[];
   sync_status?: Record<string, unknown>;
   temp_id_mapping?: Record<string, string>;
 }
@@ -67,6 +75,25 @@ interface TodoistApiProject {
   updated_at?: string;
 }
 
+interface TodoistApiCollaborator {
+  id: string | number;
+  full_name?: string;
+  email?: string | null;
+  timezone?: string | null;
+  image_id?: string | null;
+  is_deleted?: boolean;
+  updated_at?: string;
+}
+
+interface TodoistApiCollaboratorState {
+  project_id: string | number;
+  user_id: string | number;
+  state?: string;
+  role?: string | null;
+  is_deleted?: boolean;
+  updated_at?: string;
+}
+
 export class HttpTodoistAdapter implements TodoistAdapter {
   constructor(
     private readonly apiToken: string,
@@ -78,16 +105,21 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       method: "POST",
       body: this.encodeForm({
         sync_token: syncToken,
-        resource_types: JSON.stringify(["items", "projects"])
+        resource_types: JSON.stringify(["items", "projects", "collaborators", "collaborator_states"])
       })
     });
+    const responseUpdatedAt = response.updated_at ?? new Date().toISOString();
 
     return {
       syncToken: response.sync_token ?? syncToken,
       tasks: (response.items ?? response.tasks ?? []).map((task) => this.mapTask(task)),
       projects: (response.projects ?? []).map((project) => this.mapProject(project)),
-      collaborators: [],
-      collaboratorStates: []
+      collaborators: (response.collaborators ?? []).map((collaborator) =>
+        this.mapCollaborator(collaborator, responseUpdatedAt)
+      ),
+      collaboratorStates: (response.collaborator_states ?? []).map((state) =>
+        this.mapCollaboratorState(state, responseUpdatedAt)
+      )
     };
   }
 
@@ -355,6 +387,37 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       isArchived: project.is_archived === true,
       rawJson: project,
       updatedAt: project.updated_at ?? new Date().toISOString()
+    };
+  }
+
+  private mapCollaborator(
+    collaborator: TodoistApiCollaborator,
+    fallbackUpdatedAt: string
+  ): TodoistCollaboratorMirror {
+    return {
+      todoistUserId: String(collaborator.id),
+      fullName: collaborator.full_name ?? "",
+      email: collaborator.email ?? null,
+      timeZone: collaborator.timezone ?? null,
+      imageId: collaborator.image_id ?? null,
+      isDeleted: collaborator.is_deleted === true,
+      rawJson: collaborator,
+      updatedAt: collaborator.updated_at ?? fallbackUpdatedAt
+    };
+  }
+
+  private mapCollaboratorState(
+    state: TodoistApiCollaboratorState,
+    fallbackUpdatedAt: string
+  ): TodoistCollaboratorStateMirror {
+    return {
+      todoistProjectId: String(state.project_id),
+      todoistUserId: String(state.user_id),
+      state: state.state === "active" ? "active" : "invited",
+      role: state.role ?? null,
+      isDeleted: state.is_deleted === true,
+      rawJson: state,
+      updatedAt: state.updated_at ?? fallbackUpdatedAt
     };
   }
 }

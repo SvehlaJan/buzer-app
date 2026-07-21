@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { migrate } from "../../src/db/migrations.js";
+import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
@@ -236,8 +237,104 @@ describe("HTTP routes", () => {
         name: "Family",
         canAssignTasks: true,
         shared: true,
-        isInboxProject: false
+        isInboxProject: false,
+        collaboratorsReady: false,
+        collaborators: [{
+          id: "user-self",
+          displayName: "Me",
+          email: null,
+          isCurrentUser: true
+        }]
       }]
+    });
+  });
+
+  it("projects only safe project-specific assignee choices after collaborator sync", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'member-ready', 3, '2026-07-22T10:00:00Z')
+    `).run();
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-07-22T10:00:00Z"
+    });
+    projects.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const collaborators = new CollaboratorRepository(db);
+    collaborators.upsertCollaborator({
+      todoistUserId: "user-wife",
+      fullName: "Wife",
+      email: "wife@example.test",
+      timeZone: "Europe/Warsaw",
+      imageId: "private-avatar-id",
+      isDeleted: false,
+      rawJson: { private: true },
+      updatedAt: "2026-07-22T10:00:00Z"
+    });
+    collaborators.upsertCollaboratorState({
+      todoistProjectId: "project-family",
+      todoistUserId: "user-wife",
+      state: "active",
+      role: "READ_WRITE",
+      isDeleted: false,
+      rawJson: { private: true },
+      updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/projects",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      projects: [
+        {
+          id: "project-family",
+          name: "Family",
+          canAssignTasks: true,
+          shared: true,
+          isInboxProject: false,
+          collaboratorsReady: true,
+          collaborators: [
+            { id: "user-self", displayName: "Me", email: null, isCurrentUser: true },
+            { id: "user-wife", displayName: "Wife", email: "wife@example.test", isCurrentUser: false }
+          ]
+        },
+        {
+          id: "project-personal",
+          name: "Personal",
+          canAssignTasks: false,
+          shared: false,
+          isInboxProject: false,
+          collaboratorsReady: true,
+          collaborators: [
+            { id: "user-self", displayName: "Me", email: null, isCurrentUser: true }
+          ]
+        }
+      ]
     });
   });
 

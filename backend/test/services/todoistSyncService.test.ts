@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
+import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
@@ -190,6 +191,65 @@ describe("TodoistSyncService", () => {
     expect(projectRepo.getActiveByTodoistProjectId("project-family")?.name).toBe("Family");
   });
 
+  it("persists synced collaborator profiles and active project membership with the full mirror contract", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'old-token', 2, '2026-06-13T10:00:00Z')
+    `).run();
+    const tasks = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family",
+      name: "Family",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const collaborators = new CollaboratorRepository(db);
+    const adapter = new FakeTodoistAdapter();
+    adapter.syncResults.push({
+      syncToken: "collaborator-token",
+      tasks: [],
+      projects: [],
+      collaborators: [{
+        todoistUserId: "user-wife",
+        fullName: "Wife",
+        email: "wife@example.test",
+        timeZone: "Europe/Warsaw",
+        imageId: null,
+        isDeleted: false,
+        rawJson: { id: "user-wife" },
+        updatedAt: "2026-06-13T10:01:00Z"
+      }],
+      collaboratorStates: [{
+        todoistProjectId: "project-family",
+        todoistUserId: "user-wife",
+        state: "active",
+        role: "READ_WRITE",
+        isDeleted: false,
+        rawJson: { project_id: "project-family", user_id: "user-wife" },
+        updatedAt: "2026-06-13T10:01:00Z"
+      }]
+    });
+
+    await new TodoistSyncService(db, tasks, projects, adapter, "user-self", collaborators).syncOnce();
+
+    expect(adapter.syncTokens).toEqual(["*"]);
+    expect(collaborators.listActiveForProject("project-family")).toEqual([
+      { todoistUserId: "user-wife", fullName: "Wife", email: "wife@example.test" }
+    ]);
+    expect(db.prepare(`
+      select sync_token as syncToken, mirror_contract_version as mirrorContractVersion
+      from todoist_sync_state where id = 1
+    `).get()).toEqual({ syncToken: "collaborator-token", mirrorContractVersion: 3 });
+  });
+
   it("forces a full sync when the project mirror is empty", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -235,7 +295,7 @@ describe("TodoistSyncService", () => {
     expect(db.prepare(`
       select sync_token as syncToken, mirror_contract_version as mirrorContractVersion
       from todoist_sync_state where id = 1
-    `).get()).toEqual({ syncToken: "full-contract-token", mirrorContractVersion: 2 });
+    `).get()).toEqual({ syncToken: "full-contract-token", mirrorContractVersion: 3 });
   });
 
   it("serializes sync token reads across concurrent callers", async () => {
@@ -248,6 +308,8 @@ describe("TodoistSyncService", () => {
         releaseFirst = () => resolve({
           syncToken: "first-token",
           tasks: [],
+          collaborators: [],
+          collaboratorStates: [],
           projects: [{
             todoistProjectId: "project-1",
             name: "Project",
@@ -261,7 +323,9 @@ describe("TodoistSyncService", () => {
           }]
         });
       }))
-      .mockResolvedValue({ syncToken: "second-token", projects: [], tasks: [] });
+      .mockResolvedValue({
+        syncToken: "second-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
+      });
     const service = new TodoistSyncService(db, new TaskRepository(db), new ProjectRepository(db), adapter);
 
     const first = service.syncOnce();
@@ -354,7 +418,7 @@ describe("TodoistSyncService", () => {
     migrate(db);
     db.prepare(`
       insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-      values (1, 'old-sync-token', 2, '2026-07-15T08:00:00Z')
+      values (1, 'old-sync-token', 3, '2026-07-15T08:00:00Z')
     `).run();
     const projects = new ProjectRepository(db);
     projects.upsertProject({
@@ -463,7 +527,7 @@ describe("TodoistSyncService", () => {
     migrate(db);
     db.prepare(`
       insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-      values (1, 'old-sync-token', 2, '2026-07-15T08:00:00Z')
+      values (1, 'old-sync-token', 3, '2026-07-15T08:00:00Z')
     `).run();
     const projects = new ProjectRepository(db);
     projects.upsertProject({ ...projectMirror("project-1", true), rawJson: "{}" });
@@ -499,7 +563,9 @@ describe("TodoistSyncService", () => {
     const adapter = new FakeTodoistAdapter();
     adapter.sync = vi.fn()
       .mockResolvedValueOnce(syncRecurringRoot("2026-07-16T09:00:00Z", "after-advance-token"))
-      .mockResolvedValueOnce({ syncToken: "lagged-token", projects: [], tasks: [] })
+      .mockResolvedValueOnce({
+        syncToken: "lagged-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
+      })
       .mockRejectedValue(new Error("unexpected_recursive_sync"));
 
     await expect(new TodoistSyncService(db, tasks, projects, adapter, "user-self").syncOnce()).resolves.toBeUndefined();
@@ -518,7 +584,7 @@ describe("TodoistSyncService", () => {
     migrate(db);
     db.prepare(`
       insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-      values (1, 'old-token', 2, '2026-07-15T08:00:00Z')
+      values (1, 'old-token', 3, '2026-07-15T08:00:00Z')
     `).run();
     const projects = new ProjectRepository(db);
     projects.upsertProject({ ...projectMirror("personal-project", false), rawJson: "{}" });
@@ -556,7 +622,7 @@ describe("TodoistSyncService", () => {
     migrate(db);
     db.prepare(`
       insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-      values (1, 'old-token', 2, '2026-07-15T08:00:00Z')
+      values (1, 'old-token', 3, '2026-07-15T08:00:00Z')
     `).run();
     const projects = new ProjectRepository(db);
     projects.upsertProject({ ...projectMirror("personal-project", true), rawJson: "{}" });
@@ -758,6 +824,8 @@ function syncRecurringRoot(dueDatetime: string, syncToken: string) {
   return {
     syncToken,
     projects: [],
+    collaborators: [],
+    collaboratorStates: [],
     tasks: [{
       todoistTaskId: "todoist-recurring-root",
       title: "Daily report",

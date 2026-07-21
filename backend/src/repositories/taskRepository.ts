@@ -111,7 +111,7 @@ export class TaskRepository {
       from todoist_sync_state
       where id = 1
     `).get() as { mirrorContractVersion: number } | undefined;
-    return row?.mirrorContractVersion === 2;
+    return (row?.mirrorContractVersion ?? 0) >= 2;
   }
 
   upsertTodoistTask(task: TodoistTaskUpsert): void {

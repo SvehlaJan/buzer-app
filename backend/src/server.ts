@@ -6,6 +6,7 @@ import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
+import { CollaboratorRepository } from "./repositories/collaboratorRepository.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
@@ -40,8 +41,11 @@ export function buildServer(options: BuildServerOptions) {
   });
   const tasks = new TaskRepository(options.db);
   const projects = new ProjectRepository(options.db);
+  const collaborators = new CollaboratorRepository(options.db);
   const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true);
-  const synchronizer = new TodoistSyncService(options.db, tasks, projects, options.todoist, options.currentUserId);
+  const synchronizer = new TodoistSyncService(
+    options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
+  );
   const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
   const actions = new TaskActionService(
     options.db,
@@ -65,7 +69,7 @@ export function buildServer(options: BuildServerOptions) {
     }
   );
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots });
+    registerRoutes(scope, options, { actions, snapshots, collaborators });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
@@ -90,6 +94,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const db = openDatabase(dbPath);
   const tasks = new TaskRepository(db);
   const projects = new ProjectRepository(db);
+  const collaborators = new CollaboratorRepository(db);
   const todoist = new HttpTodoistAdapter(todoistApiToken);
   const whatsappDryRun = process.env.WHATSAPP_DRY_RUN !== "false";
   const whatsappSender = whatsappDryRun
@@ -110,7 +115,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     escalationService
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, tasks, projects, todoist, currentUserId),
+    new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators),
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")

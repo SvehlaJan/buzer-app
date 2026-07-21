@@ -13,6 +13,15 @@ export interface TodoistCollaborator {
 export class CollaboratorRepository {
   constructor(private readonly db: Database.Database) {}
 
+  isMirrorContractReady(): boolean {
+    const row = this.db.prepare(`
+      select mirror_contract_version as mirrorContractVersion
+      from todoist_sync_state
+      where id = 1
+    `).get() as { mirrorContractVersion: number } | undefined;
+    return (row?.mirrorContractVersion ?? 0) >= 3;
+  }
+
   upsertCollaborator(collaborator: TodoistCollaboratorMirror): void {
     this.db.prepare(`
       insert into todoist_collaborators (

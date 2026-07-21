@@ -284,7 +284,7 @@ describe("HttpTodoistAdapter", () => {
     });
   });
 
-  it("sync maps Todoist projects", async () => {
+  it("sync maps Todoist projects and collaborator membership", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_token: "project-token",
       items: [],
@@ -299,6 +299,26 @@ describe("HttpTodoistAdapter", () => {
           is_archived: false,
           updated_at: "2026-06-13T10:00:00Z"
         }
+      ],
+      collaborators: [
+        {
+          id: "user-wife",
+          full_name: "Wife",
+          email: "wife@example.test",
+          timezone: "Europe/Warsaw",
+          image_id: "avatar-wife",
+          updated_at: "2026-06-13T10:01:00Z"
+        }
+      ],
+      collaborator_states: [
+        {
+          project_id: "project-family",
+          user_id: "user-wife",
+          state: "active",
+          role: "READ_WRITE",
+          is_deleted: false,
+          updated_at: "2026-06-13T10:02:00Z"
+        }
       ]
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
@@ -306,7 +326,9 @@ describe("HttpTodoistAdapter", () => {
     const result = await adapter.sync("*");
 
     const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(JSON.parse(body.get("resource_types") ?? "[]")).toEqual(["items", "projects"]);
+    expect(JSON.parse(body.get("resource_types") ?? "[]")).toEqual([
+      "items", "projects", "collaborators", "collaborator_states"
+    ]);
     expect(result.projects).toEqual([
       {
         todoistProjectId: "project-family",
@@ -327,6 +349,43 @@ describe("HttpTodoistAdapter", () => {
           updated_at: "2026-06-13T10:00:00Z"
         },
         updatedAt: "2026-06-13T10:00:00Z"
+      }
+    ]);
+    expect(result.collaborators).toEqual([
+      {
+        todoistUserId: "user-wife",
+        fullName: "Wife",
+        email: "wife@example.test",
+        timeZone: "Europe/Warsaw",
+        imageId: "avatar-wife",
+        isDeleted: false,
+        rawJson: {
+          id: "user-wife",
+          full_name: "Wife",
+          email: "wife@example.test",
+          timezone: "Europe/Warsaw",
+          image_id: "avatar-wife",
+          updated_at: "2026-06-13T10:01:00Z"
+        },
+        updatedAt: "2026-06-13T10:01:00Z"
+      }
+    ]);
+    expect(result.collaboratorStates).toEqual([
+      {
+        todoistProjectId: "project-family",
+        todoistUserId: "user-wife",
+        state: "active",
+        role: "READ_WRITE",
+        isDeleted: false,
+        rawJson: {
+          project_id: "project-family",
+          user_id: "user-wife",
+          state: "active",
+          role: "READ_WRITE",
+          is_deleted: false,
+          updated_at: "2026-06-13T10:02:00Z"
+        },
+        updatedAt: "2026-06-13T10:02:00Z"
       }
     ]);
   });

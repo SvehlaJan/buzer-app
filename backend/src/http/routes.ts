@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
+import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskActionService } from "../services/taskActionService.js";
 import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
@@ -94,6 +95,7 @@ const emptyBody = z.strictObject({});
 export interface RouteServices {
   actions: TaskActionService;
   snapshots: TaskSnapshotService;
+  collaborators: CollaboratorRepository;
 }
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions, services: RouteServices): void {
@@ -148,9 +150,22 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   });
 
   app.get("/tasks/snapshot", async () => services.snapshots.getSnapshot(new Date().toISOString()));
-  app.get("/projects", async () => ({ projects: new ProjectRepository(options.db).listActive().map((project) => ({
-    id: project.todoistProjectId, name: project.name, canAssignTasks: project.canAssignTasks, shared: project.shared, isInboxProject: project.isInboxProject
-  })) }));
+  app.get("/projects", async () => {
+    const collaboratorsReady = services.collaborators.isMirrorContractReady();
+    return {
+      projects: new ProjectRepository(options.db).listActive().map((project) => ({
+        id: project.todoistProjectId,
+        name: project.name,
+        canAssignTasks: project.canAssignTasks,
+        shared: project.shared,
+        isInboxProject: project.isInboxProject,
+        collaboratorsReady,
+        collaborators: project.shared
+          ? projectCollaborators(services.collaborators, options.currentUserId, project.todoistProjectId)
+          : [currentUserCollaborator(options.currentUserId)]
+      }))
+    };
+  });
 
   app.post("/tasks", async (request) => {
     const body = createTaskBody.parse(request.body);
@@ -254,6 +269,35 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     new DeviceRepository(options.db).upsertCheckIn({ id: body.deviceId, appVersion: body.appVersion, permissions: body.permissions, checkedInAt: new Date().toISOString() });
     return { ok: true };
   });
+}
+
+interface ProjectCollaboratorResponse {
+  id: string;
+  displayName: string;
+  email: string | null;
+  isCurrentUser: boolean;
+}
+
+function currentUserCollaborator(currentUserId: string): ProjectCollaboratorResponse {
+  return { id: currentUserId, displayName: "Me", email: null, isCurrentUser: true };
+}
+
+function projectCollaborators(
+  collaborators: CollaboratorRepository,
+  currentUserId: string,
+  projectId: string
+): ProjectCollaboratorResponse[] {
+  return [
+    currentUserCollaborator(currentUserId),
+    ...collaborators.listActiveForProject(projectId)
+      .filter((collaborator) => collaborator.todoistUserId !== currentUserId)
+      .map((collaborator) => ({
+        id: collaborator.todoistUserId,
+        displayName: collaborator.fullName,
+        email: collaborator.email,
+        isCurrentUser: false
+      }))
+  ];
 }
 
 function mutationResponse(actionId: string, result: unknown, snapshots: TaskSnapshotService) {

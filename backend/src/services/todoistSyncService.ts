@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
+import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import { ActionJournalRepository } from "../repositories/actionJournalRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
@@ -20,7 +21,8 @@ export class TodoistSyncService {
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
     private readonly todoist: TodoistAdapter,
-    private readonly currentUserId = ""
+    private readonly currentUserId = "",
+    private readonly collaborators = new CollaboratorRepository(db)
   ) {}
 
   async syncOnce(): Promise<void> {
@@ -40,8 +42,10 @@ export class TodoistSyncService {
     const current = this.db
       .prepare("select sync_token as syncToken, mirror_contract_version as mirrorContractVersion from todoist_sync_state where id = 1")
       .get() as { syncToken: string; mirrorContractVersion: number } | undefined;
-    const requiresFullSync = current?.mirrorContractVersion !== 2;
-    const syncToken = requiresFullSync || this.projects.listActive().length === 0 ? "*" : current.syncToken;
+    const requiresFullSync = (current?.mirrorContractVersion ?? 0) < 3;
+    const syncToken = requiresFullSync || this.projects.listActive().length === 0
+      ? "*"
+      : current?.syncToken ?? "*";
     const result = await this.todoist.sync(syncToken);
     const now = new Date().toISOString();
     const previousByTodoistId = new Map(
@@ -50,6 +54,14 @@ export class TodoistSyncService {
     const resetPlans: ResetPlan[] = [];
 
     const tx = this.db.transaction(() => {
+      for (const collaborator of result.collaborators) {
+        this.collaborators.upsertCollaborator(collaborator);
+      }
+
+      for (const collaboratorState of result.collaboratorStates) {
+        this.collaborators.upsertCollaboratorState(collaboratorState);
+      }
+
       for (const project of result.projects) {
         this.projects.upsertProject({
           todoistProjectId: project.todoistProjectId,
@@ -139,7 +151,7 @@ export class TodoistSyncService {
       if (syncToken === "*") {
         this.db.prepare(`
           update todoist_sync_state
-          set mirror_contract_version = 2, updated_at = ?
+          set mirror_contract_version = 3, updated_at = ?
           where id = 1
         `).run(now);
       }

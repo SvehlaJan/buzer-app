@@ -5,6 +5,21 @@ import { DeviceRepository } from "../../src/repositories/deviceRepository.js";
 import { TaskRepository, type TodoistTaskUpsert } from "../../src/repositories/taskRepository.js";
 
 describe("TaskRepository", () => {
+  it("keeps task mirror readiness at version 2 while accepting newer mirror contracts", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+
+    expect(repo.isMirrorContractReady()).toBe(false);
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'v2-token', 2, '2026-07-22T10:00:00Z')
+    `).run();
+    expect(repo.isMirrorContractReady()).toBe(true);
+    db.prepare("update todoist_sync_state set mirror_contract_version = 3 where id = 1").run();
+    expect(repo.isMirrorContractReady()).toBe(true);
+  });
+
   it("upserts task mirror and initializes commitment state", () => {
     const db = new Database(":memory:");
     migrate(db);
