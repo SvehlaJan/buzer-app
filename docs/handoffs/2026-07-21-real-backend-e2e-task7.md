@@ -61,7 +61,9 @@ Verification:
 
 - Command: `curl --silent --fail http://127.0.0.1:18455/health`
   - Result: PASS
-  - Evidence: exited 0 against a local real E2E server already listening on port 18455.
+  - Evidence: this historical probe established only that an already-running local
+    service passed `/health`; runner reuse now additionally verifies E2E identity with
+    the `/__calls` probe.
 
 Verification:
 
