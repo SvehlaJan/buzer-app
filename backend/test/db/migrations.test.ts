@@ -100,10 +100,31 @@ describe("migrate", () => {
       "snapshot_generations",
       "task_action_commands",
       "task_action_journal",
+      "todoist_collaborators",
+      "todoist_project_collaborators",
       "todoist_projects",
       "todoist_sync_state",
       "todoist_tasks",
       "whatsapp_escalations"
+    ]);
+  });
+
+  it("applies the collaborator mirror migration to an existing v3 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      drop table todoist_project_collaborators;
+      drop table todoist_collaborators;
+      delete from schema_migrations where version = 4;
+    `);
+
+    migrate(db);
+
+    expect(db.prepare("select version from schema_migrations where version = 4").get()).toEqual({ version: 4 });
+    const tables = db.prepare("select name from sqlite_master where type = 'table' and name like 'todoist_%collaborators' order by name").all();
+    expect(tables).toEqual([
+      { name: "todoist_collaborators" },
+      { name: "todoist_project_collaborators" }
     ]);
   });
 
@@ -512,7 +533,8 @@ describe("migrate", () => {
     expect(db.prepare("select version from schema_migrations order by version").all()).toEqual([
       { version: 1 },
       { version: 2 },
-      { version: 3 }
+      { version: 3 },
+      { version: 4 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;

@@ -85,7 +85,9 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     return {
       syncToken: response.sync_token ?? syncToken,
       tasks: (response.items ?? response.tasks ?? []).map((task) => this.mapTask(task)),
-      projects: (response.projects ?? []).map((project) => this.mapProject(project))
+      projects: (response.projects ?? []).map((project) => this.mapProject(project)),
+      collaborators: [],
+      collaboratorStates: []
     };
   }
 

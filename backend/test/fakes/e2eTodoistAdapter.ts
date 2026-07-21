@@ -272,10 +272,16 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     this.syncCount += 1;
     const syncToken = `e2e-sync-${this.syncCount}`;
     if (this.scenario === "sync_lag_effect_unknown") {
-      return { syncToken, tasks: [], projects: [] };
+      return { syncToken, tasks: [], projects: [], collaborators: [], collaboratorStates: [] };
     }
     const state = this.world.state();
-    return { syncToken, tasks: state.tasks, projects: state.projects };
+    return {
+      syncToken,
+      tasks: state.tasks,
+      projects: state.projects,
+      collaborators: [],
+      collaboratorStates: []
+    };
   }
 
   async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {

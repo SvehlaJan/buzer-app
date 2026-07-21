@@ -66,6 +66,28 @@ create table if not exists todoist_projects (
   updated_at text not null
 );
 
+create table if not exists todoist_collaborators (
+  todoist_user_id text primary key,
+  full_name text not null,
+  email text,
+  time_zone text,
+  image_id text,
+  is_deleted integer not null,
+  raw_json text not null,
+  updated_at text not null
+);
+
+create table if not exists todoist_project_collaborators (
+  todoist_project_id text not null,
+  todoist_user_id text not null,
+  state text not null check (state in ('active', 'invited')),
+  role text,
+  is_deleted integer not null,
+  raw_json text not null,
+  updated_at text not null,
+  primary key (todoist_project_id, todoist_user_id)
+);
+
 create table if not exists devices (
   id text primary key,
   app_version text not null,

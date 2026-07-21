@@ -1,10 +1,17 @@
-import type { TodoistProjectMirror, TodoistTaskMirror } from "./todoistTypes.js";
+import type {
+  TodoistCollaboratorMirror,
+  TodoistCollaboratorStateMirror,
+  TodoistProjectMirror,
+  TodoistTaskMirror
+} from "./todoistTypes.js";
 import type { TodoistMutationGateway } from "./todoistMutationGateway.js";
 
 export interface TodoistSyncResult {
   syncToken: string;
   tasks: TodoistTaskMirror[];
   projects: TodoistProjectMirror[];
+  collaborators: TodoistCollaboratorMirror[];
+  collaboratorStates: TodoistCollaboratorStateMirror[];
 }
 
 export interface TodoistCreateTaskInput {

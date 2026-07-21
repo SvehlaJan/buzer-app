@@ -33,3 +33,24 @@ export interface TodoistProjectMirror {
   rawJson: unknown;
   updatedAt: string;
 }
+
+export interface TodoistCollaboratorMirror {
+  todoistUserId: string;
+  fullName: string;
+  email: string | null;
+  timeZone: string | null;
+  imageId: string | null;
+  isDeleted: boolean;
+  rawJson: unknown;
+  updatedAt: string;
+}
+
+export interface TodoistCollaboratorStateMirror {
+  todoistProjectId: string;
+  todoistUserId: string;
+  state: "active" | "invited";
+  role: string | null;
+  isDeleted: boolean;
+  rawJson: unknown;
+  updatedAt: string;
+}

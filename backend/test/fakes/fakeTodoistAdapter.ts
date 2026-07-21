@@ -17,7 +17,7 @@ import type {
 } from "../../src/todoist/todoistMutationGateway.js";
 
 export class FakeTodoistAdapter implements TodoistAdapter {
-  syncResults: TodoistSyncResult[] = [];
+  syncResults: QueuedSyncResult[] = [];
   syncTokens: string[] = [];
   createdTasks: TodoistCreateTaskInput[] = [];
   createResults: TodoistCreateTaskResult[] = [];
@@ -34,7 +34,14 @@ export class FakeTodoistAdapter implements TodoistAdapter {
 
   async sync(syncToken: string): Promise<TodoistSyncResult> {
     this.syncTokens.push(syncToken);
-    return this.syncResults.shift() ?? { syncToken: "empty-token", tasks: [], projects: [] };
+    const result = this.syncResults.shift();
+    return {
+      syncToken: result?.syncToken ?? "empty-token",
+      tasks: result?.tasks ?? [],
+      projects: result?.projects ?? [],
+      collaborators: result?.collaborators ?? [],
+      collaboratorStates: result?.collaboratorStates ?? []
+    };
   }
 
   async createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult> {
@@ -108,3 +115,6 @@ export class FakeTodoistAdapter implements TodoistAdapter {
     this.recurringCompletions.push(input);
   }
 }
+
+type QueuedSyncResult = Omit<TodoistSyncResult, "collaborators" | "collaboratorStates"> &
+  Partial<Pick<TodoistSyncResult, "collaborators" | "collaboratorStates">>;
