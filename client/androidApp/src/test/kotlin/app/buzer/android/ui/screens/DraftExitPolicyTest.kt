@@ -4,6 +4,7 @@ import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.shared.model.RecurrencePreset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DraftExitPolicyTest {
     @Test
@@ -34,6 +35,25 @@ class DraftExitPolicyTest {
         assertDirty(initial, initial.copy(start = start.copy(hour = 10)))
         assertDirty(initial, initial.copy(durationMinutes = 45))
         assertDirty(initial, initial.copy(recurrencePreset = RecurrencePreset.weekly))
+    }
+
+    @Test
+    fun changedEditProjectOrAssigneeRequiresConfirmation() {
+        val initial = editDraft()
+
+        assertDirty(initial, initial.copy(projectId = "project-shared"))
+        assertDirty(initial, initial.copy(assigneeId = "wife"))
+    }
+
+    @Test
+    fun presentationStateDoesNotChangeTheEditDraftFingerprint() {
+        val initial = editDraft()
+        val scheduleExpanded = true
+        val customTimeDialogVisible = true
+
+        assertTrue(scheduleExpanded)
+        assertTrue(customTimeDialogVisible)
+        assertEquals(DraftExitDecision.NavigateHome, decideDraftExit(initial, initial, submitting = false))
     }
 
     @Test
@@ -124,6 +144,8 @@ class DraftExitPolicyTest {
         val edit = editTaskDraftFingerprint(
             title = "Root",
             description = "Description",
+            projectId = "project-personal",
+            assigneeId = "me",
             start = start,
             durationMinutes = 30,
             recurrencePreset = RecurrencePreset.never,
@@ -149,6 +171,8 @@ class DraftExitPolicyTest {
             EditTaskDraftFingerprint(
                 title = "Root",
                 description = "Description",
+                projectId = "project-personal",
+                assigneeId = "me",
                 start = start,
                 durationMinutes = 30,
                 recurrencePreset = RecurrencePreset.never,
@@ -181,6 +205,8 @@ class DraftExitPolicyTest {
         val edit = EditTaskDraftFingerprint(
             title = "Edit",
             description = "",
+            projectId = "project-personal",
+            assigneeId = "me",
             start = DateTimeDraftSelection.Empty,
             durationMinutes = 30,
             recurrencePreset = RecurrencePreset.never,
@@ -205,6 +231,8 @@ class DraftExitPolicyTest {
     private fun editDraft() = EditTaskDraftFingerprint(
         title = "Root",
         description = "",
+        projectId = "project-personal",
+        assigneeId = "me",
         start = start,
         durationMinutes = 30,
         recurrencePreset = RecurrencePreset.never,

@@ -92,6 +92,8 @@ internal class AddTaskDraftFingerprint(
 internal class EditTaskDraftFingerprint(
     val title: String,
     val description: String,
+    val projectId: String?,
+    val assigneeId: String?,
     val start: DateTimeDraftSelection,
     val durationMinutes: Int,
     val recurrencePreset: RecurrencePreset?,
@@ -106,6 +108,8 @@ internal class EditTaskDraftFingerprint(
     fun copy(
         title: String = this.title,
         description: String = this.description,
+        projectId: String? = this.projectId,
+        assigneeId: String? = this.assigneeId,
         start: DateTimeDraftSelection = this.start,
         durationMinutes: Int = this.durationMinutes,
         recurrencePreset: RecurrencePreset? = this.recurrencePreset,
@@ -115,6 +119,8 @@ internal class EditTaskDraftFingerprint(
     ): EditTaskDraftFingerprint = EditTaskDraftFingerprint(
         title = title,
         description = description,
+        projectId = projectId,
+        assigneeId = assigneeId,
         start = start,
         durationMinutes = durationMinutes,
         recurrencePreset = recurrencePreset,
@@ -126,6 +132,8 @@ internal class EditTaskDraftFingerprint(
     override fun equals(other: Any?): Boolean = other is EditTaskDraftFingerprint &&
         title == other.title &&
         description == other.description &&
+        projectId == other.projectId &&
+        assigneeId == other.assigneeId &&
         start == other.start &&
         durationMinutes == other.durationMinutes &&
         recurrencePreset == other.recurrencePreset &&
@@ -136,6 +144,8 @@ internal class EditTaskDraftFingerprint(
     override fun hashCode(): Int = listOf(
         title,
         description,
+        projectId,
+        assigneeId,
         start,
         durationMinutes,
         recurrencePreset,
@@ -168,6 +178,8 @@ internal fun addTaskDraftFingerprint(
 internal fun editTaskDraftFingerprint(
     title: String,
     description: String,
+    projectId: String?,
+    assigneeId: String?,
     start: DateTimeDraftSelection,
     durationMinutes: Int,
     recurrencePreset: RecurrencePreset?,
@@ -177,6 +189,8 @@ internal fun editTaskDraftFingerprint(
 ): EditTaskDraftFingerprint = EditTaskDraftFingerprint(
     title = title,
     description = description,
+    projectId = projectId,
+    assigneeId = assigneeId,
     start = start,
     durationMinutes = durationMinutes,
     recurrencePreset = recurrencePreset,
