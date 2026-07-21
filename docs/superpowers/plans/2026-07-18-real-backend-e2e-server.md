@@ -1516,7 +1516,7 @@ The new tests live in their **own class** and self-skip when the backend has no
 `/__scenario` (the old fake), so `scripts/e2e-fake-backend.sh` and CI stay green in
 Phase 1 — a spec non-goal protects both.
 
-- [ ] **Step 1: Extend FakeBackendClient (additive only)**
+- [x] **Step 1: Extend FakeBackendClient (additive only)**
 
 Change `request`/`requestOnce` to support authorization, and add the two methods.
 The existing method bodies stay identical apart from the added parameter:
@@ -1556,7 +1556,7 @@ The existing method bodies stay identical apart from the added parameter:
     }
 ```
 
-- [ ] **Step 2: Write the scenario test class**
+- [x] **Step 2: Write the scenario test class**
 
 `RealBackendScenarioTest.kt` (same package as the blocker tests, so
 `DeadlineBlockerActivity` needs no import; `AlarmIntentFactory` comes from
@@ -1675,13 +1675,13 @@ class RealBackendScenarioTest {
 }
 ```
 
-- [ ] **Step 3: Compile the androidTest sources**
+- [x] **Step 3: Compile the androidTest sources**
 
 Run: `cd client && ./gradlew :androidApp:compileDebugAndroidTestKotlin`
 Expected: BUILD SUCCESSFUL. (If `createEmptyComposeRule` import differs, copy the exact
 import line from `BlockerActivityFakeBackendTest.kt:11`.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/RealBackendScenarioTest.kt
