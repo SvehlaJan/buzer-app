@@ -1364,7 +1364,7 @@ git commit -m "feat(e2e): debug-endpoint parity and HTTP scenario control with c
 **Files:**
 - Modify: `backend/package.json` (scripts block)
 
-- [ ] **Step 1: Add the script**
+- [x] **Step 1: Add the script**
 
 In `backend/package.json`, extend `"scripts"`:
 
@@ -1374,7 +1374,7 @@ In `backend/package.json`, extend `"scripts"`:
     "migrate": "tsx src/db/migrations.ts"
 ```
 
-- [ ] **Step 2: Smoke-check on a real port**
+- [x] **Step 2: Smoke-check on a real port**
 
 ```bash
 cd backend && PORT=18455 npm run e2e-server &
@@ -1387,7 +1387,7 @@ kill %1
 
 Expected: `{"ok":true,...}` from `/health`, a JSON snapshot prefix containing `"task-start"` or `snapshotGeneration`, and `{"ok":true}` from `/__reset`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/package.json
