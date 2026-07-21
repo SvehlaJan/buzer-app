@@ -89,6 +89,18 @@ internal fun persistValidationFocus(
     state.copy(expandedSection = focusedSection)
 } ?: state
 
+internal fun reduceSectionTap(
+    state: TaskEditorScaffoldState,
+    requested: EditorSection,
+    validation: TaskEditorScheduleValidation
+): TaskEditorScaffoldState = if (validation.focusSection != null) {
+    persistValidationFocus(state, validation)
+} else {
+    state.copy(expandedSection = reduceSection(state.expandedSection, requested))
+}
+
+internal fun editorDismissActionsEnabled(saving: Boolean): Boolean = !saving
+
 internal fun scheduleValidationMessage(validation: TaskEditorScheduleValidation): String? =
     if (!validation.isValid && validation.focusSection == EditorSection.Schedule) {
         "Set date, start time, and duration to save this task."
@@ -195,6 +207,7 @@ internal fun TaskEditorScaffold(
     val assigneeReady = personalProject || selectedProject?.collaboratorsReady == true
     val notesPreview = draft.description.trim().ifBlank { "Add notes" }
     val expandedSection = resolvedExpandedSection(state, scheduleValidation)
+    val dismissActionsEnabled = editorDismissActionsEnabled(saving)
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -208,6 +221,7 @@ internal fun TaskEditorScaffold(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = onBack,
+                    enabled = dismissActionsEnabled,
                     modifier = Modifier.semantics { contentDescription = "Back" }
                 ) {
                     Text("‹", style = MaterialTheme.typography.headlineSmall)
@@ -228,7 +242,7 @@ internal fun TaskEditorScaffold(
                 expanded = expandedSection == EditorSection.Schedule,
                 isError = !scheduleValidation.isValid && scheduleValidation.focusSection == EditorSection.Schedule,
                 enabled = enabled,
-                onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Schedule)) }
+                onClick = { state = reduceSectionTap(state, EditorSection.Schedule, scheduleValidation) }
             )
             if (expandedSection == EditorSection.Schedule) {
                 ScheduleEditor(
@@ -285,7 +299,7 @@ internal fun TaskEditorScaffold(
                 leadingSymbol = "≡",
                 expanded = expandedSection == EditorSection.Notes,
                 enabled = enabled,
-                onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Notes)) }
+                onClick = { state = reduceSectionTap(state, EditorSection.Notes, scheduleValidation) }
             )
             if (expandedSection == EditorSection.Notes) {
                 BasicTextField(
@@ -307,7 +321,7 @@ internal fun TaskEditorScaffold(
                 leadingSymbol = "✓",
                 expanded = expandedSection == EditorSection.Checklist,
                 enabled = enabled,
-                onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Checklist)) }
+                onClick = { state = reduceSectionTap(state, EditorSection.Checklist, scheduleValidation) }
             )
             if (expandedSection == EditorSection.Checklist) {
                 checklistContent()
@@ -331,7 +345,7 @@ internal fun TaskEditorScaffold(
         ) {
             OutlinedButton(
                 onClick = onCancel,
-                enabled = !saving,
+                enabled = dismissActionsEnabled,
                 modifier = Modifier.fillMaxWidth(0.48f)
             ) { Text("Cancel") }
             Button(

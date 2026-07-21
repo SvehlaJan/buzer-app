@@ -144,3 +144,29 @@ Verification:
 - Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 - Result: PASS
 - Evidence: complete shared Kotlin host suite, Android JVM suite, and debug APK assembly passed after the code-quality fixes.
+
+## Second Code-Quality Review Follow-up
+
+The second Task 6 code-quality pass found two remaining interaction hazards. This
+follow-up adds `editorDismissActionsEnabled`, used by both top Back and sticky Cancel,
+so neither can navigate away while Save is in flight. It also routes every accordion
+tap through `reduceSectionTap`; while Schedule validation focus is active, it keeps
+the persisted Schedule state instead of retaining a Notes or Checklist tap that would
+unexpectedly open after the validation clears.
+
+TDD evidence: the focused state suite was RED before implementation because
+`reduceSectionTap` and `editorDismissActionsEnabled` were unresolved. The added tests
+then passed after the reducer/availability helpers and their Compose call sites were
+implemented.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.taskeditor.TaskEditorScaffoldStateTest --tests app.buzer.android.ui.taskeditor.TaskEditorDraftTest --tests app.buzer.android.ui.taskeditor.ScheduleQuickChoicesTest --tests app.buzer.android.ui.taskeditor.TaskEditorWheelDialogsTest`
+- Result: PASS
+- Evidence: the complete Task 5/6 focused suite passed with in-flight navigation and validation-accordion regressions covered.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: complete shared Kotlin host suite, Android JVM suite, and debug APK assembly passed after the final review fixes.

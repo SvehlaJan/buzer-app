@@ -120,6 +120,29 @@ class TaskEditorScaffoldStateTest {
     }
 
     @Test
+    fun scheduleValidationFocusIgnoresOtherAccordionTapsUntilTheErrorClears() {
+        val validation = validateScheduleForSave(
+            TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
+        )
+        val scheduleState = TaskEditorScaffoldState(expandedSection = EditorSection.Schedule)
+
+        assertEquals(
+            scheduleState,
+            reduceSectionTap(scheduleState, EditorSection.Notes, validation)
+        )
+        assertEquals(
+            scheduleState,
+            reduceSectionTap(scheduleState, EditorSection.Checklist, validation)
+        )
+    }
+
+    @Test
+    fun savingDisablesDismissActions() {
+        assertEquals(false, editorDismissActionsEnabled(saving = true))
+        assertEquals(true, editorDismissActionsEnabled(saving = false))
+    }
+
+    @Test
     fun scheduleValidationProvidesConciseScheduleLevelErrorCopy() {
         val validation = validateScheduleForSave(
             TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
