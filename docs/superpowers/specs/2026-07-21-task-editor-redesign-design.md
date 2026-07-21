@@ -4,159 +4,261 @@ Date: 2026-07-21
 
 ## Status
 
-Design direction accepted in conversation; this written spec is the review gate before implementation planning. The supporting mockups are kept together in `docs/designs/2026-07-21-task-editor-redesign/` so they can be revised without losing the current direction.
+Accepted design and implementation scope. This specification supersedes the initial
+design-session notes after the 2026-07-21 real-backend E2E merge and the completed
+design review. The supporting mockups remain together in
+`docs/designs/2026-07-21-task-editor-redesign/` so they can be revised without
+losing the agreed direction.
 
 ## Purpose
 
-Make Add Task and Edit Task fast to scan and practical on a phone. The current form repeats schedule information in a receipt and in separate inputs, uses space heavily, and makes recurrence consume the screen. The redesigned form presents the current choice in compact collapsed rows and exposes only the controls needed for the current decision.
+Make Add Task and Edit Task fast to scan and practical on a phone. The current form
+duplicates schedule facts in a receipt and separate inputs, uses too much vertical
+space, and exposes recurrence as a long stack of buttons. The redesigned editor
+shows each current choice in a compact row and reveals controls only for the active
+decision.
 
-This is a UI and interaction redesign. It must preserve the existing strict-task validation, create/update APIs, reconciliation behaviour, draft-exit protection, and alarm scheduling semantics.
+The form must preserve Todoist as the authority for visible task data, the existing
+action-journal/reconciliation protocol, draft-exit protection, direct-checklist
+constraints, and Android alarm behavior. Under the accepted Todoist-native semantics,
+`due.datetime` is the **start** of the committed block and its end is
+`due + durationMinutes`; the UI therefore says `Start` and displays a derived end.
 
 ## Supporting Mockups
 
 | Mockup | Role |
 | --- | --- |
-| `01-schedule-inline-options.png` | Expanded schedule section with adaptive quick choices and icon-only custom controls. |
-| `02-schedule-custom-wheel-dialog.png` | Precise wheel-based schedule dialog concept. |
-| `03-collapsed-task-editor.png` | Main form hierarchy with Schedule first and collapsed. |
+| `01-schedule-inline-options.png` | Expanded Schedule with adaptive quick choices and compact Custom controls. |
+| `02-schedule-custom-wheel-dialog.png` | Precise wheel-dialog concept. |
+| `03-collapsed-task-editor.png` | Main hierarchy with Schedule first and collapsed. |
 | `04-repeat-picker.png` | Recurrence selection sheet. |
 | `05-notes-and-checklist.png` | Expanded Notes and Checklist sections. |
 | `06-project-selector.png` | Project-selection sheet. |
 | `07-assignee-selector.png` | Assignee-selection sheet. |
 
-Mockup text and layout are design references, not test fixtures or a source of API truth.
+Mockup text and layout are design references, not test fixtures or API truth.
 
 ## Scope
 
 In scope:
 
-- Add Task and Edit Task visual hierarchy and form interactions.
-- A collapsed/expanded Schedule section with adaptive fast choices.
-- Separate precise date, time, and duration dialogs based on the already-installed `WheelPickerCompose` dependency.
-- Compact Project, Assignee, Repeat, Notes, and Checklist sections.
-- Matching JVM and Android instrumentation coverage for the redesigned paths.
+- One equivalent Add/Edit editor: title, Schedule, Project, Assignee, Repeat, Notes,
+  and Checklist are editable in both flows.
+- Schedule-first hierarchy, collapsed by default, adaptive single-tap choices, and
+  separate precise date, time, and duration wheel dialogs.
+- Project-scoped Assignee choices sourced from the backend's synced Todoist
+  collaborator membership rather than a static Me/Wife build configuration.
+- The existing `POST /tasks` and `POST /tasks/:id/update` contracts needed to create
+  or edit an unscheduled non-self task and to clear an existing non-self schedule.
+- Matching JVM, backend, and Android instrumentation coverage, including the merged
+  real-backend E2E runner.
 
 Out of scope:
 
-- Changing the task lifecycle, alarm plan, Todoist mutation semantics, or validation rules.
-- Redesigning Morning Review repair and blocker reschedule forms in this change. They currently share `CommitmentEditor`; they must retain their current layout unless an explicitly scoped follow-up migrates them.
-- Editing project or assignee through the existing Edit Task API. The current `UpdateTaskRequest.RootTaskPatch` does not carry either field. The edit screen may render them as read-only context in this change; making them editable requires a separate backend/API design and tests.
-- Persisting a new assignment representation for personal projects. The UI should present the accountable owner clearly, but any conflict between the current personal-project request contract and the product rule that every new task has an assignee must be resolved before changing backend behaviour.
+- Changing lifecycle, reconciliation, alarm delivery, or Todoist mutation authority.
+- Redesigning Morning Review repair or blocker reschedule. They continue to use the
+  existing `CommitmentEditor` layout and are protected by regression tests.
+- A visible time-zone selector. The app still supplies the device zone internally for
+  scheduled recurrence serialization, but the user has no time-zone decision here.
+- Child schedules, checklist reorder, grandchildren, Todoist webhooks, and avatar
+  image fetching.
 
 ## Main Form
 
-The screen has one scrollable content column and a sticky bottom action bar. Its visual sequence is:
+The screen has one scrollable content column and a sticky bottom action bar:
 
-1. Back affordance and `Add task` or `Edit task` title.
-2. Single-line task title input.
-3. **Schedule** — first data section, collapsed by default.
+1. Back affordance and `Add task` or `Edit task` heading.
+2. Prominent, borderless, single-line title editor with an understated divider.
+3. **Schedule**, first data section and collapsed by default.
 4. Project.
 5. Assignee.
 6. Repeat.
 7. Notes.
 8. Checklist.
-9. Sticky `Cancel` plus the existing calculated save action.
+9. Edit only: the existing managed Activity log, retained as an unchanged read-only
+   section after Checklist.
+10. Sticky Cancel plus the single Save action.
 
-The Schedule row displays one summary rather than a receipt plus duplicate fields. When complete it reads in the shape `Today · 10:00–10:30 · 30 min`. If incomplete, it gives a short action-oriented prompt such as `Set date, time & duration`; validation remains tied to the individual missing value.
+Project, Assignee, and Repeat are compact label/value rows with a semantic leading
+icon and a chevron when interactive. Notes and Checklist use disclosure rows. Thin
+dividers, not permanent outlined containers, separate rows. The normal Add/Edit
+screen has no attention banner.
 
-Project, Assignee, and Repeat are compact label/value rows with a leading semantic icon and a trailing chevron only when interactive. Notes and Checklist show a disclosure affordance and a useful summary (`Checklist · 2 items`). Thin dividers, not permanent outlined containers, separate rows.
+Schedule, Notes, and Checklist form one accordion: opening one collapses the other
+two. Opening or closing a section is presentation state only and never makes a draft
+dirty. Project, Assignee, and Repeat open a selection surface instead of becoming
+accordion sections.
 
-The redesign removes the top attention banner from normal Add/Edit forms. Health and morning-review attention belong to their established surfaces rather than ordinary task editing.
+The sticky primary label is `Save HH:mm–HH:mm` when a complete schedule exists and
+`Save task` when the selected non-self assignee has no schedule. A cross-midnight
+summary must be unambiguous, for example
+`Today · 23:30–Tomorrow 00:30 · 1 hr`.
 
-## Schedule Interaction
+## Schedule
 
-Tapping the collapsed Schedule row expands it in place below the summary. It contains Date, Start time, and Duration groups in the same visual language:
+The collapsed Schedule row displays one derived summary:
 
-- a concise section label;
-- adaptive quick-choice buttons arranged in a horizontally scrollable row when necessary;
-- a compact 48 dp icon-only button at the end for the precise custom picker;
-- a quiet derived `Ends at …` label after Duration.
+- complete: `Today · 10:00–10:30 · 30 min`;
+- incomplete for a self-assigned task: `Set date, time & duration`;
+- valid unscheduled non-self task: `No schedule`.
 
-The quick path must be usable with a single tap and at most one horizontal swipe. The custom icon has an accessible text alternative (`Custom date`, `Custom start time`, or `Custom duration`) even though it has no visible label.
+Tapping the row expands Date, Start time, and Duration groups in the same visual
+language. Each group has three adaptive quick choices reachable in one tap and at
+most one horizontal swipe, plus a compact trailing icon-only Custom control with a
+semantic label (`Custom date`, `Custom start time`, or `Custom duration`). Quick
+choices mutate only the local task draft, leave Schedule expanded, recompute the
+summary/end, clear the affected validation highlight, and invalidate a captured retry
+request.
 
-### Adaptive quick choices
+Suggestion calculation is pure and receives the current draft plus an injected clock;
+no composable reads the system clock directly.
 
-Suggestion calculation is pure and receives the current draft plus a supplied clock. It never reads the system clock inside a composable, which keeps the UI deterministic in tests.
+- **Date:** selected/current date, tomorrow, and the next useful work-day boundary,
+  deduplicated by date and user-facing label.
+- **Start time:** selected time and nearby likely five-minute slots; with no selected
+  time, round the injected current time up to a five-minute slot and offer nearby
+  future slots.
+- **Duration:** canonical nearby values that always include the selected duration;
+  `15 min`, `30 min`, and `1 hr` are the initial 30-minute choices.
 
-- **Date:** include the selected date or current default, then nearby useful dates such as tomorrow and the next work-week boundary; avoid duplicate labels/dates.
-- **Start time:** include the selected time and neighbouring sensible slots. With a selected 10:00, the primary candidates are 09:30, 10:00, and 10:30. With no selected time, start from the current time rounded up to the app's five-minute precision and offer nearby future slots.
-- **Duration:** choose from the supported canonical minute values, always including the current value and its closest useful alternatives. For a 30-minute selection, the initial candidates are 15 min, 30 min, and 1 hr.
+Selecting `No schedule` is available only for a non-self assignee. It clears the
+date/time/duration in the local draft and changes Repeat to `Does not repeat`; it
+does not call Todoist until Save. An unscheduled task cannot repeat. Changing from a
+self assignee to a non-self assignee retains an existing schedule. Changing back to
+self never invents one: Save expands Schedule and highlights the missing controls.
 
-Selecting a quick choice updates the draft immediately, closes no separate dialog, recomputes the Schedule summary and end time, clears only the affected validation error, and invalidates any pending create/update request as current code already does.
+### Precise dialogs
 
-### Precise custom dialogs
+The repository already uses `WheelPickerCompose`. The redesigned editor splits the
+combined date-time field into three centered `AlertDialog` wheel pickers:
 
-The repository already includes `com.github.commandiron:WheelPickerCompose` and wraps it in `WheelDateTimeField` and `WheelDurationField`. The redesign splits those combined interactions into precise, draft-based dialogs:
+- Custom date: date wheel seeded from the draft/current date.
+- Custom start time: time wheel in five-minute increments, seeded from the
+  draft/current time.
+- Custom duration: Hours/Minutes wheels, 0–6 hours and five-minute minute steps;
+  zero remains invalid.
 
-- **Custom date:** a date wheel dialog, seeded from the current schedule draft.
-- **Custom start time:** a `WheelTimePicker` dialog, seeded from the current time and retaining the existing five-minute precision.
-- **Custom duration:** the existing two-wheel Hours/Minutes model, with 0–6 hours and five-minute minute steps. Zero remains invalid.
-
-Each dialog holds a local pending selection. `Apply` writes that selection back to the task draft; `Cancel` and outside dismissal discard it. This means spinning a wheel never mutates the form until confirmation. The existing component can be refactored into reusable wheel-dialog primitives; it must not keep one combined DateTime dialog behind both the date and time controls.
+Each dialog owns a pending value. `Apply` writes to the form draft; Cancel and outside
+dismissal discard the pending value. Spinning a wheel therefore never changes the form
+until Apply.
 
 ## Project And Assignee
 
-### Add Task
+Project and Assignee have the same draft-only behavior in Add and Edit. A selection
+sheet dismisses immediately after a selection, but no Todoist request occurs until the
+single Save action. A failure keeps the entire draft and its retry request in the
+editor.
 
-Project opens a bottom sheet with an optional search field and a plain selectable project list. A tap selects immediately, persists the existing preferred-project setting, dismisses the sheet, and refreshes the Assignee state. The selected row has a single trailing check rather than a radio button or action footer.
+Project opens a bottom sheet with optional search and a selectable project list. A
+selection persists the preferred project and recalculates Assignee:
 
-Assignee uses the same immediate-selection sheet pattern, with an avatar/initial, primary name, a small identity hint, and one trailing selection check. It must clearly communicate the owner of the task instead of rendering `Not required` in the normal form. When the selected project does not allow a Todoist collaborator choice, the form presents the account owner as a non-interactive value rather than an empty requirement; the backing request semantics remain unchanged until the product-contract audit described in Scope is complete.
+- If the current assignee remains valid, retain it.
+- Otherwise select `Me` when the new project permits it; otherwise clear it and show
+  the Assignee requirement on Save.
 
-For assignable projects, changing project clears an assignee that is no longer valid and directs focus/validation to Assignee before saving. It must not silently submit an invalid selection.
+Assignee opens an immediate-selection bottom sheet. Its options are the current user
+and active Todoist collaborators for the selected shared project, with a primary name,
+small identity hint, and trailing selected check. The client must use fresh or cached,
+previously validated membership. If no such membership is available, disable the row,
+show retry, and block only a save that cannot validate the required selection.
 
-### Edit Task
+A personal/non-assignable project renders `Me` as a locked value, with a small
+Personal-project hint. Its Todoist request remains unassigned (`assigneeId = null`),
+because the current user is the implicit owner. A shared project displays a selectable
+assignee. The backend validates that a shared-project assignee is a current project
+member; it never trusts an arbitrary client-provided ID.
 
-In this rework, Project and Assignee rows show authoritative task context. They are read-only unless the implementation plan also introduces a reviewed API mutation for those fields. A read-only row has no chevron and never implies an unavailable action. This intentionally differs from the exploratory mockup's chevrons and avoids a deceptive UI.
+Tasks assigned to the current user require title, project, assignee, start, and
+positive duration. Tasks assigned to another collaborator require title, project, and
+assignee but may be unscheduled. Validation is a concise error at Schedule level:
+Save auto-expands Schedule and highlights the missing controls rather than repeating
+per-control messages.
 
-## Remaining Sections
+## Repeat, Notes, And Checklist
 
-### Repeat
+Repeat opens a compact bottom sheet with `Does not repeat`, `Daily`, `Weekdays`,
+`Weekly`, `Monthly`, and `Yearly`; the selected row has a trailing check and applies
+to the draft immediately. For an existing custom recurrence, choosing a supported
+preset replaces it in the draft without a confirmation. An unscheduled non-self task
+is fixed to `Does not repeat` until a schedule is set.
 
-Repeat opens a short selection sheet with `Does not repeat`, `Daily`, `Weekdays`, `Weekly`, `Monthly`, and `Yearly`. The selected row gets a trailing check. The choice applies on tap and returns to the form. There are no numbered labels or stacked full-width buttons. Existing custom recurrence copy remains visible when relevant and changing it still follows current behaviour.
+Notes is collapsed when blank. Its collapsed row shows a one-line ellipsized preview
+when present; expanding it reveals a quiet multi-line editor without a permanent heavy
+outline.
 
-### Notes
+Checklist is collapsed by default and shows progress, for example
+`Checklist · 2/5 done`. Expanded rows keep the existing checkbox, editable title,
+optional details, removal, child-mutation ordering, and 30-item maximum. Reorder and
+child schedules remain unsupported.
 
-Notes is collapsed when blank. Tapping it expands a quiet multiline editor with no heavy permanent outline; its content is part of the normal task draft and uses the existing validation/draft-exit behaviour.
+## State, Errors, And Accessibility
 
-### Checklist
-
-Checklist is collapsed by default and shows its item count. When expanded, it presents task-like rows: checkbox, title, optional reorder affordance, and overflow/delete action, followed by an inline `Add item` control. Existing checklist validation, child-mutation ordering, and max-item rules remain unchanged.
+- The title, schedule, project, assignee, repeat, notes, and checklist all contribute
+  to a domain draft fingerprint; accordion/sheet/dialog visibility does not.
+- A captured create/update request is invalidated whenever a domain field changes.
+  Retry reuses the unchanged request/action ID.
+- Project and Assignee data are local draft selections; a multi-field save is one
+  reconciled mutation, never a sequence of immediate mutations.
+- A stale, pending, or network failure leaves the editor open and preserves the full
+  draft. Pending uses the current reconciliation copy rather than pretending success.
+- Every icon-only control has a content description. Dialogs expose Apply and Cancel.
+  The sticky action bar stays reachable above IME and system navigation.
+- Back and Cancel use the current clean/dirty/in-flight discard policy.
 
 ## Architecture Boundaries
 
-Do not broaden `CommitmentEditor` until its use by Add, Edit, repair, and blocker reschedule paths has been deliberately separated. The recommended structure is:
+Do not broaden the current shared `CommitmentEditor`, because it is also used by
+Morning Review repair and blocker reschedule. The Add/Edit-only redesign introduces
+focused components while preserving that editor for those protected surfaces:
 
-- `TaskEditorScreenScaffold`: Add/Edit-only content arrangement, sticky actions, and expandable sections.
-- `ScheduleEditor`: pure state-facing summary, adaptive-choice groups, and custom-dialog coordination.
-- `ScheduleQuickChoices`: pure candidate calculator and formatters with JVM tests.
-- `ProjectSelectionSheet`, `AssigneeSelectionSheet`, and `RecurrenceSelectionSheet`: small, add-flow selection surfaces.
-- Existing wheel wrappers refactored into date, time, and duration dialog primitives.
+- `TaskEditorScreenScaffold`: Add/Edit layout, sticky actions, and section state.
+- `ScheduleEditor`: summary, quick-choice groups, validation focus, and dialog state.
+- `ScheduleQuickChoices`: pure candidate generation, formatting, and reducers.
+- `ProjectSelectionSheet`, `AssigneeSelectionSheet`, and `RecurrenceSelectionSheet`:
+  draft-selection surfaces.
+- Separate date, time, and duration wheel-dialog primitives.
 
-`AddTaskScreen` remains the owner of loaded projects, preferred-project persistence, assignee options, validation, and create retry state. `EditTaskScreen` remains the owner of its root/checklist draft and update retry state. Existing `DraftExitPolicy` fingerprints must include the same domain fields and must not treat disclosure/dialog visibility as a change.
+`AddTaskScreen` owns project loading/preferred-project persistence, the Add draft,
+validation, create retry, and returned authoritative snapshot. `EditTaskScreen` owns
+the existing root/checklist draft, project data, update retry, and returned authoritative
+snapshot. The existing `RootTaskPatch` already supports `projectId` and `assigneeId`;
+the edit flow must populate both rather than introducing another endpoint.
 
-## Errors, Accessibility, And State
-
-- Validation appears beside or directly below the affected collapsed/expanded row; submitting an incomplete form expands Schedule if start or duration is invalid.
-- Loading/failed project fetch behaviour remains visible and retryable; selection controls are disabled while the data needed for them is unavailable.
-- Every icon-only control has a semantic content description.
-- Dialogs use explicit `Apply` and `Cancel` controls and preserve the current draft until Apply.
-- The sticky action bar must remain reachable above system navigation and IME content.
-- Android Back and Cancel retain the existing clean/dirty/in-flight discard policy.
+The backend extends the existing `/projects` read model with synced collaborator
+membership. It extends, rather than replaces, the existing create/update mutation
+contracts so unscheduled non-self tasks and explicit schedule clearing remain
+representable. The Todoist Sync adapter remains the only source for project/member
+facts.
 
 ## Verification Expectations
 
 The implementation plan must add or migrate coverage in the same change:
 
-- JVM tests for date/time/duration candidate generation, deduplication, rounding, end-time formatting, and custom dialog draft/apply/cancel reducers.
-- Existing picker tests migrated from combined DateTime behaviour to split date/time behaviour.
-- Add Task instrumentation coverage for collapsed schedule summary, quick choice updates, custom-picker confirmation/cancellation, project selection, assignee requirement, recurrence selection, and dirty-exit behaviour.
-- Edit Task instrumentation coverage for read-only Project/Assignee context, schedule editing, repeat/notes/checklist expansion, save, and dirty exit.
-- Regression coverage for Morning Review repair and blocker reschedule so their current editor paths do not change accidentally.
-- The complete deterministic `scripts/e2e-fake-backend.sh` lane after UI changes, in addition to `:shared:testAndroidHostTest`, `:androidApp:testDebugUnitTest`, and `:androidApp:assembleDebug`.
+- Backend tests for collaborator/member sync, `/projects` projection, invalid
+  cross-project assignment rejection, scheduled/unscheduled create and update, and
+  Todoist `due`/`duration` clearing.
+- Shared DTO serialization tests for collaborator data and explicit nullable schedule
+  patches.
+- JVM tests for quick-choice generation/deduplication/rounding, cross-midnight summary,
+  draft reducers, self-vs-non-self validation, and dialog Apply/Cancel behavior.
+- Add/Edit instrumentation tests for the collapsed Schedule, quick choices, custom
+  picker confirmation/cancellation, draft-only Project/Assignee edits, optional
+  non-self schedule, recurrence, Notes/Checklist accordion behavior, save, retry, and
+  dirty exit.
+- Regression coverage proving Morning Review repair and blocker reschedule retain the
+  existing combined picker/editor layout.
+- `:shared:testAndroidHostTest`, `:androidApp:testDebugUnitTest`,
+  `:androidApp:assembleDebug`, and `scripts/e2e-fake-backend.sh` after UI changes.
+  Run `scripts/e2e-real-backend.sh` as the complementary harness; its known
+  `[partial-failure]` fake-only discrepancy must remain documented unless this feature
+  introduces a new real-backend failure.
 
 ## Design Self-Review
 
-- No placeholder decisions remain for this UI rework. The only intentionally deferred capability is editing project/assignee from Edit Task because current API models do not support it.
-- The form has one source of schedule truth: the Schedule draft. The collapsed summary, end time, and save label are derived displays.
-- The design preserves all strict-task enforcement and does not weaken assignment, deadline, or duration validation.
-- The implementation scope is limited to Add/Edit surfaces and shared leaf widgets, preventing accidental redesign of repair/reschedule screens.
+- Add and Edit have equal editing capability; no row advertises an unavailable action.
+- Schedule has one source of truth: the draft. The collapsed summary, end, and Save
+  label are derived values.
+- The design does not expose time zones or weaken self-assigned commitment rules.
+- Non-self unscheduled tasks are explicit Todoist-visible data, not a client-only
+  exception; the backend validates membership and schedule requirements.
+- Repair and blocker reschedule are intentionally protected from this visual redesign.

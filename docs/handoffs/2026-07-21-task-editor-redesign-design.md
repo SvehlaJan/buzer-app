@@ -1,5 +1,10 @@
 # Task Editor Redesign Design Session — 2026-07-21
 
+> Superseded by `docs/handoffs/2026-07-21-task-editor-redesign-planning.md`.
+> The later master cross-check established that `RootTaskPatch` and the existing update
+> route already support Project/Assignee edits; the current approved design and plan
+> therefore make both fields editable in Add and Edit.
+
 ## Task / Plan
 
 - Task: consolidate the approved Add/Edit task editor redesign and preserve the generated concepts for later revisions.
@@ -39,5 +44,6 @@
 
 ## Next Recommended Step
 
-1. User reviews `docs/superpowers/specs/2026-07-21-task-editor-redesign-design.md`, especially the Add-vs-Edit project/assignee boundary.
-2. After approval, create a detailed implementation plan that names the existing instrumentation tests to migrate and keeps repair/reschedule regressions protected.
+Execute `docs/superpowers/plans/2026-07-21-task-editor-redesign.md` in a dedicated
+worktree from master. The implementation keeps repair/reschedule protected while
+migrating Add and Edit to equal, draft-only Project/Assignee editing.
