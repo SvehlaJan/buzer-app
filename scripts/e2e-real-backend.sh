@@ -18,11 +18,31 @@ cleanup() {
 }
 trap cleanup EXIT
 
+curl_probe() {
+  local max_time="$1"
+  local endpoint="$2"
+  curl --silent --show-error --fail --connect-timeout 2 --max-time "${max_time}" \
+    "${endpoint}" >/dev/null
+}
+
+health_is_ready() {
+  curl_probe "$1" "${BACKEND_URL}/health"
+}
+
+e2e_backend_is_ready() {
+  curl_probe "$1" "${BACKEND_URL}/__calls"
+}
+
 wait_for_backend() {
   local deadline=$((SECONDS + 60))
+  local remaining
   while (( SECONDS < deadline )); do
-    if curl --silent --fail "${BACKEND_URL}/health" >/dev/null; then
-      return 0
+    remaining=$((deadline - SECONDS))
+    if health_is_ready "${remaining}"; then
+      remaining=$((deadline - SECONDS))
+      if (( remaining > 0 )) && e2e_backend_is_ready "${remaining}"; then
+        return 0
+      fi
     fi
     if [[ -n "${STARTED_PID}" ]] && ! kill -0 "${STARTED_PID}" >/dev/null 2>&1; then
       local exit_code=0
@@ -36,8 +56,13 @@ wait_for_backend() {
   return 1
 }
 
-if curl --silent --fail "${BACKEND_URL}/health" >/dev/null; then
-  echo "Using existing E2E backend at ${BACKEND_URL}"
+if health_is_ready 5; then
+  if e2e_backend_is_ready 5; then
+    echo "Using existing E2E backend at ${BACKEND_URL}"
+  else
+    echo "A healthy service is already listening at ${BACKEND_URL}, but it is not the E2E backend (/__calls probe failed). Refusing to run Android tests." >&2
+    exit 1
+  fi
 else
   echo "Starting E2E backend at ${BACKEND_URL}"
   (
