@@ -291,10 +291,12 @@ private fun existingChildMutations(
 
 private fun plainLanguageProblem(validationErrors: List<String>): String {
     val errors = validationErrors.toSet()
+    val missingDueDatetime = "missing_due_datetime" in errors || "due_datetime_required" in errors
+    val missingDuration = "missing_duration" in errors || "duration_required" in errors
     return when {
-        "missing_due_datetime" in errors && "missing_duration" in errors -> "No start time or duration set"
-        "missing_due_datetime" in errors -> "No start time set"
-        "missing_duration" in errors -> "No duration set"
+        missingDueDatetime && missingDuration -> "No start time or duration set"
+        missingDueDatetime -> "No start time set"
+        missingDuration -> "No duration set"
         validationErrors.isEmpty() -> "Commitment details need repair"
         else -> validationErrors.joinToString(", ") { it.replace('_', ' ') }
     }

@@ -110,6 +110,22 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
+    fun invalidTaskCardShowsPlainLanguageForCanonicalScheduleErrors() {
+        val state = buildMorningReviewReadyState(
+            invalidTasks = listOf(
+                invalidTask(
+                    id = "task-invalid",
+                    validationErrors = listOf("due_datetime_required", "duration_required")
+                )
+            ),
+            warning = null,
+            refreshing = false
+        )
+
+        assertEquals("No start time or duration set", state.cards.single().problemText)
+    }
+
+    @Test
     fun repairEditorUsesSharedEditModeWithResolvedProjectAndAssigneeLabels() {
         val state = buildMorningReviewRepairEditorState(
             task = invalidTask(

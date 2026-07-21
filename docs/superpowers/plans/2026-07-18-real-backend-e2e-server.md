@@ -49,7 +49,7 @@ Key facts the implementer must know (verified against the codebase, do not redis
 - Create: `backend/test/fakes/e2eTodoistAdapter.ts`
 - Test: `backend/test/fakes/e2eTodoistAdapter.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -177,12 +177,12 @@ describe("scenario presets", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
 Expected: FAIL — cannot resolve `./e2eTodoistAdapter.js`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `backend/test/fakes/e2eTodoistAdapter.ts`:
 
@@ -486,12 +486,12 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/fakes/e2eTodoistAdapter.test.ts`
 Expected: PASS (8 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/fakes/e2eTodoistAdapter.ts backend/test/fakes/e2eTodoistAdapter.test.ts
@@ -506,7 +506,7 @@ git commit -m "feat(e2e): add stateful E2E Todoist world adapter with scenario p
 - Create: `backend/test/fakes/e2eFixtures.ts`
 - Test: `backend/test/fakes/e2eFixtures.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -573,12 +573,12 @@ describe("e2eFixtureSeed", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
 Expected: FAIL — cannot resolve `./e2eFixtures.js`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `backend/test/fakes/e2eFixtures.ts`:
 
@@ -761,12 +761,12 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/fakes/e2eFixtures.test.ts`
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/fakes/e2eFixtures.ts backend/test/fakes/e2eFixtures.test.ts
@@ -781,7 +781,7 @@ git commit -m "feat(e2e): add fixture seed module deriving the 15 fake-backend f
 - Create: `backend/test/e2eServer.ts`
 - Test: `backend/test/e2eServer.test.ts`
 
-- [ ] **Step 1: Write the failing seeding-conformance test**
+- [x] **Step 1: Write the failing seeding-conformance test**
 
 `backend/test/e2eServer.test.ts`:
 
@@ -850,12 +850,12 @@ describe("seeding", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: FAIL — cannot resolve `./e2eServer.js`.
 
-- [ ] **Step 3: Write the implementation (core server, debug routes come in Task 5)**
+- [x] **Step 3: Write the implementation (core server, debug routes come in Task 5)**
 
 `backend/test/e2eServer.ts`:
 
@@ -983,12 +983,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: PASS (2 tests). If `task-deadline` is not `started`, the nudge ran before sync — nudges and pins must run after `syncOnce()`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/e2eServer.ts backend/test/e2eServer.test.ts
@@ -1008,7 +1008,7 @@ sync, effect confirmation). Every happy path must return `outcome: "completed"` 
 whole point of Phase 1. Failures here are world-semantics bugs; debug with the real
 services, do not weaken assertions to `202`.
 
-- [ ] **Step 1: Append the failing conformance tests**
+- [x] **Step 1: Append the failing conformance tests**
 
 ```typescript
 const device = { deviceId: "e2e-device" };
@@ -1156,7 +1156,7 @@ describe("happy-path conformance (every action must complete, not go pending)", 
 });
 ```
 
-- [ ] **Step 2: Run and fix until green**
+- [x] **Step 2: Run and fix until green**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: initially some failures are plausible (this task exists to find them). Debug
@@ -1167,12 +1167,12 @@ satisfy that action's `isEffectPresent` (`taskActionService.ts:342,401,418,438,4
 means the request payload violates `backend/src/http/routes.ts` schemas — fix the test
 payload against the zod schemas at `routes.ts:10-92`.
 
-- [ ] **Step 3: Run the full backend suite to confirm nothing regressed**
+- [x] **Step 3: Run the full backend suite to confirm nothing regressed**
 
 Run: `cd backend && npm test`
 Expected: PASS in full (the diff so far touches only new `test/` files).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/test/e2eServer.test.ts backend/test/fakes/e2eTodoistAdapter.ts
@@ -1187,7 +1187,7 @@ git commit -m "test(e2e): prove every mutation happy path completes against the 
 - Modify: `backend/test/e2eServer.ts` (fill in `registerDebugSurface`)
 - Modify: `backend/test/e2eServer.test.ts` (append a `describe` block)
 
-- [ ] **Step 1: Append the failing tests**
+- [x] **Step 1: Append the failing tests**
 
 ```typescript
 describe("debug surface parity", () => {
@@ -1273,12 +1273,12 @@ describe("debug surface parity", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify the new block fails**
+- [x] **Step 2: Run to verify the new block fails**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts`
 Expected: the `debug surface parity` tests FAIL (404 on `/__calls` etc.); earlier blocks stay green.
 
-- [ ] **Step 3: Implement `registerDebugSurface`**
+- [x] **Step 3: Implement `registerDebugSurface`**
 
 Replace the empty `registerDebugSurface` body in `backend/test/e2eServer.ts`:
 
@@ -1345,12 +1345,12 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
 }
 ```
 
-- [ ] **Step 4: Run the file, then the full suite**
+- [x] **Step 4: Run the file, then the full suite**
 
 Run: `cd backend && npx vitest run test/e2eServer.test.ts && npm test`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/test/e2eServer.ts backend/test/e2eServer.test.ts
@@ -1364,7 +1364,7 @@ git commit -m "feat(e2e): debug-endpoint parity and HTTP scenario control with c
 **Files:**
 - Modify: `backend/package.json` (scripts block)
 
-- [ ] **Step 1: Add the script**
+- [x] **Step 1: Add the script**
 
 In `backend/package.json`, extend `"scripts"`:
 
@@ -1374,7 +1374,7 @@ In `backend/package.json`, extend `"scripts"`:
     "migrate": "tsx src/db/migrations.ts"
 ```
 
-- [ ] **Step 2: Smoke-check on a real port**
+- [x] **Step 2: Smoke-check on a real port**
 
 ```bash
 cd backend && PORT=18455 npm run e2e-server &
@@ -1387,7 +1387,7 @@ kill %1
 
 Expected: `{"ok":true,...}` from `/health`, a JSON snapshot prefix containing `"task-start"` or `snapshotGeneration`, and `{"ok":true}` from `/__reset`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/package.json
@@ -1401,7 +1401,7 @@ git commit -m "feat(e2e): add e2e-server npm script"
 **Files:**
 - Create: `scripts/e2e-real-backend.sh` (mode 755)
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Structurally parallel to `scripts/e2e-fake-backend.sh` (which stays untouched); only the
 boot command and readiness probe differ:
@@ -1488,7 +1488,7 @@ GRADLE_ARGS+=(
 ./gradlew "${GRADLE_ARGS[@]}"
 ```
 
-- [ ] **Step 2: Make it executable and verify boot-only behavior**
+- [x] **Step 2: Make it executable and verify boot-only behavior**
 
 ```bash
 chmod +x scripts/e2e-real-backend.sh
@@ -1497,7 +1497,7 @@ bash -n scripts/e2e-real-backend.sh
 
 Expected: `bash -n` exits 0 (syntax check). Full runs happen in Task 9.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/e2e-real-backend.sh
@@ -1516,7 +1516,7 @@ The new tests live in their **own class** and self-skip when the backend has no
 `/__scenario` (the old fake), so `scripts/e2e-fake-backend.sh` and CI stay green in
 Phase 1 — a spec non-goal protects both.
 
-- [ ] **Step 1: Extend FakeBackendClient (additive only)**
+- [x] **Step 1: Extend FakeBackendClient (additive only)**
 
 Change `request`/`requestOnce` to support authorization, and add the two methods.
 The existing method bodies stay identical apart from the added parameter:
@@ -1556,7 +1556,7 @@ The existing method bodies stay identical apart from the added parameter:
     }
 ```
 
-- [ ] **Step 2: Write the scenario test class**
+- [x] **Step 2: Write the scenario test class**
 
 `RealBackendScenarioTest.kt` (same package as the blocker tests, so
 `DeadlineBlockerActivity` needs no import; `AlarmIntentFactory` comes from
@@ -1675,13 +1675,13 @@ class RealBackendScenarioTest {
 }
 ```
 
-- [ ] **Step 3: Compile the androidTest sources**
+- [x] **Step 3: Compile the androidTest sources**
 
 Run: `cd client && ./gradlew :androidApp:compileDebugAndroidTestKotlin`
 Expected: BUILD SUCCESSFUL. (If `createEmptyComposeRule` import differs, copy the exact
 import line from `BlockerActivityFakeBackendTest.kt:11`.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/RealBackendScenarioTest.kt
@@ -1695,22 +1695,22 @@ git commit -m "test(e2e): scenario-preset instrumentation tests with old-fake se
 **Files:**
 - Create: `docs/notes/2026-07-18-e2e-real-backend-validation.md` (triage record)
 
-- [ ] **Step 1: Run the full backend gate**
+- [x] **Step 1: Run the full backend gate**
 
 Run: `cd backend && npm test && npm run typecheck`
 Expected: PASS in full. `git diff --stat master -- backend/src backend/test/fakes/fakeTodoistAdapter.ts` must show **no changes** to `backend/src/` or `fakeTodoistAdapter.ts` (spec acceptance criterion).
 
-- [ ] **Step 2: Run the old fake-backend E2E suite as a control**
+- [x] **Step 2: Run the old fake-backend E2E suite as a control**
 
 Run: `scripts/e2e-fake-backend.sh`
 Expected: all pre-existing tests pass; the 2 new `RealBackendScenarioTest` tests report **skipped** (assumption failure). This proves Phase 1 breaks nothing existing.
 
-- [ ] **Step 3: Run the new real-backend E2E suite**
+- [x] **Step 3: Run the new real-backend E2E suite**
 
 Run: `scripts/e2e-real-backend.sh`
 Expected: the 25 existing tests plus the 2 preset tests run against the real backend.
 
-- [ ] **Step 4: Triage every failure into the spec's three buckets**
+- [x] **Step 4: Triage every failure into the spec's three buckets**
 
 For each failing test, record in `docs/notes/2026-07-18-e2e-real-backend-validation.md`:
 test name, observed behavior, bucket — (a) real bug in the new server/world → fix it
@@ -1723,14 +1723,14 @@ real backend; `reconciliationStatus` idle value is `confirmed`, not `none`) → 
 as evidence, do not "fix" the backend to match the fake. Re-run after each (a)/(b) fix
 until only (c) entries remain.
 
-- [ ] **Step 5: Commit the validation record**
+- [x] **Step 5: Commit the validation record**
 
 ```bash
 git add docs/notes/2026-07-18-e2e-real-backend-validation.md
 git commit -m "docs(e2e): record real-backend E2E validation triage"
 ```
 
-- [ ] **Step 6: Verify the spec's acceptance criteria one by one**
+- [x] **Step 6: Verify the spec's acceptance criteria one by one**
 
 Walk `docs/superpowers/specs/2026-07-18-real-backend-e2e-server-design.md` §Acceptance
 Criteria; each bullet must be demonstrably true (file exists / suite output / diff

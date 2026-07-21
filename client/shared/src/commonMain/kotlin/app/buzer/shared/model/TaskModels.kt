@@ -1,6 +1,7 @@
 package app.buzer.shared.model
 
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -156,6 +157,7 @@ data class UpdateTaskRequest(
     val deviceId: String,
     val expectedOccurrenceKey: String,
     val rootPatch: RootTaskPatch? = null,
+    @EncodeDefault
     val childMutations: List<ChecklistMutation> = emptyList()
 ) {
     init {
