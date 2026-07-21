@@ -30,7 +30,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.addtask.AddTaskFailurePresentation
 import app.buzer.android.ui.addtask.AddTaskFormResult
 import app.buzer.android.ui.addtask.AddTaskFormValidator
@@ -47,6 +46,7 @@ import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ChecklistDraft
+import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TasksSnapshotResponse
@@ -63,7 +63,7 @@ fun AddTaskScreen(
     onBack: () -> Unit,
     onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
     createTask: suspend (CreateTaskRequest) -> app.buzer.shared.model.MutationResponse = AddTaskDependencies.createTaskAction(),
-    assigneeOptions: List<AddTaskAssigneeOption> = AddTaskDependencies.assigneeOptions(),
+    assigneeOptions: List<ProjectCollaborator> = emptyList(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     initialSelectedProjectId: String? = null,
@@ -100,7 +100,7 @@ fun AddTaskScreen(
     var projectLoadDialogMessage by remember { mutableStateOf<String?>(null) }
     var selectedProject by remember { mutableStateOf<ProjectItem?>(null) }
     var projectMenuExpanded by remember { mutableStateOf(false) }
-    var selectedAssignee by remember { mutableStateOf<AddTaskAssigneeOption?>(null) }
+    var selectedAssignee by remember { mutableStateOf<ProjectCollaborator?>(null) }
     var deadline by remember { mutableStateOf(DateTimeDraftSelection.Empty) }
     var durationMinutes by remember { mutableStateOf(30) }
     var description by remember { mutableStateOf("") }
@@ -134,8 +134,9 @@ fun AddTaskScreen(
         projects = loaded
         val preferredProjectId = selectedProject?.id ?: persistedProjectId
         selectedProject = loaded.firstOrNull { it.id == preferredProjectId }
-        if (selectedProject?.canAssignTasks != true) {
-            selectedAssignee = null
+        selectedAssignee = selectedProject?.let { project ->
+            project.collaborators.firstOrNull { it.id == selectedAssignee?.id }
+                ?: project.collaborators.firstOrNull { it.isCurrentUser && !project.canAssignTasks }
         }
         selectedProject?.let { persistProjectId(it.id) }
     }
@@ -306,7 +307,7 @@ fun AddTaskScreen(
                     onProjectMenuExpandedChange = { projectMenuExpanded = it },
                     onProjectSelected = { project ->
                         selectedProject = project
-                        selectedAssignee = null
+                        selectedAssignee = project.collaborators.firstOrNull { it.isCurrentUser && !project.canAssignTasks }
                         pendingCreateRequest = null
                         persistProjectId(project.id)
                         projectMenuExpanded = false
@@ -319,7 +320,7 @@ fun AddTaskScreen(
             assigneeContent = {
                 AssigneeSelector(
                     selectedProject = selectedProject,
-                    assigneeOptions = assigneeOptions,
+                    assigneeOptions = selectedProject?.collaborators?.ifEmpty { assigneeOptions } ?: assigneeOptions,
                     selectedAssignee = selectedAssignee,
                     onAssigneeSelected = { option ->
                         selectedAssignee = option
@@ -448,23 +449,49 @@ fun ProjectSelector(
     }
 }
 
+internal data class PersonalProjectAssigneePresentation(
+    val displayName: String,
+    val hint: String
+)
+
+internal fun personalProjectAssigneePresentation(
+    selectedProject: ProjectItem?,
+    selectedAssignee: ProjectCollaborator?,
+    assigneeOptions: List<ProjectCollaborator>
+): PersonalProjectAssigneePresentation? {
+    if (selectedProject?.canAssignTasks != false) return null
+    val currentUser = selectedAssignee?.takeIf { it.isCurrentUser }
+        ?: selectedProject.collaborators.firstOrNull { it.isCurrentUser }
+        ?: assigneeOptions.firstOrNull { it.isCurrentUser }
+    return PersonalProjectAssigneePresentation(
+        displayName = currentUser?.displayName ?: "Me",
+        hint = "Personal project · assigned to you"
+    )
+}
+
 @Composable
 fun AssigneeSelector(
     selectedProject: ProjectItem?,
-    assigneeOptions: List<AddTaskAssigneeOption>,
-    selectedAssignee: AddTaskAssigneeOption?,
-    onAssigneeSelected: (AddTaskAssigneeOption) -> Unit,
+    assigneeOptions: List<ProjectCollaborator>,
+    selectedAssignee: ProjectCollaborator?,
+    onAssigneeSelected: (ProjectCollaborator) -> Unit,
     enabled: Boolean
 ) {
-    if (selectedProject?.canAssignTasks != true) {
-        Text("Not required")
+    personalProjectAssigneePresentation(selectedProject, selectedAssignee, assigneeOptions)?.let { presentation ->
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(presentation.displayName)
+            Text(presentation.hint)
+        }
+        return
+    }
+    if (selectedProject == null) {
         return
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         assigneeOptions.forEach { option ->
             val selected = selectedAssignee == option
-            val label = if (selected) "${option.label} selected" else option.label
+            val label = if (selected) "${option.displayName} selected" else option.displayName
             if (selected) {
                 Button(
                     onClick = { onAssigneeSelected(option) },

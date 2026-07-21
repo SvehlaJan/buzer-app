@@ -218,8 +218,8 @@ internal fun updateRequest(
             expectedTaskRevision = task.taskRevision,
             title = title.trim(),
             description = NullablePatch.Value(description.trim().takeIf { it.isNotEmpty() }),
-            dueDatetime = selectedStart.toIsoInstantString(ZoneId.systemDefault()),
-            durationMinutes = durationMinutes,
+            dueDatetime = NullablePatch.Value(selectedStart.toIsoInstantString(ZoneId.systemDefault())),
+            durationMinutes = NullablePatch.Value(durationMinutes),
             recurrencePreset = recurrenceChange,
             timeZone = ZoneId.systemDefault().id
         ),

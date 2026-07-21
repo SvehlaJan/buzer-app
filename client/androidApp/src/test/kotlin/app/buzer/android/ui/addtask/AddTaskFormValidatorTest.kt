@@ -1,6 +1,7 @@
 package app.buzer.android.ui.addtask
 
 import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
 import java.time.LocalDate
 import java.time.ZoneId
@@ -9,7 +10,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AddTaskFormValidatorTest {
-    private val me = AddTaskAssigneeOption(label = "Me", id = "user-me")
+    private val me = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true)
+    private val wife = ProjectCollaborator(id = "user-wife", displayName = "Wife", isCurrentUser = false)
     private val deadline = DateTimeSelection(LocalDate.of(2026, 6, 2), 18, 30)
     private val zone = ZoneId.of("Europe/Warsaw")
     private val assignableProject = ProjectItem(
@@ -17,14 +19,18 @@ class AddTaskFormValidatorTest {
         name = "Family",
         canAssignTasks = true,
         shared = true,
-        isInboxProject = false
+        isInboxProject = false,
+        collaborators = listOf(me, wife),
+        collaboratorsReady = true
     )
     private val personalProject = ProjectItem(
         id = "project-personal",
         name = "Personal",
         canAssignTasks = false,
         shared = false,
-        isInboxProject = false
+        isInboxProject = false,
+        collaborators = listOf(me),
+        collaboratorsReady = true
     )
 
     @Test
@@ -51,7 +57,7 @@ class AddTaskFormValidatorTest {
         val result = AddTaskFormValidator.validate(
             title = " Personal task ",
             selectedProject = personalProject,
-            selectedAssignee = null,
+            selectedAssignee = me,
             deadline = deadline,
             durationMinutes = 30,
             zoneId = zone
@@ -129,7 +135,7 @@ class AddTaskFormValidatorTest {
         val result = AddTaskFormValidator.validate(
             title = "Buy milk",
             selectedProject = assignableProject,
-            selectedAssignee = AddTaskAssigneeOption("Me", ""),
+            selectedAssignee = ProjectCollaborator("", "Me", isCurrentUser = true),
             deadline = deadline,
             durationMinutes = 45,
             zoneId = zone
@@ -147,6 +153,59 @@ class AddTaskFormValidatorTest {
 
         assertEquals(
             AddTaskFormResult.Invalid("Start time is required", AddTaskInvalidField.Start),
+            result
+        )
+    }
+
+    @Test
+    fun allowsUnscheduledNonSelfTask() {
+        val result = AddTaskFormValidator.validate(
+            title = "Ask about booking",
+            selectedProject = assignableProject,
+            selectedAssignee = wife,
+            deadline = null,
+            durationMinutes = null,
+            zoneId = zone,
+            recurrencePreset = app.buzer.shared.model.RecurrencePreset.weekly
+        )
+
+        assertTrue(result is AddTaskFormResult.Valid)
+        assertEquals("user-wife", result.request.assigneeId)
+        assertEquals(null, result.request.dueDatetime)
+        assertEquals(null, result.request.durationMinutes)
+        assertEquals(app.buzer.shared.model.RecurrencePreset.never, result.request.recurrencePreset)
+    }
+
+    @Test
+    fun rejectsPartialScheduleForNonSelfTask() {
+        val result = AddTaskFormValidator.validate(
+            title = "Ask about booking",
+            selectedProject = assignableProject,
+            selectedAssignee = wife,
+            deadline = deadline,
+            durationMinutes = null,
+            zoneId = zone
+        )
+
+        assertEquals(
+            AddTaskFormResult.Invalid("Duration is required", AddTaskInvalidField.Duration),
+            result
+        )
+    }
+
+    @Test
+    fun rejectsNonPositiveDurationForCurrentUser() {
+        val result = AddTaskFormValidator.validate(
+            title = "Buy milk",
+            selectedProject = assignableProject,
+            selectedAssignee = me,
+            deadline = deadline,
+            durationMinutes = 0,
+            zoneId = zone
+        )
+
+        assertEquals(
+            AddTaskFormResult.Invalid("Duration must be greater than zero", AddTaskInvalidField.Duration),
             result
         )
     }

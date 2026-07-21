@@ -88,24 +88,17 @@ class AddTaskFakeBackendTest {
     }
 
     @Test
-    fun addTask_personalProjectOmitsAssignee() {
+    fun addTask_personalProjectShowsLockedMe() {
         resetTestState()
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             openAddTaskFromHome()
             selectProject("Test Personal (personal)")
-            composeRule.onAllNodesWithText("Me").assertCountEquals(0)
-            enterTitle("Personal task")
-            selectDefaultDeadline()
-            clickSaveBlockRange()
-
-            waitForRecordedCall("/tasks")
-            fakeBackend.assertRecorded(
-                "/tasks",
-                "\"actionId\":",
-                "\"deviceId\":"
-            )
+            composeRule.onNodeWithText("Me").assertIsDisplayed()
+            composeRule.onNodeWithText("Personal project", substring = true)
+                .performScrollTo()
+                .assertIsDisplayed()
         } finally {
             scenario.close()
         }

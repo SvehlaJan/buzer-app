@@ -34,6 +34,24 @@ class BuzerApiClientJsonTest {
     }
 
     @Test
+    fun createTaskRequestEncodesExplicitNullSchedule() {
+        val body = buzerApiJson.encodeToString(
+            CreateTaskRequest(
+                title = "Unscheduled shared task",
+                projectId = "project-family",
+                assigneeId = "user-wife",
+                dueDatetime = null,
+                durationMinutes = null,
+                actionId = "action-create-unscheduled",
+                deviceId = "device-1"
+            )
+        )
+
+        assertContains(body, "\"dueDatetime\":null")
+        assertContains(body, "\"durationMinutes\":null")
+    }
+
+    @Test
     fun taskRequestsEncodeDescriptionWhenPresent() {
         val createBody = buzerApiJson.encodeToString(
             CreateTaskRequest(
@@ -75,8 +93,8 @@ class BuzerApiClientJsonTest {
                     description = NullablePatch.Value("Updated details"),
                     projectId = "project-family",
                     assigneeId = NullablePatch.Value("user-me"),
-                    dueDatetime = "2026-06-13T13:00:00Z",
-                    durationMinutes = 45
+                    dueDatetime = NullablePatch.Value("2026-06-13T13:00:00Z"),
+                    durationMinutes = NullablePatch.Value(45)
                 )
             )
         )
@@ -87,6 +105,35 @@ class BuzerApiClientJsonTest {
         assertContains(body, """"assigneeId":"user-me"""")
         assertContains(body, """"dueDatetime":"2026-06-13T13:00:00Z"""")
         assertContains(body, """"durationMinutes":45""")
+    }
+
+    @Test
+    fun rootTaskPatchDistinguishesScheduleClearFromAbsence() {
+        val clearBody = buzerApiJson.encodeToString(
+            UpdateTaskRequest(
+                actionId = "action-clear-schedule",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1",
+                rootPatch = RootTaskPatch(
+                    expectedTaskRevision = "r:3",
+                    dueDatetime = NullablePatch.Value(null),
+                    durationMinutes = NullablePatch.Value(null)
+                )
+            )
+        )
+        val unchangedBody = buzerApiJson.encodeToString(
+            UpdateTaskRequest(
+                actionId = "action-leave-schedule",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1",
+                rootPatch = RootTaskPatch(expectedTaskRevision = "r:3")
+            )
+        )
+
+        assertContains(clearBody, "\"dueDatetime\":null")
+        assertContains(clearBody, "\"durationMinutes\":null")
+        assertFalse(unchangedBody.contains("dueDatetime"))
+        assertFalse(unchangedBody.contains("durationMinutes"))
     }
 
     @Test
@@ -202,7 +249,7 @@ class BuzerApiClientJsonTest {
     }
 
     @Test
-    fun projectsResponseDecodesProjectCapabilities() {
+    fun projectsResponseDecodesProjectCapabilitiesAndCollaborators() {
         val response = buzerApiJson.decodeFromString<ProjectsResponse>(
             """
             {
@@ -212,7 +259,22 @@ class BuzerApiClientJsonTest {
                   "name": "Family",
                   "canAssignTasks": true,
                   "shared": true,
-                  "isInboxProject": false
+                  "isInboxProject": false,
+                  "collaboratorsReady": true,
+                  "collaborators": [
+                    {
+                      "id": "user-me",
+                      "displayName": "Me",
+                      "email": null,
+                      "isCurrentUser": true
+                    },
+                    {
+                      "id": "user-wife",
+                      "displayName": "Wife",
+                      "email": "wife@example.test",
+                      "isCurrentUser": false
+                    }
+                  ]
                 }
               ]
             }
@@ -221,5 +283,8 @@ class BuzerApiClientJsonTest {
 
         assertEquals("project-family", response.projects.single().id)
         assertEquals(true, response.projects.single().canAssignTasks)
+        assertEquals(true, response.projects.single().collaboratorsReady)
+        assertEquals("Wife", response.projects.single().collaborators[1].displayName)
+        assertEquals("wife@example.test", response.projects.single().collaborators[1].email)
     }
 }

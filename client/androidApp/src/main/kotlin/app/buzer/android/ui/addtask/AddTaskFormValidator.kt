@@ -1,16 +1,12 @@
 package app.buzer.android.ui.addtask
 
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ChecklistDraft
+import app.buzer.shared.model.CreateTaskRequest
+import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrencePreset
 import java.time.ZoneId
-
-data class AddTaskAssigneeOption(
-    val label: String,
-    val id: String
-)
 
 sealed interface AddTaskFormResult {
     data class Valid(val request: CreateTaskRequest) : AddTaskFormResult
@@ -32,9 +28,9 @@ object AddTaskFormValidator {
     fun validate(
         title: String,
         selectedProject: ProjectItem?,
-        selectedAssignee: AddTaskAssigneeOption?,
+        selectedAssignee: ProjectCollaborator?,
         deadline: DateTimeSelection?,
-        durationMinutes: Int,
+        durationMinutes: Int?,
         zoneId: ZoneId = ZoneId.systemDefault(),
         description: String = "",
         actionId: String = "test-action-id",
@@ -50,36 +46,45 @@ object AddTaskFormValidator {
         if (selectedProject == null) {
             return AddTaskFormResult.Invalid("Project is required", AddTaskInvalidField.Project)
         }
-        if (selectedProject.canAssignTasks) {
-            if (selectedAssignee == null) {
-                return AddTaskFormResult.Invalid(
-                    "Assignee is required for this project",
-                    AddTaskInvalidField.Assignee
-                )
-            }
-            if (selectedAssignee.id.isBlank()) {
-                return AddTaskFormResult.Invalid(
-                    "${selectedAssignee.label} assignee ID is not configured",
-                    AddTaskInvalidField.Assignee
-                )
-            }
+        if (selectedAssignee == null) {
+            return AddTaskFormResult.Invalid(
+                "Assignee is required for this project",
+                AddTaskInvalidField.Assignee
+            )
         }
-        if (deadline == null) {
-            return AddTaskFormResult.Invalid("Start time is required", AddTaskInvalidField.Start)
+        if (selectedAssignee.id.isBlank()) {
+            return AddTaskFormResult.Invalid(
+                "${selectedAssignee.displayName} assignee ID is not configured",
+                AddTaskInvalidField.Assignee
+            )
         }
+
+        val scheduleRequired = selectedAssignee.isCurrentUser
+        val scheduleComplete = deadline != null && (durationMinutes ?: 0) > 0
+        val scheduleEmpty = deadline == null && durationMinutes == null
+        if (!scheduleComplete && !scheduleEmpty) {
+            return invalidScheduleResult(deadline, durationMinutes)
+        }
+        if (scheduleRequired && !scheduleComplete) {
+            return invalidScheduleResult(deadline, durationMinutes)
+        }
+
+        val normalizedRecurrencePreset = if (scheduleEmpty) RecurrencePreset.never else recurrencePreset
 
         return AddTaskFormResult.Valid(
             CreateTaskRequest(
                 title = trimmedTitle,
                 description = description.normalizedOptionalText(),
                 projectId = selectedProject.id,
-                assigneeId = selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks },
-                dueDatetime = deadline.toIsoInstantString(zoneId),
+                assigneeId = selectedAssignee.id.takeIf { selectedProject.canAssignTasks },
+                dueDatetime = deadline?.toIsoInstantString(zoneId),
                 durationMinutes = durationMinutes,
                 actionId = actionId,
                 deviceId = deviceId,
-                recurrencePreset = recurrencePreset,
-                timeZone = timeZone,
+                recurrencePreset = normalizedRecurrencePreset,
+                timeZone = timeZone?.takeIf {
+                    scheduleComplete && normalizedRecurrencePreset != RecurrencePreset.never
+                },
                 checklistDrafts = checklistDrafts
             )
         )
@@ -87,4 +92,13 @@ object AddTaskFormValidator {
 
     private fun String.normalizedOptionalText(): String? =
         trim().takeIf { it.isNotEmpty() }
+
+    private fun invalidScheduleResult(
+        deadline: DateTimeSelection?,
+        durationMinutes: Int?
+    ): AddTaskFormResult.Invalid = when {
+        deadline == null -> AddTaskFormResult.Invalid("Start time is required", AddTaskInvalidField.Start)
+        durationMinutes == null -> AddTaskFormResult.Invalid("Duration is required", AddTaskInvalidField.Duration)
+        else -> AddTaskFormResult.Invalid("Duration must be greater than zero", AddTaskInvalidField.Duration)
+    }
 }

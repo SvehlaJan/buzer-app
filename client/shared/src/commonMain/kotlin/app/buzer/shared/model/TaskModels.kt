@@ -4,6 +4,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.descriptors.element
@@ -118,12 +119,22 @@ data class TasksSnapshotResponse(
 )
 
 @Serializable
+data class ProjectCollaborator(
+    val id: String,
+    val displayName: String,
+    val email: String? = null,
+    val isCurrentUser: Boolean
+)
+
+@Serializable
 data class ProjectItem(
     val id: String,
     val name: String,
     val canAssignTasks: Boolean,
     val shared: Boolean,
-    val isInboxProject: Boolean
+    val isInboxProject: Boolean,
+    val collaborators: List<ProjectCollaborator> = emptyList(),
+    val collaboratorsReady: Boolean = false
 )
 
 @Serializable
@@ -131,14 +142,14 @@ data class ProjectsResponse(
     val projects: List<ProjectItem>
 )
 
-@Serializable
+@Serializable(with = CreateTaskRequestSerializer::class)
 data class CreateTaskRequest(
     val title: String,
     val description: String? = null,
     val projectId: String,
     val assigneeId: String? = null,
-    val dueDatetime: String,
-    val durationMinutes: Int,
+    val dueDatetime: String? = null,
+    val durationMinutes: Int? = null,
     val actionId: String,
     val deviceId: String,
     val recurrencePreset: RecurrencePreset = RecurrencePreset.never,
@@ -149,6 +160,78 @@ data class CreateTaskRequest(
         requireNonBlank("actionId", actionId)
         requireNonBlank("deviceId", deviceId)
     }
+}
+
+object CreateTaskRequestSerializer : KSerializer<CreateTaskRequest> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("CreateTaskRequest") {
+        element<String>("title")
+        element<String?>("description", isOptional = true)
+        element<String>("projectId")
+        element<String?>("assigneeId", isOptional = true)
+        element<String?>("dueDatetime")
+        element<Int?>("durationMinutes")
+        element<String>("actionId")
+        element<String>("deviceId")
+        element<String>("recurrencePreset", isOptional = true)
+        element<String?>("timeZone", isOptional = true)
+        element("checklistDrafts", ListSerializer(ChecklistDraft.serializer()).descriptor, isOptional = true)
+    }
+
+    override fun serialize(encoder: Encoder, value: CreateTaskRequest) {
+        val jsonEncoder = encoder as? JsonEncoder
+            ?: throw SerializationException("CreateTaskRequestSerializer supports JSON only")
+        jsonEncoder.encodeJsonElement(buildJsonObject {
+            put("title", value.title)
+            value.description?.let { put("description", it) }
+            put("projectId", value.projectId)
+            value.assigneeId?.let { put("assigneeId", it) }
+            put("dueDatetime", value.dueDatetime?.let(::JsonPrimitive) ?: JsonNull)
+            put("durationMinutes", value.durationMinutes?.let(::JsonPrimitive) ?: JsonNull)
+            put("actionId", value.actionId)
+            put("deviceId", value.deviceId)
+            if (value.recurrencePreset != RecurrencePreset.never) {
+                put("recurrencePreset", value.recurrencePreset.name)
+            }
+            value.timeZone?.let { put("timeZone", it) }
+            if (value.checklistDrafts.isNotEmpty()) {
+                put(
+                    "checklistDrafts",
+                    jsonEncoder.json.encodeToJsonElement(
+                        ListSerializer(ChecklistDraft.serializer()),
+                        value.checklistDrafts
+                    )
+                )
+            }
+        })
+    }
+
+    override fun deserialize(decoder: Decoder): CreateTaskRequest {
+        val jsonDecoder = decoder as? JsonDecoder
+            ?: throw SerializationException("CreateTaskRequestSerializer supports JSON only")
+        val element = jsonDecoder.decodeJsonElement().jsonObject
+        return CreateTaskRequest(
+            title = requiredString(element, "title"),
+            description = element["description"]?.jsonPrimitive?.contentOrNull,
+            projectId = requiredString(element, "projectId"),
+            assigneeId = element["assigneeId"]?.jsonPrimitive?.contentOrNull,
+            dueDatetime = element["dueDatetime"]?.jsonPrimitive?.contentOrNull,
+            durationMinutes = element["durationMinutes"]?.let {
+                if (it is JsonNull) null else it.jsonPrimitive.int
+            },
+            actionId = requiredString(element, "actionId"),
+            deviceId = requiredString(element, "deviceId"),
+            recurrencePreset = element["recurrencePreset"]?.jsonPrimitive?.contentOrNull
+                ?.let(RecurrencePreset::valueOf) ?: RecurrencePreset.never,
+            timeZone = element["timeZone"]?.jsonPrimitive?.contentOrNull,
+            checklistDrafts = element["checklistDrafts"]?.let {
+                jsonDecoder.json.decodeFromJsonElement(ListSerializer(ChecklistDraft.serializer()), it)
+            } ?: emptyList()
+        )
+    }
+
+    private fun requiredString(element: JsonObject, key: String): String =
+        element[key]?.jsonPrimitive?.contentOrNull
+            ?: throw SerializationException("Missing $key")
 }
 
 @Serializable
@@ -190,8 +273,8 @@ data class RootTaskPatch(
     val description: NullablePatch<String> = NullablePatch.Absent,
     val projectId: String? = null,
     val assigneeId: NullablePatch<String> = NullablePatch.Absent,
-    val dueDatetime: String? = null,
-    val durationMinutes: Int? = null,
+    val dueDatetime: NullablePatch<String> = NullablePatch.Absent,
+    val durationMinutes: NullablePatch<Int> = NullablePatch.Absent,
     val recurrencePreset: RecurrencePreset? = null,
     val timeZone: String? = null
 ) {
@@ -219,11 +302,11 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
         jsonEncoder.encodeJsonElement(buildJsonObject {
             put("expectedTaskRevision", value.expectedTaskRevision)
             value.title?.let { put("title", it) }
-            value.description.putNullablePatch("description", this)
+            value.description.putNullableStringPatch("description", this)
             value.projectId?.let { put("projectId", it) }
-            value.assigneeId.putNullablePatch("assigneeId", this)
-            value.dueDatetime?.let { put("dueDatetime", it) }
-            value.durationMinutes?.let { put("durationMinutes", it) }
+            value.assigneeId.putNullableStringPatch("assigneeId", this)
+            value.dueDatetime.putNullableStringPatch("dueDatetime", this)
+            value.durationMinutes.putNullableIntPatch("durationMinutes", this)
             value.recurrencePreset?.let { put("recurrencePreset", it.name) }
             value.timeZone?.let { put("timeZone", it) }
         })
@@ -236,11 +319,11 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
         return RootTaskPatch(
             expectedTaskRevision = requiredString(value, "expectedTaskRevision"),
             title = value["title"]?.jsonPrimitive?.contentOrNull,
-            description = value.nullablePatch("description"),
+            description = value.nullableStringPatch("description"),
             projectId = value["projectId"]?.jsonPrimitive?.contentOrNull,
-            assigneeId = value.nullablePatch("assigneeId"),
-            dueDatetime = value["dueDatetime"]?.jsonPrimitive?.contentOrNull,
-            durationMinutes = value["durationMinutes"]?.jsonPrimitive?.int,
+            assigneeId = value.nullableStringPatch("assigneeId"),
+            dueDatetime = value.nullableStringPatch("dueDatetime"),
+            durationMinutes = value.nullableIntPatch("durationMinutes"),
             recurrencePreset = value["recurrencePreset"]?.jsonPrimitive?.contentOrNull?.let(RecurrencePreset::valueOf),
             timeZone = value["timeZone"]?.jsonPrimitive?.contentOrNull
         )
@@ -249,10 +332,25 @@ object RootTaskPatchSerializer : KSerializer<RootTaskPatch> {
     private fun requiredString(value: JsonObject, key: String): String =
         value[key]?.jsonPrimitive?.contentOrNull ?: throw SerializationException("Missing $key")
 
-    private fun JsonObject.nullablePatch(key: String): NullablePatch<String> =
+    private fun JsonObject.nullableStringPatch(key: String): NullablePatch<String> =
         if (containsKey(key)) NullablePatch.Value(this[key]?.jsonPrimitive?.contentOrNull) else NullablePatch.Absent
 
-    private fun NullablePatch<String>.putNullablePatch(key: String, target: kotlinx.serialization.json.JsonObjectBuilder) {
+    private fun JsonObject.nullableIntPatch(key: String): NullablePatch<Int> =
+        if (!containsKey(key)) {
+            NullablePatch.Absent
+        } else {
+            val element = getValue(key)
+            NullablePatch.Value(if (element is JsonNull) null else element.jsonPrimitive.int)
+        }
+
+    private fun NullablePatch<String>.putNullableStringPatch(key: String, target: kotlinx.serialization.json.JsonObjectBuilder) {
+        when (this) {
+            NullablePatch.Absent -> Unit
+            is NullablePatch.Value -> target.put(key, value?.let(::JsonPrimitive) ?: JsonNull)
+        }
+    }
+
+    private fun NullablePatch<Int>.putNullableIntPatch(key: String, target: kotlinx.serialization.json.JsonObjectBuilder) {
         when (this) {
             NullablePatch.Absent -> Unit
             is NullablePatch.Value -> target.put(key, value?.let(::JsonPrimitive) ?: JsonNull)

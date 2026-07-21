@@ -1,12 +1,13 @@
 package app.buzer.android.ui.blockers
 
-import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.screens.descriptionAwareRescheduleRequest
 import app.buzer.android.ui.screens.rescheduleRequestFromEditorStart
 import app.buzer.android.ui.screens.updateTaskRequestFromEditorStart
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.ProjectCollaborator
+import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.RescheduleTaskRequest
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -106,7 +107,7 @@ class BlockerActionStateTest {
                 shared = true,
                 isInboxProject = false
             ),
-            selectedAssignee = AddTaskAssigneeOption(label = "Me", id = "user-me"),
+            selectedAssignee = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true),
             start = DateTimeSelection(
                 date = LocalDate.of(2026, 7, 10),
                 hour = 8,
@@ -123,7 +124,7 @@ class BlockerActionStateTest {
         assertEquals("opaque-root-revision", patch.expectedTaskRevision)
         assertEquals("Edited title", patch.title)
         assertEquals("project-family", patch.projectId)
-        assertEquals("2026-07-10T08:05:00Z", patch.dueDatetime)
-        assertEquals(45, patch.durationMinutes)
+        assertEquals(NullablePatch.Value("2026-07-10T08:05:00Z"), patch.dueDatetime)
+        assertEquals(NullablePatch.Value(45), patch.durationMinutes)
     }
 }

@@ -1,7 +1,6 @@
 package app.buzer.android.ui
 
 import app.buzer.android.ui.screens.MorningReviewContentState
-import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.screens.buildMorningReviewReadyState
@@ -17,6 +16,7 @@ import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.ui.commitment.ChecklistEditorDraft
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.ui.commitment.CommitmentEditorMode
 import java.time.LocalDate
@@ -145,7 +145,7 @@ class MorningReviewScreenStateTest {
                     isInboxProject = false
                 )
             ),
-            assigneeOptions = listOf(AddTaskAssigneeOption(label = "Me", id = "user-1"))
+            assigneeOptions = listOf(ProjectCollaborator(id = "user-1", displayName = "Me", isCurrentUser = true))
         )
 
         assertEquals(CommitmentEditorMode.Repair, state.mode)
@@ -184,7 +184,7 @@ class MorningReviewScreenStateTest {
                 shared = true,
                 isInboxProject = false
             ),
-            selectedAssignee = AddTaskAssigneeOption(label = "Me", id = "user-1"),
+            selectedAssignee = ProjectCollaborator(id = "user-1", displayName = "Me", isCurrentUser = true),
             start = DateTimeDraftSelection(date = LocalDate.of(2026, 7, 13), hour = null, minute = null)
         )
 
@@ -224,7 +224,7 @@ class MorningReviewScreenStateTest {
             title = task.title,
             description = "",
             selectedProject = ProjectItem("project-1", "Family", true, true, false),
-            selectedAssignee = AddTaskAssigneeOption("Me", "user-1"),
+            selectedAssignee = ProjectCollaborator("user-1", "Me", isCurrentUser = true),
             start = DateTimeSelection(LocalDate.of(2026, 7, 13), 10, 0),
             durationMinutes = 30,
             existingChecklistItems = task.checklistItems,

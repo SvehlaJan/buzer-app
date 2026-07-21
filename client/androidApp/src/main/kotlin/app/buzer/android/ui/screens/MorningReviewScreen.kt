@@ -35,7 +35,6 @@ import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.components.commitmentSaveLabel
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.android.ui.status.BlockingErrorState
 import app.buzer.android.ui.status.BlockingLoadingState
 import app.buzer.android.ui.status.ErrorAlertDialog
@@ -45,6 +44,7 @@ import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TaskSnapshotItem
@@ -172,7 +172,7 @@ fun buildMorningReviewRepairEditorState(
     start: DateTimeDraftSelection,
     durationMinutes: Int,
     projects: List<ProjectItem> = emptyList(),
-    assigneeOptions: List<AddTaskAssigneeOption> = emptyList()
+    assigneeOptions: List<ProjectCollaborator> = emptyList()
 ): MorningReviewRepairEditorState =
     MorningReviewRepairEditorState(
         mode = CommitmentEditorMode.Repair,
@@ -180,7 +180,10 @@ fun buildMorningReviewRepairEditorState(
         title = task.title,
         description = task.description.orEmpty(),
         projectLabel = projects.firstOrNull { it.id == task.projectId }?.name ?: task.projectId,
-        assigneeLabel = assigneeOptions.firstOrNull { it.id == task.assigneeId }?.label ?: task.assigneeId,
+        assigneeLabel = (
+            projects.firstOrNull { it.id == task.projectId }?.collaborators?.ifEmpty { assigneeOptions }
+                ?: assigneeOptions
+            ).firstOrNull { it.id == task.assigneeId }?.displayName ?: task.assigneeId,
         start = start,
         durationMinutes = durationMinutes,
         submitLabel = commitmentSaveLabel(start.toSelection(), durationMinutes)
@@ -189,7 +192,7 @@ fun buildMorningReviewRepairEditorState(
 fun buildMorningReviewRepairValidation(
     title: String,
     selectedProject: ProjectItem?,
-    selectedAssignee: AddTaskAssigneeOption?,
+    selectedAssignee: ProjectCollaborator?,
     start: DateTimeDraftSelection
 ): MorningReviewRepairValidation {
     val invalidField = when {
@@ -225,7 +228,7 @@ internal fun updateTaskRequestFromEditorStart(
     title: String,
     description: String,
     selectedProject: ProjectItem,
-    selectedAssignee: AddTaskAssigneeOption?,
+    selectedAssignee: ProjectCollaborator?,
     start: DateTimeSelection,
     durationMinutes: Int,
     recurrencePreset: RecurrencePreset? = null,
@@ -251,8 +254,8 @@ internal fun updateTaskRequestFromEditorStart(
             assigneeId = NullablePatch.Value(
                 selectedAssignee?.id?.takeIf { selectedProject.canAssignTasks }
             ),
-            dueDatetime = dueDatetime,
-            durationMinutes = durationMinutes,
+            dueDatetime = NullablePatch.Value(dueDatetime),
+            durationMinutes = NullablePatch.Value(durationMinutes),
             recurrencePreset = recurrencePreset,
             timeZone = zoneId.id
         ),
@@ -317,7 +320,7 @@ fun MorningReviewScreen(
     onDismissActionError: () -> Unit = {},
     onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
-    assigneeOptions: List<AddTaskAssigneeOption> = AddTaskDependencies.assigneeOptions(),
+    assigneeOptions: List<ProjectCollaborator> = emptyList(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null
 ) {
@@ -349,7 +352,7 @@ fun MorningReviewScreen(
         mutableStateOf(false)
     }
     var selectedAssignee by remember(repairingTask?.id) {
-        mutableStateOf<AddTaskAssigneeOption?>(null)
+        mutableStateOf<ProjectCollaborator?>(null)
     }
     var start by remember(repairingTask?.id) {
         mutableStateOf(repairingTask?.initialRepairStartDraft() ?: DateTimeDraftSelection.Empty)
@@ -405,7 +408,8 @@ fun MorningReviewScreen(
         val task = repairingTask ?: return@LaunchedEffect
         title = task.title
         selectedProject = projects.firstOrNull { it.id == task.projectId }
-        selectedAssignee = assigneeOptions.firstOrNull { it.id == task.assigneeId }
+        selectedAssignee = selectedProject?.collaborators?.firstOrNull { it.id == task.assigneeId }
+            ?: assigneeOptions.firstOrNull { it.id == task.assigneeId }
     }
 
     // A successful repair updates the authoritative invalid-task list in the hosting activity.
@@ -494,7 +498,9 @@ fun MorningReviewScreen(
                         onProjectMenuExpandedChange = { projectMenuExpanded = it },
                         onProjectSelected = { project ->
                             selectedProject = project
-                            selectedAssignee = null
+                            selectedAssignee = project.collaborators.firstOrNull {
+                                it.isCurrentUser && !project.canAssignTasks
+                            }
                             projectMenuExpanded = false
                             errorText = null
                         },
@@ -504,7 +510,7 @@ fun MorningReviewScreen(
                 assigneeContent = {
                     AssigneeSelector(
                         selectedProject = selectedProject,
-                        assigneeOptions = assigneeOptions,
+                        assigneeOptions = selectedProject?.collaborators?.ifEmpty { assigneeOptions } ?: assigneeOptions,
                         selectedAssignee = selectedAssignee,
                         onAssigneeSelected = { option ->
                             selectedAssignee = option

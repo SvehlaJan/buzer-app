@@ -2,7 +2,6 @@ package app.buzer.android.tasks
 
 import android.content.Context
 import app.buzer.android.BuildConfig
-import app.buzer.android.ui.addtask.AddTaskAssigneeOption
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.model.CreateTaskRequest
@@ -10,11 +9,6 @@ import app.buzer.shared.model.MutationResponse
 
 object AddTaskDependencies {
     private var cachedProjectRepository: AddTaskProjectRepository? = null
-
-    fun assigneeOptions(): List<AddTaskAssigneeOption> = listOf(
-        AddTaskAssigneeOption("Me", BuildConfig.BUZER_ASSIGNEE_ME_ID),
-        AddTaskAssigneeOption("Wife", BuildConfig.BUZER_ASSIGNEE_WIFE_ID)
-    )
 
     fun projectRepository(): AddTaskProjectRepository {
         cachedProjectRepository?.let { return it }
