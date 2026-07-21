@@ -493,7 +493,7 @@ describe("HttpTodoistAdapter", () => {
         lang: "en",
         timezone: "Europe/Bratislava"
       },
-      duration: { amount: 45, unit: "minute" }
+      duration: { kind: "replace", amount: 45, unit: "minute" }
     });
 
     expect(readCommands(fetchMock)).toEqual([{
@@ -557,7 +557,8 @@ describe("HttpTodoistAdapter", () => {
       sync_status: {
         "update-preserve": "ok",
         "update-clear": "ok",
-        "update-replace": "ok"
+        "update-replace": "ok",
+        "update-clear-duration": "ok"
       }
     })));
     const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
@@ -566,7 +567,7 @@ describe("HttpTodoistAdapter", () => {
       commandUuid: "update-preserve",
       todoistTaskId: "todoist-root",
       title: "Metadata only",
-      duration: { amount: 90, unit: "minute" },
+      duration: { kind: "replace", amount: 90, unit: "minute" },
       due: { kind: "preserve" },
       assignment: { kind: "preserve" }
     });
@@ -590,7 +591,15 @@ describe("HttpTodoistAdapter", () => {
       assignment: { kind: "assign", assigneeId: "user-self" }
     });
 
-    const [preserve, clear, replace] = readCommands(fetchMock);
+    await adapter.itemUpdate({
+      commandUuid: "update-clear-duration",
+      todoistTaskId: "todoist-root",
+      duration: { kind: "clear" },
+      due: { kind: "clear" },
+      assignment: { kind: "preserve" }
+    });
+
+    const [preserve, clear, replace, clearDuration] = readCommands(fetchMock);
     expect(preserve).toEqual({
       type: "item_update",
       uuid: "update-preserve",
@@ -624,6 +633,11 @@ describe("HttpTodoistAdapter", () => {
         },
         responsible_uid: "user-self"
       }
+    });
+    expect(clearDuration).toEqual({
+      type: "item_update",
+      uuid: "update-clear-duration",
+      args: { id: "todoist-root", due: null, duration: null }
     });
   });
 

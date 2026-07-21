@@ -15,6 +15,7 @@ const taskRevision = z.string().regex(/^r:\d+$/).max(MAX_OPAQUE_VALUE_LENGTH);
 const nullableString = z.string().trim().min(1).max(MAX_TEXT_LENGTH).nullable().optional().transform((value) => value ?? null);
 const nullablePositiveInt = z.number().int().positive().nullable().optional().transform((value) => value ?? null);
 const nullablePatchString = z.string().trim().min(1).max(MAX_TEXT_LENGTH).nullable().optional();
+const nullablePatchPositiveInt = z.number().int().positive().nullable().optional();
 const timeZone = z.string().trim().min(1).max(100).refine(isIanaTimeZone, "timeZone must be an IANA time zone");
 const recurrencePreset = z.enum(["never", "daily", "weekdays", "weekly", "monthly", "yearly"]);
 const taskIdParams = z.strictObject({ id: opaqueValue });
@@ -75,8 +76,8 @@ const rootEditPatch = z.strictObject({
   description: nullablePatchString,
   projectId: opaqueValue.optional(),
   assigneeId: nullablePatchString,
-  dueDatetime: z.string().trim().min(1).max(100).optional(),
-  durationMinutes: z.number().int().positive().optional(),
+  dueDatetime: z.string().trim().min(1).max(100).nullable().optional(),
+  durationMinutes: nullablePatchPositiveInt,
   recurrencePreset: recurrencePreset.optional(),
   timeZone: timeZone.optional()
 });
@@ -314,8 +315,8 @@ function mapRootEditPatch(patch: z.infer<typeof rootEditPatch>) {
     ...(patch.description === undefined ? {} : { description: patch.description }),
     ...(patch.projectId === undefined ? {} : { projectId: patch.projectId }),
     ...(patch.assigneeId === undefined ? {} : { assigneeId: patch.assigneeId }),
-    ...(patch.dueDatetime === undefined ? {} : { dueDatetime: patch.dueDatetime }),
-    ...(patch.durationMinutes === undefined ? {} : { durationMinutes: patch.durationMinutes }),
+    ...(Object.prototype.hasOwnProperty.call(patch, "dueDatetime") ? { dueDatetime: patch.dueDatetime ?? null } : {}),
+    ...(Object.prototype.hasOwnProperty.call(patch, "durationMinutes") ? { durationMinutes: patch.durationMinutes ?? null } : {}),
     ...(patch.recurrencePreset === undefined ? {} : { recurrencePreset: patch.recurrencePreset }),
     ...(patch.timeZone === undefined ? {} : { timeZone: patch.timeZone })
   };

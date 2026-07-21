@@ -89,7 +89,7 @@ describe("E2ETodoistWorld semantics", () => {
       commandUuid: "c-1",
       todoistTaskId: "t-1",
       title: "Renamed",
-      duration: { amount: 90, unit: "minute" },
+      duration: { kind: "replace", amount: 90, unit: "minute" },
       due: {
         kind: "replace",
         datetime: "2026-07-19T08:00:00.000Z",
@@ -167,14 +167,14 @@ describe("E2ETodoistWorld semantics", () => {
       projectId: "project-test",
       assigneeId: "user-me",
       due: { kind: "clear" },
-      duration: { amount: 2, unit: "hour" }
+      duration: { kind: "replace", amount: 2, unit: "hour" }
     });
     expect((await syncedTask(adapter, root.todoistTaskId as string)).durationMinutes).toBe(120);
 
     await adapter.itemUpdate({
       commandUuid: "c-minute",
       todoistTaskId: "t-1",
-      duration: { amount: 45, unit: "minute" },
+      duration: { kind: "replace", amount: 45, unit: "minute" },
       due: { kind: "preserve" },
       assignment: { kind: "preserve" }
     });
@@ -183,7 +183,7 @@ describe("E2ETodoistWorld semantics", () => {
     await adapter.itemUpdate({
       commandUuid: "c-hour",
       todoistTaskId: "t-1",
-      duration: { amount: 2, unit: "hour" },
+      duration: { kind: "replace", amount: 2, unit: "hour" },
       due: { kind: "preserve" },
       assignment: { kind: "preserve" }
     });
@@ -217,7 +217,7 @@ describe("E2ETodoistWorld semantics", () => {
         lang: null,
         timezone: null
       },
-      duration: { amount: 30, unit: "minute" }
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     });
     expect(root.todoistTaskId).not.toBeNull();
     const child = await adapter.itemAdd({

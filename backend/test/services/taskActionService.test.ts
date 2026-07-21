@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
+import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { EscalationService } from "../../src/services/escalationService.js";
@@ -72,10 +73,41 @@ function actionAwareService(
   escalation: EscalationService | null = null,
   now: (() => string) | undefined = undefined
 ): TaskActionService {
+  markCollaboratorMirrorReady(db);
   const coordinator = new TaskActionCoordinator({ db, roots: repo, sync: { syncOnce: synchronize }, ...(now === undefined ? {} : { now }) });
   return new TaskActionService(db, repo, projects, adapter, "user-self", escalation, false, {
     rootActions: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) },
     checklist: { coordinator, synchronize, snapshot: () => ({ source: "snapshot" }) }
+  });
+}
+
+function markCollaboratorMirrorReady(db: Database.Database): void {
+  db.prepare(`
+    insert or replace into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+    values (1, 'collaborators-ready', 3, '2026-07-22T10:00:00Z')
+  `).run();
+}
+
+function addActiveCollaborator(db: Database.Database, projectId: string, userId: string): void {
+  const collaborators = new CollaboratorRepository(db);
+  collaborators.upsertCollaborator({
+    todoistUserId: userId,
+    fullName: "Wife",
+    email: "wife@example.test",
+    timeZone: "Europe/Warsaw",
+    imageId: null,
+    isDeleted: false,
+    rawJson: {},
+    updatedAt: "2026-07-22T10:00:00Z"
+  });
+  collaborators.upsertCollaboratorState({
+    todoistProjectId: projectId,
+    todoistUserId: userId,
+    state: "active",
+    role: "READ_WRITE",
+    isDeleted: false,
+    rawJson: {},
+    updatedAt: "2026-07-22T10:00:00Z"
   });
 }
 
@@ -681,6 +713,7 @@ describe("TaskActionService", () => {
   it("rejects invalid self-assigned created tasks before calling Todoist", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const repo = new TaskRepository(db);
     const projectRepo = new ProjectRepository(db);
     projectRepo.upsertProject({
@@ -754,6 +787,7 @@ describe("TaskActionService", () => {
   it("builds a backend-owned daily recurrence for a new root commitment", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const repo = new TaskRepository(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
@@ -800,7 +834,7 @@ describe("TaskActionService", () => {
         lang: "en",
         timezone: "Europe/Bratislava"
       },
-      duration: { amount: 30, unit: "minute" }
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     })]);
     expect(adapter.createdTasks).toEqual([]);
   });
@@ -808,6 +842,7 @@ describe("TaskActionService", () => {
   it("reuses an action-aware root create command UUID and temp ID after an ambiguous send", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const repo = new TaskRepository(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
@@ -854,6 +889,7 @@ describe("TaskActionService", () => {
   it("does not duplicate an ambiguous checklist child create while reconciliation is pending", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const repo = new TaskRepository(db);
     const projects = new ProjectRepository(db);
     projects.upsertProject({
@@ -929,7 +965,7 @@ describe("TaskActionService", () => {
       todoistTaskId: "todoist-1",
       due: { kind: "preserve" },
       assignment: { kind: "preserve" },
-      duration: { amount: 90, unit: "minute" },
+      duration: { kind: "replace", amount: 90, unit: "minute" },
       description: [
         "--- Buzer activity (managed) ---",
         "2026-05-08 18:00 UTC — Extended +30 min (60 → 90 min)"
@@ -987,7 +1023,7 @@ describe("TaskActionService", () => {
       due: {
         kind: "replace", datetime: "2026-07-17T08:30:00Z", string: "every day at 10:30", lang: "en", timezone: "Europe/Bratislava"
       },
-      duration: { amount: 30, unit: "minute" }
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     })]);
     expect(repo.getById("task-1")).toMatchObject({ state: "started", occurrenceDueDatetime: "2026-07-16T08:30:00Z", occurrenceKey: "old-occurrence" });
   });
@@ -1102,7 +1138,7 @@ describe("TaskActionService", () => {
       description: "Updated details",
       assignment: { kind: "assign", assigneeId: "user-self" },
       due: { kind: "replace", datetime: "2026-05-08T19:00:00Z", string: null, lang: null, timezone: null },
-      duration: { amount: 45, unit: "minute" }
+      duration: { kind: "replace", amount: 45, unit: "minute" }
     });
     expect(repo.getById("task-1")?.title).toBe("Old title");
   });
@@ -1180,7 +1216,7 @@ describe("TaskActionService", () => {
     expect(adapter.itemUpdates[0]).toMatchObject({
       title: "Send the invoice",
       description: "Private note\n--- Buzer activity (managed) ---\n2026-07-15 09:00 UTC — Extended +30 min (30 → 60 min)",
-      duration: { amount: 30, unit: "minute" }
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     });
   });
 
@@ -1208,6 +1244,7 @@ describe("TaskActionService", () => {
   it("replays an action-aware project edit without repeating its confirmed move step", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const repo = new TaskRepository(db);
     insertCommittedTask(repo);
     repo.initializeOccurrence("task-1", {
@@ -1424,7 +1461,7 @@ describe("TaskActionService", () => {
       projectId: "project-personal",
       assigneeId: null,
       due: { kind: "replace", datetime: "2026-06-13T12:00:00Z", string: null, lang: null, timezone: null },
-      duration: { amount: 30, unit: "minute" }
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     });
     expect(taskRepo.listAll()).toEqual([]);
   });
@@ -1539,6 +1576,7 @@ describe("TaskActionService", () => {
   it("rejects non-positive duration before calling Todoist even when task is assigned away", async () => {
     const db = new Database(":memory:");
     migrate(db);
+    markCollaboratorMirrorReady(db);
     const taskRepo = new TaskRepository(db);
     const projectRepo = new ProjectRepository(db);
     projectRepo.upsertProject({
@@ -1552,6 +1590,7 @@ describe("TaskActionService", () => {
       rawJson: "{}",
       updatedAt: "2026-06-13T10:00:00Z"
     });
+    addActiveCollaborator(db, "project-family", "someone-else");
     const adapter = new FakeTodoistAdapter();
     const service = new TaskActionService(db, taskRepo, projectRepo, adapter, "user-self");
 
@@ -1571,5 +1610,230 @@ describe("TaskActionService", () => {
     });
 
     expect(adapter.createdTasks).toEqual([]);
+  });
+
+  it("rejects a shared-project assignee who is not an active project member", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, new TaskRepository(db), projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Wife task", description: null, projectId: "project-family", assigneeId: "user-wife",
+      dueDatetime: null, durationMinutes: null, creatorId: "user-self", now: "2026-07-22T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["assignee_not_in_project"] }
+    });
+    expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it("blocks shared-project mutations until collaborator membership is mirrored", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, new TaskRepository(db), projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "My task", description: null, projectId: "project-family", assigneeId: "user-self",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: 30, creatorId: "user-self", now: "2026-07-22T10:00:00Z"
+    })).rejects.toMatchObject({ code: "collaborators_unavailable", statusCode: 503 });
+    expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it("creates an active non-self collaborator task without a schedule", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const repo = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    addActiveCollaborator(db, "project-family", "user-wife");
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    await expect(service.create({
+      title: "Wife task", description: null, projectId: "project-family", assigneeId: "user-wife",
+      dueDatetime: null, durationMinutes: null, recurrencePreset: "never", creatorId: "user-self",
+      now: "2026-07-22T10:00:00Z", actionId: "wife-unscheduled", deviceId: "phone-a"
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(adapter.itemAdds[0]).toMatchObject({
+      kind: "root", assigneeId: "user-wife", due: { kind: "preserve" }, duration: null
+    });
+  });
+
+  it("requires a complete schedule for the current user in a shared project", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, new TaskRepository(db), projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "My task", description: null, projectId: "project-family", assigneeId: "user-self",
+      dueDatetime: null, durationMinutes: null, creatorId: "user-self", now: "2026-07-22T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["due_datetime_required", "duration_required"] }
+    });
+    expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it("rejects a partial schedule before sending a shared task mutation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    addActiveCollaborator(db, "project-family", "user-wife");
+    const adapter = new FakeTodoistAdapter();
+    const service = new TaskActionService(db, new TaskRepository(db), projects, adapter, "user-self");
+
+    await expect(service.create({
+      title: "Partial wife task", description: null, projectId: "project-family", assigneeId: "user-wife",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: null, creatorId: "user-self", now: "2026-07-22T10:00:00Z"
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: ["schedule_fields_must_be_set_together"] }
+    });
+    expect(adapter.itemAdds).toEqual([]);
+  });
+
+  it("clears both schedule fields when changing a scheduled task to a non-self collaborator", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Scheduled", description: null,
+      projectId: "project-family", assigneeId: "user-self", creatorId: "user-self",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-07-23T10:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    addActiveCollaborator(db, "project-family", "user-wife");
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    await expect(service.update("task-1", {
+      actionId: "clear-for-wife", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        assigneeId: "user-wife", dueDatetime: null, durationMinutes: null, recurrencePreset: "never"
+      },
+      childMutations: []
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(adapter.itemUpdates[0]).toMatchObject({
+      due: { kind: "clear" }, duration: { kind: "clear" }, assignment: { kind: "assign", assigneeId: "user-wife" }
+    });
+  });
+
+  it("rejects clearing only one schedule field while retaining the current-user assignment", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.updateTaskFields("task-1", {
+      title: "Scheduled", description: null, projectId: "project-family", assigneeId: "user-self",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: 30, commitmentOwnerId: null,
+      updatedAt: "2026-07-22T10:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-07-23T10:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    await expect(service.update("task-1", {
+      actionId: "partial-clear", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: { expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`, dueDatetime: null },
+      childMutations: []
+    })).rejects.toMatchObject({
+      code: "task_validation_failed",
+      statusCode: 422,
+      details: { errors: expect.arrayContaining(["schedule_fields_must_be_set_together", "due_datetime_required"]) }
+    });
+    expect(adapter.itemUpdates).toEqual([]);
+  });
+
+  it("clears Todoist assignment when moving an edited task to a personal project", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markCollaboratorMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Scheduled", description: null,
+      projectId: "project-family", assigneeId: "user-self", creatorId: "user-self",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-07-23T10:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const service = actionAwareService(db, repo, projects, adapter);
+
+    await expect(service.update("task-1", {
+      actionId: "move-personal", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        projectId: "project-personal", assigneeId: null
+      },
+      childMutations: []
+    })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
+
+    expect(adapter.itemUpdates[0]).toMatchObject({ assignment: { kind: "unassign" } });
   });
 });

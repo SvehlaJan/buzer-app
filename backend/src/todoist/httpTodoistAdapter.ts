@@ -8,6 +8,7 @@ import type {
 } from "./todoistAdapter.js";
 import type {
   TodoistDueMutation,
+  TodoistDurationMutation,
   TodoistItemAddInput,
   TodoistItemAddResult,
   TodoistItemIdentityInput,
@@ -169,7 +170,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
         timezone: null
       },
       assignment: { kind: "preserve" },
-      duration: { amount: input.durationMinutes, unit: "minute" },
+      duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
       ...("description" in input
         ? { description: normalizeLegacyDescription(input.description) }
         : {})
@@ -189,17 +190,21 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       todoistTaskId: input.todoistTaskId,
       title: input.title.trim(),
       description: input.description?.trim() ?? null,
-      due: {
-        kind: "replace",
-        datetime: input.dueDatetime,
-        string: null,
-        lang: null,
-        timezone: null
-      },
+      due: input.dueDatetime === null
+        ? { kind: "clear" }
+        : {
+            kind: "replace",
+            datetime: input.dueDatetime,
+            string: null,
+            lang: null,
+            timezone: null
+          },
       assignment: input.assigneeId === null
         ? { kind: "unassign" }
         : { kind: "assign", assigneeId: input.assigneeId },
-      duration: { amount: input.durationMinutes, unit: "minute" }
+      duration: input.durationMinutes === null
+        ? { kind: "clear" }
+        : { kind: "replace", amount: input.durationMinutes, unit: "minute" }
     });
   }
 
@@ -219,7 +224,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       }
       applyDueMutation(args, input.due);
       if (input.duration !== null) {
-        args.duration = input.duration;
+        applyDurationMutation(args, input.duration);
       }
     }
     const response = await this.command(input.commandUuid, "item_add", args, input.tempId);
@@ -235,7 +240,7 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       args.description = input.description ?? "";
     }
     if (input.duration !== undefined) {
-      args.duration = input.duration;
+      applyDurationMutation(args, input.duration);
     }
     applyDueMutation(args, input.due);
     if (input.assignment.kind === "assign") {
@@ -447,6 +452,17 @@ function applyDueMutation(args: Record<string, unknown>, due: TodoistDueMutation
     replacement.timezone = due.timezone;
   }
   args.due = replacement;
+}
+
+function applyDurationMutation(args: Record<string, unknown>, duration: TodoistDurationMutation): void {
+  if (duration.kind === "preserve") {
+    return;
+  }
+  if (duration.kind === "clear") {
+    args.duration = null;
+    return;
+  }
+  args.duration = { amount: duration.amount, unit: duration.unit };
 }
 
 function normalizeDurationMinutes(amount: number | null, unit: string | null): number | null {

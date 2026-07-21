@@ -41,8 +41,8 @@ export interface TodoistUpdateTaskInput {
   description: string | null;
   projectId: string;
   assigneeId: string | null;
-  dueDatetime: string;
-  durationMinutes: number;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
 }
 
 export interface TodoistLegacyUpdateCommandIdentities {

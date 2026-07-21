@@ -1,6 +1,5 @@
 import type Database from "better-sqlite3";
 import { createHash, randomUUID } from "node:crypto";
-import { validateTaskStrictness } from "../domain/taskValidation.js";
 import { addMinutes } from "../domain/time.js";
 import { appendExtension, decodeTaskDescription, reconstructTaskDescription } from "../domain/taskDescriptionCodec.js";
 import { describeRecurrence, translateRecurrencePreset, type RecurrencePreset } from "../domain/taskRecurrence.js";
@@ -10,7 +9,8 @@ import {
   TaskActionCoordinator,
   type TaskActionCommandContext
 } from "./taskActionCoordinator.js";
-import type { ProjectRepository } from "../repositories/projectRepository.js";
+import type { ProjectRepository, TodoistProject } from "../repositories/projectRepository.js";
+import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import type { EscalationService } from "./escalationService.js";
@@ -74,8 +74,8 @@ export interface RootEditPatch {
   description?: string | null;
   projectId?: string;
   assigneeId?: string | null;
-  dueDatetime?: string;
-  durationMinutes?: number;
+  dueDatetime?: string | null;
+  durationMinutes?: number | null;
   recurrencePreset?: RecurrencePreset;
   timeZone?: string;
 }
@@ -94,8 +94,8 @@ interface ResolvedRootEdit {
   description: string | null;
   projectId: string;
   assigneeId: string | null;
-  dueDatetime: string;
-  durationMinutes: number;
+  dueDatetime: string | null;
+  durationMinutes: number | null;
   recurrencePreset?: RecurrencePreset;
   timeZone?: string;
 }
@@ -103,6 +103,7 @@ interface ResolvedRootEdit {
 export class TaskActionService {
   private readonly checklistService: TodoistChecklistService;
   private readonly actionJournal: ActionJournalRepository;
+  private readonly collaborators: CollaboratorRepository;
 
   constructor(
     private readonly db: Database.Database,
@@ -116,6 +117,7 @@ export class TaskActionService {
   ) {
     this.checklistService = new TodoistChecklistService(tasks, todoist, options.checklist);
     this.actionJournal = new ActionJournalRepository(db);
+    this.collaborators = new CollaboratorRepository(db);
   }
 
   /** Checklist children are intentionally delegated to their dedicated mutation boundary. */
@@ -254,58 +256,23 @@ export class TaskActionService {
       });
     }
 
-    const errors: string[] = [];
-    if (input.title.trim().length === 0) {
-      errors.push("title_required");
-    }
-    if (input.dueDatetime === null) {
-      errors.push("due_datetime_required");
-    }
-    if (input.durationMinutes === null) {
-      errors.push("duration_required");
-    } else if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
-      errors.push("duration_must_be_positive_minutes");
-    }
-    if (project.canAssignTasks && input.assigneeId === null) {
-      errors.push("assignee_required_for_assignable_project");
-    }
-    if (!project.canAssignTasks && input.assigneeId !== null) {
-      errors.push("assignee_not_supported_for_project");
-    }
-    if (errors.length > 0) {
-      throw Object.assign(new Error("Task validation failed"), {
-        code: "task_validation_failed",
-        statusCode: 422,
-        details: { errors }
-      });
-    }
-
-    const dueDatetime = input.dueDatetime;
-    const durationMinutes = input.durationMinutes;
-    if (dueDatetime === null || durationMinutes === null) {
-      throw new Error("unreachable_missing_schedule_after_validation");
-    }
-
-    const strictAssigneeId = project.canAssignTasks ? input.assigneeId : this.currentUserId;
-    const validation = validateTaskStrictness({
-      title: input.title,
-      creatorId: input.creatorId,
-      assigneeId: strictAssigneeId,
-      dueDatetime,
-      durationMinutes,
-      currentUserId: this.currentUserId
-    });
-    if (!validation.valid) {
-      throw Object.assign(new Error("Task validation failed"), {
-        code: "task_validation_failed",
-        statusCode: 422,
-        details: { errors: validation.errors }
-      });
-    }
-
     const recurrencePreset = input.recurrencePreset ?? "never";
     const timeZone = input.timeZone ?? "UTC";
     const checklist = input.checklist ?? [];
+    const errors = [
+      ...this.projectAssignmentErrors(project, input.assigneeId),
+      ...scheduleErrors({
+        dueDatetime: input.dueDatetime,
+        durationMinutes: input.durationMinutes,
+        required: scheduleIsRequired(project.canAssignTasks, input.assigneeId, this.currentUserId)
+      })
+    ];
+    if (input.title.trim().length === 0) {
+      errors.push("title_required");
+    }
+    if (input.dueDatetime === null && input.durationMinutes === null && recurrencePreset !== "never") {
+      errors.push("recurrence_requires_schedule");
+    }
     if (!isRecurrencePreset(recurrencePreset)) {
       errors.push("recurrence_preset_invalid");
     }
@@ -328,7 +295,12 @@ export class TaskActionService {
       });
     }
     const metadata = this.rootMetadata(input);
-    const recurrence = translateRecurrencePreset({ preset: recurrencePreset, selectedStart: dueDatetime, timeZone });
+    const dueDatetime = input.dueDatetime;
+    const durationMinutes = input.durationMinutes;
+    const scheduled = dueDatetime !== null && durationMinutes !== null;
+    const recurrence = dueDatetime !== null && durationMinutes !== null
+      ? translateRecurrencePreset({ preset: recurrencePreset, selectedStart: dueDatetime, timeZone })
+      : null;
     const id = actionStableUuid(metadata.actionId, "root_id");
     const rootTempId = actionStableUuid(metadata.actionId, "item_add");
     return this.executeRootAction({
@@ -355,10 +327,14 @@ export class TaskActionService {
         description: normalizeOptionalText(input.description),
         projectId: input.projectId,
         assigneeId: input.assigneeId,
-        due: recurrence === null
-          ? { kind: "replace", datetime: dueDatetime, string: null, lang: null, timezone: null }
-          : { kind: "replace", datetime: dueDatetime, ...recurrence },
-        duration: { amount: durationMinutes, unit: "minute" }
+        due: !scheduled
+          ? { kind: "preserve" }
+          : recurrence === null
+            ? { kind: "replace", datetime: dueDatetime!, string: null, lang: null, timezone: null }
+            : { kind: "replace", datetime: dueDatetime!, ...recurrence },
+        duration: scheduled
+          ? { kind: "replace", amount: durationMinutes!, unit: "minute" }
+          : null
       }), { tempId: rootTempId });
       if (created.todoistTaskId === null) {
         throw Object.assign(new Error("Todoist did not return a root task ID"), {
@@ -518,7 +494,7 @@ export class TaskActionService {
         commandUuid,
         todoistTaskId: task.todoistTaskId,
         description,
-        duration: { amount: newDuration, unit: "minute" },
+        duration: { kind: "replace", amount: newDuration, unit: "minute" },
         due: { kind: "preserve" },
         assignment: { kind: "preserve" }
       }));
@@ -549,7 +525,7 @@ export class TaskActionService {
         commandUuid,
         todoistTaskId: task.todoistTaskId,
         ...(normalizedDescription === undefined ? {} : { description: normalizedDescription }),
-        duration: { amount: input.durationMinutes, unit: "minute" },
+        duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
         due: recurrence,
         assignment: { kind: "preserve" }
       }));
@@ -592,18 +568,19 @@ export class TaskActionService {
       ...decodeTaskDescription(task.description),
       userDescription: normalizeOptionalText(input.description) ?? ""
     });
-    const errors: string[] = [];
+    const errors = [
+      ...this.projectAssignmentErrors(project, input.assigneeId),
+      ...scheduleErrors({
+        dueDatetime: input.dueDatetime,
+        durationMinutes: input.durationMinutes,
+        required: scheduleIsRequired(project.canAssignTasks, input.assigneeId, this.currentUserId)
+      })
+    ];
     if (normalizedTitle.length === 0) {
       errors.push("title_required");
     }
-    if (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0) {
-      errors.push("duration_must_be_positive_minutes");
-    }
-    if (project.canAssignTasks && input.assigneeId === null) {
-      errors.push("assignee_required_for_assignable_project");
-    }
-    if (!project.canAssignTasks && input.assigneeId !== null) {
-      errors.push("assignee_not_supported_for_project");
+    if (input.dueDatetime === null && input.durationMinutes === null && input.recurrencePreset !== undefined && input.recurrencePreset !== "never") {
+      errors.push("recurrence_requires_schedule");
     }
     if (errors.length > 0) {
       throw Object.assign(new Error("Task validation failed"), {
@@ -662,7 +639,9 @@ export class TaskActionService {
         todoistTaskId: task.todoistTaskId,
         title: normalizedTitle,
         description: normalizedDescription,
-        duration: { amount: input.durationMinutes, unit: "minute" },
+        duration: input.durationMinutes === null
+          ? { kind: "clear" }
+          : { kind: "replace", amount: input.durationMinutes, unit: "minute" },
         due,
         assignment: project.canAssignTasks && input.assigneeId !== null
           ? { kind: "assign", assigneeId: input.assigneeId }
@@ -685,18 +664,6 @@ export class TaskActionService {
         statusCode: 422
       });
     }
-    if (task.dueDatetime === null && patch.dueDatetime === undefined) {
-      throw Object.assign(new Error("Root task must have a deadline before editing"), {
-        code: "task_missing_deadline_or_duration",
-        statusCode: 422
-      });
-    }
-    if (task.durationMinutes === null && patch.durationMinutes === undefined) {
-      throw Object.assign(new Error("Root task must have a duration before editing"), {
-        code: "task_missing_deadline_or_duration",
-        statusCode: 422
-      });
-    }
     const decodedDescription = decodeTaskDescription(task.description);
     return {
       title: patch.title ?? task.title,
@@ -705,11 +672,34 @@ export class TaskActionService {
         : decodedDescription.userDescription,
       projectId: patch.projectId ?? task.projectId!,
       assigneeId: Object.prototype.hasOwnProperty.call(patch, "assigneeId") ? patch.assigneeId ?? null : task.assigneeId,
-      dueDatetime: patch.dueDatetime ?? task.dueDatetime!,
-      durationMinutes: patch.durationMinutes ?? task.durationMinutes!,
+      dueDatetime: Object.prototype.hasOwnProperty.call(patch, "dueDatetime")
+        ? patch.dueDatetime ?? null
+        : task.dueDatetime,
+      durationMinutes: Object.prototype.hasOwnProperty.call(patch, "durationMinutes")
+        ? patch.durationMinutes ?? null
+        : task.durationMinutes,
       ...(patch.recurrencePreset === undefined ? {} : { recurrencePreset: patch.recurrencePreset }),
       ...(patch.timeZone === undefined ? {} : { timeZone: patch.timeZone })
     };
+  }
+
+  private projectAssignmentErrors(project: TodoistProject, assigneeId: string | null): string[] {
+    if (!project.canAssignTasks) {
+      return assigneeId === null ? [] : ["assignee_not_supported_for_project"];
+    }
+    if (assigneeId === null) {
+      return ["assignee_required_for_assignable_project"];
+    }
+    if (!this.collaborators.isMirrorContractReady()) {
+      throw Object.assign(new Error("Project collaborator data is unavailable"), {
+        code: "collaborators_unavailable",
+        statusCode: 503
+      });
+    }
+    if (assigneeId !== this.currentUserId && !this.collaborators.isActiveMember(project.todoistProjectId, assigneeId)) {
+      return ["assignee_not_in_project"];
+    }
+    return [];
   }
 
   private requireSchedulableTask(taskId: string): TaskWithCommitment & { dueDatetime: string; durationMinutes: number } {
@@ -916,6 +906,37 @@ function isRecurrencePreset(value: unknown): value is RecurrencePreset {
     || value === "yearly";
 }
 
+function scheduleIsRequired(
+  canAssignTasks: boolean,
+  assigneeId: string | null,
+  currentUserId: string
+): boolean {
+  return !canAssignTasks || assigneeId === currentUserId;
+}
+
+function scheduleErrors(input: {
+  dueDatetime: string | null;
+  durationMinutes: number | null;
+  required: boolean;
+}): string[] {
+  const errors: string[] = [];
+  const hasDue = input.dueDatetime !== null;
+  const hasDuration = input.durationMinutes !== null;
+  if (hasDue !== hasDuration) {
+    errors.push("schedule_fields_must_be_set_together");
+  }
+  if (input.required && !hasDue) {
+    errors.push("due_datetime_required");
+  }
+  if (input.required && !hasDuration) {
+    errors.push("duration_required");
+  }
+  if (input.durationMinutes !== null && (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0)) {
+    errors.push("duration_must_be_positive_minutes");
+  }
+  return errors;
+}
+
 function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) {
   if (!task.isRecurring) {
     return { kind: "replace" as const, datetime: dueDatetime, string: null, lang: null, timezone: null };
@@ -945,6 +966,9 @@ function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) 
 
 function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit) {
   const scheduleChanged = task.dueDatetime !== input.dueDatetime || task.durationMinutes !== input.durationMinutes;
+  if (input.dueDatetime === null || input.durationMinutes === null) {
+    return { kind: "clear" as const };
+  }
   if (input.recurrencePreset !== undefined) {
     const timeZone = input.timeZone ?? task.dueTimezone ?? "UTC";
     if (!isIanaTimeZone(timeZone)) {

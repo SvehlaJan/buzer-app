@@ -766,6 +766,49 @@ describe("HTTP routes", () => {
     });
   });
 
+  it("preserves explicit null schedule fields when the update route clears a Wife task schedule", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Scheduled task", description: null,
+      projectId: "project-family", assigneeId: "user-self", creatorId: "user-self",
+      dueDatetime: "2026-07-23T10:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    db.prepare("update commitment_states set occurrence_key = ?, occurrence_due_datetime = ?, occurrence_recurrence_fingerprint = ? where task_id = ?")
+      .run("occurrence-1", "2026-07-23T10:00:00Z", '{"isRecurring":false,"dueString":null,"dueLang":null,"dueTimezone":null}', "task-1");
+    new ProjectRepository(db).upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-22T10:00:00Z"
+    });
+    addActiveCollaborator(db, "project-family", "user-wife");
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST", url: "/tasks/task-1/update", headers: { authorization: "Bearer secret" },
+      payload: {
+        ...action("clear-schedule"),
+        rootPatch: {
+          expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+          assigneeId: "user-wife",
+          dueDatetime: null,
+          durationMinutes: null,
+          recurrencePreset: "never"
+        },
+        childMutations: []
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(202);
+    expect(adapter.itemUpdates[0]).toMatchObject({
+      due: { kind: "clear" }, duration: { kind: "clear" }, assignment: { kind: "assign", assigneeId: "user-wife" }
+    });
+  });
+
   it("rejects legacy flat update fields and only requires a task revision for root patches", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -845,8 +888,31 @@ describe("HTTP routes", () => {
 function markMirrorReady(db: Database.Database): void {
   db.prepare(`
     insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-    values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
+    values (1, 'ready-token', 3, '2026-07-15T10:00:00Z')
   `).run();
+}
+
+function addActiveCollaborator(db: Database.Database, projectId: string, userId: string): void {
+  const collaborators = new CollaboratorRepository(db);
+  collaborators.upsertCollaborator({
+    todoistUserId: userId,
+    fullName: "Wife",
+    email: "wife@example.test",
+    timeZone: "Europe/Warsaw",
+    imageId: null,
+    isDeleted: false,
+    rawJson: {},
+    updatedAt: "2026-07-22T10:00:00Z"
+  });
+  collaborators.upsertCollaboratorState({
+    todoistProjectId: projectId,
+    todoistUserId: userId,
+    state: "active",
+    role: "READ_WRITE",
+    isDeleted: false,
+    rawJson: {},
+    updatedAt: "2026-07-22T10:00:00Z"
+  });
 }
 
 function action(id: string, kind: "create" | "occurrence" | "revision" = "occurrence") {

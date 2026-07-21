@@ -88,11 +88,11 @@ export class E2ETodoistWorld {
       dueLang: input.due.kind === "replace" ? input.due.lang : null,
       dueTimezone: input.due.kind === "replace" ? input.due.timezone : null,
       isRecurring: input.due.kind === "replace" && input.due.string !== null,
-      durationAmount: input.duration?.amount ?? null,
-      durationUnit: input.duration?.unit ?? null,
+      durationAmount: input.duration?.kind === "replace" ? input.duration.amount : null,
+      durationUnit: input.duration?.kind === "replace" ? input.duration.unit : null,
       durationMinutes: normalizeDurationMinutes(
-        input.duration?.amount ?? null,
-        input.duration?.unit ?? null
+        input.duration?.kind === "replace" ? input.duration.amount : null,
+        input.duration?.kind === "replace" ? input.duration.unit : null
       ),
       completedAt: null,
       deletedAt: null,
@@ -138,12 +138,18 @@ export class E2ETodoistWorld {
     if (input.title !== undefined) task.title = input.title;
     if (input.description !== undefined) task.description = input.description;
     if (input.duration !== undefined) {
-      task.durationAmount = input.duration.amount;
-      task.durationUnit = input.duration.unit;
-      task.durationMinutes = normalizeDurationMinutes(
-        input.duration.amount,
-        input.duration.unit
-      );
+      if (input.duration.kind === "clear") {
+        task.durationAmount = null;
+        task.durationUnit = null;
+        task.durationMinutes = null;
+      } else if (input.duration.kind === "replace") {
+        task.durationAmount = input.duration.amount;
+        task.durationUnit = input.duration.unit;
+        task.durationMinutes = normalizeDurationMinutes(
+          input.duration.amount,
+          input.duration.unit
+        );
+      }
     }
     this.applyDue(task, input.due);
     if (input.assignment.kind === "assign") task.assigneeId = input.assignment.assigneeId;
@@ -348,7 +354,7 @@ export class E2ETodoistAdapter implements TodoistAdapter {
       duration:
         input.durationMinutes === null
           ? null
-          : { amount: input.durationMinutes, unit: "minute" }
+          : { kind: "replace", amount: input.durationMinutes, unit: "minute" }
     });
     return { todoistTaskId, task: this.world.getTask(todoistTaskId) };
   }
@@ -366,7 +372,7 @@ export class E2ETodoistAdapter implements TodoistAdapter {
         commandUuid: "e2e-legacy-reschedule",
         todoistTaskId: input.todoistTaskId,
         ...(input.description === undefined ? {} : { description: input.description }),
-        duration: { amount: input.durationMinutes, unit: "minute" },
+        duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
         due: {
           kind: "replace",
           datetime: input.dueDatetime,
@@ -394,14 +400,18 @@ export class E2ETodoistAdapter implements TodoistAdapter {
         todoistTaskId: input.todoistTaskId,
         title: input.title,
         description: input.description,
-        duration: { amount: input.durationMinutes, unit: "minute" },
-        due: {
-          kind: "replace",
-          datetime: input.dueDatetime,
-          string: null,
-          lang: null,
-          timezone: null
-        },
+        duration: input.durationMinutes === null
+          ? { kind: "clear" }
+          : { kind: "replace", amount: input.durationMinutes, unit: "minute" },
+        due: input.dueDatetime === null
+          ? { kind: "clear" }
+          : {
+              kind: "replace",
+              datetime: input.dueDatetime,
+              string: null,
+              lang: null,
+              timezone: null
+            },
         assignment:
           input.assigneeId === null
             ? { kind: "unassign" }

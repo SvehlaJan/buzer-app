@@ -16,10 +16,10 @@ export type TodoistAssignmentMutation =
   | { kind: "assign"; assigneeId: string }
   | { kind: "unassign" };
 
-export interface TodoistDurationMutation {
-  amount: number;
-  unit: string;
-}
+export type TodoistDurationMutation =
+  | { kind: "preserve" }
+  | { kind: "clear" }
+  | { kind: "replace"; amount: number; unit: "minute" | "hour" };
 
 export interface TodoistRootItemAddInput {
   kind: "root";
