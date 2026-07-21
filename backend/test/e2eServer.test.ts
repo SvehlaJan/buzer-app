@@ -386,6 +386,7 @@ describe("debug surface parity", () => {
 
       const failed = await mutate(server, "/tasks/task-start/start", action({ expectedOccurrenceKey: task.occurrenceKey }), 500);
       expect(failed).toMatchObject({ code: "forced_failure", snapshot: expect.any(Object) });
+      expect(failed).not.toHaveProperty("message");
       const calls = (await server.app.inject({ method: "GET", url: "/__calls" })).json().calls;
       expect(calls.some((call: { path: string }) => call.path === "/tasks/task-start/start")).toBe(true);
     });

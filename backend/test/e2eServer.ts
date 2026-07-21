@@ -149,7 +149,6 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       if (controls.failActions) {
         return reply.code(500).send({
           code: "forced_failure",
-          message: "Forced action failure",
           snapshot: snapshots.getSnapshot(new Date().toISOString())
         });
       }
