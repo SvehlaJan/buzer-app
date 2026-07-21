@@ -90,6 +90,20 @@ class BuzerApiClientJsonTest {
     }
 
     @Test
+    fun rootOnlyUpdateTaskRequestEncodesEmptyChildMutations() {
+        val body = buzerApiJson.encodeToString(
+            UpdateTaskRequest(
+                actionId = "action-edit-root-only",
+                deviceId = "device-1",
+                expectedOccurrenceKey = "occurrence-1",
+                rootPatch = RootTaskPatch(expectedTaskRevision = "r:3", title = "Edited task")
+            )
+        )
+
+        assertContains(body, "\"childMutations\":[]")
+    }
+
+    @Test
     fun rescheduleTaskRequestEncodesDescriptionPatchSemantics() {
         val unchangedBody = buzerApiJson.encodeToString(
             RescheduleTaskRequest(
