@@ -43,6 +43,13 @@ internal fun ScheduleEditor(
             .padding(start = Spacing.xl, bottom = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
+        scheduleValidationMessage(validation)?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
         QuickChoiceGroup(
             label = "Date",
             isError = validation.highlightDate,

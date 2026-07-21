@@ -88,6 +88,33 @@ class TaskEditorScaffoldStateTest {
         assertTrue(validation.highlightDuration)
     }
 
+    @Test
+    fun scheduleValidationFocusExpandsScheduleEvenWhenAnotherSectionWasOpen() {
+        val validation = validateScheduleForSave(
+            TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
+        )
+
+        assertEquals(
+            EditorSection.Schedule,
+            resolvedExpandedSection(
+                state = TaskEditorScaffoldState(expandedSection = EditorSection.Notes),
+                validation = validation
+            )
+        )
+    }
+
+    @Test
+    fun scheduleValidationProvidesConciseScheduleLevelErrorCopy() {
+        val validation = validateScheduleForSave(
+            TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
+        )
+
+        assertEquals(
+            "Set date, start time, and duration to save this task.",
+            scheduleValidationMessage(validation)
+        )
+    }
+
     private fun project(
         id: String,
         collaborators: List<ProjectCollaborator>

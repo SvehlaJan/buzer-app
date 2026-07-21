@@ -89,3 +89,28 @@ Verification:
 
 Run Task 6 specification and code-quality review, then migrate Add and Edit to this
 scaffold in Tasks 7 and 8 while preserving their existing retry/reconciliation flows.
+
+## Review Follow-up
+
+The Task 6 specification review found two Schedule-validation gaps. This follow-up
+adds controlled resolution of an expanded section: when the owning screen passes a
+Schedule validation focus, Schedule is rendered open even if Notes or Checklist had
+been open. The expanded Schedule now also displays the concise error copy
+`Set date, start time, and duration to save this task.` above the existing missing
+control highlights.
+
+TDD evidence: the added focused test was RED before implementation because
+`resolvedExpandedSection` and `scheduleValidationMessage` did not exist. It is GREEN
+after the reducer and presentation helpers were added.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.taskeditor.TaskEditorScaffoldStateTest --tests app.buzer.android.ui.taskeditor.TaskEditorDraftTest --tests app.buzer.android.ui.taskeditor.ScheduleQuickChoicesTest --tests app.buzer.android.ui.taskeditor.TaskEditorWheelDialogsTest`
+- Result: PASS
+- Evidence: Schedule focus/error-copy coverage and Task 5 primitive regression tests passed.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: complete shared and Android JVM suites passed and debug APK assembled after the review fix.

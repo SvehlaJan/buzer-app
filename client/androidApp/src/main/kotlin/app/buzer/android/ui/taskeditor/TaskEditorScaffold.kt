@@ -74,6 +74,19 @@ internal fun reduceSection(
     requested: EditorSection
 ): EditorSection = if (current == requested) EditorSection.None else requested
 
+/** A validation focus is controlled by the screen owner until the failing draft field changes. */
+internal fun resolvedExpandedSection(
+    state: TaskEditorScaffoldState,
+    validation: TaskEditorScheduleValidation
+): EditorSection = validation.focusSection ?: state.expandedSection
+
+internal fun scheduleValidationMessage(validation: TaskEditorScheduleValidation): String? =
+    if (!validation.isValid && validation.focusSection == EditorSection.Schedule) {
+        "Set date, start time, and duration to save this task."
+    } else {
+        null
+    }
+
 internal fun selectProject(
     state: TaskEditorScaffoldState,
     draft: TaskEditorDraft,
@@ -168,6 +181,7 @@ internal fun TaskEditorScaffold(
     val personalProject = selectedProject?.canAssignTasks == false
     val assigneeReady = personalProject || selectedProject?.collaboratorsReady == true
     val notesPreview = draft.description.trim().ifBlank { "Add notes" }
+    val expandedSection = resolvedExpandedSection(state, scheduleValidation)
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -190,12 +204,12 @@ internal fun TaskEditorScaffold(
                 label = "Schedule",
                 value = collapsedScheduleSummary(draft, now),
                 leadingSymbol = "◷",
-                expanded = state.expandedSection == EditorSection.Schedule,
+                expanded = expandedSection == EditorSection.Schedule,
                 isError = !scheduleValidation.isValid && scheduleValidation.focusSection == EditorSection.Schedule,
                 enabled = enabled,
                 onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Schedule)) }
             )
-            if (state.expandedSection == EditorSection.Schedule) {
+            if (expandedSection == EditorSection.Schedule) {
                 ScheduleEditor(
                     draft = draft,
                     now = now,
@@ -248,11 +262,11 @@ internal fun TaskEditorScaffold(
                 label = "Notes",
                 value = notesPreview,
                 leadingSymbol = "≡",
-                expanded = state.expandedSection == EditorSection.Notes,
+                expanded = expandedSection == EditorSection.Notes,
                 enabled = enabled,
                 onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Notes)) }
             )
-            if (state.expandedSection == EditorSection.Notes) {
+            if (expandedSection == EditorSection.Notes) {
                 BasicTextField(
                     value = draft.description,
                     onValueChange = onDescriptionChange,
@@ -270,11 +284,11 @@ internal fun TaskEditorScaffold(
                 label = "Checklist",
                 value = "Checklist · $checklistDoneCount/$checklistTotalCount done",
                 leadingSymbol = "✓",
-                expanded = state.expandedSection == EditorSection.Checklist,
+                expanded = expandedSection == EditorSection.Checklist,
                 enabled = enabled,
                 onClick = { state = state.copy(expandedSection = reduceSection(state.expandedSection, EditorSection.Checklist)) }
             )
-            if (state.expandedSection == EditorSection.Checklist) {
+            if (expandedSection == EditorSection.Checklist) {
                 checklistContent()
             }
             Spacer(Modifier.height(Spacing.xl))
