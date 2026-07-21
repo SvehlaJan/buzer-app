@@ -13,7 +13,7 @@ internal data class TaskEditorSchedule(
     val durationMinutes: Int? = null
 ) {
     fun isComplete(): Boolean =
-        date != null && hour != null && minute != null && durationMinutes != null
+        date != null && hour != null && minute != null && (durationMinutes ?: 0) > 0
 
     fun isEmpty(): Boolean =
         date == null && hour == null && minute == null && durationMinutes == null

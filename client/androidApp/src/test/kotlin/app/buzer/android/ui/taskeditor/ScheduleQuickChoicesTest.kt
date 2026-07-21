@@ -97,6 +97,18 @@ class ScheduleQuickChoicesTest {
     }
 
     @Test
+    fun zeroDurationDoesNotProduceACompleteScheduleOrDerivedEndCopy() {
+        val schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 10, 0, 0)
+        val draft = TaskEditorDraft(title = "Review finances", schedule = schedule)
+        val now = LocalDateTime.of(2026, 7, 21, 9, 0)
+
+        assertEquals(false, schedule.isComplete())
+        assertEquals(null, scheduleSummary(schedule, now))
+        assertEquals("Set date, time & duration", collapsedScheduleSummary(draft, now))
+        assertEquals("Save task", saveActionLabel(draft))
+    }
+
+    @Test
     fun saveLabelUsesTaskForAnUnscheduledNonSelfDraftAndTimesForACompleteDraft() {
         val assignee = ProjectCollaborator(id = "wife", displayName = "Wife", isCurrentUser = false)
         val noSchedule = TaskEditorDraft(

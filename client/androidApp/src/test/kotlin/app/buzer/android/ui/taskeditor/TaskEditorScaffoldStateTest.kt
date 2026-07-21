@@ -104,6 +104,22 @@ class TaskEditorScaffoldStateTest {
     }
 
     @Test
+    fun scheduleValidationFocusPersistsAfterTheValidationClears() {
+        val focusedState = persistValidationFocus(
+            state = TaskEditorScaffoldState(expandedSection = EditorSection.Notes),
+            validation = validateScheduleForSave(
+                TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
+            )
+        )
+
+        assertEquals(EditorSection.Schedule, focusedState.expandedSection)
+        assertEquals(
+            EditorSection.Schedule,
+            resolvedExpandedSection(focusedState, TaskEditorScheduleValidation.valid())
+        )
+    }
+
+    @Test
     fun scheduleValidationProvidesConciseScheduleLevelErrorCopy() {
         val validation = validateScheduleForSave(
             TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)

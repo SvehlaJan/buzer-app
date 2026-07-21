@@ -114,3 +114,33 @@ Verification:
 - Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 - Result: PASS
 - Evidence: complete shared and Android JVM suites passed and debug APK assembled after the review fix.
+
+## Code-Quality Review Follow-up
+
+The Task 6 code-quality review found three more boundary defects. This follow-up:
+
+- persists Schedule validation focus into the presentation state with
+  `persistValidationFocus`, while retaining the immediate controlled rendering needed
+  for the first error composition; Schedule therefore remains expanded after the
+  parent clears validation following a field edit;
+- adds a top, icon-only `Back` affordance with a semantic `Back` content description
+  and a dedicated `onBack` callback, separate from the sticky `onCancel` callback so
+  the Add/Edit owners can later apply distinct discard policies; and
+- changes `TaskEditorSchedule.isComplete()` to require a positive duration. Derived
+  end, collapsed summary, and Save-time labels now all reject a zero-minute duration.
+
+TDD evidence: the persistence/zero-duration regression test run was RED first because
+`persistValidationFocus` was unresolved. After implementing the reducer and positive
+duration invariant, the focused suite passed.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.taskeditor.TaskEditorScaffoldStateTest --tests app.buzer.android.ui.taskeditor.TaskEditorDraftTest --tests app.buzer.android.ui.taskeditor.ScheduleQuickChoicesTest --tests app.buzer.android.ui.taskeditor.TaskEditorWheelDialogsTest`
+- Result: PASS
+- Evidence: persisted focus and zero-duration derived-state regressions passed with all Task 5/6 focused tests.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: complete shared Kotlin host suite, Android JVM suite, and debug APK assembly passed after the code-quality fixes.

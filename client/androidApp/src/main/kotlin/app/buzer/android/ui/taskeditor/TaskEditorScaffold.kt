@@ -18,11 +18,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +81,13 @@ internal fun resolvedExpandedSection(
     state: TaskEditorScaffoldState,
     validation: TaskEditorScheduleValidation
 ): EditorSection = validation.focusSection ?: state.expandedSection
+
+internal fun persistValidationFocus(
+    state: TaskEditorScaffoldState,
+    validation: TaskEditorScheduleValidation
+): TaskEditorScaffoldState = validation.focusSection?.let { focusedSection ->
+    state.copy(expandedSection = focusedSection)
+} ?: state
 
 internal fun scheduleValidationMessage(validation: TaskEditorScheduleValidation): String? =
     if (!validation.isValid && validation.focusSection == EditorSection.Schedule) {
@@ -165,6 +174,7 @@ internal fun TaskEditorScaffold(
     onDescriptionChange: (String) -> Unit,
     onRetryCollaborators: () -> Unit,
     onSave: () -> Unit,
+    onBack: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     scheduleValidation: TaskEditorScheduleValidation = TaskEditorScheduleValidation.valid(),
@@ -176,6 +186,9 @@ internal fun TaskEditorScaffold(
     titleModifier: Modifier = Modifier
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
+    LaunchedEffect(scheduleValidation.focusSection) {
+        state = persistValidationFocus(state, scheduleValidation)
+    }
     val selectedProject = projects.firstOrNull { it.id == draft.projectId }
     val assignees = projectAssignees(selectedProject, currentUser)
     val personalProject = selectedProject?.canAssignTasks == false
@@ -192,7 +205,15 @@ internal fun TaskEditorScaffold(
                 .padding(bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            Text(screenTitle, style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.semantics { contentDescription = "Back" }
+                ) {
+                    Text("‹", style = MaterialTheme.typography.headlineSmall)
+                }
+                Text(screenTitle, style = MaterialTheme.typography.titleLarge)
+            }
             BorderlessTitleField(
                 title = title,
                 onTitleChange = onTitleChange,
