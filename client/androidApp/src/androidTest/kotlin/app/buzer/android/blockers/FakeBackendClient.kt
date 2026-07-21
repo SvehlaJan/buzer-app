@@ -29,6 +29,17 @@ class FakeBackendClient(
         request("POST", "/__fail-projects", """{"enabled":$enabled}""")
     }
 
+    fun setScenario(name: String) {
+        request("POST", "/__scenario", """{"name":"$name"}""")
+    }
+
+    fun taskReconciliationStatus(taskId: String): String? {
+        val body = request("GET", "/tasks/snapshot", authorized = true)
+        val tasks = Json.parseToJsonElement(body).jsonObject["tasks"]?.jsonArray ?: return null
+        return tasks.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull == taskId }
+            ?.jsonObject?.get("reconciliationStatus")?.jsonPrimitive?.contentOrNull
+    }
+
     fun calls(): String = request("GET", "/__calls")
 
     fun assertRecorded(path: String) {
@@ -88,13 +99,18 @@ class FakeBackendClient(
         }
     }
 
-    private fun request(method: String, path: String, body: String = "{}"): String {
+    private fun request(
+        method: String,
+        path: String,
+        body: String = "{}",
+        authorized: Boolean = false
+    ): String {
         // The CI emulator's guest network can drop for several seconds at a time; all
         // control endpoints are idempotent, so ride out connectivity blips by retrying.
         val deadline = System.currentTimeMillis() + CONNECTIVITY_RETRY_WINDOW_MILLIS
         while (true) {
             try {
-                return requestOnce(method, path, body)
+                return requestOnce(method, path, body, authorized)
             } catch (error: java.io.IOException) {
                 if (System.currentTimeMillis() >= deadline) throw error
                 Thread.sleep(1_000)
@@ -102,11 +118,14 @@ class FakeBackendClient(
         }
     }
 
-    private fun requestOnce(method: String, path: String, body: String): String {
+    private fun requestOnce(method: String, path: String, body: String, authorized: Boolean): String {
         val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.connectTimeout = 5_000
         connection.readTimeout = 5_000
+        if (authorized) {
+            connection.setRequestProperty("Authorization", "Bearer $AUTH_TOKEN")
+        }
         if (method == "POST") {
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
@@ -129,5 +148,6 @@ class FakeBackendClient(
 
     private companion object {
         const val CONNECTIVITY_RETRY_WINDOW_MILLIS = 20_000L
+        const val AUTH_TOKEN = "test-token"
     }
 }
