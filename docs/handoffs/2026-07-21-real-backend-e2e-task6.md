@@ -39,17 +39,41 @@ Verification:
 
 Verification:
 
-- Command: `git diff --check`
+- Command: `git show --check 1ddbc41`
   - Result: PASS
-  - Evidence: no whitespace diagnostics.
+  - Evidence: the committed Task 6 tree produced no whitespace diagnostics.
 
 Verification:
 
-- Command: `cd backend && PORT=18455 npm run e2e-server` with real-port HTTP checks
+- Command: `cd backend && PORT=18455 npm run e2e-server` (privileged temporary
+  server process)
   - Result: PASS
-  - Evidence: the server listened successfully; `GET /health` returned ok, an
-    authorized `GET /tasks/snapshot` returned the seeded fixture snapshot, and
-    `POST /__reset` returned `{ok:true}`.
+  - Evidence: the E2E server listened successfully on port 18455.
+
+Verification:
+
+- Command: `curl --fail --silent http://127.0.0.1:18455/health`
+  - Result: PASS
+  - Evidence: returned an `ok: true` health response.
+
+Verification:
+
+- Command: `curl --fail --silent --header 'Authorization: Bearer test-token' http://127.0.0.1:18455/tasks/snapshot`
+  - Result: PASS
+  - Evidence: returned the seeded authorized fixture snapshot.
+
+Verification:
+
+- Command: `curl --fail --silent --request POST http://127.0.0.1:18455/__reset`
+  - Result: PASS
+  - Evidence: returned `{ok:true}`.
+
+Verification:
+
+- Command: `kill "$e2e_server_pid"`
+  - Result: PASS
+  - Evidence: the privileged smoke process was terminated after the HTTP checks;
+    no temporary E2E server was left running.
 
 ## Manual verification
 
