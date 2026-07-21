@@ -1401,7 +1401,7 @@ git commit -m "feat(e2e): add e2e-server npm script"
 **Files:**
 - Create: `scripts/e2e-real-backend.sh` (mode 755)
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Structurally parallel to `scripts/e2e-fake-backend.sh` (which stays untouched); only the
 boot command and readiness probe differ:
@@ -1488,7 +1488,7 @@ GRADLE_ARGS+=(
 ./gradlew "${GRADLE_ARGS[@]}"
 ```
 
-- [ ] **Step 2: Make it executable and verify boot-only behavior**
+- [x] **Step 2: Make it executable and verify boot-only behavior**
 
 ```bash
 chmod +x scripts/e2e-real-backend.sh
@@ -1497,7 +1497,7 @@ bash -n scripts/e2e-real-backend.sh
 
 Expected: `bash -n` exits 0 (syntax check). Full runs happen in Task 9.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/e2e-real-backend.sh
