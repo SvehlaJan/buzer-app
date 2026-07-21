@@ -2,10 +2,12 @@ package app.buzer.android.blockers
 
 import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -62,6 +64,7 @@ class RealBackendScenarioTest {
                 composeRule.onNodeWithText("Done").performClick()
                 waitForRecordedCall("/tasks/task-deadline/done")
                 waitForReconciliationStatus("task-deadline", "pending")
+                waitForPendingDeadlineBlocker(scenario)
             } finally {
                 scenario.close()
             }
@@ -106,5 +109,17 @@ class RealBackendScenarioTest {
             SystemClock.sleep(200)
         }
         fail("Expected $taskId reconciliationStatus=$expected, last seen: $last")
+    }
+
+    private fun waitForPendingDeadlineBlocker(scenario: ActivityScenario<DeadlineBlockerActivity>) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            scenario.state != Lifecycle.State.DESTROYED &&
+                runCatching {
+                    composeRule.onNodeWithText("Done").assertIsDisplayed().assertIsEnabled()
+                }.isSuccess
+        }
+        if (scenario.state == Lifecycle.State.DESTROYED) {
+            fail("Expected reconciliation-pending Done action to keep the deadline blocker open")
+        }
     }
 }
