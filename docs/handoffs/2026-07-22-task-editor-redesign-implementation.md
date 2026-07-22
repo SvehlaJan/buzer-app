@@ -326,3 +326,58 @@ Verification:
 
 - Run the complete `scripts/e2e-real-backend.sh` lane and retain only the documented
   partial-child discrepancy, then complete the coordinating Task 10 verification.
+
+---
+
+## Final automated verification and connected-device install (2026-07-22)
+
+### Scope / plan status
+
+- Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 10.
+- Automated verification is complete. The authoritative real-backend lane has exactly
+  the single documented fake-only partial-child discrepancy; all redesigned-editor
+  coverage passed.
+- Per user direction, `tools/fake-backend` is deprecated. Do not invoke, modify, or
+  count it as a verification gate. The real local E2E backend is authoritative.
+
+### Verification
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` from `client/`
+- Result: PASS
+- Evidence: shared host tests, Android JVM tests, and debug APK assembly completed
+  successfully.
+
+Verification:
+
+- Command: `npm test` and `npm run typecheck` from `backend/`
+- Result: PASS
+- Evidence: backend test suite passed (386 tests); TypeScript typecheck passed.
+
+Verification:
+
+- Command: `npm test -- test/fakes/e2eFixtures.test.ts` and `npm test -- test/e2eServer.test.ts` from `backend/`
+- Result: PASS
+- Evidence: real-fixture tests passed 10/10 and real E2E-server tests passed 20/20.
+
+Verification:
+
+- Command: `PORT=18442 scripts/e2e-real-backend.sh`
+- Result: CLASSIFIED PASS
+- Evidence: 31/32 managed-device tests passed. The sole failure was the explicitly
+  accepted fake-only `addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft`
+  discrepancy; all Add/Edit redesign and real-backend scenario tests passed.
+
+Verification:
+
+- Command: `android run --debug --device=56061FDCR005J0 --apks=/Users/svehla/playground/buzer-app/.worktrees/task-editor-redesign/client/androidApp/build/outputs/apk/debug/androidApp-debug.apk --activity=app.buzer.android.MainActivity --type=ACTIVITY`
+- Result: PASS
+- Evidence: verified debug APK installed and launched on connected Pixel 10
+  (`56061FDCR005J0`).
+
+### Manual verification status
+
+- Blocked only by the connected Pixel 10 lock screen. Unlock it, then inspect the
+  Schedule quick choices/custom dialogs, draft-only Project and Assignee selection,
+  and the legacy repair/reschedule picker before marking Task 10 fully complete.

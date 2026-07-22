@@ -829,7 +829,7 @@
   Expected: PASS. Record test-file/test-count output and confirm the real E2E server
   conformance tests include project collaborator data.
 
-- [ ] **Step 2: Run all required JVM/build gates.**
+- [x] **Step 2: Run all required JVM/build gates.**
 
   Run from `client/`:
 
@@ -839,19 +839,17 @@
   ./gradlew :androidApp:assembleDebug
   ```
 
-  Expected: PASS.
+  Result (2026-07-22): PASS — `:shared:testAndroidHostTest`,
+  `:androidApp:testDebugUnitTest`, and `:androidApp:assembleDebug` completed
+  successfully.
 
-- [ ] **Step 3: Run deterministic Android fake-backend E2E.**
+- [x] **Step 3: Retire the deprecated TypeScript fake-backend E2E lane.**
 
-  Run from repository root with the documented Android SDK environment:
+  Per the user, `tools/fake-backend` is deprecated and must not be invoked,
+  modified, or counted as a verification gate. The local real-backend E2E server
+  (`backend/test/e2eServer.ts`) is authoritative for this redesign.
 
-  ```text
-  scripts/e2e-fake-backend.sh
-  ```
-
-  Expected: all migrated UI tests pass; the two real-backend scenario tests self-skip.
-
-- [ ] **Step 4: Run the complementary real-backend E2E lane and classify results.**
+- [x] **Step 4: Run the authoritative real-backend E2E lane and classify results.**
 
   Run from repository root with the documented Android SDK environment:
 
@@ -859,11 +857,10 @@
   scripts/e2e-real-backend.sh
   ```
 
-  Expected: all redesigned-editor tests pass against real business logic. The only
-  acceptable pre-existing failure is
+  Result (2026-07-22): 31 of 32 instrumentation tests passed against a fresh local
+  real E2E backend. The only failure was the accepted pre-existing
   `addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft`, documented as the
-  fake-only `[partial-failure]` bucket-c convention. Any other failure is fixed before
-  handoff.
+  fake-only `[partial-failure]` bucket-c convention. No other failure occurred.
 
 - [ ] **Step 5: Perform targeted manual verification and write the handoff.**
 
@@ -878,6 +875,10 @@
   git add docs/superpowers/specs/2026-07-21-task-editor-redesign-design.md docs/handoffs/2026-07-21-task-editor-redesign-implementation.md
   git commit -m "docs: hand off task editor redesign"
   ```
+
+  Status (2026-07-22): the verified debug APK was installed and launched on the
+  connected Pixel 10 (`56061FDCR005J0`), but the device is locked. Complete this
+  inspection after it is unlocked, then capture the final result in the handoff.
 
 ## Plan Self-Review
 
