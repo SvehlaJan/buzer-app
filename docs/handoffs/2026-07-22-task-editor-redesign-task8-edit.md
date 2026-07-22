@@ -94,6 +94,11 @@ Verification:
   `Custom: <rule>` (or `Custom recurrence`) and opens a preset sheet with no selected
   row. It remains absent from the root patch until an explicit supported choice is
   tapped; that replacement then becomes the selected row and is serialized.
+- Follow-up after static quality review: `onUpdate` now rethrows cancellation, catches
+  ordinary update exceptions into a retryable preserved-draft message, and clears its
+  submitting state in `finally`. Choosing No schedule for a non-self task also now
+  deliberately replaces an untouched custom recurrence with `Does not repeat` rather
+  than leaving stale custom copy in the Repeat row.
 - The focused Gradle rerun for this follow-up was blocked before execution because the
   execution approval budget was exhausted. The exact intended command was:
   `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.EditTaskScreenRequestTest --tests app.buzer.android.ui.screens.EditTaskScreenStateTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`.

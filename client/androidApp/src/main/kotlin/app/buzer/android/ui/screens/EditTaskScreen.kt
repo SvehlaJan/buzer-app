@@ -55,6 +55,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal data class ExistingChecklistDraft(
@@ -151,6 +152,39 @@ internal data class EditRecurrencePresentation(
     val rowValue: String,
     val selectedPreset: RecurrencePreset?
 )
+
+internal data class EditNoScheduleSelection(
+    val draft: TaskEditorDraft,
+    val customRecurrenceUntouched: Boolean
+)
+
+internal fun selectEditNoSchedule(
+    draft: TaskEditorDraft,
+    customRecurrenceUntouched: Boolean
+): EditNoScheduleSelection = if (draft.assignee?.isCurrentUser == false) {
+    EditNoScheduleSelection(
+        draft = setNoSchedule(draft),
+        customRecurrenceUntouched = false
+    )
+} else {
+    EditNoScheduleSelection(
+        draft = draft,
+        customRecurrenceUntouched = customRecurrenceUntouched
+    )
+}
+
+internal data class EditTaskSubmitState(
+    val submitting: Boolean,
+    val resultMessage: String?
+)
+
+internal fun failedEditTaskSubmitState(error: Exception): EditTaskSubmitState {
+    val message = error.message?.trim().takeUnless { it.isNullOrEmpty() } ?: "Task update failed"
+    return EditTaskSubmitState(
+        submitting = false,
+        resultMessage = "$message. Your draft is still here; retry."
+    )
+}
 
 internal fun editRecurrencePresentation(
     task: TaskSnapshotItem,
@@ -299,16 +333,27 @@ fun EditTaskScreen(
         submitting = true
         resultMessage = null
         scope.launch {
-            when (val result = onUpdate(task.id, request)) {
-                CoordinatorActionResult.Success -> onBack()
-                is CoordinatorActionResult.Stale -> resultMessage = "Task changed elsewhere. Your draft is still here; reapply it after review."
-                is CoordinatorActionResult.Pending -> resultMessage = "Saved; waiting for Todoist confirmation"
-                is CoordinatorActionResult.RetryAfter -> resultMessage = "Retry in ${result.retryAfterSeconds} seconds"
-                is CoordinatorActionResult.LocalReconciliationFailed -> resultMessage = result.message
-                is CoordinatorActionResult.FailedAndHidden -> resultMessage = result.message
-                CoordinatorActionResult.ChildActionInFlight -> resultMessage = "Checklist update is already in progress"
+            try {
+                when (val result = onUpdate(task.id, request)) {
+                    CoordinatorActionResult.Success -> onBack()
+                    is CoordinatorActionResult.Stale -> resultMessage = "Task changed elsewhere. Your draft is still here; reapply it after review."
+                    is CoordinatorActionResult.Pending -> resultMessage = "Saved; waiting for Todoist confirmation"
+                    is CoordinatorActionResult.RetryAfter -> resultMessage = "Retry in ${result.retryAfterSeconds} seconds"
+                    is CoordinatorActionResult.LocalReconciliationFailed -> resultMessage = result.message
+                    is CoordinatorActionResult.FailedAndHidden -> resultMessage = result.message
+                    CoordinatorActionResult.ChildActionInFlight -> resultMessage = "Checklist update is already in progress"
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AppLog.error(
+                    "edit_task update_failed type=${error::class.simpleName} message=${error.message}",
+                    error
+                )
+                resultMessage = failedEditTaskSubmitState(error).resultMessage
+            } finally {
+                submitting = false
             }
-            submitting = false
         }
     }
 
@@ -480,7 +525,20 @@ fun EditTaskScreen(
             },
             afterChecklistContent = { ActivityLogSection(task) },
             onScheduleChange = { schedule -> updateDraft(draft.copy(schedule = schedule)) },
-            onNoSchedule = { updateDraft(setNoSchedule(draft)) },
+            onNoSchedule = {
+                val selection = selectEditNoSchedule(draft, customRecurrenceUntouched)
+                val replacedCustomRecurrence =
+                    customRecurrenceUntouched != selection.customRecurrenceUntouched
+                customRecurrenceUntouched = selection.customRecurrenceUntouched
+                if (selection.draft == draft && replacedCustomRecurrence) {
+                    pendingRequest = null
+                    errorText = null
+                    resultMessage = null
+                    scheduleValidation = TaskEditorScheduleValidation.valid()
+                } else {
+                    updateDraft(selection.draft)
+                }
+            },
             onProjectSelected = { project ->
                 updateDraft(selectAddTaskProject(draft, project, currentUser))
             },

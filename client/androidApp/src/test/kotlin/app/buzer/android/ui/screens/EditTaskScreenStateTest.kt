@@ -58,6 +58,54 @@ class EditTaskScreenStateTest {
     }
 
     @Test
+    fun nonSelfNoScheduleDeliberatelyReplacesCustomRecurrenceWithNever() {
+        val customTask = task(assigneeId = wife.id, assignedToUser = false).copy(
+            recurrence = TaskRecurrence(
+                kind = RecurrenceKind.custom,
+                preset = null,
+                rule = "every 2 days"
+            )
+        )
+        val result = selectEditNoSchedule(
+            draft = TaskEditorDraft(
+                title = "Ask about booking",
+                assignee = wife,
+                schedule = TaskEditorSchedule(
+                    date = java.time.LocalDate.of(2026, 7, 16),
+                    hour = 10,
+                    minute = 0,
+                    durationMinutes = 30
+                ),
+                recurrencePreset = RecurrencePreset.never
+            ),
+            customRecurrenceUntouched = true
+        )
+
+        val presentation = editRecurrencePresentation(
+            task = customTask,
+            customRecurrenceUntouched = result.customRecurrenceUntouched,
+            draftPreset = result.draft.recurrencePreset
+        )
+
+        assertEquals(TaskEditorSchedule(), result.draft.schedule)
+        assertEquals(RecurrencePreset.never, result.draft.recurrencePreset)
+        assertFalse(result.customRecurrenceUntouched)
+        assertEquals("Does not repeat", presentation.rowValue)
+        assertEquals(RecurrencePreset.never, presentation.selectedPreset)
+    }
+
+    @Test
+    fun updateExceptionLeavesTheDraftRetryableInsteadOfSavingForever() {
+        val state = failedEditTaskSubmitState(IllegalStateException("Network unavailable"))
+
+        assertFalse(state.submitting)
+        assertEquals(
+            "Network unavailable. Your draft is still here; retry.",
+            state.resultMessage
+        )
+    }
+
+    @Test
     fun initialTaskAssigneeStaysAuthoritativeUntilRefreshedMembershipProvesItStale() {
         val draft = initialEditTaskDraft(task(assigneeId = wife.id, assignedToUser = false))
         val projectWithOnlyMe = sharedProject(collaborators = listOf(me))
