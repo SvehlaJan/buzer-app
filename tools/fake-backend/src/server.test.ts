@@ -119,6 +119,98 @@ test("projects and editable root mutations model the redesigned assignment contr
   assert.equal(rejected.json().code, "assignee_not_in_project");
 });
 
+test("root create and update enforce self and partial schedule validation", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const selfWithoutSchedule = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: {
+      ...action("self-without-schedule"),
+      title: "My unscheduled task",
+      projectId: "project-test",
+      assigneeId: "user-me",
+      dueDatetime: null,
+      durationMinutes: null
+    }
+  });
+  assert.equal(selfWithoutSchedule.statusCode, 422);
+  assert.deepEqual(selfWithoutSchedule.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["due_datetime_required", "duration_required"] }
+  });
+
+  const wifeWithPartialSchedule = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: {
+      ...action("wife-partial-schedule"),
+      title: "Wife partial task",
+      projectId: "project-test",
+      assigneeId: "user-wife",
+      dueDatetime: "2026-06-01T14:00:00.000Z",
+      durationMinutes: null
+    }
+  });
+  assert.equal(wifeWithPartialSchedule.statusCode, 422);
+  assert.deepEqual(wifeWithPartialSchedule.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["schedule_fields_must_be_set_together"] }
+  });
+
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  const selfUpdateWithoutSchedule = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("self-update-without-schedule", before.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: before.taskRevision,
+        dueDatetime: null,
+        durationMinutes: null
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(selfUpdateWithoutSchedule.statusCode, 422);
+  assert.deepEqual(selfUpdateWithoutSchedule.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["due_datetime_required", "duration_required"] }
+  });
+
+  const selfPartialUpdate = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("self-partial-update", before.occurrenceKey),
+      rootPatch: { expectedTaskRevision: before.taskRevision, dueDatetime: null },
+      childMutations: []
+    }
+  });
+  assert.equal(selfPartialUpdate.statusCode, 422);
+  assert.deepEqual(selfPartialUpdate.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["schedule_fields_must_be_set_together", "due_datetime_required"] }
+  });
+
+  const wifeUpdateWithoutSchedule = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("wife-update-without-schedule", before.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: before.taskRevision,
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(wifeUpdateWithoutSchedule.statusCode, 200);
+});
+
 test("reset restores fixtures at a newer snapshot generation", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());

@@ -71,3 +71,27 @@ Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 9.
 
 - The fake response intentionally hides the current user's email (`null`) to match the production `/projects` projection even though the fixture mirror retains the source email.
 - Task 10 should run Android test compilation and both documented fake/real backend E2E lanes once the Gradle-cache approval limitation is cleared, then inspect the device flow described in the implementation plan.
+
+## Post-review correction
+
+Review found that the fake backend still accepted an empty or partial schedule for a self-assigned root. The follow-up applies production-equivalent proposed-state validation before fake root creation and update:
+
+- self (`user-me`) and personal-project roots require both due datetime and positive duration;
+- non-self collaborators may have an empty schedule but never a partial one;
+- validation returns the production `task_validation_failed` response shape and the matching `due_datetime_required`, `duration_required`, `schedule_fields_must_be_set_together`, and positive-duration codes.
+
+Verification:
+
+- Command: `npm test` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: 16 tests passed, including self create/update rejection, partial non-self rejection, and empty non-self update acceptance.
+
+- Command: `npx vitest run test/services/taskActionService.test.ts test/http/routes.test.ts` (from `backend/`)
+  Result: PASS
+  Evidence: 2 files, 83 tests passed.
+
+- Command: `git diff --check`
+  Result: PASS
+  Evidence: no whitespace errors.
+
+Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.

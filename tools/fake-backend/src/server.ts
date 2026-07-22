@@ -77,6 +77,35 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       ? null
       : "assignee_not_in_project";
   }
+  function scheduleErrors(input: {
+    projectId: string;
+    assigneeId: string | null;
+    dueDatetime: string | null;
+    durationMinutes: number | null;
+  }): string[] {
+    const project = fixtureProjects.find((candidate) => candidate.id === input.projectId);
+    const required = project?.canAssignTasks === false || input.assigneeId === "user-me";
+    const hasDue = input.dueDatetime !== null;
+    const hasDuration = input.durationMinutes !== null;
+    const errors: string[] = [];
+    if (hasDue !== hasDuration) errors.push("schedule_fields_must_be_set_together");
+    if (required && !hasDue) errors.push("due_datetime_required");
+    if (required && !hasDuration) errors.push("duration_required");
+    if (input.durationMinutes !== null && (!Number.isInteger(input.durationMinutes) || input.durationMinutes <= 0)) {
+      errors.push("duration_must_be_positive_minutes");
+    }
+    return errors;
+  }
+  function taskValidationError(errors: string[]) {
+    return {
+      statusCode: 422,
+      body: {
+        code: "task_validation_failed",
+        message: "Task validation failed",
+        details: { errors }
+      }
+    };
+  }
   function error(code: string, statusCode: number) { return { statusCode, body: { code, snapshot: currentSnapshot() } }; }
   function staleFor(taskValue: FakeTask, body: ActionBody, child?: FakeChecklistItem) {
     if (controls.stale || body.expectedOccurrenceKey !== taskValue.occurrenceKey) return error("stale_occurrence", 409);
@@ -150,6 +179,10 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     const assigneeId = body.assigneeId === null ? null : typeof body.assigneeId === "string" ? body.assigneeId : "user-me";
     const assignmentError = projectAssignmentError(projectId, assigneeId);
     if (assignmentError !== null) return error(assignmentError, 422);
+    const dueDatetime = typeof body.dueDatetime === "string" ? body.dueDatetime : null;
+    const durationMinutes = typeof body.durationMinutes === "number" ? body.durationMinutes : null;
+    const errors = scheduleErrors({ projectId, assigneeId, dueDatetime, durationMinutes });
+    if (errors.length > 0) return taskValidationError(errors);
     const drafts = Array.isArray(body.checklistDrafts) ? body.checklistDrafts : [];
     const hasAmbiguousChildCreate = drafts.some((draft) => (draft as Record<string, unknown>).title === "[partial-failure]");
     if (hasAmbiguousChildCreate) return pending(body.actionId);
@@ -160,7 +193,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     });
     state.tasks.push({
       id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null, projectId, assigneeId,
-      dueDatetime: typeof body.dueDatetime === "string" ? body.dueDatetime : null, durationMinutes: typeof body.durationMinutes === "number" ? body.durationMinutes : null,
+      dueDatetime, durationMinutes,
       state: "planned", occurrenceNumber: 1, occurrenceKey: `occurrence-${id}-1`, taskRevision: 1,
       recurrence: body.recurrencePreset && body.recurrencePreset !== "never" ? { kind: "supported", preset: String(body.recurrencePreset), rule: `every ${String(body.recurrencePreset)}`, language: "en", timeZone: typeof body.timeZone === "string" ? body.timeZone : null } : { kind: "none", preset: "never", rule: null, language: null, timeZone: null },
       hierarchyStatus: "valid", hierarchyViolation: null, reconciliationStatus: "none", checklistItems: items, startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false
@@ -210,6 +243,14 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
         : root.assigneeId;
       const assignmentError = projectAssignmentError(projectId, assigneeId);
       if (assignmentError !== null) return error(assignmentError, 422);
+      const dueDatetime = patch.dueDatetime === undefined
+        ? root.dueDatetime
+        : typeof patch.dueDatetime === "string" ? patch.dueDatetime : null;
+      const durationMinutes = patch.durationMinutes === undefined
+        ? root.durationMinutes
+        : typeof patch.durationMinutes === "number" ? patch.durationMinutes : null;
+      const errors = scheduleErrors({ projectId, assigneeId, dueDatetime, durationMinutes });
+      if (errors.length > 0) return taskValidationError(errors);
       for (const key of ["title", "description", "projectId", "assigneeId", "dueDatetime", "durationMinutes"] as const) {
         if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
       }
