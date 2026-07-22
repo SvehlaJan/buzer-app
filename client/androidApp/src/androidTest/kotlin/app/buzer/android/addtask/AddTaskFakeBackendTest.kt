@@ -7,7 +7,9 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -59,7 +61,7 @@ class AddTaskFakeBackendTest {
     }
 
     @Test
-    fun addTask_sharedProjectRequiresAssigneeAndCreatesTask() {
+    fun addTask_sharedProjectSelectsMeByDefaultAndCreatesTask() {
         resetTestState()
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -68,9 +70,7 @@ class AddTaskFakeBackendTest {
             selectProject("Test Shared")
             enterTitle("Buy milk")
             selectDefaultSchedule()
-            submitUntilValidation("Assignee is required")
-
-            selectAssignee("Me")
+            waitForScrollableContentDescription("Assignee: Me")
             clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
@@ -267,13 +267,12 @@ class AddTaskFakeBackendTest {
             selectAssignee("Wife")
             waitForContentDescription("Assignee: Wife")
             openSchedule()
-            composeRule.onNodeWithText("No schedule").performClick()
             composeRule.onNodeWithText("Schedule").performClick()
             waitForContentDescription("Schedule: No schedule")
             openNotes()
             composeRule.onNodeWithContentDescription("Notes").performTextInput("draft note")
             openChecklist()
-            composeRule.onAllNodesWithText("draft note").assertCountEquals(0)
+            composeRule.onAllNodesWithContentDescription("Notes").assertCountEquals(0)
             composeRule.onNodeWithText("Add checklist item").performClick()
             assertNoRecordedCall("/tasks")
         } finally {
@@ -289,6 +288,7 @@ class AddTaskFakeBackendTest {
         try {
             openAddTaskFromHome()
             enterTitle("Unsaved draft")
+            composeRule.onNodeWithTag("titleInput").assertTextContains("Unsaved draft")
             composeRule.onNodeWithText("Cancel").performClick()
             waitForText("Discard changes?")
             composeRule.onNodeWithText("Keep editing").performClick()
@@ -325,24 +325,25 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectAssignee(label: String) {
-        composeRule.onNodeWithContentDescription("Assignee: Choose assignee")
+        composeRule.onNodeWithContentDescription("Assignee: Me")
             .performScrollTo()
             .performClick()
-        waitForText(label)
-        composeRule.onNodeWithText(label).performClick()
+        val choiceDescription = if (label == "Me") "$label, selected" else label
+        waitForContentDescription(choiceDescription)
+        composeRule.onNodeWithContentDescription(choiceDescription).performClick()
     }
 
     private fun selectDefaultSchedule() {
         openSchedule()
         composeRule.onNodeWithContentDescription("Custom date").performClick()
         waitForText("Custom date")
-        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("Custom date dialog apply").performClick()
         composeRule.onNodeWithContentDescription("Custom start time").performClick()
         waitForText("Custom start time")
-        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("Custom start time dialog apply").performClick()
         composeRule.onNodeWithContentDescription("Custom duration").performClick()
         waitForText("Custom duration")
-        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("Custom duration dialog apply").performClick()
     }
 
     private fun openSchedule() {
@@ -363,16 +364,16 @@ class AddTaskFakeBackendTest {
     private fun verifyCustomDialogCanCancelAndApply(contentDescription: String, title: String) {
         composeRule.onNodeWithContentDescription(contentDescription).performClick()
         waitForText(title)
-        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onNodeWithContentDescription("$title dialog cancel").performClick()
         composeRule.onAllNodesWithText(title).assertCountEquals(0)
         composeRule.onNodeWithContentDescription(contentDescription).performClick()
         waitForText(title)
-        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("$title dialog apply").performClick()
     }
 
     private fun clickSaveBlockRange() {
         val label = waitForSaveBlockRangeLabel()
-        composeRule.onNodeWithText(label).performScrollTo().performClick()
+        composeRule.onNodeWithText(label).performClick()
     }
 
     private fun submitUntilValidation(validationText: String) {
@@ -489,6 +490,23 @@ class AddTaskFakeBackendTest {
             }
         }
         throw AssertionError("Expected contentDescription $contentDescription", lastError)
+    }
+
+    private fun waitForScrollableContentDescription(contentDescription: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastError: Throwable? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                composeRule.onNodeWithContentDescription(contentDescription)
+                    .performScrollTo()
+                    .assertIsDisplayed()
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(100)
+            }
+        }
+        throw AssertionError("Expected scrollable contentDescription $contentDescription", lastError)
     }
 
     private fun waitForRecordedCall(path: String) {

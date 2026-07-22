@@ -11,6 +11,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.buzer.android.ui.theme.Spacing
@@ -48,12 +51,18 @@ internal fun DateWheelDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(pendingDate) }) {
+            TextButton(
+                onClick = { onApply(pendingDate) },
+                modifier = Modifier.semantics { contentDescription = "Custom date dialog apply" }
+            ) {
                 Text("Apply")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.semantics { contentDescription = "Custom date dialog cancel" }
+            ) {
                 Text("Cancel")
             }
         }
@@ -100,12 +109,18 @@ internal fun TimeWheelDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(pendingHour, pendingMinute) }) {
+            TextButton(
+                onClick = { onApply(pendingHour, pendingMinute) },
+                modifier = Modifier.semantics { contentDescription = "Custom start time dialog apply" }
+            ) {
                 Text("Apply")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.semantics { contentDescription = "Custom start time dialog cancel" }
+            ) {
                 Text("Cancel")
             }
         }
@@ -152,13 +167,17 @@ internal fun DurationWheelDialog(
         confirmButton = {
             TextButton(
                 onClick = { onApply(pendingHours * 60 + pendingMinutes) },
-                enabled = pendingHours > 0 || pendingMinutes > 0
+                enabled = pendingHours > 0 || pendingMinutes > 0,
+                modifier = Modifier.semantics { contentDescription = "Custom duration dialog apply" }
             ) {
                 Text("Apply")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.semantics { contentDescription = "Custom duration dialog cancel" }
+            ) {
                 Text("Cancel")
             }
         }

@@ -427,14 +427,14 @@ private fun BorderlessTitleField(
     errorText: String?,
     modifier: Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         BasicTextField(
             value = title,
             onValueChange = onTitleChange,
             enabled = enabled,
             singleLine = true,
             textStyle = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface),
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .padding(vertical = Spacing.sm)
                 .semantics { contentDescription = "Task title" }

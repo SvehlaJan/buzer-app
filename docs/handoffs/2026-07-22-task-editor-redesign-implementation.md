@@ -104,3 +104,88 @@ the redesign fully verified for merge.
 - No time-zone selector was added; a device zone remains internal to scheduled
   recurrence serialization.
 - The documented real-backend `[partial-failure]` difference remains intentional.
+
+---
+
+## Add-editor instrumentation regression follow-up (2026-07-22)
+
+### Scope / plan status
+
+- Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 10 Android
+  verification follow-up.
+- Fixed the Add-only Compose and instrumentation regressions discovered when the
+  managed-device lane became available. The wider Task 10 full-suite status remains
+  owned by the coordinating agent.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffold.kt`
+  - Applies the supplied title modifier to `BasicTextField`, not its wrapper, so the
+    tagged title node can receive text input/focus actions.
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorWheelDialogs.kt`
+  - Gives each wheel dialog's visible Apply/Cancel action a distinct semantic content
+    description; the user-visible labels remain unchanged.
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+  - Clears the active editor focus before displaying a dirty-draft discard dialog, so
+    the IME cannot obscure that confirmation.
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
+  - Uses the redesigned control semantics, expects the valid default `Me` selection
+    after a shared-project change, and verifies accordion collapse without rejecting
+    the intended Notes preview.
+
+### TDD / diagnosis evidence
+
+- Initial focused Add managed-device run was RED: eight of eleven tests failed. The
+  title node lacked `RequestFocus`; each custom dialog had two visible Cancel labels;
+  and the old Assignee helper looked for `Choose assignee` even though a valid shared
+  project selects `Me` by default.
+- The strengthened dirty-exit reproduction first proved that the edited title was in
+  the field. A temporary count-only diagnostic then recorded
+  `ConfirmDiscard`, title lengths `0 -> 13`, and no project change; the confirmation
+  was simply hidden while the title field/IME retained focus. The diagnostic was
+  removed before the final code.
+
+### Verification
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_TEST_CLASS=app.buzer.android.addtask.AddTaskFakeBackendTest#addTask_scheduleUsesQuickChoicesAndSeparateCustomDialogs scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: one custom-wheel test passed after dialog-specific semantics were added.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_TEST_CLASS=app.buzer.android.addtask.AddTaskFakeBackendTest#addTask_dirtyCancelAndDeviceBackRequireDiscardConfirmation scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: the dirty Cancel and system-Back confirmation path passed after
+  `LocalFocusManager.clearFocus(force = true)`.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_TEST_CLASS=app.buzer.android.addtask.AddTaskFakeBackendTest scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: all 11 Add fake-backend managed-device tests passed on `pixel8Api34`.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`
+- Result: PASS
+- Evidence: focused JVM draft-exit suite completed successfully.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: debug APK assembled successfully.
+
+### Manual verification
+
+- The managed-device Add class exercised title entry, custom wheel Cancel/Apply,
+  project/assignee sheets, optional schedule state, accordion behavior, save/retry,
+  and dirty Cancel/system Back. No separate physical-device pass was performed in
+  this follow-up.
+
+### Next recommended step
+
+- Continue the plan's remaining full Android fake/real E2E and device verification
+  gates from the coordinating task.

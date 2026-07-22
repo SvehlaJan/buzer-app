@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -98,6 +99,7 @@ fun AddTaskScreen(
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
@@ -339,7 +341,10 @@ fun AddTaskScreen(
     fun requestExit() {
         when (decideDraftExit(initialFingerprint, currentFingerprint(), submitting)) {
             DraftExitDecision.NavigateHome -> onBack()
-            DraftExitDecision.ConfirmDiscard -> discardConfirmationVisible = true
+            DraftExitDecision.ConfirmDiscard -> {
+                focusManager.clearFocus(force = true)
+                discardConfirmationVisible = true
+            }
             DraftExitDecision.Ignore -> Unit
         }
     }
