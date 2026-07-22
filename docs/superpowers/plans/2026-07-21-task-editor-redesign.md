@@ -862,7 +862,7 @@
   `addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft`, documented as the
   fake-only `[partial-failure]` bucket-c convention. No other failure occurred.
 
-- [ ] **Step 5: Perform targeted manual verification and write the handoff.**
+- [x] **Step 5: Perform targeted manual verification and write the handoff.**
 
   On the connected device/emulator, inspect: collapsed Schedule; one-tap quick choice;
   Custom date/time/duration Apply and Cancel; personal locked Me; shared Me/Wife
@@ -876,9 +876,16 @@
   git commit -m "docs: hand off task editor redesign"
   ```
 
-  Status (2026-07-22): the verified debug APK was installed and launched on the
-  connected Pixel 10 (`56061FDCR005J0`), but the device is locked. Complete this
-  inspection after it is unlocked, then capture the final result in the handoff.
+  Status (2026-07-22): completed after the Pixel 10 (`56061FDCR005J0`) was unlocked.
+  Physical inspection confirmed the collapsed Schedule row, quick choices, the Custom
+  start-time wheel Cancel path, the draft-only discard confirmation, and the compact
+  Project/Assignee/Repeat/Notes/Checklist layout. The connected device intentionally
+  used the emulator-only `10.0.2.2:18442` test URL, so data-dependent Project and
+  Assignee choices could not load there; those flows, plus the legacy
+  repair/reschedule picker, remain covered by the authoritative real managed-device
+  E2E lane in Step 4. A device-discovered unequal action-row width was fixed and
+  locked by a backend-free Compose regression test; the final physical screenshot
+  confirmed the dynamic Save time range stays on one line.
 
 ## Plan Self-Review
 

@@ -375,12 +375,12 @@ internal fun TaskEditorScaffold(
             OutlinedButton(
                 onClick = onCancel,
                 enabled = dismissActionsEnabled,
-                modifier = Modifier.fillMaxWidth(0.48f)
+                modifier = Modifier.weight(1f)
             ) { Text("Cancel") }
             Button(
                 onClick = onSave,
                 enabled = saveEnabled && !saving,
-                modifier = Modifier.fillMaxWidth(0.48f)
+                modifier = Modifier.weight(1f)
             ) { Text(if (saving) savingLabel else saveLabel) }
         }
         }

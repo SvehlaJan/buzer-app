@@ -381,3 +381,85 @@ Verification:
 - Blocked only by the connected Pixel 10 lock screen. Unlock it, then inspect the
   Schedule quick choices/custom dialogs, draft-only Project and Assignee selection,
   and the legacy repair/reschedule picker before marking Task 10 fully complete.
+
+---
+
+## Final physical-device verification and action-row regression fix (2026-07-22)
+
+### Scope / plan status
+
+- Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 10 step 5.
+- The Pixel 10 was unlocked and the Add editor was inspected without creating or
+  updating a task. The action row revealed a real visual defect after selecting a
+  complete schedule: `Save 20:45–21:15` wrapped into three lines because its button
+  received half the width of Cancel.
+- Task 10 is now checked off. Physical inspection covers the static/editor-local
+  behavior. The real managed-device lane remains the authoritative verification for
+  backend-backed project/assignee choices and the legacy repair/reschedule surface.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffold.kt`
+  - Uses equal `RowScope.weight(1f)` action buttons. The dynamic Save range remains
+    visible, while Cancel and Save receive equal width.
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffoldLayoutTest.kt`
+  - Adds a backend-free Compose regression test that renders a complete scheduled
+    draft and asserts the Cancel and Save controls have equal root bounds.
+- `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`
+  - Records the completed targeted manual/device verification with its physical
+    backend boundary.
+
+### TDD / diagnosis evidence
+
+- RED: the new `TaskEditorScaffoldLayoutTest` failed on `pixel8Api34` with
+  `expected:<478.0> but was:<239.0>`.
+- Root cause: `fillMaxWidth(0.48f)` was evaluated successively in a `Row`, making
+  Save consume 48% of the width remaining after Cancel rather than sharing the row.
+- GREEN: changing only both action modifiers to `Modifier.weight(1f)` made the same
+  test pass. The test uses the current Compose v2 rule API and no backend.
+
+### Verification
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:pixel8Api34DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.buzer.android.ui.taskeditor.TaskEditorScaffoldLayoutTest` from `client/`
+- Result: PASS
+- Evidence: one backend-free managed-device test completed successfully after the
+  RED result above.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` from `client/`
+- Result: PASS
+- Evidence: shared host tests, Android JVM tests, and debug assembly completed.
+
+Verification:
+
+- Command: `android run --device=56061FDCR005J0 --apks=/Users/svehla/playground/buzer-app/.worktrees/task-editor-redesign/client/androidApp/build/outputs/apk/debug/androidApp-debug.apk --activity=app.buzer.android.MainActivity --type=ACTIVITY`
+- Result: PASS
+- Evidence: the final debug APK installed and launched on the connected Pixel 10.
+
+### Manual verification
+
+- Confirmed Schedule is the first collapsed section and displays its selection.
+- Confirmed one-tap date, start-time, and duration choices; the temporary draft showed
+  `Tomorrow · 20:55–21:25 · 30 min` and `Save 20:55–21:25` on a single line in an
+  equal-width action button.
+- Confirmed the Custom start-time wheel opens with separate Cancel and Apply controls;
+  Cancel did not alter the draft.
+- Confirmed the compact Project, Assignee, Repeat, Notes, and Checklist sections are
+  present. Project/Assignee data could not load because the physical device cannot
+  reach the emulator-only `10.0.2.2:18442` URL. This was expected for the local test
+  configuration; no fake server was started or used.
+- Confirmed Cancel displayed `Discard changes?` and discarded the temporary schedule
+  draft. No task was saved or mutated during the device check.
+- A rebuilt APK without build-time backend properties cannot construct its coordinator;
+  the final installed debug APK was therefore built with the unreachable test URL only
+  to render the editor locally. A live physical-device data-flow check requires a real
+  reachable backend URL and token.
+
+### Next recommended step
+
+- No code work remains for the redesign. If live data-flow testing on the physical
+  phone is wanted, provide a reachable backend URL/token or configure
+  `client/local.properties`; do not use `tools/fake-backend`.
