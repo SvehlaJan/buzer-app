@@ -105,7 +105,7 @@ class ScheduleQuickChoicesTest {
         assertEquals(false, schedule.isComplete())
         assertEquals(null, scheduleSummary(schedule, now))
         assertEquals("Set date, time & duration", collapsedScheduleSummary(draft, now))
-        assertEquals("Save task", saveActionLabel(draft))
+        assertEquals("Save", saveActionLabel(draft))
     }
 
     @Test
@@ -121,7 +121,19 @@ class ScheduleQuickChoicesTest {
             schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 23, 30, 60)
         )
 
-        assertEquals("Save task", saveActionLabel(noSchedule))
+        assertEquals("Save", saveActionLabel(noSchedule))
         assertEquals("Save 23:30–00:30", saveActionLabel(scheduled))
+    }
+
+    @Test
+    fun primaryActionLabelUsesTheHostVerbOnlyWhenTheScheduleRangeIsValid() {
+        val complete = TaskEditorDraft(
+            title = "Review finances",
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 10, 0, 30)
+        )
+        val incomplete = complete.copy(schedule = TaskEditorSchedule(date = LocalDate.of(2026, 7, 21)))
+
+        assertEquals("Repair 10:00–10:30", primaryActionLabel("Repair", complete))
+        assertEquals("Repair", primaryActionLabel("Repair", incomplete))
     }
 }

@@ -1,6 +1,7 @@
 package app.buzer.android.ui.taskeditor
 
 import app.buzer.shared.model.ProjectCollaborator
+import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import java.time.LocalDate
 import java.time.LocalTime
@@ -42,6 +43,29 @@ class TaskEditorDraftTest {
         )
 
         assertEquals(scheduledSelf, setNoSchedule(scheduledSelf))
+    }
+
+    @Test
+    fun noScheduleDoesNotSilentlyReplaceACustomRecurrence() {
+        val custom = draft(
+            assignee = collaborator(isCurrentUser = false),
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 10, 15, 30),
+            recurrencePreset = RecurrencePreset.weekly
+        ).copy(recurrenceKind = RecurrenceKind.custom)
+
+        assertEquals(
+            custom.copy(schedule = TaskEditorSchedule()),
+            setNoSchedule(custom)
+        )
+    }
+
+    @Test
+    fun malformedTimeDoesNotProduceACompleteScheduleOrDateTime() {
+        val malformed = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 24, 0, 30)
+
+        assertEquals(false, malformed.isComplete())
+        assertEquals(null, malformed.selectedTime())
+        assertEquals(null, malformed.startDateTime())
     }
 
     @Test

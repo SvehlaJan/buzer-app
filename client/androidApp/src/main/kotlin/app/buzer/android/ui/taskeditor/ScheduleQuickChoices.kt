@@ -150,15 +150,17 @@ internal fun collapsedScheduleSummary(
     else -> "Set date, time & duration"
 }
 
-internal fun saveActionLabel(draft: TaskEditorDraft): String {
-    val start = draft.schedule.startDateTime()
-    val duration = draft.schedule.durationMinutes
-    return if (draft.schedule.isComplete() && start != null && duration != null) {
-        "Save ${formatTime(start.toLocalTime())}–${formatTime(start.plusMinutes(duration.toLong()).toLocalTime())}"
-    } else {
-        "Save task"
-    }
+internal fun primaryActionLabel(verb: String, draft: TaskEditorDraft): String =
+    scheduleRangeLabel(draft.schedule)?.let { "$verb $it" } ?: verb
+
+internal fun scheduleRangeLabel(schedule: TaskEditorSchedule): String? {
+    val start = schedule.startDateTime() ?: return null
+    val duration = schedule.durationMinutes?.takeIf { it > 0 } ?: return null
+    return "${formatTime(start.toLocalTime())}–${formatTime(start.plusMinutes(duration.toLong()).toLocalTime())}"
 }
+
+/** Temporary bridge for the Add/Edit-only scaffold until hosts provide their own action verb. */
+internal fun saveActionLabel(draft: TaskEditorDraft): String = primaryActionLabel("Save", draft)
 
 internal fun formatDurationLabel(minutes: Int): String {
     val hours = minutes / 60
