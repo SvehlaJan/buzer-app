@@ -178,6 +178,32 @@ describe("e2eFixtureSeed", () => {
     ]);
   });
 
+  it("includes the active shared-project collaborator mirror used by the editor", () => {
+    expect(seed.collaborators.map((collaborator) => [
+      collaborator.todoistUserId,
+      collaborator.fullName,
+      collaborator.email,
+      collaborator.isDeleted
+    ])).toEqual([
+      ["user-me", "Me", "me@example.test", false],
+      ["user-wife", "Wife", "wife@example.test", false]
+    ]);
+    expect(seed.collaboratorStates).toEqual([
+      expect.objectContaining({
+        todoistProjectId: "project-test",
+        todoistUserId: "user-me",
+        state: "active",
+        isDeleted: false
+      }),
+      expect.objectContaining({
+        todoistProjectId: "project-test",
+        todoistUserId: "user-wife",
+        state: "active",
+        isDeleted: false
+      })
+    ]);
+  });
+
   it("derives ISO dates from the supplied time on every call", () => {
     const later = e2eFixtureSeed(new Date("2026-07-19T12:00:00.000Z"));
     const laterById = new Map(later.tasks.map((task) => [task.id, task.mirror]));

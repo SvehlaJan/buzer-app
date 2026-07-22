@@ -2,7 +2,13 @@ import cors from "@fastify/cors";
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createFixtureState, FakeChecklistItem, FakeState, FakeTask, snapshot } from "./fixtures.js";
 
-export type RecordedCall = { method: string; path: string; body: Record<string, unknown>; at: string };
+export type RecordedCall = {
+  method: string;
+  path: string;
+  body: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  at: string;
+};
 export type FakeBackendOptions = { token?: string; failActions?: boolean; delayMs?: number };
 type Replay = { fingerprint: string; statusCode: number; body: unknown; headers?: Record<string, string> };
 type Controls = { pending: boolean; stale: boolean; activityLogFull: boolean; rateLimit: boolean };
@@ -37,8 +43,40 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     const keys = ["actionId", "deviceId", "expectedOccurrenceKey", "expectedTaskRevision", "expectedChildRevision"] as const;
     return Object.fromEntries(keys.filter((key) => body[key] !== undefined).map((key) => [key, body[key]]));
   }
-  function record(request: FastifyRequest, body: ActionBody) { calls.push({ method: request.method, path: request.url, body: actionMetadata(body), at: "2026-06-01T10:00:00.000Z" }); }
+  function record(request: FastifyRequest, body: ActionBody) {
+    calls.push({
+      method: request.method,
+      path: request.url,
+      body: actionMetadata(body),
+      payload: structuredClone(body),
+      at: "2026-06-01T10:00:00.000Z"
+    });
+  }
   function task(id: string): FakeTask | undefined { return state.tasks.find((candidate) => candidate.id === id && !candidate.isCompleted); }
+  const fixtureProjects = [
+    {
+      id: "project-personal", name: "Test Personal", canAssignTasks: false, shared: false, isInboxProject: false,
+      collaboratorsReady: true,
+      collaborators: [{ id: "user-me", displayName: "Me", email: null, isCurrentUser: true }]
+    },
+    {
+      id: "project-test", name: "Test Shared", canAssignTasks: true, shared: true, isInboxProject: false,
+      collaboratorsReady: true,
+      collaborators: [
+        { id: "user-me", displayName: "Me", email: null, isCurrentUser: true },
+        { id: "user-wife", displayName: "Wife", email: "wife@example.test", isCurrentUser: false }
+      ]
+    }
+  ] as const;
+  function projectAssignmentError(projectId: string, assigneeId: string | null): string | null {
+    const project = fixtureProjects.find((candidate) => candidate.id === projectId);
+    if (project === undefined) return "project_not_found";
+    if (!project.canAssignTasks) return assigneeId === null ? null : "assignee_not_supported_for_project";
+    if (assigneeId === null) return "assignee_required_for_assignable_project";
+    return project.collaborators.some((collaborator) => collaborator.id === assigneeId)
+      ? null
+      : "assignee_not_in_project";
+  }
   function error(code: string, statusCode: number) { return { statusCode, body: { code, snapshot: currentSnapshot() } }; }
   function staleFor(taskValue: FakeTask, body: ActionBody, child?: FakeChecklistItem) {
     if (controls.stale || body.expectedOccurrenceKey !== taskValue.occurrenceKey) return error("stale_occurrence", 409);
@@ -76,12 +114,12 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   app.get("/tasks/snapshot", async (_request, reply) => failSnapshot ? reply.code(500).send({ error: "forced_snapshot_failure" }) : currentSnapshot());
   app.get("/projects", async (_request, reply) => {
     await maybeDelay();
-    return failProjects ? reply.code(500).send({ error: "forced_project_failure" }) : { projects: [
-      { id: "project-test", name: "Test Shared", canAssignTasks: true, shared: true, isInboxProject: false },
-      { id: "project-personal", name: "Test Personal", canAssignTasks: false, shared: false, isInboxProject: false }
-    ] };
+    return failProjects ? reply.code(500).send({ error: "forced_project_failure" }) : { projects: fixtureProjects };
   });
-  app.get("/__calls", async () => ({ calls }));
+  app.get("/__calls", async () => ({
+    calls: calls.map(({ method, path, body, at }) => ({ method, path, body, at }))
+  }));
+  app.get("/__calls/full", async () => ({ calls }));
   app.post("/__reset", async () => {
     // Test clients retain their last authoritative snapshot. Resetting to generation 1 would
     // deliberately be rejected as stale by the production coordinator, so fixture resets
@@ -108,6 +146,10 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     if (controls.stale) return error("stale_task", 409);
     if (controls.pending) return pending(body.actionId);
     const id = `created-task-${state.tasks.filter((item) => item.id.startsWith("created-task-")).length + 1}`;
+    const projectId = typeof body.projectId === "string" ? body.projectId : "project-test";
+    const assigneeId = body.assigneeId === null ? null : typeof body.assigneeId === "string" ? body.assigneeId : "user-me";
+    const assignmentError = projectAssignmentError(projectId, assigneeId);
+    if (assignmentError !== null) return error(assignmentError, 422);
     const drafts = Array.isArray(body.checklistDrafts) ? body.checklistDrafts : [];
     const hasAmbiguousChildCreate = drafts.some((draft) => (draft as Record<string, unknown>).title === "[partial-failure]");
     if (hasAmbiguousChildCreate) return pending(body.actionId);
@@ -117,7 +159,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       return created;
     });
     state.tasks.push({
-      id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null,
+      id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null, projectId, assigneeId,
       dueDatetime: typeof body.dueDatetime === "string" ? body.dueDatetime : null, durationMinutes: typeof body.durationMinutes === "number" ? body.durationMinutes : null,
       state: "planned", occurrenceNumber: 1, occurrenceKey: `occurrence-${id}-1`, taskRevision: 1,
       recurrence: body.recurrencePreset && body.recurrencePreset !== "never" ? { kind: "supported", preset: String(body.recurrencePreset), rule: `every ${String(body.recurrencePreset)}`, language: "en", timeZone: typeof body.timeZone === "string" ? body.timeZone : null } : { kind: "none", preset: "never", rule: null, language: null, timeZone: null },
@@ -162,7 +204,13 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     const patch = body.rootPatch as Record<string, unknown> | null | undefined;
     if (patch !== null && patch !== undefined) {
       if (patch.expectedTaskRevision !== `r:${root.taskRevision}`) return error("stale_task", 409);
-      for (const key of ["title", "description", "dueDatetime", "durationMinutes"] as const) {
+      const projectId = typeof patch.projectId === "string" ? patch.projectId : root.projectId;
+      const assigneeId = Object.prototype.hasOwnProperty.call(patch, "assigneeId")
+        ? (typeof patch.assigneeId === "string" ? patch.assigneeId : null)
+        : root.assigneeId;
+      const assignmentError = projectAssignmentError(projectId, assigneeId);
+      if (assignmentError !== null) return error(assignmentError, 422);
+      for (const key of ["title", "description", "projectId", "assigneeId", "dueDatetime", "durationMinutes"] as const) {
         if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
       }
       if (root.state === "invalid" && root.hierarchyStatus === "valid" && root.dueDatetime !== null && root.durationMinutes !== null) {

@@ -53,7 +53,9 @@ export async function buildE2EServer(): Promise<E2EServer> {
     const fixture = e2eFixtureSeed(new Date());
     adapter.world.load({
       tasks: fixture.tasks.map((task) => task.mirror),
-      projects: fixture.projects
+      projects: fixture.projects,
+      collaborators: fixture.collaborators,
+      collaboratorStates: fixture.collaboratorStates
     });
 
     for (const { id, mirror } of fixture.tasks) {
@@ -91,6 +93,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
         "commitment_states",
         "todoist_tasks",
         "todoist_projects",
+        "todoist_project_collaborators",
+        "todoist_collaborators",
         "todoist_sync_state"
       ]) {
         db.prepare(`delete from ${table}`).run();

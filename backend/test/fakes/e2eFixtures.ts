@@ -1,4 +1,6 @@
 import type {
+  TodoistCollaboratorMirror,
+  TodoistCollaboratorStateMirror,
   TodoistProjectMirror,
   TodoistTaskMirror
 } from "../../src/todoist/todoistTypes.js";
@@ -22,6 +24,8 @@ export interface E2EOccurrencePin {
 export interface E2EFixtureSeed {
   tasks: E2EFixtureTask[];
   projects: TodoistProjectMirror[];
+  collaborators: TodoistCollaboratorMirror[];
+  collaboratorStates: TodoistCollaboratorStateMirror[];
   nudges: E2ECommitmentNudge[];
   occurrencePins: E2EOccurrencePin[];
 }
@@ -322,6 +326,50 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     }
   ];
 
+  const collaborators: TodoistCollaboratorMirror[] = [
+    {
+      todoistUserId: "user-me",
+      fullName: "Me",
+      email: "me@example.test",
+      timeZone: TIME_ZONE,
+      imageId: null,
+      isDeleted: false,
+      rawJson: {},
+      updatedAt: nowIso
+    },
+    {
+      todoistUserId: "user-wife",
+      fullName: "Wife",
+      email: "wife@example.test",
+      timeZone: TIME_ZONE,
+      imageId: null,
+      isDeleted: false,
+      rawJson: {},
+      updatedAt: nowIso
+    }
+  ];
+
+  const collaboratorStates: TodoistCollaboratorStateMirror[] = [
+    {
+      todoistProjectId: "project-test",
+      todoistUserId: "user-me",
+      state: "active",
+      role: "admin",
+      isDeleted: false,
+      rawJson: {},
+      updatedAt: nowIso
+    },
+    {
+      todoistProjectId: "project-test",
+      todoistUserId: "user-wife",
+      state: "active",
+      role: "member",
+      isDeleted: false,
+      rawJson: {},
+      updatedAt: nowIso
+    }
+  ];
+
   const nudges: E2ECommitmentNudge[] = [
     { id: "task-deadline", kind: "started", startedAt: iso(-29) },
     { id: "task-reschedule", kind: "started", startedAt: iso(-29) },
@@ -334,5 +382,5 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     .filter((task) => task.mirror.parentId === null)
     .map((task) => ({ id: task.id, occurrenceKey: `occurrence-${task.id}-1` }));
 
-  return { tasks, projects, nudges, occurrencePins };
+  return { tasks, projects, collaborators, collaboratorStates, nudges, occurrencePins };
 }

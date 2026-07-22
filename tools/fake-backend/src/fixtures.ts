@@ -12,6 +12,8 @@ export type FakeTask = {
   todoistTaskId: string;
   title: string;
   description: string | null;
+  projectId: string;
+  assigneeId: string | null;
   dueDatetime: string | null;
   durationMinutes: number | null;
   state: "planned" | "started" | "invalid";
@@ -114,20 +116,20 @@ export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
       todoistTaskId: task.todoistTaskId,
       title: task.title,
       description: task.description,
-      projectId: "project-test",
-      assigneeId: "user-me",
+      projectId: task.projectId,
+      assigneeId: task.assigneeId,
       creatorId: "user-me",
       dueDatetime: task.dueDatetime,
       durationMinutes: task.durationMinutes,
       startAt: task.dueDatetime,
       state: task.state,
-      isAssignedToUser: true,
+      isAssignedToUser: task.assigneeId === "user-me" || (task.projectId === "project-personal" && task.assigneeId === null),
       isCreatedByUser: true,
       isCompleted: task.isCompleted,
       isDeleted: false,
       validationErrors: task.hierarchyStatus === "unsupported" ? [task.hierarchyViolation] : [
-        ...(task.dueDatetime === null ? ["missing_due_datetime"] : []),
-        ...(task.durationMinutes === null ? ["missing_duration"] : [])
+        ...((task.assigneeId === "user-me" || (task.projectId === "project-personal" && task.assigneeId === null)) && task.dueDatetime === null ? ["missing_due_datetime"] : []),
+        ...((task.assigneeId === "user-me" || (task.projectId === "project-personal" && task.assigneeId === null)) && task.durationMinutes === null ? ["missing_duration"] : [])
       ],
       startedAt: task.startedAt,
       startDismissCount: task.startDismissCount,
@@ -151,7 +153,7 @@ export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
 function task(id: string, overrides: Partial<FakeTask> & Pick<FakeTask, "title" | "dueDatetime" | "occurrenceKey">): FakeTask {
   const { title, dueDatetime, occurrenceKey, ...rest } = overrides;
   return {
-    id, todoistTaskId: `todoist-${id}`, title, description: null, dueDatetime, durationMinutes: 30,
+    id, todoistTaskId: `todoist-${id}`, title, description: null, projectId: "project-test", assigneeId: "user-me", dueDatetime, durationMinutes: 30,
     state: "planned", occurrenceNumber: 1, occurrenceKey, taskRevision: 1,
     recurrence: { kind: "none", preset: "never", rule: null, language: null, timeZone: null }, hierarchyStatus: "valid", hierarchyViolation: null,
     reconciliationStatus: "none", checklistItems: [], startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false, ...rest

@@ -123,7 +123,7 @@ describe("E2ETodoistWorld semantics", () => {
         lang: null,
         timezone: null
       },
-      duration: null
+      duration: { kind: "replace", amount: 30, unit: "minute" }
     });
     const todoistTaskId = root.todoistTaskId as string;
     expect((await syncedTask(adapter, todoistTaskId)).dueDate).toBe(
@@ -150,11 +150,15 @@ describe("E2ETodoistWorld semantics", () => {
       commandUuid: "c-clear",
       todoistTaskId,
       due: { kind: "clear" },
+      duration: { kind: "clear" },
       assignment: { kind: "preserve" }
     });
     const cleared = await syncedTask(adapter, todoistTaskId);
     expect(cleared.dueDate).toBeNull();
     expect(cleared.dueDatetime).toBeNull();
+    expect(cleared.durationAmount).toBeNull();
+    expect(cleared.durationUnit).toBeNull();
+    expect(cleared.durationMinutes).toBeNull();
   });
 
   it("normalizes minute and hour durations for root, item, and legacy updates", async () => {

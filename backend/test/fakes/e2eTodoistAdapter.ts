@@ -19,6 +19,8 @@ import type {
   TodoistRootItemAddInput
 } from "../../src/todoist/todoistMutationGateway.js";
 import type {
+  TodoistCollaboratorMirror,
+  TodoistCollaboratorStateMirror,
   TodoistProjectMirror,
   TodoistTaskMirror
 } from "../../src/todoist/todoistTypes.js";
@@ -42,6 +44,8 @@ export const E2E_SCENARIOS: readonly E2EScenario[] = [
 export class E2ETodoistWorld {
   private tasks = new Map<string, TodoistTaskMirror>();
   private projects = new Map<string, TodoistProjectMirror>();
+  private collaborators = new Map<string, TodoistCollaboratorMirror>();
+  private collaboratorStates = new Map<string, TodoistCollaboratorStateMirror>();
   private createdCount = 0;
   private loadGeneration = 0;
 
@@ -50,6 +54,8 @@ export class E2ETodoistWorld {
   load(seed: {
     tasks: TodoistTaskMirror[];
     projects: TodoistProjectMirror[];
+    collaborators?: TodoistCollaboratorMirror[];
+    collaboratorStates?: TodoistCollaboratorStateMirror[];
   }): void {
     this.tasks = new Map(
       seed.tasks.map((task) => [task.todoistTaskId, structuredClone(task)])
@@ -60,14 +66,33 @@ export class E2ETodoistWorld {
         structuredClone(project)
       ])
     );
+    this.collaborators = new Map(
+      (seed.collaborators ?? []).map((collaborator) => [
+        collaborator.todoistUserId,
+        structuredClone(collaborator)
+      ])
+    );
+    this.collaboratorStates = new Map(
+      (seed.collaboratorStates ?? []).map((state) => [
+        `${state.todoistProjectId}:${state.todoistUserId}`,
+        structuredClone(state)
+      ])
+    );
     this.createdCount = 0;
     this.loadGeneration += 1;
   }
 
-  state(): { tasks: TodoistTaskMirror[]; projects: TodoistProjectMirror[] } {
+  state(): {
+    tasks: TodoistTaskMirror[];
+    projects: TodoistProjectMirror[];
+    collaborators: TodoistCollaboratorMirror[];
+    collaboratorStates: TodoistCollaboratorStateMirror[];
+  } {
     return {
       tasks: [...this.tasks.values()].map((task) => structuredClone(task)),
-      projects: [...this.projects.values()].map((project) => structuredClone(project))
+      projects: [...this.projects.values()].map((project) => structuredClone(project)),
+      collaborators: [...this.collaborators.values()].map((collaborator) => structuredClone(collaborator)),
+      collaboratorStates: [...this.collaboratorStates.values()].map((state) => structuredClone(state))
     };
   }
 
@@ -285,8 +310,8 @@ export class E2ETodoistAdapter implements TodoistAdapter {
       syncToken,
       tasks: state.tasks,
       projects: state.projects,
-      collaborators: [],
-      collaboratorStates: []
+      collaborators: state.collaborators,
+      collaboratorStates: state.collaboratorStates
     };
   }
 

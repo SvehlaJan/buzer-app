@@ -41,6 +41,84 @@ test("snapshot exposes deterministic nested root scenarios", async (t) => {
   assert.equal(body.tasks.find((task: { id: string }) => task.id === "task-reconciliation-pending").reconciliationStatus, "pending");
 });
 
+test("projects and editable root mutations model the redesigned assignment contract", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const projects = await app.inject({ method: "GET", url: "/projects", headers: auth });
+  assert.equal(projects.statusCode, 200);
+  assert.deepEqual(projects.json().projects, [
+    {
+      id: "project-personal", name: "Test Personal", canAssignTasks: false, shared: false, isInboxProject: false,
+      collaboratorsReady: true,
+      collaborators: [{ id: "user-me", displayName: "Me", email: null, isCurrentUser: true }]
+    },
+    {
+      id: "project-test", name: "Test Shared", canAssignTasks: true, shared: true, isInboxProject: false,
+      collaboratorsReady: true,
+      collaborators: [
+        { id: "user-me", displayName: "Me", email: null, isCurrentUser: true },
+        { id: "user-wife", displayName: "Wife", email: "wife@example.test", isCurrentUser: false }
+      ]
+    }
+  ]);
+
+  const created = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: {
+      ...action("wife-create"),
+      title: "Wife can schedule later",
+      projectId: "project-test",
+      assigneeId: "user-wife",
+      dueDatetime: null,
+      durationMinutes: null
+    }
+  });
+  assert.equal(created.statusCode, 200);
+  const createdTask = created.json().snapshot.tasks.find((task: { title: string }) => task.title === "Wife can schedule later");
+  assert.deepEqual(
+    [createdTask.projectId, createdTask.assigneeId, createdTask.dueDatetime, createdTask.durationMinutes],
+    ["project-test", "user-wife", null, null]
+  );
+
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  const updated = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("wife-unscheduled", before.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: before.taskRevision,
+        projectId: "project-test",
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(updated.statusCode, 200);
+  const after = updated.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  assert.deepEqual(
+    [after.projectId, after.assigneeId, after.dueDatetime, after.durationMinutes],
+    ["project-test", "user-wife", null, null]
+  );
+
+  const rejected = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("wrong-member", after.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: after.taskRevision,
+        assigneeId: "user-stranger"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(rejected.statusCode, 422);
+  assert.equal(rejected.json().code, "assignee_not_in_project");
+});
+
 test("reset restores fixtures at a newer snapshot generation", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());

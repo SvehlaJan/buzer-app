@@ -7,12 +7,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.filter
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onChildren
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -20,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.MainActivity
@@ -51,9 +48,9 @@ class AddTaskFakeBackendTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             openAddTaskFromHome()
-            waitForText("Select project")
+            waitForText("Choose project")
             enterTitle("Buy milk")
-            selectDefaultDeadline()
+            selectDefaultSchedule()
             submitUntilValidation("Project is required")
             assertNoRecordedCall("/tasks")
         } finally {
@@ -70,10 +67,10 @@ class AddTaskFakeBackendTest {
             openAddTaskFromHome()
             selectProject("Test Shared")
             enterTitle("Buy milk")
-            selectDefaultDeadline()
-            submitUntilValidation("Assignee is required before saving")
+            selectDefaultSchedule()
+            submitUntilValidation("Assignee is required")
 
-            composeRule.onNodeWithText("Me").performClick()
+            selectAssignee("Me")
             clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
@@ -94,7 +91,7 @@ class AddTaskFakeBackendTest {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             openAddTaskFromHome()
-            selectProject("Test Personal (personal)")
+            selectProject("Test Personal")
             composeRule.onNodeWithText("Me").assertIsDisplayed()
             composeRule.onNodeWithText("Personal project", substring = true)
                 .performScrollTo()
@@ -117,8 +114,8 @@ class AddTaskFakeBackendTest {
 
                 fakeBackend.setFailProjects(false)
                 composeRule.onNodeWithText("Retry").performClick()
-                waitForText("Select project")
-                composeRule.onNodeWithText("Select project").assertIsDisplayed()
+                waitForText("Choose project")
+                composeRule.onNodeWithText("Choose project").assertIsDisplayed()
             } finally {
                 scenario.close()
             }
@@ -137,8 +134,8 @@ class AddTaskFakeBackendTest {
                 openAddTaskFromHome()
                 selectProject("Test Shared")
                 enterTitle("Buy milk")
-                composeRule.onNodeWithText("Me").performClick()
-                selectDefaultDeadline()
+                selectAssignee("Me")
+                selectDefaultSchedule()
                 clickSaveBlockRange()
 
                 waitForRecordedCall("/tasks")
@@ -163,8 +160,10 @@ class AddTaskFakeBackendTest {
         val firstScenario = ActivityScenario.launch(MainActivity::class.java)
         try {
             openAddTaskFromHome()
-            selectProject("Test Personal (personal)")
+            selectProject("Test Personal")
             composeRule.onNodeWithText("Cancel").performClick()
+            waitForText("Discard changes?")
+            composeRule.onNodeWithText("Discard").performClick()
         } finally {
             firstScenario.close()
         }
@@ -188,11 +187,10 @@ class AddTaskFakeBackendTest {
             openAddTaskFromHome()
             selectProject("Test Shared")
             enterTitle("Buy milk")
-            composeRule.onNodeWithText("Details").performClick()
-            waitForText("Details")
-            composeRule.onNodeWithText("Details").performTextInput("Gate code: 2468")
-            composeRule.onNodeWithText("Me").performClick()
-            selectDefaultDeadline()
+            openNotes()
+            composeRule.onNodeWithContentDescription("Notes").performTextInput("Gate code: 2468")
+            selectAssignee("Me")
+            selectDefaultSchedule()
             clickSaveBlockRange()
 
             waitForRecordedCall("/tasks")
@@ -215,8 +213,9 @@ class AddTaskFakeBackendTest {
             openAddTaskFromHome()
             selectProject("Test Shared")
             enterTitle("Checklist root")
-            composeRule.onNodeWithText("Me").performClick()
-            selectDefaultDeadline()
+            selectAssignee("Me")
+            selectDefaultSchedule()
+            openChecklist()
             addChecklistDraft(1, "Created child")
             addChecklistDraft(2, "[partial-failure]")
             clickSaveBlockRange()
@@ -224,6 +223,80 @@ class AddTaskFakeBackendTest {
             waitForScrollableText("Checklist item 1")
             waitForScrollableText("[partial-failure]")
             assertEquals(1, recordedCreateActionIds().size)
+        } finally {
+            scenario.close()
+        }
+    }
+
+    @Test
+    fun addTask_scheduleUsesQuickChoicesAndSeparateCustomDialogs() {
+        resetTestState()
+
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            openAddTaskFromHome()
+            waitForContentDescription("Schedule: Set date, time & duration")
+            openSchedule()
+            composeRule.onNodeWithText("Date").assertIsDisplayed()
+            composeRule.onNodeWithText("Start time").assertIsDisplayed()
+            composeRule.onNodeWithText("Duration").assertIsDisplayed()
+
+            composeRule.onNodeWithText("Today").performClick()
+            verifyCustomDialogCanCancelAndApply("Custom date", "Custom date")
+            verifyCustomDialogCanCancelAndApply("Custom start time", "Custom start time")
+            composeRule.onNodeWithText("30 min").performClick()
+            verifyCustomDialogCanCancelAndApply("Custom duration", "Custom duration")
+
+            composeRule.onNodeWithText("Schedule").performClick()
+            val label = waitForSaveBlockRangeLabel()
+            composeRule.onNodeWithText(label).assertIsDisplayed()
+        } finally {
+            scenario.close()
+        }
+    }
+
+    @Test
+    fun addTask_selectorSheetsAndAccordionKeepChangesInDraftUntilSave() {
+        resetTestState()
+
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            openAddTaskFromHome()
+            selectProject("Test Shared")
+            waitForContentDescription("Project: Test Shared")
+            selectAssignee("Wife")
+            waitForContentDescription("Assignee: Wife")
+            openSchedule()
+            composeRule.onNodeWithText("No schedule").performClick()
+            composeRule.onNodeWithText("Schedule").performClick()
+            waitForContentDescription("Schedule: No schedule")
+            openNotes()
+            composeRule.onNodeWithContentDescription("Notes").performTextInput("draft note")
+            openChecklist()
+            composeRule.onAllNodesWithText("draft note").assertCountEquals(0)
+            composeRule.onNodeWithText("Add checklist item").performClick()
+            assertNoRecordedCall("/tasks")
+        } finally {
+            scenario.close()
+        }
+    }
+
+    @Test
+    fun addTask_dirtyCancelAndDeviceBackRequireDiscardConfirmation() {
+        resetTestState()
+
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            openAddTaskFromHome()
+            enterTitle("Unsaved draft")
+            composeRule.onNodeWithText("Cancel").performClick()
+            waitForText("Discard changes?")
+            composeRule.onNodeWithText("Keep editing").performClick()
+            composeRule.onNodeWithTag("titleInput").assertIsDisplayed()
+            pressBack()
+            waitForText("Discard changes?")
+            composeRule.onNodeWithText("Keep editing").performClick()
+            composeRule.onNodeWithTag("titleInput").assertIsDisplayed()
         } finally {
             scenario.close()
         }
@@ -245,40 +318,56 @@ class AddTaskFakeBackendTest {
     }
 
     private fun selectProject(label: String) {
-        waitForText("Select project")
-        composeRule.onNodeWithContentDescription("Project picker").performClick()
+        waitForContentDescription("Project: Choose project")
+        composeRule.onNodeWithContentDescription("Project: Choose project").performClick()
         waitForText(label)
         composeRule.onNodeWithText(label).performClick()
     }
 
-    private fun selectDefaultDeadline() {
-        // "Start picker" is a row of two side-by-side buttons (date, time); performClick() on
-        // the row itself lands at its geometric center, which falls in the gap between the two
-        // buttons and never opens the dialog. The form can recompose immediately after Details
-        // receives input, so retry the child click until the dialog is actually visible.
-        val deadline = SystemClock.elapsedRealtime() + 15_000
-        var lastError: Throwable? = null
-        var dialogVisible = false
-        while (SystemClock.elapsedRealtime() < deadline) {
-            try {
-                composeRule.onNodeWithContentDescription("Start picker")
-                    .performScrollTo()
-                    .onChildren()
-                    .filter(hasClickAction())
-                    .onFirst()
-                    .performClick()
-                composeRule.onNodeWithText("OK").assertIsDisplayed()
-                dialogVisible = true
-                break
-            } catch (error: Throwable) {
-                lastError = error
-                SystemClock.sleep(100)
-            }
-        }
-        if (!dialogVisible) {
-            throw AssertionError("Expected date picker dialog", lastError)
-        }
-        composeRule.onNodeWithText("OK").performClick()
+    private fun selectAssignee(label: String) {
+        composeRule.onNodeWithContentDescription("Assignee: Choose assignee")
+            .performScrollTo()
+            .performClick()
+        waitForText(label)
+        composeRule.onNodeWithText(label).performClick()
+    }
+
+    private fun selectDefaultSchedule() {
+        openSchedule()
+        composeRule.onNodeWithContentDescription("Custom date").performClick()
+        waitForText("Custom date")
+        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("Custom start time").performClick()
+        waitForText("Custom start time")
+        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.onNodeWithContentDescription("Custom duration").performClick()
+        waitForText("Custom duration")
+        composeRule.onNodeWithText("Apply").performClick()
+    }
+
+    private fun openSchedule() {
+        composeRule.onNodeWithText("Schedule").performScrollTo().performClick()
+        waitForText("Date")
+    }
+
+    private fun openNotes() {
+        composeRule.onNodeWithText("Notes").performScrollTo().performClick()
+        waitForContentDescription("Notes")
+    }
+
+    private fun openChecklist() {
+        composeRule.onNodeWithText("Checklist").performScrollTo().performClick()
+        waitForText("Add checklist item")
+    }
+
+    private fun verifyCustomDialogCanCancelAndApply(contentDescription: String, title: String) {
+        composeRule.onNodeWithContentDescription(contentDescription).performClick()
+        waitForText(title)
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onAllNodesWithText(title).assertCountEquals(0)
+        composeRule.onNodeWithContentDescription(contentDescription).performClick()
+        waitForText(title)
+        composeRule.onNodeWithText("Apply").performClick()
     }
 
     private fun clickSaveBlockRange() {
@@ -332,7 +421,7 @@ class AddTaskFakeBackendTest {
             }
 
     companion object {
-        private val saveBlockRangeLabelPattern = Regex("""Save \d{2}:\d{2}-\d{2}:\d{2}""")
+        private val saveBlockRangeLabelPattern = Regex("""Save \d{2}:\d{2}–\d{2}:\d{2}""")
     }
 
     private fun resetTestState() {

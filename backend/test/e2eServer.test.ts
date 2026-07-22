@@ -68,12 +68,33 @@ describe("seeding", () => {
     });
   });
 
-  it("serves the two fixture projects and rejects missing auth", async () => {
+  it("serves the shared collaborator project contract and rejects missing auth", async () => {
     await withServer(async (server) => {
       const projects = await server.app.inject({ method: "GET", url: "/projects", headers: auth });
       expect(projects.statusCode).toBe(200);
-      expect(projects.json().projects.map((project: { id: string; name: string }) => [project.id, project.name]))
-        .toEqual([["project-personal", "Test Personal"], ["project-test", "Test Shared"]]);
+      expect(projects.json().projects).toEqual([
+        {
+          id: "project-personal",
+          name: "Test Personal",
+          canAssignTasks: false,
+          shared: false,
+          isInboxProject: false,
+          collaboratorsReady: true,
+          collaborators: [{ id: "user-me", displayName: "Me", email: null, isCurrentUser: true }]
+        },
+        {
+          id: "project-test",
+          name: "Test Shared",
+          canAssignTasks: true,
+          shared: true,
+          isInboxProject: false,
+          collaboratorsReady: true,
+          collaborators: [
+            { id: "user-me", displayName: "Me", email: null, isCurrentUser: true },
+            { id: "user-wife", displayName: "Wife", email: "wife@example.test", isCurrentUser: false }
+          ]
+        }
+      ]);
       const unauthorized = await server.app.inject({ method: "GET", url: "/tasks/snapshot" });
       expect(unauthorized.statusCode).toBe(401);
     });
@@ -244,6 +265,54 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         dueDatetime,
         durationMinutes: 30,
         checklistItems: [{ title: "Created child", description: "Created with the root" }]
+      });
+    });
+  });
+
+  it("allows an unscheduled Wife task and clears an existing task schedule", async () => {
+    await withServer(async (server) => {
+      const created = await mutate(
+        server,
+        "/tasks",
+        action({
+          title: "Wife can schedule later",
+          projectId: "project-test",
+          assigneeId: "user-wife",
+          dueDatetime: null,
+          durationMinutes: null
+        })
+      );
+      expect(created.outcome).toBe("completed");
+      const createdTask = server.adapter.world.state().tasks.find(
+        (candidate) => candidate.title === "Wife can schedule later"
+      );
+      expect(createdTask).toMatchObject({
+        projectId: "project-test",
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null
+      });
+
+      const existing = await snapshotTask(server, "task-one-time-empty");
+      const updated = await mutate(
+        server,
+        "/tasks/task-one-time-empty/update",
+        action({
+          expectedOccurrenceKey: existing.occurrenceKey,
+          rootPatch: {
+            expectedTaskRevision: existing.taskRevision,
+            assigneeId: "user-wife",
+            dueDatetime: null,
+            durationMinutes: null
+          },
+          childMutations: []
+        })
+      );
+      expect(updated.outcome).toBe("completed");
+      expect(server.adapter.world.getTask("todoist-task-one-time-empty")).toMatchObject({
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null
       });
     });
   });

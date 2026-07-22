@@ -42,6 +42,8 @@ class FakeBackendClient(
 
     fun calls(): String = request("GET", "/__calls")
 
+    fun fullCalls(): String = request("GET", "/__calls/full")
+
     fun assertRecorded(path: String) {
         val body = calls()
         check(body.contains("\"path\":\"$path\"")) {
