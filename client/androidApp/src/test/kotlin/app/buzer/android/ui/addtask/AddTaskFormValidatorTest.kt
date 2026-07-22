@@ -69,6 +69,26 @@ class AddTaskFormValidatorTest {
     }
 
     @Test
+    fun rejectsCreateWhenSharedProjectCollaboratorsAreUnavailable() {
+        val result = AddTaskFormValidator.validate(
+            title = "Buy milk",
+            selectedProject = assignableProject.copy(collaboratorsReady = false),
+            selectedAssignee = me,
+            deadline = deadline,
+            durationMinutes = 45,
+            zoneId = zone
+        )
+
+        assertEquals(
+            AddTaskFormResult.Invalid(
+                "Collaborators are unavailable. Retry before saving.",
+                AddTaskInvalidField.Assignee
+            ),
+            result
+        )
+    }
+
+    @Test
     fun trimsOptionalDescriptionIntoCreateRequest() {
         val result = AddTaskFormValidator.validate(
             title = "Buy milk",
@@ -158,7 +178,7 @@ class AddTaskFormValidatorTest {
     }
 
     @Test
-    fun allowsUnscheduledNonSelfTask() {
+    fun rejectsUnscheduledNonSelfTaskWithARepeatSelection() {
         val result = AddTaskFormValidator.validate(
             title = "Ask about booking",
             selectedProject = assignableProject,
@@ -169,11 +189,7 @@ class AddTaskFormValidatorTest {
             recurrencePreset = app.buzer.shared.model.RecurrencePreset.weekly
         )
 
-        assertTrue(result is AddTaskFormResult.Valid)
-        assertEquals("user-wife", result.request.assigneeId)
-        assertEquals(null, result.request.dueDatetime)
-        assertEquals(null, result.request.durationMinutes)
-        assertEquals(app.buzer.shared.model.RecurrencePreset.never, result.request.recurrencePreset)
+        assertEquals(AddTaskFormResult.Invalid("Repeat requires a schedule"), result)
     }
 
     @Test
