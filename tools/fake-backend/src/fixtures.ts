@@ -77,7 +77,7 @@ export function createFixtureState(): FakeState {
         title: "Canonical datetime fixture", description: "Snapshot datetimes are normalized to RFC3339 instants.",
         dueDatetime: legacyIsoAt(180), occurrenceKey: "occurrence-task-floating-time-1"
       }),
-      task("task-one-time-empty", { title: "One-time empty checklist", dueDatetime: "2026-06-01T12:00:00.000Z", occurrenceKey: "occurrence-one-time-empty-1" }),
+      task("task-one-time-empty", { title: "One-time empty checklist", dueDatetime: legacyIsoAt(-31), occurrenceKey: "occurrence-one-time-empty-1" }),
       task("task-one-time-partial", {
         title: "One-time partially checked", dueDatetime: "2026-06-01T13:00:00.000Z", occurrenceKey: "occurrence-one-time-partial-1",
         checklistItems: [child("child-one-time-partial-done", "Already done", true, 1), child("child-one-time-partial-open", "Still open", false, 2)]

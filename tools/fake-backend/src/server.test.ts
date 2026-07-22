@@ -271,10 +271,16 @@ test("recurrence requires a schedule and root updates persist or clear it", asyn
   });
   assert.equal(scheduledDaily.statusCode, 200);
   const dailyTask = scheduledDaily.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  const expectedDailyTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Warsaw",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date(before.dueDatetime));
   assert.deepEqual(dailyTask.recurrence, {
     kind: "supported",
     preset: "daily",
-    rule: "every day at 14:00",
+    rule: `every day at ${expectedDailyTime}`,
     language: "en",
     timeZone: "Europe/Warsaw",
     displayLabel: "Daily"

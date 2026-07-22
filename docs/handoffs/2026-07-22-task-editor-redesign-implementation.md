@@ -189,3 +189,69 @@ Verification:
 
 - Continue the plan's remaining full Android fake/real E2E and device verification
   gates from the coordinating task.
+
+---
+
+## Edit-editor fixture and dirty-back regression follow-up (2026-07-22)
+
+### Scope / plan status
+
+- Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 10 Android
+  verification follow-up.
+- Repaired the time-rotted Edit fake-backend fixture and the Edit screen's missing
+  system-Back handling. The temporary semantics diagnostic used during investigation was
+  removed before this handoff.
+
+### Files changed
+
+- `tools/fake-backend/src/fixtures.ts`
+  - Anchors `task-one-time-empty` at `legacyIsoAt(-31)`, leaving its scheduled,
+    self-assigned, 30-minute commitment valid while making it an on-screen overdue row
+    in Home's today agenda.
+- `tools/fake-backend/src/server.test.ts`
+  - Derives the expected daily recurrence time from the pre-update fixture schedule in
+    `Europe/Warsaw`, rather than pinning the old static fixture hour.
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/EditTaskScreen.kt`
+  - Mirrors Add's dirty-exit behavior: clears focus before discard confirmation and
+    handles system Back by closing that dialog or requesting a dirty exit.
+
+### TDD / diagnosis evidence
+
+- The original full Edit managed-device class was RED 2/2 before any repair: its source
+  title never appeared because the fixture was statically dated 2026-06-01 while Home
+  filters its agenda using device date (2026-07-22).
+- A temporary semantics dump after a first `legacyIsoAt(120)` repair showed eight today
+  agenda rows but the future target was uncomposed below the initial lazy-list viewport.
+  `legacyIsoAt(-31)` makes it a visible overdue row while retaining the scheduled-self
+  contract.
+- With that fixture repair, the first Edit test became green and the second exposed the
+  real system-Back regression: Edit had no Compose `BackHandler`, so Espresso reported
+  `NoActivityResumedException`. The symmetric handler repair was then verified by the
+  same existing E2E test.
+
+### Verification
+
+Verification:
+
+- Command: `PORT=18437 ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_TEST_CLASS=app.buzer.android.addtask.EditTaskFakeBackendTest scripts/e2e-fake-backend.sh`
+- Result: PASS
+- Evidence: `pixel8Api34` completed `EditTaskFakeBackendTest` with `OK (2 tests)`,
+  including project/assignee draft save, retry request identity, dirty Cancel, and dirty
+  system-Back confirmation.
+
+Verification:
+
+- Command: `npm test` from `tools/fake-backend/`
+- Result: PASS
+- Evidence: 19 tests passed; the recurrence fixture assertion derives its expected time
+  from `before.dueDatetime`.
+
+### Manual verification
+
+- No separate physical-device pass. The managed-device suite covered both sticky Cancel
+  and system Back through the dirty-edit confirmation flow.
+
+### Next recommended step
+
+- Continue the coordinating task's remaining broad fake/real Android E2E and device
+  verification gates.
