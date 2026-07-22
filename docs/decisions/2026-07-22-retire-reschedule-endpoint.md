@@ -20,9 +20,9 @@ ordinary reconciled task update.
 - `CommitmentEditor` and its legacy combined picker can be removed when its callers
   migrate.
 - The product design's former dedicated reschedule endpoint is superseded.
-- Deploy the updated Android app before or together with the backend version that
-  removes the endpoint, because an older installed app could otherwise submit the
-  retired request.
+- This is an atomic personal-app cutover. The user accepts brief downtime and will
+  install the new APK with the backend deployment; no compatibility shim is kept
+  for an older installed app.
 
 ## Non-Changes
 

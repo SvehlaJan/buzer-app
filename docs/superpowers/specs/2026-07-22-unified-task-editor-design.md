@@ -6,9 +6,10 @@ Date: 2026-07-22
 
 Accepted. This specification extends the implemented 2026-07-21 Task Editor
 Redesign to every task-update surface. It supersedes that specification's
-exclusion of Morning Review repair and deadline-blocker rescheduling, and is
-paired with the endpoint-retirement decision in
-`docs/decisions/2026-07-22-retire-reschedule-endpoint.md`.
+exclusion of Morning Review repair and deadline-blocker rescheduling. It is paired
+with the endpoint-retirement and conflict-deferral decisions in
+`docs/decisions/2026-07-22-retire-reschedule-endpoint.md` and
+`docs/decisions/2026-07-22-defer-update-conflict-resolution.md`.
 
 The product-spec references to a dedicated reschedule mutation are amended only
 as described here: deadline-blocker rescheduling becomes a complete task update.
@@ -29,7 +30,9 @@ The completed UI keeps the approved compact interaction model:
   date, start-time, and duration wheel dialogs;
 - editable Project, Assignee, Repeat, Notes, and Checklist sections;
 - local draft changes until the primary action; and
-- equal-width Cancel and primary action buttons.
+- equal-width Cancel and primary action buttons; and
+- a primary label derived once from the host verb plus the complete schedule range,
+  for example `Repair 10:00–10:30`, or the bare verb when no valid range exists.
 
 Detailed Schedule, collaborator, recurrence, checklist, and time-zone semantics
 from `2026-07-21-task-editor-redesign-design.md` remain in force. There is still
@@ -69,18 +72,18 @@ The following differences are intentionally confined to the host boundary.
 | Entry point | Context copy | Primary action | Validation on entry | Success | Cancel destination |
 | --- | --- | --- | --- | --- | --- |
 | Add | `Add task`; no warning | Add | No | Normal Add destination | Prior app destination |
-| Edit | `Edit task`; no warning | Save | Yes | Normal Edit destination | Prior app destination |
-| Morning Review | `Repair task`; concise invalid-task warning | Repair | Yes | Remove/reduce the repaired item, then show remaining review list | Remaining review list |
-| Deadline blocker | `Reschedule task`; block-ended warning | Reschedule | Yes | Close the blocker | Blocker action surface |
+| Edit | `Edit task`; validation banner only while invalid | Save | Yes | Normal Edit destination | Prior app destination |
+| Morning Review | `Repair task`; validation banner only while invalid | Repair | Yes | Remove/reduce the repaired item, then show remaining review list | Remaining review list |
+| Deadline blocker | `Reschedule task`; warning only while invalid | Reschedule | Yes | Close the blocker | Blocker action surface |
 
-All four hosts render the same editable task fields. The normal Edit host may
-append the existing read-only Activity log after Checklist through an outer slot;
-the log is not part of `TaskEditor` and does not create a screen mode.
+All four hosts render the same editable task fields. Every Update host appends the
+existing read-only Activity log after Checklist through an outer slot; the log is
+not part of `TaskEditor` and does not create a screen mode.
 
 The deadline blocker continues to consume Android system Back as required by the
-full-screen enforcement policy. Its editor still exposes Cancel; after a dirty
-draft confirmation, Cancel returns to the blocker action surface rather than
-escaping the blocker.
+full-screen enforcement policy. Its editor exposes both the shared top Back
+affordance and bottom Cancel action; after a dirty-draft confirmation either returns
+to the blocker action surface rather than escaping the blocker.
 
 ## Draft, Validation, and Exit Behavior
 
@@ -100,10 +103,11 @@ Validation exposure is deliberately minimal:
   dependent errors update immediately. Tapping Add reveals every remaining error.
 - Every `Update` host validates the entire prefilled draft on entry. It highlights
   all invalid values, focuses a missing Title first, otherwise expands the first
-  invalid expandable section in display order, and shows a concise contextual
-  error. Project, Assignee, and Repeat remain closed selection rows with inline
-  errors; entry validation never opens a selection sheet. Errors continue to update
-  immediately as the draft changes.
+  invalid expandable section in display order, and shows a concise validation
+  banner. Project, Assignee, and Repeat remain closed selection rows with inline
+  errors; entry validation never opens a selection sheet. The banner clears when
+  the local draft becomes valid. Errors continue to update immediately as the draft
+  changes.
 - A cancelled wheel dialog leaves the draft and all validation state unchanged.
 
 Project/collaborator loading is an availability state, not a false validation
@@ -112,10 +116,20 @@ snapshot; membership-dependent errors become actionable when the project facts
 finish loading, and Submit remains disabled while a required choice cannot be
 validated.
 
+The primary action is disabled for every invalid, unavailable, pending, or
+submitting draft. It is never used as a second route to reveal already-visible
+validation errors. Custom Todoist recurrence changes are handled in the same local
+validator: a Schedule change is allowed in the draft but requires an explicit
+supported Repeat replacement before submit is enabled.
+
 Schedule remains one dependent group. Date, start time, duration, self-assignment,
 and recurrence are evaluated together. A partial schedule is never silently
 accepted; a non-self assignee may retain an empty schedule only with `Never`
 recurrence.
+
+Tasks with an unsupported nested checklist hierarchy remain updateable at the root.
+Their Checklist section is read-only and displays the existing hierarchy warning;
+the MVP does not implement nested checklist editing.
 
 Dirty Cancel or back behavior is common. A clean draft takes its host's cancel
 destination; a dirty draft first shows `Discard changes?`. Submitting disables
@@ -134,9 +148,15 @@ specialized for Repair or Reschedule.
 
 On first submission, a host captures the request and action ID. Retry resends the
 same captured request. A domain-draft change invalidates it and creates a new
-request only on a later submit. A stale, pending, local-reconciliation, or network
-failure keeps the full editor open with the draft intact and uses the established
-error/retry presentation.
+request only on a later submit. A local-reconciliation or network failure keeps the
+full editor open with the draft intact and uses the established error/retry
+presentation. A stale response uses the existing generic error presentation only;
+the MVP intentionally adds no rebase, merge, reload choice, or FCM conflict
+notification under the single-client assumption.
+
+A pending update keeps the editor open with `Saved; waiting for confirmation`,
+disables duplicate submission, and refreshes the authoritative snapshot. The host
+performs its normal successful transition only after confirmation.
 
 Morning Review retains its existing snapshot reduction rules after a successful
 update. The deadline blocker submits through the existing update coordinator and
@@ -146,10 +166,12 @@ snapshot controls future alarms and blockers.
 ## Full Blocker Editing
 
 Opening the deadline-blocker editor must retain the complete `TaskSnapshotItem`,
-not only its compact `BlockerUiModel`. The host loads the same project and
-collaborator choices used by normal Edit before enabling a submit. It can display
-the block-ended warning while those choices load, and preserves the local draft on
-load, membership, or action failure.
+not only its compact `BlockerUiModel`. A missing or stale task snapshot does not
+open a partial editor; the blocker shows Refresh/Retry instead. With a complete
+snapshot, the host opens the editor immediately, loads the same project and
+collaborator choices used by normal Edit in place, and enables submit only when
+those required facts are available. It preserves the local draft on load,
+membership, or action failure.
 
 The user may change title, Schedule, Project, Assignee, Repeat, Notes, and
 Checklist from this context. The label remains `Reschedule` because it describes
@@ -169,9 +191,10 @@ After all callers migrate:
    `POST /tasks/:id/update` with the same reconciliation protocol as Edit and
    Repair.
 
-For a deployed personal installation, update the Android app before or together
-with the backend release that removes the old endpoint. No external public API
-compatibility promise is required.
+This is an atomic personal-app cutover. Remove the Android and backend contracts in
+the same change, deploy the backend, and install the new APK together. The user
+explicitly accepts that an older installed APK cannot reschedule during this brief
+cutover; no compatibility shim is required.
 
 ## Verification
 
@@ -186,7 +209,9 @@ legacy-picker tests as a separate regression contract.
   reschedule route.
 - Android instrumentation: Add's quiet initial state; Edit and Repair immediate
   invalid-state display; Repair's return to remaining list; full deadline-blocker
-  editing and successful close; all update retries and discard paths.
+  editing and successful close; validation-banner clearing; disabled invalid action;
+  pending confirmation; all update retries and discard paths; and read-only nested
+  checklist behavior.
 - Run `:shared:testAndroidHostTest`, `:androidApp:testDebugUnitTest`, and
   `:androidApp:assembleDebug`.
 - The real backend E2E server in `backend/test/e2eServer.ts` is the authoritative
@@ -207,3 +232,5 @@ legacy-picker tests as a separate regression contract.
   safety instead of introducing immediate field mutations.
 - Retiring the duplicate reschedule contract reduces backend and client branching
   without changing the enforcement lifecycle or alarm authority.
+- Conflict rebase and FCM are deliberately deferred; the single-client MVP retains
+  the established generic stale-error behavior.
