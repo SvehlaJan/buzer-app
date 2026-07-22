@@ -113,6 +113,8 @@ internal fun selectionRowSupportingText(
     fieldError: String?
 ): String? = fieldError ?: normalSupportingText
 
+internal fun conciseInlineError(message: String?): String? = message?.trim()?.takeIf { it.isNotEmpty() }
+
 internal fun selectProject(
     state: TaskEditorScaffoldState,
     draft: TaskEditorDraft,
@@ -201,8 +203,10 @@ internal fun TaskEditorScaffold(
     saveLabel: String = saveActionLabel(draft),
     savingLabel: String = "Saving...",
     titleModifier: Modifier = Modifier,
+    titleError: String? = null,
     projectError: String? = null,
-    assigneeError: String? = null
+    assigneeError: String? = null,
+    checklistError: String? = null
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
     LaunchedEffect(scheduleValidation.focusSection) {
@@ -213,6 +217,8 @@ internal fun TaskEditorScaffold(
     val personalProject = selectedProject?.canAssignTasks == false
     val assigneeReady = personalProject || selectedProject?.collaboratorsReady == true
     val notesPreview = draft.description.trim().ifBlank { "Add notes" }
+    val conciseTitleError = conciseInlineError(titleError)
+    val conciseChecklistError = conciseInlineError(checklistError)
     val expandedSection = resolvedExpandedSection(state, scheduleValidation)
     val dismissActionsEnabled = editorDismissActionsEnabled(saving)
 
@@ -239,6 +245,7 @@ internal fun TaskEditorScaffold(
                 title = title,
                 onTitleChange = onTitleChange,
                 enabled = enabled,
+                errorText = conciseTitleError,
                 modifier = titleModifier
             )
 
@@ -336,6 +343,8 @@ internal fun TaskEditorScaffold(
                 value = "Checklist · $checklistDoneCount/$checklistTotalCount done",
                 leadingSymbol = "✓",
                 expanded = expandedSection == EditorSection.Checklist,
+                supportingText = conciseChecklistError,
+                isError = conciseChecklistError != null,
                 enabled = enabled,
                 onClick = { state = reduceSectionTap(state, EditorSection.Checklist, scheduleValidation) }
             )
@@ -411,6 +420,7 @@ private fun BorderlessTitleField(
     title: String,
     onTitleChange: (String) -> Unit,
     enabled: Boolean,
+    errorText: String?,
     modifier: Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -426,6 +436,16 @@ private fun BorderlessTitleField(
                 .semantics { contentDescription = "Task title" }
         )
         HorizontalDivider()
+        errorText?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier
+                    .padding(top = Spacing.xs)
+                    .semantics { contentDescription = "Title error: $message" }
+            )
+        }
     }
 }
 
@@ -437,6 +457,7 @@ private fun EditorDisclosureRow(
     expanded: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    supportingText: String? = null,
     isError: Boolean = false
 ) {
     EditorValueRow(
@@ -446,6 +467,7 @@ private fun EditorDisclosureRow(
         enabled = enabled,
         showChevron = true,
         trailingValue = if (expanded) "⌃" else "⌄",
+        supportingText = supportingText,
         isError = isError,
         onClick = onClick
     )

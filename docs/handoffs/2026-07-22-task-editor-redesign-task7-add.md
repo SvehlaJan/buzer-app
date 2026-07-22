@@ -71,3 +71,33 @@ Verification:
 ## Next Recommended Step
 
 Run the required Task 7 specification and code-quality reviews, then migrate Edit Task in Task 8. After Task 9 updates fixture parity and instrumentation semantics, run both deterministic E2E lanes.
+
+## Specification Review Follow-up
+
+The Task 7 specification review found that blank-title and invalid-checklist Save
+failures were retained in Add state but had no visible presentation in the new
+scaffold. This follow-up resolves that P1:
+
+- `TaskEditorScaffold` now accepts optional title and checklist errors. The title
+  field displays concise error text directly below its divider with a title-specific
+  accessibility description; the Checklist row shows concise error text and error
+  color without opening or mutating the draft.
+- Add wires its existing `AddTaskInvalidField.Title` error to the title input and its
+  fieldless checklist/generic validation message to Checklist. Project, Assignee,
+  and Schedule handling is unchanged; all validation branches return before a create
+  request is assembled.
+
+TDD evidence: the added `conciseInlineError` state test was RED first with unresolved
+references, then GREEN after the scaffold presentation inputs were added.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.taskeditor.TaskEditorScaffoldStateTest --tests app.buzer.android.ui.addtask.AddTaskProjectLoadFeedbackTest --tests app.buzer.android.ui.addtask.AddTaskFormValidatorTest`
+- Result: PASS
+- Evidence: concise title/checklist inline-error presentation and Add validation regressions passed.
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: complete shared host suite, Android JVM suite, and debug APK assembly passed after the review fix.

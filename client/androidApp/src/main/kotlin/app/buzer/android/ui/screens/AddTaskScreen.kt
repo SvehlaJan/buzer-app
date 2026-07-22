@@ -226,6 +226,7 @@ fun AddTaskScreen(
         if (submitting) return
         val checklistValidation = validateChecklistDrafts(checklistDrafts)
         if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
+            invalidField = null
             errorText = checklistValidation.bannerMessage ?: "Each checklist item needs a title"
             return
         }
@@ -339,8 +340,10 @@ fun AddTaskScreen(
             saveEnabled = saveEnabled,
             saving = submitting,
             titleModifier = Modifier.testTag("titleInput"),
+            titleError = errorText.takeIf { invalidField == AddTaskInvalidField.Title },
             projectError = errorText.takeIf { invalidField == AddTaskInvalidField.Project },
             assigneeError = errorText.takeIf { invalidField == AddTaskInvalidField.Assignee },
+            checklistError = errorText.takeIf { invalidField == null },
             modifier = Modifier.fillMaxSize()
         )
 

@@ -172,6 +172,13 @@ class TaskEditorScaffoldStateTest {
         )
     }
 
+    @Test
+    fun titleAndChecklistValidationErrorsKeepConciseInlineCopy() {
+        assertEquals("Title is required", conciseInlineError("  Title is required  "))
+        assertEquals("Each checklist item needs a title", conciseInlineError("Each checklist item needs a title"))
+        assertEquals(null, conciseInlineError("   "))
+    }
+
     private fun project(
         id: String,
         collaborators: List<ProjectCollaborator>
