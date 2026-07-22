@@ -96,6 +96,36 @@ Verification:
 
 Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.
 
+## Post-review update parity and project-status correction
+
+The fake `/tasks/:id/update` path now follows the production recurrence decision tree when no replacement preset is supplied:
+
+- changing the schedule of a supported recurrence regenerates the same preset at the new local date/time;
+- changing the schedule of a custom Todoist recurrence is rejected with `custom_recurrence_schedule_change_requires_replacement` until the caller supplies a replacement preset;
+- unknown project IDs now return `404 project_not_found` for both fake root creation and update, before assignment or schedule validation.
+
+Focused coverage confirms the supported `daily` recurrence is re-anchored in `Europe/Bratislava`, a custom recurrence cannot be silently modified, and both unknown-project routes preserve the production status code.
+
+Verification:
+
+- Command: `npm test` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: 19 tests passed, including the new update recurrence/project-status parity contract.
+
+- Command: `npm run build` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: TypeScript compilation completed without errors.
+
+- Command: `npx vitest run test/domain/taskRecurrence.test.ts test/services/taskActionService.test.ts test/http/routes.test.ts` (from `backend/`)
+  Result: PASS
+  Evidence: 3 files, 114 tests passed.
+
+- Command: `git diff --check`
+  Result: PASS
+  Evidence: no whitespace errors.
+
+Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.
+
 ## Post-review recurrence serialization correction
 
 The fake no longer emits placeholder recurrence text such as `every daily`. It now carries a local implementation of the stable production contract rather than importing backend runtime code:

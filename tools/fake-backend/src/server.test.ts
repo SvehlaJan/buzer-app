@@ -344,6 +344,79 @@ test("scheduled recurrence presets use Todoist-shaped, time-specific rules", asy
   }
 });
 
+test("update re-anchors supported recurrence, protects custom recurrence, and rejects unknown projects", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const unknownProjectCreate = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: {
+      ...action("unknown-project-create"),
+      title: "Unknown project",
+      projectId: "project-missing",
+      assigneeId: "user-me",
+      dueDatetime: "2026-06-01T12:00:00.000Z",
+      durationMinutes: 30
+    }
+  });
+  assert.equal(unknownProjectCreate.statusCode, 404);
+  assert.equal(unknownProjectCreate.json().code, "project_not_found");
+
+  const snapshot = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json();
+  const supported = snapshot.tasks.find((task: { id: string }) => task.id === "task-recurring-all-checked");
+  const reanchored = await app.inject({
+    method: "POST", url: `/tasks/${supported.id}/update`, headers: auth,
+    payload: {
+      ...action("reanchor-supported-recurrence", supported.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: supported.taskRevision,
+        dueDatetime: "2026-06-02T11:15:00.000Z"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(reanchored.statusCode, 200);
+  const reanchoredTask = reanchored.json().snapshot.tasks.find((task: { id: string }) => task.id === supported.id);
+  assert.deepEqual(reanchoredTask.recurrence, {
+    kind: "supported",
+    preset: "daily",
+    rule: "every day at 13:15",
+    language: "en",
+    timeZone: "Europe/Bratislava",
+    displayLabel: "Daily"
+  });
+
+  const custom = snapshot.tasks.find((task: { id: string }) => task.id === "task-custom-recurrence");
+  const customScheduleChange = await app.inject({
+    method: "POST", url: `/tasks/${custom.id}/update`, headers: auth,
+    payload: {
+      ...action("change-custom-schedule", custom.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: custom.taskRevision,
+        dueDatetime: "2026-06-03T11:15:00.000Z"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(customScheduleChange.statusCode, 422);
+  assert.equal(customScheduleChange.json().code, "custom_recurrence_schedule_change_requires_replacement");
+
+  const current = reanchored.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  const unknownProjectUpdate = await app.inject({
+    method: "POST", url: `/tasks/${current.id}/update`, headers: auth,
+    payload: {
+      ...action("unknown-project-update", current.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: current.taskRevision,
+        projectId: "project-missing"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(unknownProjectUpdate.statusCode, 404);
+  assert.equal(unknownProjectUpdate.json().code, "project_not_found");
+});
+
 test("reset restores fixtures at a newer snapshot generation", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());

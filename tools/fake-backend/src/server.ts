@@ -172,6 +172,15 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       }
     };
   }
+  function customRecurrenceScheduleChangeError() {
+    return {
+      statusCode: 422,
+      body: {
+        code: "custom_recurrence_schedule_change_requires_replacement",
+        message: "Custom Todoist recurrence must be replaced before changing its schedule"
+      }
+    };
+  }
   function error(code: string, statusCode: number) { return { statusCode, body: { code, snapshot: currentSnapshot() } }; }
   function staleFor(taskValue: FakeTask, body: ActionBody, child?: FakeChecklistItem) {
     if (controls.stale || body.expectedOccurrenceKey !== taskValue.occurrenceKey) return error("stale_occurrence", 409);
@@ -243,6 +252,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     const id = `created-task-${state.tasks.filter((item) => item.id.startsWith("created-task-")).length + 1}`;
     const projectId = typeof body.projectId === "string" ? body.projectId : "project-test";
     const assigneeId = body.assigneeId === null ? null : typeof body.assigneeId === "string" ? body.assigneeId : "user-me";
+    if (!fixtureProjects.some((project) => project.id === projectId)) return error("project_not_found", 404);
     const assignmentError = projectAssignmentError(projectId, assigneeId);
     if (assignmentError !== null) return error(assignmentError, 422);
     const dueDatetime = typeof body.dueDatetime === "string" ? body.dueDatetime : null;
@@ -313,6 +323,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       const assigneeId = Object.prototype.hasOwnProperty.call(patch, "assigneeId")
         ? (typeof patch.assigneeId === "string" ? patch.assigneeId : null)
         : root.assigneeId;
+      if (!fixtureProjects.some((project) => project.id === projectId)) return error("project_not_found", 404);
       const assignmentError = projectAssignmentError(projectId, assigneeId);
       if (assignmentError !== null) return error(assignmentError, 422);
       const dueDatetime = patch.dueDatetime === undefined
@@ -335,6 +346,10 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
         errors.push("recurrence_preset_invalid");
       }
       if (errors.length > 0) return taskValidationError(errors);
+      const scheduleChanged = root.dueDatetime !== dueDatetime || root.durationMinutes !== durationMinutes;
+      if (scheduleChanged && recurrencePreset === undefined && root.recurrence.kind === "custom") {
+        return customRecurrenceScheduleChangeError();
+      }
       for (const key of ["title", "description", "projectId", "assigneeId", "dueDatetime", "durationMinutes"] as const) {
         if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
       }
@@ -345,6 +360,12 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
           recurrencePreset,
           dueDatetime,
           typeof patch.timeZone === "string" ? patch.timeZone : root.recurrence.timeZone ?? "UTC"
+        );
+      } else if (scheduleChanged && root.recurrence.kind === "supported" && isRecurrencePreset(root.recurrence.preset)) {
+        root.recurrence = recurrenceForPreset(
+          root.recurrence.preset,
+          dueDatetime,
+          root.recurrence.timeZone ?? "UTC"
         );
       }
       if (root.state === "invalid" && root.hierarchyStatus === "valid" && root.dueDatetime !== null && root.durationMinutes !== null) {
