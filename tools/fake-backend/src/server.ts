@@ -68,6 +68,18 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       ]
     }
   ] as const;
+  const recurrencePresets = ["never", "daily", "weekdays", "weekly", "monthly", "yearly"] as const;
+  function isRecurrencePreset(value: unknown): value is (typeof recurrencePresets)[number] {
+    return typeof value === "string" && recurrencePresets.includes(value as (typeof recurrencePresets)[number]);
+  }
+  function recurrenceForPreset(
+    preset: (typeof recurrencePresets)[number],
+    timeZone: string | null
+  ): FakeTask["recurrence"] {
+    return preset === "never"
+      ? { kind: "none", preset: "never", rule: null, language: null, timeZone: null }
+      : { kind: "supported", preset, rule: `every ${preset}`, language: "en", timeZone };
+  }
   function projectAssignmentError(projectId: string, assigneeId: string | null): string | null {
     const project = fixtureProjects.find((candidate) => candidate.id === projectId);
     if (project === undefined) return "project_not_found";
@@ -181,7 +193,13 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
     if (assignmentError !== null) return error(assignmentError, 422);
     const dueDatetime = typeof body.dueDatetime === "string" ? body.dueDatetime : null;
     const durationMinutes = typeof body.durationMinutes === "number" ? body.durationMinutes : null;
+    const requestedRecurrencePreset = typeof body.recurrencePreset === "string" ? body.recurrencePreset : "never";
+    const recurrencePreset = isRecurrencePreset(requestedRecurrencePreset) ? requestedRecurrencePreset : "never";
     const errors = scheduleErrors({ projectId, assigneeId, dueDatetime, durationMinutes });
+    if (dueDatetime === null && durationMinutes === null && requestedRecurrencePreset !== "never") {
+      errors.push("recurrence_requires_schedule");
+    }
+    if (!isRecurrencePreset(requestedRecurrencePreset)) errors.push("recurrence_preset_invalid");
     if (errors.length > 0) return taskValidationError(errors);
     const drafts = Array.isArray(body.checklistDrafts) ? body.checklistDrafts : [];
     const hasAmbiguousChildCreate = drafts.some((draft) => (draft as Record<string, unknown>).title === "[partial-failure]");
@@ -195,7 +213,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null, projectId, assigneeId,
       dueDatetime, durationMinutes,
       state: "planned", occurrenceNumber: 1, occurrenceKey: `occurrence-${id}-1`, taskRevision: 1,
-      recurrence: body.recurrencePreset && body.recurrencePreset !== "never" ? { kind: "supported", preset: String(body.recurrencePreset), rule: `every ${String(body.recurrencePreset)}`, language: "en", timeZone: typeof body.timeZone === "string" ? body.timeZone : null } : { kind: "none", preset: "never", rule: null, language: null, timeZone: null },
+      recurrence: recurrenceForPreset(recurrencePreset, typeof body.timeZone === "string" ? body.timeZone : "UTC"),
       hierarchyStatus: "valid", hierarchyViolation: null, reconciliationStatus: "none", checklistItems: items, startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false
     });
     state.scheduleVersion++; advanceSnapshotGeneration();
@@ -249,10 +267,30 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       const durationMinutes = patch.durationMinutes === undefined
         ? root.durationMinutes
         : typeof patch.durationMinutes === "number" ? patch.durationMinutes : null;
+      const requestedRecurrencePreset = patch.recurrencePreset === undefined
+        ? undefined
+        : typeof patch.recurrencePreset === "string" ? patch.recurrencePreset : "invalid";
+      const recurrencePreset = requestedRecurrencePreset === undefined
+        ? undefined
+        : isRecurrencePreset(requestedRecurrencePreset) ? requestedRecurrencePreset : "never";
       const errors = scheduleErrors({ projectId, assigneeId, dueDatetime, durationMinutes });
+      if (dueDatetime === null && durationMinutes === null && requestedRecurrencePreset !== undefined && requestedRecurrencePreset !== "never") {
+        errors.push("recurrence_requires_schedule");
+      }
+      if (requestedRecurrencePreset !== undefined && !isRecurrencePreset(requestedRecurrencePreset)) {
+        errors.push("recurrence_preset_invalid");
+      }
       if (errors.length > 0) return taskValidationError(errors);
       for (const key of ["title", "description", "projectId", "assigneeId", "dueDatetime", "durationMinutes"] as const) {
         if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
+      }
+      if (dueDatetime === null || durationMinutes === null) {
+        root.recurrence = recurrenceForPreset("never", null);
+      } else if (recurrencePreset !== undefined) {
+        root.recurrence = recurrenceForPreset(
+          recurrencePreset,
+          typeof patch.timeZone === "string" ? patch.timeZone : root.recurrence.timeZone ?? "UTC"
+        );
       }
       if (root.state === "invalid" && root.hierarchyStatus === "valid" && root.dueDatetime !== null && root.durationMinutes !== null) {
         root.state = "planned";

@@ -95,3 +95,30 @@ Verification:
   Evidence: no whitespace errors.
 
 Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.
+
+## Post-review recurrence correction
+
+The fake route also now applies the production recurrence/schedule rule:
+
+- an empty schedule can only use recurrence `never`, including for an optional non-self task;
+- a successful root update persists a supplied recurrence preset with its time zone;
+- clearing a schedule clears recurrence as well;
+- invalid recurrence values receive `recurrence_preset_invalid` in the fake validation response.
+
+The focused fake test rejects unscheduled Wife `daily` creation and update, verifies a scheduled `daily` update in the returned snapshot, then verifies a non-self schedule/recurrence clear returns `Never`.
+
+Verification:
+
+- Command: `npm test` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: 17 tests passed.
+
+- Command: `npx vitest run test/services/taskActionService.test.ts test/http/routes.test.ts` (from `backend/`)
+  Result: PASS
+  Evidence: 2 files, 83 tests passed.
+
+- Command: `git diff --check`
+  Result: PASS
+  Evidence: no whitespace errors.
+
+Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.

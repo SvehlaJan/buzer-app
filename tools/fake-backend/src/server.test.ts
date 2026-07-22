@@ -211,6 +211,101 @@ test("root create and update enforce self and partial schedule validation", asyn
   assert.equal(wifeUpdateWithoutSchedule.statusCode, 200);
 });
 
+test("recurrence requires a schedule and root updates persist or clear it", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+
+  const wifeCreateWithUnscheduledRecurrence = await app.inject({
+    method: "POST", url: "/tasks", headers: auth,
+    payload: {
+      ...action("wife-unscheduled-daily"),
+      title: "Wife recurring task",
+      projectId: "project-test",
+      assigneeId: "user-wife",
+      dueDatetime: null,
+      durationMinutes: null,
+      recurrencePreset: "daily"
+    }
+  });
+  assert.equal(wifeCreateWithUnscheduledRecurrence.statusCode, 422);
+  assert.deepEqual(wifeCreateWithUnscheduledRecurrence.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["recurrence_requires_schedule"] }
+  });
+
+  const before = (await app.inject({ method: "GET", url: "/tasks/snapshot", headers: auth })).json()
+    .tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  const wifeUpdateWithUnscheduledRecurrence = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("wife-unscheduled-daily-update", before.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: before.taskRevision,
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null,
+        recurrencePreset: "daily"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(wifeUpdateWithUnscheduledRecurrence.statusCode, 422);
+  assert.deepEqual(wifeUpdateWithUnscheduledRecurrence.json(), {
+    code: "task_validation_failed",
+    message: "Task validation failed",
+    details: { errors: ["recurrence_requires_schedule"] }
+  });
+
+  const scheduledDaily = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("set-daily", before.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: before.taskRevision,
+        recurrencePreset: "daily",
+        timeZone: "Europe/Warsaw"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(scheduledDaily.statusCode, 200);
+  const dailyTask = scheduledDaily.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  assert.deepEqual(dailyTask.recurrence, {
+    kind: "supported",
+    preset: "daily",
+    rule: "every daily",
+    language: "en",
+    timeZone: "Europe/Warsaw",
+    displayLabel: "every daily"
+  });
+
+  const cleared = await app.inject({
+    method: "POST", url: "/tasks/task-one-time-empty/update", headers: auth,
+    payload: {
+      ...action("clear-wife-recurrence", dailyTask.occurrenceKey),
+      rootPatch: {
+        expectedTaskRevision: dailyTask.taskRevision,
+        assigneeId: "user-wife",
+        dueDatetime: null,
+        durationMinutes: null,
+        recurrencePreset: "never"
+      },
+      childMutations: []
+    }
+  });
+  assert.equal(cleared.statusCode, 200);
+  const clearedTask = cleared.json().snapshot.tasks.find((task: { id: string }) => task.id === "task-one-time-empty");
+  assert.deepEqual(clearedTask.recurrence, {
+    kind: "none",
+    preset: "never",
+    rule: null,
+    language: null,
+    timeZone: null,
+    displayLabel: "Never"
+  });
+});
+
 test("reset restores fixtures at a newer snapshot generation", async (t) => {
   const app = await buildServer();
   t.after(() => app.close());
