@@ -108,6 +108,11 @@ internal fun scheduleValidationMessage(validation: TaskEditorScheduleValidation)
         null
     }
 
+internal fun selectionRowSupportingText(
+    normalSupportingText: String?,
+    fieldError: String?
+): String? = fieldError ?: normalSupportingText
+
 internal fun selectProject(
     state: TaskEditorScaffoldState,
     draft: TaskEditorDraft,
@@ -195,7 +200,9 @@ internal fun TaskEditorScaffold(
     saving: Boolean = false,
     saveLabel: String = saveActionLabel(draft),
     savingLabel: String = "Saving...",
-    titleModifier: Modifier = Modifier
+    titleModifier: Modifier = Modifier,
+    projectError: String? = null,
+    assigneeError: String? = null
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
     LaunchedEffect(scheduleValidation.focusSection) {
@@ -260,6 +267,11 @@ internal fun TaskEditorScaffold(
                 value = selectedProject?.name ?: "Choose project",
                 leadingSymbol = "□",
                 enabled = enabled,
+                supportingText = selectionRowSupportingText(
+                    normalSupportingText = null,
+                    fieldError = projectError
+                ),
+                isError = projectError != null,
                 onClick = { state = state.copy(openSheet = EditorSheet.Project) }
             )
             EditorValueRow(
@@ -272,11 +284,15 @@ internal fun TaskEditorScaffold(
                 leadingSymbol = "◎",
                 enabled = enabled && assigneeReady && !personalProject,
                 showChevron = !personalProject,
-                supportingText = when {
-                    personalProject -> "Personal project"
-                    !assigneeReady -> "Collaborators unavailable · Retry"
-                    else -> null
-                },
+                supportingText = selectionRowSupportingText(
+                    normalSupportingText = when {
+                        personalProject -> "Personal project"
+                        !assigneeReady -> "Collaborators unavailable · Retry"
+                        else -> null
+                    },
+                    fieldError = assigneeError
+                ),
+                isError = assigneeError != null,
                 onClick = { state = state.copy(openSheet = EditorSheet.Assignee) }
             )
             if (!personalProject && !assigneeReady) {

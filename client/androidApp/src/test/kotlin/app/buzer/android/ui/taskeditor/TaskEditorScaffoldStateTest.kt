@@ -154,6 +154,24 @@ class TaskEditorScaffoldStateTest {
         )
     }
 
+    @Test
+    fun fieldErrorOverridesTheNormalRowSupportingText() {
+        assertEquals(
+            "Project is required",
+            selectionRowSupportingText(
+                normalSupportingText = "Personal project",
+                fieldError = "Project is required"
+            )
+        )
+        assertEquals(
+            "Personal project",
+            selectionRowSupportingText(
+                normalSupportingText = "Personal project",
+                fieldError = null
+            )
+        )
+    }
+
     private fun project(
         id: String,
         collaborators: List<ProjectCollaborator>
