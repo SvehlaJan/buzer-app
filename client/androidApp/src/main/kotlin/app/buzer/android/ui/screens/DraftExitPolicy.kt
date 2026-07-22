@@ -28,7 +28,7 @@ internal class AddTaskDraftFingerprint(
     val projectId: String?,
     val assigneeId: String?,
     val start: DateTimeDraftSelection,
-    val durationMinutes: Int,
+    val durationMinutes: Int?,
     val recurrencePreset: RecurrencePreset,
     checklistItems: List<ChecklistDraftFingerprint>
 ) {
@@ -40,7 +40,7 @@ internal class AddTaskDraftFingerprint(
         projectId: String? = this.projectId,
         assigneeId: String? = this.assigneeId,
         start: DateTimeDraftSelection = this.start,
-        durationMinutes: Int = this.durationMinutes,
+        durationMinutes: Int? = this.durationMinutes,
         recurrencePreset: RecurrencePreset = this.recurrencePreset,
         checklistItems: List<ChecklistDraftFingerprint> = this.checklistItems
     ): AddTaskDraftFingerprint = AddTaskDraftFingerprint(
@@ -82,7 +82,7 @@ internal class AddTaskDraftFingerprint(
             projectId = projectId,
             assigneeId = null,
             start = DateTimeDraftSelection.Empty,
-            durationMinutes = 30,
+            durationMinutes = null,
             recurrencePreset = RecurrencePreset.never,
             checklistItems = emptyList()
         )
@@ -161,7 +161,7 @@ internal fun addTaskDraftFingerprint(
     projectId: String?,
     assigneeId: String?,
     start: DateTimeDraftSelection,
-    durationMinutes: Int,
+    durationMinutes: Int?,
     recurrencePreset: RecurrencePreset,
     checklistItems: List<ChecklistDraftFingerprint>
 ): AddTaskDraftFingerprint = AddTaskDraftFingerprint(
@@ -174,6 +174,43 @@ internal fun addTaskDraftFingerprint(
     recurrencePreset = recurrencePreset,
     checklistItems = checklistItems
 )
+
+internal data class AddTaskProjectBaselineCapture(
+    val fingerprint: AddTaskDraftFingerprint,
+    val captured: Boolean
+)
+
+internal fun shouldDeferNoProjectBaseline(
+    persistedProjectId: String?,
+    draftProjectId: String?,
+    automaticPersistedProjectId: String?
+): Boolean = persistedProjectId != null &&
+    draftProjectId == null &&
+    automaticPersistedProjectId == null
+
+internal fun captureAddTaskProjectBaseline(
+    initialFingerprint: AddTaskDraftFingerprint,
+    alreadyCaptured: Boolean,
+    automaticPersistedProjectId: String?,
+    automaticPersistedAssigneeId: String?,
+    deferNoProjectBaseline: Boolean
+): AddTaskProjectBaselineCapture = when {
+    alreadyCaptured -> AddTaskProjectBaselineCapture(
+        fingerprint = initialFingerprint,
+        captured = true
+    )
+    automaticPersistedProjectId == null && deferNoProjectBaseline -> AddTaskProjectBaselineCapture(
+        fingerprint = initialFingerprint,
+        captured = false
+    )
+    else -> AddTaskProjectBaselineCapture(
+        fingerprint = initialFingerprint.copy(
+            projectId = automaticPersistedProjectId,
+            assigneeId = automaticPersistedAssigneeId
+        ),
+        captured = true
+    )
+}
 
 internal fun editTaskDraftFingerprint(
     title: String,

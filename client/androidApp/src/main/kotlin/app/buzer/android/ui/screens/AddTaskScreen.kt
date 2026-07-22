@@ -1,5 +1,6 @@
 package app.buzer.android.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,8 +14,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +42,7 @@ import app.buzer.android.ui.addtask.AddTaskSubmitState
 import app.buzer.android.ui.addtask.selectAddTaskProject
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.ChecklistEditor
+import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
@@ -58,6 +62,28 @@ import app.buzer.shared.ui.commitment.validateChecklistDrafts
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlinx.coroutines.launch
+
+internal fun addTaskEditorFingerprint(
+    draft: TaskEditorDraft,
+    selectedProject: ProjectItem?,
+    checklistDrafts: List<ChecklistEditorDraft>
+): AddTaskDraftFingerprint = addTaskDraftFingerprint(
+    title = draft.title,
+    description = draft.description,
+    projectId = draft.projectId,
+    assigneeId = draft.assignee?.id?.takeIf { selectedProject?.canAssignTasks == true },
+    start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
+    durationMinutes = draft.schedule.durationMinutes,
+    recurrencePreset = draft.recurrencePreset,
+    checklistItems = checklistDrafts.map { draftItem ->
+        ChecklistDraftFingerprint(
+            stableId = draftItem.clientMutationId,
+            title = draftItem.title,
+            description = draftItem.description,
+            checked = false
+        )
+    }
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,6 +134,9 @@ fun AddTaskScreen(
     var pendingCreateRequest by remember { mutableStateOf<CreateTaskRequest?>(null) }
     var checklistDrafts by remember { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
     var scheduleValidation by remember { mutableStateOf(TaskEditorScheduleValidation.valid()) }
+    var discardConfirmationVisible by remember { mutableStateOf(false) }
+    var initialFingerprint by remember { mutableStateOf(AddTaskDraftFingerprint.empty(projectId = null)) }
+    var initialProjectBaselineCaptured by remember { mutableStateOf(false) }
     val now = remember(nowProvider) { nowProvider() }
     val deviceId = remember(context) {
         EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
@@ -156,15 +185,37 @@ fun AddTaskScreen(
         projects = loaded
         val preferredProjectId = draft.projectId ?: persistedProjectId
         val resolvedProject = loaded.firstOrNull { it.id == preferredProjectId }
+        var baselineDraft = draft
+        var automaticPersistedProject: ProjectItem? = null
         if (resolvedProject != null) {
             val resolvedCurrentUser = resolvedProject.collaborators.firstOrNull { it.isCurrentUser }
                 ?: loaded.asSequence()
                     .flatMap { it.collaborators.asSequence() }
                     .firstOrNull { it.isCurrentUser }
-                ?: return
-            updateDraft(selectAddTaskProject(draft, resolvedProject, resolvedCurrentUser))
-            persistProjectId(resolvedProject.id)
+            if (resolvedCurrentUser != null) {
+                baselineDraft = selectAddTaskProject(draft, resolvedProject, resolvedCurrentUser)
+                automaticPersistedProject = resolvedProject.takeIf {
+                    draft.projectId == null && it.id == persistedProjectId
+                }
+                updateDraft(baselineDraft)
+                persistProjectId(resolvedProject.id)
+            }
         }
+        val baselineCapture = captureAddTaskProjectBaseline(
+            initialFingerprint = initialFingerprint,
+            alreadyCaptured = initialProjectBaselineCaptured,
+            automaticPersistedProjectId = automaticPersistedProject?.id,
+            automaticPersistedAssigneeId = baselineDraft.assignee?.id?.takeIf {
+                automaticPersistedProject?.canAssignTasks == true
+            },
+            deferNoProjectBaseline = shouldDeferNoProjectBaseline(
+                persistedProjectId = persistedProjectId,
+                draftProjectId = draft.projectId,
+                automaticPersistedProjectId = automaticPersistedProject?.id
+            )
+        )
+        initialFingerprint = baselineCapture.fingerprint
+        initialProjectBaselineCaptured = baselineCapture.captured
     }
 
     fun retryProjects() {
@@ -279,6 +330,27 @@ fun AddTaskScreen(
         }
     }
 
+    fun currentFingerprint() = addTaskEditorFingerprint(
+        draft = draft,
+        selectedProject = selectedProject,
+        checklistDrafts = checklistDrafts
+    )
+
+    fun requestExit() {
+        when (decideDraftExit(initialFingerprint, currentFingerprint(), submitting)) {
+            DraftExitDecision.NavigateHome -> onBack()
+            DraftExitDecision.ConfirmDiscard -> discardConfirmationVisible = true
+            DraftExitDecision.Ignore -> Unit
+        }
+    }
+
+    BackHandler(enabled = discardConfirmationVisible) {
+        discardConfirmationVisible = false
+    }
+    BackHandler(enabled = !discardConfirmationVisible) {
+        requestExit()
+    }
+
     LaunchedEffect(Unit) {
         projectsLoading = true
         projectLoadError = null
@@ -333,8 +405,8 @@ fun AddTaskScreen(
             onDescriptionChange = { description -> updateDraft(draft.copy(description = description)) },
             onRetryCollaborators = { retryProjects() },
             onSave = { validateAndSubmit() },
-            onBack = onBack,
-            onCancel = onBack,
+            onBack = { requestExit() },
+            onCancel = { requestExit() },
             scheduleValidation = scheduleValidation,
             enabled = !submitState.formDisabled,
             saveEnabled = saveEnabled,
@@ -382,6 +454,19 @@ fun AddTaskScreen(
             onRetry = {
                 submitDialogMessage = null
                 validateAndSubmit()
+            }
+        )
+    }
+    if (discardConfirmationVisible) {
+        AlertDialog(
+            onDismissRequest = { discardConfirmationVisible = false },
+            title = { Text("Discard changes?") },
+            text = { Text("Your new task has not been saved.") },
+            confirmButton = {
+                TextButton(onClick = onBack) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { discardConfirmationVisible = false }) { Text("Keep editing") }
             }
         )
     }

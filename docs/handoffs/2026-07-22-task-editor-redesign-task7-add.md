@@ -11,11 +11,13 @@ Date: 2026-07-22
 ## Files Changed
 
 - `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/DraftExitPolicy.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskProjectRepository.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskProjectLoadFeedback.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffold.kt`
 - `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskProjectLoadFeedbackTest.kt`
 - `client/androidApp/src/test/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffoldStateTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/DraftExitPolicyTest.kt`
 - This handoff.
 
 ## Implementation
@@ -101,3 +103,72 @@ Verification:
 - Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 - Result: PASS
 - Evidence: complete shared host suite, Android JVM suite, and debug APK assembly passed after the review fix.
+
+## Task 9 Cross-Check Follow-up
+
+Task 9 found that Add had bypassed the existing dirty-exit policy by wiring the
+scaffold's Back and Cancel directly to navigation. This follow-up now:
+
+- builds an Add-specific draft fingerprint from the new editor draft, preserving the
+  personal-project `Me` display as a null Todoist assignee;
+- captures the first definitive project-load baseline as either an automatically
+  resolved persisted project/current-user selection or no project. The sole deferral
+  is an unresolved saved project preference, which waits for retry to restore that
+  preference without absorbing later user project selections, title, schedule, or
+  checklist edits;
+- routes both Back and Cancel through `decideDraftExit`, so clean drafts navigate,
+  changed drafts open `Discard changes?`, and submitting drafts ignore exit; and
+- keeps captured create requests/retry state untouched until the user explicitly
+  confirms Discard.
+
+A focused `DraftExitPolicyTest` covers the automatic initial personal-project/Me
+selection (clean) and a later title change (discard confirmation). The test was added
+before the helper implementation, but its required Gradle invocation could not run:
+
+Verification:
+
+- Command: `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`
+- Result: SKIPPED
+- Evidence: the approved escalated command was rejected by the environment's automatic approval review because the workspace hit its usage limit; no alternative execution path was attempted.
+
+Verification:
+
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace diagnostics after the dirty-exit follow-up.
+
+## Follow-up: system Back handling
+
+- Android system Back now uses the same `requestExit()` decision path as the editor's Back and Cancel controls. It navigates away for a clean draft, opens the discard confirmation for a dirty draft, and is ignored while submission is in flight.
+- While the discard confirmation is open, system Back closes only that dialog, matching its normal dismissal behavior rather than reopening the exit flow.
+- Existing `DraftExitPolicyTest` coverage asserts clean/dirty and in-flight decisions; the Add baseline test covers automatic initial project/assignee initialization that must remain clean.
+
+Verification:
+
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors in the uncommitted Task 7 changes after the Back-handler update.
+- Command: `rg -n "BackHandler|requestExit|discardConfirmationVisible" client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
+- Result: PASS
+- Evidence: two mutually exclusive Back handlers are present: one routes normal Back to `requestExit()`, and one dismisses the visible discard dialog.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`
+- Result: SKIPPED
+- Evidence: the approved escalated command is still blocked by the environment usage limit; no alternate execution path was attempted.
+
+## Follow-up: Add baseline precision
+
+- Add fingerprints now preserve nullable duration. The empty draft remains `null`, so choosing the UI's 30-minute duration is a real `null -> 30` edit and requires discard confirmation.
+- Project baseline capture locks on the first definitive load when there is no saved preference. With a saved preference, either an empty result or a nonempty result missing that project remains uncaptured until retry can restore the persisted-project/`Me` pair. A retry cannot absorb a later manual project selection into the clean baseline.
+- Added pure `DraftExitPolicyTest` coverage for all four cases: explicit 30-minute selection from an empty Add draft, manual project selection followed by a retry after an empty initial load, and both empty and nonempty-missing initial responses with a saved project preference that retry restores.
+
+Verification:
+
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors in the uncommitted Task 7 changes after the baseline fixes.
+- Command: `rg -n "durationMinutes = draft.schedule.durationMinutes|durationMinutes = null|automaticPersistedProject|shouldDeferNoProjectBaseline|deferNoProjectBaseline|captureAddTaskProjectBaseline|selectingThirtyMinutes|manualProjectSelectionBeforeRetry|emptyInitialLoadWithAPersistedProject|nonemptyInitialLoadMissingThePersistedProject" client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/DraftExitPolicy.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/DraftExitPolicyTest.kt`
+- Result: PASS
+- Evidence: static inspection confirms nullable duration is retained, only auto persisted-project resolution is eligible for the initial baseline, all unresolved saved-preference loads defer correctly, and all pure regression tests are present.
+- Command: `cd client && ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`
+- Result: SKIPPED
+- Evidence: the approved escalated command remains blocked by the environment usage limit; no alternate execution path was attempted.

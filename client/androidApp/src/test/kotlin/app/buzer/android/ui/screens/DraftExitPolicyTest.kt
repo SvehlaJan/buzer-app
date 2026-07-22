@@ -1,9 +1,13 @@
 package app.buzer.android.ui.screens
 
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
+import app.buzer.android.ui.taskeditor.TaskEditorDraft
+import app.buzer.shared.model.ProjectCollaborator
+import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrencePreset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DraftExitPolicyTest {
@@ -24,6 +28,14 @@ class DraftExitPolicyTest {
         assertDirty(initial, initial.copy(description = "From the market"))
         assertDirty(initial, initial.copy(assigneeId = "wife"))
         assertDirty(initial, initial.copy(projectId = "project-shared"))
+    }
+
+    @Test
+    fun selectingThirtyMinutesFromAnEmptyAddDraftRequiresConfirmation() {
+        val initial = AddTaskDraftFingerprint.empty(projectId = "project-personal")
+
+        assertEquals(null, initial.durationMinutes)
+        assertDirty(initial, initial.copy(durationMinutes = 30))
     }
 
     @Test
@@ -135,6 +147,135 @@ class DraftExitPolicyTest {
         val changed = initial.copy(title = "Buy milk")
 
         assertEquals(DraftExitDecision.Ignore, decideDraftExit(initial, changed, submitting = true))
+    }
+
+    @Test
+    fun automaticInitialProjectAndMeSelectionIsCleanButAChangedAddDraftConfirmsDiscard() {
+        val me = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true)
+        val personalProject = ProjectItem(
+            id = "project-personal",
+            name = "Personal",
+            canAssignTasks = false,
+            shared = false,
+            isInboxProject = false,
+            collaborators = listOf(me),
+            collaboratorsReady = true
+        )
+        val baseline = AddTaskDraftFingerprint.empty(projectId = personalProject.id)
+        val current = addTaskEditorFingerprint(
+            draft = TaskEditorDraft(title = "", projectId = personalProject.id, assignee = me),
+            selectedProject = personalProject,
+            checklistDrafts = emptyList()
+        )
+
+        assertEquals(baseline, current)
+        assertEquals(DraftExitDecision.NavigateHome, decideDraftExit(baseline, current, submitting = false))
+        assertEquals(
+            DraftExitDecision.ConfirmDiscard,
+            decideDraftExit(baseline, current.copy(title = "Buy milk"), submitting = false)
+        )
+    }
+
+    @Test
+    fun manualProjectSelectionBeforeRetryRemainsDirtyAfterAnEmptyInitialLoad() {
+        val initial = AddTaskDraftFingerprint.empty(projectId = null)
+        val afterEmptyLoad = captureAddTaskProjectBaseline(
+            initialFingerprint = initial,
+            alreadyCaptured = false,
+            automaticPersistedProjectId = null,
+            automaticPersistedAssigneeId = null,
+            deferNoProjectBaseline = false
+        )
+
+        assertTrue(afterEmptyLoad.captured)
+        assertEquals(initial, afterEmptyLoad.fingerprint)
+
+        val manualSelection = afterEmptyLoad.fingerprint.copy(
+            projectId = "project-shared",
+            assigneeId = "user-me"
+        )
+        assertFalse(
+            shouldDeferNoProjectBaseline(
+                persistedProjectId = "project-personal",
+                draftProjectId = manualSelection.projectId,
+                automaticPersistedProjectId = null
+            )
+        )
+        val afterRetry = captureAddTaskProjectBaseline(
+            initialFingerprint = afterEmptyLoad.fingerprint,
+            alreadyCaptured = afterEmptyLoad.captured,
+            automaticPersistedProjectId = "project-shared",
+            automaticPersistedAssigneeId = "user-me",
+            deferNoProjectBaseline = false
+        )
+
+        assertTrue(afterRetry.captured)
+        assertEquals(afterEmptyLoad.fingerprint, afterRetry.fingerprint)
+        assertDirty(afterRetry.fingerprint, manualSelection)
+    }
+
+    @Test
+    fun emptyInitialLoadWithAPersistedProjectDefersUntilRetryRestoresProjectAndMe() {
+        val initial = AddTaskDraftFingerprint.empty(projectId = null)
+        val afterEmptyLoad = captureAddTaskProjectBaseline(
+            initialFingerprint = initial,
+            alreadyCaptured = false,
+            automaticPersistedProjectId = null,
+            automaticPersistedAssigneeId = null,
+            deferNoProjectBaseline = true
+        )
+
+        assertFalse(afterEmptyLoad.captured)
+        assertEquals(initial, afterEmptyLoad.fingerprint)
+
+        val afterRetry = captureAddTaskProjectBaseline(
+            initialFingerprint = afterEmptyLoad.fingerprint,
+            alreadyCaptured = afterEmptyLoad.captured,
+            automaticPersistedProjectId = "project-shared",
+            automaticPersistedAssigneeId = "user-me",
+            deferNoProjectBaseline = false
+        )
+
+        assertTrue(afterRetry.captured)
+        assertEquals("project-shared", afterRetry.fingerprint.projectId)
+        assertEquals("user-me", afterRetry.fingerprint.assigneeId)
+        assertEquals(
+            DraftExitDecision.NavigateHome,
+            decideDraftExit(afterRetry.fingerprint, afterRetry.fingerprint, submitting = false)
+        )
+    }
+
+    @Test
+    fun nonemptyInitialLoadMissingThePersistedProjectDefersUntilRetryRestoresIt() {
+        val initial = AddTaskDraftFingerprint.empty(projectId = null)
+        val deferNoProjectBaseline = shouldDeferNoProjectBaseline(
+            persistedProjectId = "project-shared",
+            draftProjectId = null,
+            automaticPersistedProjectId = null
+        )
+        val afterMissingInitialLoad = captureAddTaskProjectBaseline(
+            initialFingerprint = initial,
+            alreadyCaptured = false,
+            automaticPersistedProjectId = null,
+            automaticPersistedAssigneeId = null,
+            deferNoProjectBaseline = deferNoProjectBaseline
+        )
+
+        assertTrue(deferNoProjectBaseline)
+        assertFalse(afterMissingInitialLoad.captured)
+        assertEquals(initial, afterMissingInitialLoad.fingerprint)
+
+        val afterRetry = captureAddTaskProjectBaseline(
+            initialFingerprint = afterMissingInitialLoad.fingerprint,
+            alreadyCaptured = afterMissingInitialLoad.captured,
+            automaticPersistedProjectId = "project-shared",
+            automaticPersistedAssigneeId = "user-me",
+            deferNoProjectBaseline = false
+        )
+
+        assertTrue(afterRetry.captured)
+        assertEquals("project-shared", afterRetry.fingerprint.projectId)
+        assertEquals("user-me", afterRetry.fingerprint.assigneeId)
     }
 
     @Test
