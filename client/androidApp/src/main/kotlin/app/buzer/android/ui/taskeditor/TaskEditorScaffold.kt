@@ -185,6 +185,7 @@ internal fun TaskEditorScaffold(
     checklistDoneCount: Int,
     checklistTotalCount: Int,
     checklistContent: @Composable () -> Unit,
+    afterChecklistContent: @Composable () -> Unit = {},
     onScheduleChange: (TaskEditorSchedule) -> Unit,
     onNoSchedule: () -> Unit,
     onProjectSelected: (ProjectItem) -> Unit,
@@ -351,6 +352,7 @@ internal fun TaskEditorScaffold(
             if (expandedSection == EditorSection.Checklist) {
                 checklistContent()
             }
+            afterChecklistContent()
             Spacer(Modifier.height(Spacing.xl))
         }
         Column(

@@ -1,10 +1,15 @@
 package app.buzer.android.ui.screens
 
 import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.android.ui.taskeditor.TaskEditorSchedule
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.NullablePatch
+import app.buzer.shared.model.ProjectCollaborator
+import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrenceKind
+import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.ui.commitment.ChecklistEditorDraft
@@ -28,8 +33,9 @@ class EditTaskScreenRequestTest {
             task = task(),
             title = "Updated root",
             description = "New details",
-            selectedStart = DateTimeSelection(LocalDate.of(2026, 7, 16), 10, 0),
-            durationMinutes = 45,
+            project = sharedProject,
+            selectedAssignee = me,
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 16), 10, 0, 45),
             recurrencePreset = app.buzer.shared.model.RecurrencePreset.daily,
             existingDrafts = listOf(
                 ExistingChecklistDraft("child-1", "child-r1", "Edited child", "detail", checked = true),
@@ -49,12 +55,82 @@ class EditTaskScreenRequestTest {
         assertIs<ChecklistMutation.Add>(request.childMutations[3])
     }
 
+    @Test
+    fun movingProjectAndSelectingWifeWritesTypedProjectAndAssigneePatches() {
+        val request = updateRequest(
+            task = task(),
+            title = "Updated root",
+            description = "",
+            project = sharedProject,
+            selectedAssignee = wife,
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 16), 10, 0, 30),
+            recurrencePreset = RecurrencePreset.never,
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList(),
+            deviceId = "device-1"
+        )
+
+        assertEquals("project-test", request.rootPatch?.projectId)
+        assertEquals(NullablePatch.Value("user-wife"), request.rootPatch?.assigneeId)
+    }
+
+    @Test
+    fun unscheduledWifeWritesExplicitNullSchedulesAndNeverRecurrence() {
+        val request = updateRequest(
+            task = task().copy(recurrence = TaskRecurrence(RecurrenceKind.supported, RecurrencePreset.weekly, null)),
+            title = "Ask about booking",
+            description = "",
+            project = sharedProject,
+            selectedAssignee = wife,
+            schedule = TaskEditorSchedule(),
+            recurrencePreset = RecurrencePreset.weekly,
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList(),
+            deviceId = "device-1"
+        )
+
+        assertEquals(NullablePatch.Value(null), request.rootPatch?.dueDatetime)
+        assertEquals(NullablePatch.Value(null), request.rootPatch?.durationMinutes)
+        assertEquals(RecurrencePreset.never, request.rootPatch?.recurrencePreset)
+    }
+
+    @Test
+    fun personalProjectWritesAnExplicitUnassignedPatch() {
+        val personalProject = ProjectItem(
+            id = "project-personal",
+            name = "Personal",
+            canAssignTasks = false,
+            shared = false,
+            isInboxProject = false,
+            collaborators = listOf(me),
+            collaboratorsReady = true
+        )
+        val request = updateRequest(
+            task = task(),
+            title = "Personal task",
+            description = "",
+            project = personalProject,
+            selectedAssignee = me,
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 16), 10, 0, 30),
+            recurrencePreset = RecurrencePreset.never,
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList(),
+            deviceId = "device-1"
+        )
+
+        assertEquals(NullablePatch.Value(null), request.rootPatch?.assigneeId)
+    }
+
     private fun requestFor(recurrencePreset: app.buzer.shared.model.RecurrencePreset?) = updateRequest(
         task = task(),
         title = "Root",
         description = "",
-        selectedStart = DateTimeSelection(LocalDate.of(2026, 7, 16), 9, 0),
-        durationMinutes = 30,
+        project = sharedProject,
+        selectedAssignee = me,
+        schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 16), 9, 0, 30),
         recurrencePreset = recurrencePreset,
         existingDrafts = listOf(ExistingChecklistDraft("child-1", "child-r1", "Child", null, false)),
         deletedChildren = emptySet(),
@@ -75,4 +151,18 @@ class EditTaskScreenRequestTest {
             ChecklistItem("child-2", "Second", null, true, 2, "child-r2")
         )
     )
+
+    private companion object {
+        val me = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true)
+        val wife = ProjectCollaborator(id = "user-wife", displayName = "Wife", isCurrentUser = false)
+        val sharedProject = ProjectItem(
+            id = "project-test",
+            name = "Shared",
+            canAssignTasks = true,
+            shared = true,
+            isInboxProject = false,
+            collaborators = listOf(me, wife),
+            collaboratorsReady = true
+        )
+    }
 }

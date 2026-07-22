@@ -46,6 +46,16 @@ class DraftExitPolicyTest {
     }
 
     @Test
+    fun clearingAnEditScheduleRequiresConfirmation() {
+        val initial = editDraft()
+
+        assertDirty(
+            initial,
+            initial.copy(start = DateTimeDraftSelection.Empty, durationMinutes = null)
+        )
+    }
+
+    @Test
     fun presentationStateDoesNotChangeTheEditDraftFingerprint() {
         val initial = editDraft()
         val scheduleExpanded = true
