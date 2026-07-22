@@ -18,6 +18,46 @@ import kotlin.test.assertNull
 
 class EditTaskScreenStateTest {
     @Test
+    fun untouchedCustomRecurrenceShowsItsRuleAndPreselectsNoSupportedPreset() {
+        val customTask = task(assigneeId = wife.id, assignedToUser = false).copy(
+            recurrence = TaskRecurrence(
+                kind = RecurrenceKind.custom,
+                preset = null,
+                rule = "every 2 days"
+            )
+        )
+
+        val presentation = editRecurrencePresentation(
+            task = customTask,
+            customRecurrenceUntouched = true,
+            draftPreset = RecurrencePreset.never
+        )
+
+        assertEquals("Custom: every 2 days", presentation.rowValue)
+        assertNull(presentation.selectedPreset)
+    }
+
+    @Test
+    fun deliberateSupportedRecurrenceReplacementStopsShowingTheCustomRule() {
+        val customTask = task(assigneeId = wife.id, assignedToUser = false).copy(
+            recurrence = TaskRecurrence(
+                kind = RecurrenceKind.custom,
+                preset = null,
+                rule = "every 2 days"
+            )
+        )
+
+        val presentation = editRecurrencePresentation(
+            task = customTask,
+            customRecurrenceUntouched = false,
+            draftPreset = RecurrencePreset.weekly
+        )
+
+        assertEquals("Weekly", presentation.rowValue)
+        assertEquals(RecurrencePreset.weekly, presentation.selectedPreset)
+    }
+
+    @Test
     fun initialTaskAssigneeStaysAuthoritativeUntilRefreshedMembershipProvesItStale() {
         val draft = initialEditTaskDraft(task(assigneeId = wife.id, assignedToUser = false))
         val projectWithOnlyMe = sharedProject(collaborators = listOf(me))

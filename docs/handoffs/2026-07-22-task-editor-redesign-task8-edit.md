@@ -90,7 +90,13 @@ Verification:
 
 ## Open Issues
 
-- The implementation awaits the required spec-compliance and code-quality reviews.
+- Follow-up after spec review: existing custom recurrence is now presented as
+  `Custom: <rule>` (or `Custom recurrence`) and opens a preset sheet with no selected
+  row. It remains absent from the root patch until an explicit supported choice is
+  tapped; that replacement then becomes the selected row and is serialized.
+- The focused Gradle rerun for this follow-up was blocked before execution because the
+  execution approval budget was exhausted. The exact intended command was:
+  `cd client && ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests app.buzer.android.ui.screens.EditTaskScreenRequestTest --tests app.buzer.android.ui.screens.EditTaskScreenStateTest --tests app.buzer.android.ui.screens.DraftExitPolicyTest`.
 - Instrumentation/E2E coverage is intentionally deferred to plan Task 9.
 
 ## Next Step

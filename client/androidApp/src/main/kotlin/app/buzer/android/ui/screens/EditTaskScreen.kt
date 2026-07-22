@@ -35,6 +35,7 @@ import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorSchedule
 import app.buzer.android.ui.taskeditor.TaskEditorScaffold
 import app.buzer.android.ui.taskeditor.TaskEditorScheduleValidation
+import app.buzer.android.ui.taskeditor.recurrenceLabel
 import app.buzer.android.ui.taskeditor.setNoSchedule
 import app.buzer.android.ui.taskeditor.validateScheduleForSave
 import app.buzer.shared.diagnostics.AppLog
@@ -146,6 +147,28 @@ internal fun buildEditUpdateRequestWhenScheduleValid(
     null
 }
 
+internal data class EditRecurrencePresentation(
+    val rowValue: String,
+    val selectedPreset: RecurrencePreset?
+)
+
+internal fun editRecurrencePresentation(
+    task: TaskSnapshotItem,
+    customRecurrenceUntouched: Boolean,
+    draftPreset: RecurrencePreset
+): EditRecurrencePresentation = if (customRecurrenceUntouched) {
+    val customRule = task.recurrence.rule?.trim().takeUnless { it.isNullOrEmpty() }
+    EditRecurrencePresentation(
+        rowValue = customRule?.let { "Custom: $it" } ?: "Custom recurrence",
+        selectedPreset = null
+    )
+} else {
+    EditRecurrencePresentation(
+        rowValue = recurrenceLabel(draftPreset),
+        selectedPreset = draftPreset
+    )
+}
+
 @Composable
 fun EditTaskScreen(
     task: TaskSnapshotItem,
@@ -208,6 +231,11 @@ fun EditTaskScreen(
             projectLoadError = projectLoadError.takeUnless { hasCachedProjects }
         )
     }
+    val recurrencePresentation = editRecurrencePresentation(
+        task = task,
+        customRecurrenceUntouched = customRecurrenceUntouched,
+        draftPreset = draft.recurrencePreset
+    )
 
     fun updateDraft(next: TaskEditorDraft) {
         if (draft == next) return
@@ -481,6 +509,8 @@ fun EditTaskScreen(
             projectError = errorText.takeIf { invalidField == AddTaskInvalidField.Project },
             assigneeError = errorText.takeIf { invalidField == AddTaskInvalidField.Assignee },
             checklistError = errorText.takeIf { invalidField == null },
+            recurrenceValue = recurrencePresentation.rowValue,
+            selectedRecurrencePreset = recurrencePresentation.selectedPreset,
             modifier = Modifier.fillMaxSize()
         )
         if (projectsLoading) InlineLoadingStatus("Loading projects...")

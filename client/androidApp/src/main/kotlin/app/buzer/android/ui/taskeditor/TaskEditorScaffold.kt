@@ -207,7 +207,9 @@ internal fun TaskEditorScaffold(
     titleError: String? = null,
     projectError: String? = null,
     assigneeError: String? = null,
-    checklistError: String? = null
+    checklistError: String? = null,
+    recurrenceValue: String = recurrenceLabel(draft.recurrencePreset),
+    selectedRecurrencePreset: RecurrencePreset? = draft.recurrencePreset
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
     LaunchedEffect(scheduleValidation.focusSection) {
@@ -312,7 +314,7 @@ internal fun TaskEditorScaffold(
             }
             EditorValueRow(
                 label = "Repeat",
-                value = recurrenceLabel(draft.recurrencePreset),
+                value = recurrenceValue,
                 leadingSymbol = "↻",
                 enabled = enabled && !(draft.schedule.isEmpty() && draft.assignee?.isCurrentUser == false),
                 onClick = { state = state.copy(openSheet = EditorSheet.Recurrence) }
@@ -407,7 +409,7 @@ internal fun TaskEditorScaffold(
             onDismiss = { state = state.copy(openSheet = EditorSheet.None) }
         )
         EditorSheet.Recurrence -> RecurrenceSelectionSheet(
-            selectedPreset = draft.recurrencePreset,
+            selectedPreset = selectedRecurrencePreset,
             onPresetSelected = { preset ->
                 onRecurrencePresetSelected(preset)
                 state = state.copy(openSheet = EditorSheet.None)

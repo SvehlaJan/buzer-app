@@ -28,6 +28,13 @@ class EditTaskScreenRequestTest {
     }
 
     @Test
+    fun explicitSupportedChoiceReplacesACustomRecurrence() {
+        val request = requestFor(recurrencePreset = RecurrencePreset.daily)
+
+        assertEquals(RecurrencePreset.daily, request.rootPatch?.recurrencePreset)
+    }
+
+    @Test
     fun editRequestIncludesRootAndExplicitDirectChildMutations() {
         val request = updateRequest(
             task = task(),

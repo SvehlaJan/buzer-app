@@ -112,7 +112,7 @@ internal fun AssigneeSelectionSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RecurrenceSelectionSheet(
-    selectedPreset: RecurrencePreset,
+    selectedPreset: RecurrencePreset?,
     onPresetSelected: (RecurrencePreset) -> Unit,
     onDismiss: () -> Unit
 ) {
