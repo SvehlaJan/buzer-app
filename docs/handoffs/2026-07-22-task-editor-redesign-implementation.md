@@ -463,3 +463,55 @@ Verification:
 - No code work remains for the redesign. If live data-flow testing on the physical
   phone is wanted, provide a reachable backend URL/token or configure
   `client/local.properties`; do not use `tools/fake-backend`.
+
+---
+
+## Master merge, push, and live-configured Pixel install (2026-07-22)
+
+### Scope / plan status
+
+- Fast-forwarded `master` from `65bda28` to the completed task-editor redesign head
+  `c3afe78`, then pushed `master` to `origin`.
+- Installed the resulting debug APK on connected Pixel 10 `56061FDCR005J0`, built from
+  the existing ignored `client/local.properties`. The backend token was not displayed,
+  logged, or committed.
+- No VPS deployment was performed in this session. The current VPS must be redeployed
+  from this pushed master before the redesigned Project/Assignee collaborator contract
+  can work against live data.
+
+### Verification
+
+Verification:
+
+- Command: `npm test` and `npm run typecheck` from `backend/` on merged `master`
+- Result: PASS
+- Evidence: 32 test files / 386 tests passed; TypeScript completed without diagnostics.
+
+Verification:
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:pixel8Api34DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.buzer.android.ui.taskeditor.TaskEditorScaffoldLayoutTest` from `client/` on merged `master`
+- Result: PASS
+- Evidence: shared/JVM/debug-build checks and the one focused backend-free
+  managed-device action-row test completed successfully.
+
+Verification:
+
+- Command: read-only `GET /health` and authenticated `GET /projects` against the
+  configured VPS URL
+- Result: PASS / deployment required
+- Evidence: both routes returned HTTP 200, but project objects expose only
+  `id,name,canAssignTasks,shared,isInboxProject`; the new `collaborators` and
+  `collaboratorsReady` fields are absent.
+
+Verification:
+
+- Command: `android run --device=56061FDCR005J0 --apks=/Users/svehla/playground/buzer-app/client/androidApp/build/outputs/apk/debug/androidApp-debug.apk --activity=app.buzer.android.MainActivity --type=ACTIVITY`
+- Result: PASS
+- Evidence: the master debug APK installed and launched on Pixel 10. The Home screen
+  loaded the live snapshot and displayed 12 invalid tasks needing review.
+
+### Next recommended step
+
+- Redeploy the VPS from pushed `master` (`c3afe78`), then refresh the installed Pixel
+  app. No extra Android reinstall should be needed unless the client configuration or
+  APK changes.
