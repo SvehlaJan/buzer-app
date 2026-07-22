@@ -274,10 +274,10 @@ test("recurrence requires a schedule and root updates persist or clear it", asyn
   assert.deepEqual(dailyTask.recurrence, {
     kind: "supported",
     preset: "daily",
-    rule: "every daily",
+    rule: "every day at 14:00",
     language: "en",
     timeZone: "Europe/Warsaw",
-    displayLabel: "every daily"
+    displayLabel: "Daily"
   });
 
   const cleared = await app.inject({
@@ -304,6 +304,44 @@ test("recurrence requires a schedule and root updates persist or clear it", asyn
     timeZone: null,
     displayLabel: "Never"
   });
+});
+
+test("scheduled recurrence presets use Todoist-shaped, time-specific rules", async (t) => {
+  const app = await buildServer();
+  t.after(() => app.close());
+  const expectedRules = {
+    daily: "every day at 14:00",
+    weekdays: "every weekday at 14:00",
+    weekly: "every Monday at 14:00",
+    monthly: "every month on the 1st at 14:00",
+    yearly: "every year on June 1st at 14:00"
+  } as const;
+
+  for (const [preset, rule] of Object.entries(expectedRules)) {
+    const response = await app.inject({
+      method: "POST", url: "/tasks", headers: auth,
+      payload: {
+        ...action(`create-${preset}`),
+        title: `Scheduled ${preset}`,
+        projectId: "project-test",
+        assigneeId: "user-me",
+        dueDatetime: "2026-06-01T12:00:00.000Z",
+        durationMinutes: 30,
+        recurrencePreset: preset,
+        timeZone: "Europe/Warsaw"
+      }
+    });
+    assert.equal(response.statusCode, 200);
+    const created = response.json().snapshot.tasks.find((task: { title: string }) => task.title === `Scheduled ${preset}`);
+    assert.deepEqual(created.recurrence, {
+      kind: "supported",
+      preset,
+      rule,
+      language: "en",
+      timeZone: "Europe/Warsaw",
+      displayLabel: preset.slice(0, 1).toUpperCase() + preset.slice(1)
+    });
+  }
 });
 
 test("reset restores fixtures at a newer snapshot generation", async (t) => {

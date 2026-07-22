@@ -74,11 +74,65 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
   }
   function recurrenceForPreset(
     preset: (typeof recurrencePresets)[number],
+    dueDatetime: string | null,
     timeZone: string | null
   ): FakeTask["recurrence"] {
-    return preset === "never"
-      ? { kind: "none", preset: "never", rule: null, language: null, timeZone: null }
-      : { kind: "supported", preset, rule: `every ${preset}`, language: "en", timeZone };
+    if (preset === "never") {
+      return { kind: "none", preset: "never", rule: null, language: null, timeZone: null };
+    }
+    if (dueDatetime === null || timeZone === null) throw new Error("scheduled_recurrence_requires_start_and_time_zone");
+    const local = localRecurrenceParts(dueDatetime, timeZone);
+    const time = `${local.hour}:${local.minute}`;
+    const rule = recurrenceRuleForPreset(preset, local, time);
+    return { kind: "supported", preset, rule, language: "en", timeZone };
+  }
+  function recurrenceRuleForPreset(
+    preset: Exclude<(typeof recurrencePresets)[number], "never">,
+    local: { weekday: string; month: string; day: number; hour: string; minute: string },
+    time: string
+  ): string {
+    switch (preset) {
+      case "daily": return `every day at ${time}`;
+      case "weekdays": return `every weekday at ${time}`;
+      case "weekly": return `every ${local.weekday} at ${time}`;
+      case "monthly": return `every month on the ${formatOrdinalDay(local.day)} at ${time}`;
+      case "yearly": return `every year on ${local.month} ${formatOrdinalDay(local.day)} at ${time}`;
+    }
+  }
+  function localRecurrenceParts(dueDatetime: string, timeZone: string) {
+    const start = new Date(dueDatetime);
+    if (Number.isNaN(start.getTime())) throw new Error("scheduled_recurrence_requires_iso_datetime");
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(start);
+    const part = (type: Intl.DateTimeFormatPartTypes) => {
+      const value = parts.find((candidate) => candidate.type === type)?.value;
+      if (value === undefined) throw new Error(`missing_recurrence_${type}`);
+      return value;
+    };
+    return {
+      weekday: part("weekday"),
+      month: part("month"),
+      day: Number(part("day")),
+      hour: part("hour").padStart(2, "0"),
+      minute: part("minute").padStart(2, "0")
+    };
+  }
+  function formatOrdinalDay(day: number): string {
+    const lastTwoDigits = day % 100;
+    if (lastTwoDigits >= 11 && lastTwoDigits <= 13) return `${day}th`;
+    switch (day % 10) {
+      case 1: return `${day}st`;
+      case 2: return `${day}nd`;
+      case 3: return `${day}rd`;
+      default: return `${day}th`;
+    }
   }
   function projectAssignmentError(projectId: string, assigneeId: string | null): string | null {
     const project = fixtureProjects.find((candidate) => candidate.id === projectId);
@@ -213,7 +267,7 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
       id, todoistTaskId: `todoist-${id}`, title: String(body.title ?? "Created task"), description: typeof body.description === "string" ? body.description : null, projectId, assigneeId,
       dueDatetime, durationMinutes,
       state: "planned", occurrenceNumber: 1, occurrenceKey: `occurrence-${id}-1`, taskRevision: 1,
-      recurrence: recurrenceForPreset(recurrencePreset, typeof body.timeZone === "string" ? body.timeZone : "UTC"),
+      recurrence: recurrenceForPreset(recurrencePreset, dueDatetime, typeof body.timeZone === "string" ? body.timeZone : "UTC"),
       hierarchyStatus: "valid", hierarchyViolation: null, reconciliationStatus: "none", checklistItems: items, startedAt: null, startDismissCount: 0, deadlineExtensionCount: 0, isCompleted: false
     });
     state.scheduleVersion++; advanceSnapshotGeneration();
@@ -285,10 +339,11 @@ export async function buildServer(options: FakeBackendOptions = {}): Promise<Fas
         if (patch[key] !== undefined) (root as unknown as Record<string, unknown>)[key] = patch[key];
       }
       if (dueDatetime === null || durationMinutes === null) {
-        root.recurrence = recurrenceForPreset("never", null);
+        root.recurrence = recurrenceForPreset("never", null, null);
       } else if (recurrencePreset !== undefined) {
         root.recurrence = recurrenceForPreset(
           recurrencePreset,
+          dueDatetime,
           typeof patch.timeZone === "string" ? patch.timeZone : root.recurrence.timeZone ?? "UTC"
         );
       }

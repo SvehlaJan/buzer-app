@@ -139,7 +139,10 @@ export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
       occurrenceKey: task.occurrenceKey,
       taskRevision: `r:${task.taskRevision}`,
       activityLogEntries: [],
-      recurrence: { ...task.recurrence, displayLabel: task.recurrence.kind === "none" ? "Never" : task.recurrence.rule },
+      recurrence: {
+        ...task.recurrence,
+        displayLabel: recurrenceDisplayLabel(task.recurrence)
+      },
       checklistItems: task.checklistItems.map((item) => ({ ...item, childRevision: `r:${item.childRevision}` })),
       checkedCount: task.checklistItems.filter((item) => item.checked).length,
       totalCount: task.checklistItems.length,
@@ -148,6 +151,12 @@ export function snapshot(state: FakeState, serverTime = FIXED_NOW) {
       reconciliationStatus: task.reconciliationStatus
     }))
   };
+}
+
+function recurrenceDisplayLabel(recurrence: FakeTask["recurrence"]): string {
+  if (recurrence.kind === "custom") return recurrence.rule ?? "Custom Todoist recurrence";
+  if (recurrence.preset === null || recurrence.preset === "never") return "Never";
+  return recurrence.preset.slice(0, 1).toUpperCase() + recurrence.preset.slice(1);
 }
 
 function task(id: string, overrides: Partial<FakeTask> & Pick<FakeTask, "title" | "dueDatetime" | "occurrenceKey">): FakeTask {

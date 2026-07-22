@@ -96,6 +96,34 @@ Verification:
 
 Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.
 
+## Post-review recurrence serialization correction
+
+The fake no longer emits placeholder recurrence text such as `every daily`. It now carries a local implementation of the stable production contract rather than importing backend runtime code:
+
+- scheduled recurrence rules use Todoist-shaped, parseable grammar such as `every day at 14:00`;
+- weekday, weekly, monthly, and yearly rules include the timezone-local weekday/month/day/time components and production ordinal format;
+- snapshot `displayLabel` mirrors the backend projection (`Daily`, `Weekdays`, `Weekly`, `Monthly`, `Yearly`, or `Never`) rather than exposing the raw rule for supported presets.
+
+Verification:
+
+- Command: `npm run build` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: TypeScript compilation completed without errors.
+
+- Command: `npm test` (from `tools/fake-backend/`)
+  Result: PASS
+  Evidence: 18 tests passed, including all scheduled recurrence preset rule/display assertions.
+
+- Command: `npx vitest run test/domain/taskRecurrence.test.ts test/services/taskActionService.test.ts test/http/routes.test.ts` (from `backend/`)
+  Result: PASS
+  Evidence: 3 files, 114 tests passed.
+
+- Command: `git diff --check`
+  Result: PASS
+  Evidence: no whitespace errors.
+
+Android compilation/E2E remains blocked for the same documented Gradle-cache sandbox and usage-limit reason; it was not retried.
+
 ## Post-review recurrence correction
 
 The fake route also now applies the production recurrence/schedule rule:
