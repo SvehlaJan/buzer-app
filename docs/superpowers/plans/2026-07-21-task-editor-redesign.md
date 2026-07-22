@@ -53,7 +53,7 @@
 - Test: `backend/test/repositories/collaboratorRepository.test.ts`
 - Test: `backend/test/db/migrations.test.ts`
 
-- [ ] **Step 1: Write repository and migration tests before adding storage.**
+- [x] **Step 1: Write repository and migration tests before adding storage.**
 
   Add tests that migrate an empty database, upsert `user-me`/`user-wife`, mark Wife
   active for `project-test`, mark her deleted for another project, and assert that
@@ -68,7 +68,7 @@
   expect(repo.isActiveMember("project-test", "user-former")).toBe(false);
   ```
 
-- [ ] **Step 2: Run the focused tests and observe the missing-repository failure.**
+- [x] **Step 2: Run the focused tests and observe the missing-repository failure.**
 
   Run from `backend/`:
 
@@ -79,7 +79,7 @@
   Expected: FAIL because `CollaboratorRepository` and its schema tables do not yet
   exist.
 
-- [ ] **Step 3: Add the explicit mirror records and migration 4.**
+- [x] **Step 3: Add the explicit mirror records and migration 4.**
 
   In `todoistTypes.ts`, add the immutable adapter facts below; do not reuse a task
   assignee as membership evidence.
@@ -114,7 +114,7 @@
   `state = 'active'` members. Do not add these tables to task snapshot-generation
   triggers: membership is projected only by `/projects`.
 
-- [ ] **Step 4: Make `TodoistSyncResult` carry the new facts.**
+- [x] **Step 4: Make `TodoistSyncResult` carry the new facts.**
 
   ```ts
   export interface TodoistSyncResult {
@@ -129,7 +129,7 @@
   Update every test adapter implementation to return empty arrays until Task 2 makes
   them meaningful. This preserves compile-time exhaustiveness for fakes.
 
-- [ ] **Step 5: Run focused tests and commit the persistence layer.**
+- [x] **Step 5: Run focused tests and commit the persistence layer.**
 
   Run from `backend/`:
 
@@ -157,7 +157,7 @@
 - Modify: `backend/test/services/todoistSyncService.test.ts`
 - Modify: `backend/test/http/routes.test.ts`
 
-- [ ] **Step 1: Add adapter and projection tests.**
+- [x] **Step 1: Add adapter and projection tests.**
 
   Extend the HTTP-adapter test fixture with a collaborator and collaborator-state and
   assert its Sync request has all four resources. Extend the sync-service test to
@@ -179,7 +179,7 @@
   }));
   ```
 
-- [ ] **Step 2: Run the focused tests and observe contract failures.**
+- [x] **Step 2: Run the focused tests and observe contract failures.**
 
   Run from `backend/`:
 
@@ -190,7 +190,7 @@
   Expected: FAIL because sync requests only `items`/`projects` and `/projects` lacks
   collaborator data.
 
-- [ ] **Step 3: Map Sync API collaborator records and force one complete member sync.**
+- [x] **Step 3: Map Sync API collaborator records and force one complete member sync.**
 
   Request `items`, `projects`, `collaborators`, and `collaborator_states`. Map the
   documented Todoist fields `id`, `full_name`, `email`, `timezone`, `image_id`,
@@ -205,7 +205,7 @@
   existing blocker actions do not wait on a collaborator-only upgrade; create/update
   membership validation uses the separate collaborator readiness check.
 
-- [ ] **Step 4: Project safe client-facing collaborator choices.**
+- [x] **Step 4: Project safe client-facing collaborator choices.**
 
   Add the route-only shape below; do not expose raw Todoist state or avatar IDs.
 
@@ -226,7 +226,7 @@
   A personal project has that single locked UI choice; a shared project adds active
   collaborator rows. Wire the repository into `buildServer()` and all test builders.
 
-- [ ] **Step 5: Run focused tests, then commit the sync/read-model slice.**
+- [x] **Step 5: Run focused tests, then commit the sync/read-model slice.**
 
   Run from `backend/`:
 
@@ -253,7 +253,7 @@
 - Modify: `backend/test/http/routes.test.ts`
 - Modify: `backend/test/todoist/httpTodoistAdapter.test.ts`
 
-- [ ] **Step 1: Write failing backend tests for every new invariant.**
+- [x] **Step 1: Write failing backend tests for every new invariant.**
 
   Add focused cases for: a shared-project assignment to a non-member (422
   `assignee_not_in_project`); a Wife task without due/duration (accepted); a Me task
@@ -266,7 +266,7 @@
   accepted schedule-clear update and sends `responsible_uid: null` for a personal
   move.
 
-- [ ] **Step 2: Run the focused test set and observe strict-contract failures.**
+- [x] **Step 2: Run the focused test set and observe strict-contract failures.**
 
   Run from `backend/`:
 
@@ -277,7 +277,7 @@
   Expected: FAIL because the service requires schedule fields unconditionally, accepts
   arbitrary shared-project IDs, and cannot express nullable root schedule patches.
 
-- [ ] **Step 3: Preserve absent-versus-null schedule intent end to end.**
+- [x] **Step 3: Preserve absent-versus-null schedule intent end to end.**
 
   Change TypeScript `RootEditPatch` to distinguish omitted schedule facts from an
   explicit clear and change its resolved form to nullable values:
@@ -312,7 +312,7 @@
   `currentUserId`; personal projects still require a null Todoist assignee. When an
   unscheduled mutation is accepted, force/validate `recurrencePreset = "never"`.
 
-- [ ] **Step 4: Add duration clearing to the Todoist gateway.**
+- [x] **Step 4: Add duration clearing to the Todoist gateway.**
 
   Replace the optional duration object with an explicit mutation union and carry it
   through the HTTP adapter:
@@ -334,7 +334,7 @@
   effect check to compare nullable due/duration and only call recurrence translation
   when a complete schedule exists.
 
-- [ ] **Step 5: Run focused tests and commit the mutation-contract slice.**
+- [x] **Step 5: Run focused tests and commit the mutation-contract slice.**
 
   Run from `backend/`:
 
@@ -359,7 +359,7 @@
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/tasks/AddTaskDependencies.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
 
-- [ ] **Step 1: Add shared serialization tests before changing the DTOs.**
+- [x] **Step 1: Add shared serialization tests before changing the DTOs.**
 
   Test that a project decodes collaborators/readiness, a create request encodes
   `dueDatetime: null` and `durationMinutes: null`, and an update patch can serialize
@@ -371,7 +371,7 @@
   assertFalse(unchangedRootPatchBody.contains("dueDatetime"))
   ```
 
-- [ ] **Step 2: Run shared and form-validator tests to demonstrate the contract gap.**
+- [x] **Step 2: Run shared and form-validator tests to demonstrate the contract gap.**
 
   Run from `client/`:
 
@@ -383,7 +383,7 @@
   Expected: FAIL because create fields are non-nullable, root schedule patches cannot
   represent clear, and the validator requires a schedule for every project.
 
-- [ ] **Step 3: Model collaborator choices and nullable schedule patches.**
+- [x] **Step 3: Model collaborator choices and nullable schedule patches.**
 
   Add the serializable model and attach it to `ProjectItem` with safe defaults for
   old snapshot fixtures:
@@ -413,7 +413,7 @@
   `NullablePatch<Int>` respectively. Add separate serializer helpers for string and
   integer patches so `Absent` omits a field and `Value(null)` writes JSON null.
 
-- [ ] **Step 4: Replace static assignee configuration in validation.**
+- [x] **Step 4: Replace static assignee configuration in validation.**
 
   Delete `AddTaskDependencies.assigneeOptions()` and the `AddTaskAssigneeOption`
   dependency. The validator accepts `ProjectCollaborator?`, determines self with
@@ -431,7 +431,7 @@
   encode `assigneeId = null`. Keep the device time zone internal when a scheduled
   recurrence is serialized; do not add a form field for it.
 
-- [ ] **Step 5: Run tests and commit the client contract layer.**
+- [x] **Step 5: Run tests and commit the client contract layer.**
 
   Run from `client/`:
 
@@ -459,7 +459,7 @@
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/DraftExitPolicy.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/DraftExitPolicyTest.kt`
 
-- [ ] **Step 1: Write pure tests for the redesigned behavior.**
+- [x] **Step 1: Write pure tests for the redesigned behavior.**
 
   Cover injected-clock five-minute rounding, deduplicated date choices, selected-time
   retention, canonical duration choices, cross-midnight summary, `Save task` for an
@@ -474,7 +474,7 @@
   assertEquals(initial, reduceCustomTime(initial, pending = time, apply = false))
   ```
 
-- [ ] **Step 2: Run the new JVM tests and observe unresolved symbols.**
+- [x] **Step 2: Run the new JVM tests and observe unresolved symbols.**
 
   Run from `client/`:
 
@@ -485,7 +485,7 @@
   Expected: FAIL because the task-editor package and editable Edit fingerprint fields
   do not exist.
 
-- [ ] **Step 3: Implement a domain-only editor draft and quick-choice calculator.**
+- [x] **Step 3: Implement a domain-only editor draft and quick-choice calculator.**
 
   Keep all clock-dependent values explicit:
 
@@ -511,7 +511,7 @@
   `setNoSchedule` clear all four schedule values and set recurrence to `never` only
   when `assignee.isCurrentUser` is false.
 
-- [ ] **Step 4: Add independent WheelPicker dialogs without changing legacy pickers.**
+- [x] **Step 4: Add independent WheelPicker dialogs without changing legacy pickers.**
 
   `TaskEditorWheelDialogs.kt` contains `DateWheelDialog`, `TimeWheelDialog`, and
   `DurationWheelDialog`. Each receives an initial value and holds Compose-local pending
@@ -528,7 +528,7 @@
   `Apply`, and `Cancel`; `onDismissRequest` calls `onDismiss` without invoking
   `onApply`.
 
-- [ ] **Step 5: Update fingerprints, run tests, and commit primitives.**
+- [x] **Step 5: Update fingerprints, run tests, and commit primitives.**
 
   Extend `EditTaskDraftFingerprint` and `editTaskDraftFingerprint()` with `projectId`
   and `assigneeId`; snapshot those inputs just like child lists. Run the Step 2 test
@@ -548,7 +548,7 @@
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorSelectionSheets.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffoldStateTest.kt`
 
-- [ ] **Step 1: Write state-level tests for section, selection, and validation behavior.**
+- [x] **Step 1: Write state-level tests for section, selection, and validation behavior.**
 
   Test that Schedule starts collapsed, opening Notes collapses Schedule, Project and
   Assignee selections update the domain draft and dismiss their sheets, stale
@@ -561,7 +561,7 @@
   assertEquals("Schedule", validation.focusSection)
   ```
 
-- [ ] **Step 2: Run the new state test before adding composables.**
+- [x] **Step 2: Run the new state test before adding composables.**
 
   Run from `client/`:
 
@@ -571,7 +571,7 @@
 
   Expected: FAIL because section/selection reducers do not exist.
 
-- [ ] **Step 3: Implement `TaskEditorScaffold` without reusing `CommitmentEditor`.**
+- [x] **Step 3: Implement `TaskEditorScaffold` without reusing `CommitmentEditor`.**
 
   Render a borderless single-line title, Schedule/Project/Assignee/Repeat/Notes/
   Checklist rows, and a sticky Cancel/Save bar. Pass all domain values and callbacks
@@ -583,7 +583,7 @@
   Show `Ends at` only for a complete schedule. Make Notes show one ellipsized line and
   Checklist show `Checklist · done/total done` while collapsed.
 
-- [ ] **Step 4: Implement immediate-selection bottom sheets.**
+- [x] **Step 4: Implement immediate-selection bottom sheets.**
 
   `ProjectSelectionSheet` filters the provided list by an optional search string.
   `AssigneeSelectionSheet` shows a trailing check and disables itself with retry copy
@@ -593,7 +593,7 @@
   existing `ChecklistEditor` child mutation controls inside the expanded Checklist
   slot; do not add reordering.
 
-- [ ] **Step 5: Run tests and commit the visual component boundary.**
+- [x] **Step 5: Run tests and commit the visual component boundary.**
 
   Run from `client/`:
 
@@ -619,14 +619,14 @@
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskSubmitStateTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskProjectLoadFeedbackTest.kt`
 
-- [ ] **Step 1: Add failing Add-state tests.**
+- [x] **Step 1: Add failing Add-state tests.**
 
   Cover a personal project selecting locked Me and sending null assignee, a shared
   project selecting Me by default, switching projects invalidating Wife and restoring
   Me, cached collaborator data remaining selectable after a refresh failure, and a
   no-membership shared project disabling Assignee and preventing Save.
 
-- [ ] **Step 2: Run focused Add JVM tests.**
+- [x] **Step 2: Run focused Add JVM tests.**
 
   Run from `client/`:
 
@@ -637,7 +637,7 @@
   Expected: FAIL because the current screen uses static BuildConfig assignees and the
   old `CommitmentEditor` receipt.
 
-- [ ] **Step 3: Replace static selection state with project-backed draft state.**
+- [x] **Step 3: Replace static selection state with project-backed draft state.**
 
   Keep `AddTaskProjectRepository` cache entries as complete `ProjectItem`s, including
   collaborator readiness. On project selection, persist its ID and run the shared
@@ -645,7 +645,7 @@
   initial shared-project selection choose the `isCurrentUser` collaborator; on
   personal selection show locked Me while the request remains unassigned.
 
-- [ ] **Step 4: Build and submit through `TaskEditorScaffold`.**
+- [x] **Step 4: Build and submit through `TaskEditorScaffold`.**
 
   Replace the Add use of `CommitmentEditor` with the new scaffold. Preserve existing
   project-load retry/error dialogs, create action UUID capture, authoritative snapshot
@@ -654,7 +654,7 @@
   no-schedule draft must produce `CreateTaskRequest(dueDatetime = null,
   durationMinutes = null)` and `Save task`.
 
-- [ ] **Step 5: Run Add JVM tests and commit.**
+- [x] **Step 5: Run Add JVM tests and commit.**
 
   Re-run the Step 2 command plus
 
@@ -678,7 +678,7 @@
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/DraftExitPolicyTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/EditTaskScreenStateTest.kt`
 
-- [ ] **Step 1: Write failing Edit request/state tests.**
+- [x] **Step 1: Write failing Edit request/state tests.**
 
   Assert that moving to another project and selecting Wife writes both
   `RootTaskPatch.projectId` and `assigneeId = NullablePatch.Value("user-wife")`; an
@@ -693,7 +693,7 @@
   assertEquals(NullablePatch.Value(null), request.rootPatch?.durationMinutes)
   ```
 
-- [ ] **Step 2: Run focused Edit tests.**
+- [x] **Step 2: Run focused Edit tests.**
 
   Run from `client/`:
 
@@ -704,7 +704,7 @@
   Expected: FAIL because Edit renders Project/Assignee as immutable text and its
   request builder has non-null schedule values.
 
-- [ ] **Step 3: Load the same project/member choices as Add.**
+- [x] **Step 3: Load the same project/member choices as Add.**
 
   Give `EditTaskScreen` injectable load/refresh project functions for tests and the
   normal `AddTaskDependencies.projectRepository()` defaults for production. Resolve
@@ -713,7 +713,7 @@
   membership proves it invalid. Render retry/disabled Assignee behavior exactly as
   Add does.
 
-- [ ] **Step 4: Build explicit root patches from the complete local draft.**
+- [x] **Step 4: Build explicit root patches from the complete local draft.**
 
   Replace the Edit use of `CommitmentEditor` with `TaskEditorScaffold`. Extend
   `updateRequest()` to receive project, selected collaborator, and nullable schedule;
@@ -723,7 +723,7 @@
   `ActivityLogSection(task)` as an unchanged read-only Edit-only section after
   Checklist.
 
-- [ ] **Step 5: Run Edit tests and commit.**
+- [x] **Step 5: Run Edit tests and commit.**
 
   Re-run the Step 2 command. Expected: PASS.
 
@@ -749,7 +749,7 @@
 - Create: `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/EditTaskFakeBackendTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
 
-- [ ] **Step 1: Add failing parity and interaction tests.**
+- [x] **Step 1: Add failing parity and interaction tests.**
 
   Give the fake and real fixture shared projects `user-me`/`user-wife` collaborator
   data. Test `/projects` parity, membership validation, explicit schedule clearing,
@@ -758,7 +758,7 @@
   dismissal, Notes/Checklist accordion state, project/assignee draft-only mutation,
   cross-midnight Save label, retry preservation, and dirty exit.
 
-- [ ] **Step 2: Run focused backend and Android tests to observe missing parity.**
+- [x] **Step 2: Run focused backend and Android tests to observe missing parity.**
 
   Run from `backend/`:
 
@@ -781,7 +781,7 @@
   Expected: FAIL until fixtures and test helpers understand the expanded project
   response and nullable schedule/update fields.
 
-- [ ] **Step 3: Update deterministic fixture behavior, not production shortcuts.**
+- [x] **Step 3: Update deterministic fixture behavior, not production shortcuts.**
 
   Make fake/real project responses match the shared `ProjectItem` JSON exactly. In
   both test Todoist worlds, clear duration as well as due when the mutation requests
@@ -790,7 +790,7 @@
   convention; the real-backend lane must continue to record it as the known bucket-c
   difference.
 
-- [ ] **Step 4: Migrate instrumentation by semantics rather than old controls.**
+- [x] **Step 4: Migrate instrumentation by semantics rather than old controls.**
 
   Replace direct `Start picker`/outlined-button assumptions in
   `AddTaskFakeBackendTest` with semantic labels from the new editor. Create
@@ -800,7 +800,7 @@
   against the legacy shared `CommitmentEditor`/combined picker so a visual change does
   not leak into repair or reschedule.
 
-- [ ] **Step 5: Run focused suites and commit parity coverage.**
+- [x] **Step 5: Run focused suites and commit parity coverage.**
 
   Re-run the Step 2 commands. Expected: PASS for focused tests and Android test
   compilation.
@@ -817,7 +817,7 @@
 - Modify: `docs/superpowers/specs/2026-07-21-task-editor-redesign-design.md`
 - Create: `docs/handoffs/2026-07-21-task-editor-redesign-implementation.md`
 
-- [ ] **Step 1: Run the full backend gate.**
+- [x] **Step 1: Run the full backend gate.**
 
   Run from `backend/`:
 

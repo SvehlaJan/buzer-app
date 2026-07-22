@@ -10,6 +10,14 @@ design review. The supporting mockups remain together in
 `docs/designs/2026-07-21-task-editor-redesign/` so they can be revised without
 losing the agreed direction.
 
+Implementation status (2026-07-22): the redesign is implemented on
+`feature/task-editor-redesign`, including backend/fake-backend contract coverage and
+migrated Android instrumentation sources. Backend and fake-backend gates pass. The
+final Android compilation, device E2E, real-backend E2E, and hands-on checks remain
+pending because the environment cannot access Gradle's shared wrapper cache and its
+required elevation was rejected for usage limits; see the implementation handoff for
+the exact commands and evidence.
+
 ## Purpose
 
 Make Add Task and Edit Task fast to scan and practical on a phone. The current form
