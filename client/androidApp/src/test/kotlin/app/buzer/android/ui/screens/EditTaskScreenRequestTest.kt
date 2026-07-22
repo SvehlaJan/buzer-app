@@ -1,10 +1,16 @@
 package app.buzer.android.ui.screens
 
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.datetime.DateTimeSelection
+import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.TaskEditorSchedule
+import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateState
+import app.buzer.android.ui.taskeditor.reduceTaskEditorUpdateResult
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.MutationOutcome
+import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
@@ -12,12 +18,15 @@ import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.commitment.ChecklistEditorDraft
 import java.time.LocalDate
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class EditTaskScreenRequestTest {
     @Test
@@ -129,6 +138,98 @@ class EditTaskScreenRequestTest {
         )
 
         assertEquals(NullablePatch.Value(null), request.rootPatch?.assigneeId)
+    }
+
+    @Test
+    fun pendingEditReplayReusesCapturedRequestAndDeliversSuccessOnce() = runBlocking {
+        val updateTask = task().copy(projectId = sharedProject.id, assigneeId = me.id)
+        val state = initialTaskEditorUpdateState(
+            task = updateTask,
+            choices = TaskEditorUpdateChoices(projects = listOf(sharedProject))
+        )
+        val fingerprint = editTaskDraftFingerprint(
+            title = state.draft.title,
+            description = state.draft.description,
+            projectId = state.draft.projectId,
+            assigneeId = state.draft.assignee?.id,
+            start = app.buzer.android.ui.datetime.DateTimeDraftSelection(
+                state.draft.schedule.date,
+                state.draft.schedule.hour,
+                state.draft.schedule.minute
+            ),
+            durationMinutes = state.draft.schedule.durationMinutes,
+            recurrencePreset = state.draft.recurrencePreset,
+            existingChildren = emptyList(),
+            deletedChildIds = emptySet(),
+            addedChildren = emptyList()
+        )
+        var captured: EditTaskUpdateCapture? = null
+        var requestConstructionCount = 0
+        val dispatchedRequests = mutableListOf<app.buzer.shared.model.UpdateTaskRequest>()
+
+        suspend fun submitCurrentEdit(): CoordinatorActionResult {
+            captured = captureEditTaskUpdate(
+                captured = captured,
+                fingerprint = fingerprint,
+                createRequest = {
+                    requestConstructionCount += 1
+                    updateRequest(
+                        task = updateTask,
+                        title = state.draft.title,
+                        description = state.draft.description,
+                        project = sharedProject,
+                        selectedAssignee = me,
+                        schedule = state.draft.schedule,
+                        recurrencePreset = state.draft.recurrencePreset,
+                        existingDrafts = emptyList(),
+                        deletedChildren = emptySet(),
+                        addedDrafts = emptyList(),
+                        deviceId = "device-1"
+                    )
+                }
+            )
+            val request = requireNotNull(captured).request
+            dispatchedRequests += request
+            return if (dispatchedRequests.size == 1) {
+                CoordinatorActionResult.Pending(
+                    MutationResponse(
+                        actionId = request.actionId,
+                        outcome = MutationOutcome.reconciliation_pending,
+                        snapshot = TasksSnapshotResponse(
+                            scheduleVersion = 1,
+                            serverTime = "2026-07-23T12:00:00Z",
+                            tasks = listOf(updateTask),
+                            health = emptyList(),
+                            snapshotGeneration = 1
+                        )
+                    )
+                )
+            } else {
+                CoordinatorActionResult.Success
+            }
+        }
+
+        val pending = reduceTaskEditorUpdateResult(
+            state.beginSubmission(),
+            submitCurrentEdit()
+        )
+        val confirmed = reduceTaskEditorUpdateResult(
+            pending.state,
+            submitCurrentEdit()
+        )
+        var successCallbacks = 0
+        if (confirmed.shouldInvokeSuccess) successCallbacks += 1
+        val repeatedSuccess = reduceTaskEditorUpdateResult(
+            confirmed.state,
+            CoordinatorActionResult.Success
+        )
+        if (repeatedSuccess.shouldInvokeSuccess) successCallbacks += 1
+
+        assertEquals(1, requestConstructionCount)
+        assertEquals(2, dispatchedRequests.size)
+        assertSame(dispatchedRequests.first(), dispatchedRequests.last())
+        assertEquals(dispatchedRequests.first().actionId, dispatchedRequests.last().actionId)
+        assertEquals(1, successCallbacks)
     }
 
     private fun requestFor(recurrencePreset: app.buzer.shared.model.RecurrencePreset?) = updateRequest(

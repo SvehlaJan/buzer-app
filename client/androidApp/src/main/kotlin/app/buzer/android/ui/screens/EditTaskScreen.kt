@@ -1,17 +1,13 @@
 package app.buzer.android.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,26 +16,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.tasks.AddTaskDependencies
-import app.buzer.android.ui.addtask.AddTaskFormResult
-import app.buzer.android.ui.addtask.AddTaskFormValidator
-import app.buzer.android.ui.addtask.AddTaskInvalidField
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
-import app.buzer.android.ui.addtask.selectAddTaskProject
 import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
+import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
+import app.buzer.android.ui.taskeditor.TaskEditorPresentation
 import app.buzer.android.ui.taskeditor.TaskEditorSchedule
-import app.buzer.android.ui.taskeditor.TaskEditorScaffold
-import app.buzer.android.ui.taskeditor.TaskEditorScheduleValidation
-import app.buzer.android.ui.taskeditor.recurrenceLabel
-import app.buzer.android.ui.taskeditor.setNoSchedule
-import app.buzer.android.ui.taskeditor.validateScheduleForSave
+import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
+import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
+import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
+import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateDraft
+import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.ChecklistItem
@@ -53,11 +46,9 @@ import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.ui.commitment.ChecklistEditorDraft
 import app.buzer.shared.ui.commitment.validateChecklistDrafts
-import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal data class ExistingChecklistDraft(
@@ -76,134 +67,18 @@ internal fun ChecklistItem.toEditorDraft() = ExistingChecklistDraft(
     checked = checked
 )
 
-internal fun initialEditTaskDraft(task: TaskSnapshotItem): TaskEditorDraft {
-    val schedule = task.dueDatetime?.toTaskEditorSchedule()
-        ?: task.dueDate?.toTaskEditorDateSchedule()
-        ?: TaskEditorSchedule()
-    val fallbackAssignee = task.assigneeId?.let { assigneeId ->
-        ProjectCollaborator(
-            id = assigneeId,
-            displayName = if (task.isAssignedToUser) "Me" else assigneeId,
-            isCurrentUser = task.isAssignedToUser
-        )
-    } ?: ProjectCollaborator(
-        id = "",
-        displayName = "Me",
-        isCurrentUser = task.isAssignedToUser
-    )
-    return TaskEditorDraft(
-        title = task.title,
-        description = task.description.orEmpty(),
-        projectId = task.projectId,
-        assignee = fallbackAssignee,
-        schedule = schedule.copy(durationMinutes = task.durationMinutes),
-        recurrencePreset = task.recurrence.preset ?: RecurrencePreset.never
-    )
-}
-
-/**
- * Cached projects populate display values but never override the task snapshot's assignee.
- * A refreshed ready membership is authoritative enough to apply the normal project rule.
- */
-internal fun reconcileEditProjectMembership(
-    draft: TaskEditorDraft,
-    projects: List<ProjectItem>,
-    currentUser: ProjectCollaborator,
-    membershipWasRefreshed: Boolean
-): TaskEditorDraft {
-    val project = projects.firstOrNull { it.id == draft.projectId } ?: return draft
-    if (!project.canAssignTasks) {
-        return draft.copy(assignee = currentUser)
-    }
-    if (!membershipWasRefreshed || (project.canAssignTasks && !project.collaboratorsReady)) {
-        return draft.copy(
-            assignee = project.collaborators.firstOrNull { it.id == draft.assignee?.id } ?: draft.assignee
-        )
-    }
-    return selectAddTaskProject(draft, project, currentUser)
-}
-
-internal fun buildEditUpdateRequestWhenScheduleValid(
-    task: TaskSnapshotItem,
-    draft: TaskEditorDraft,
-    project: ProjectItem,
-    recurrencePreset: RecurrencePreset?,
-    existingDrafts: List<ExistingChecklistDraft>,
-    deletedChildren: Set<String>,
-    addedDrafts: List<ChecklistEditorDraft>,
-    deviceId: String
-): UpdateTaskRequest? = if (validateScheduleForSave(draft).isValid) {
-    updateRequest(
-        task = task,
-        title = draft.title,
-        description = draft.description,
-        project = project,
-        selectedAssignee = draft.assignee,
-        schedule = draft.schedule,
-        recurrencePreset = recurrencePreset,
-        existingDrafts = existingDrafts,
-        deletedChildren = deletedChildren,
-        addedDrafts = addedDrafts,
-        deviceId = deviceId
-    )
-} else {
-    null
-}
-
-internal data class EditRecurrencePresentation(
-    val rowValue: String,
-    val selectedPreset: RecurrencePreset?
+/** The Update host may replay this exact request while reconciliation is pending. */
+internal data class EditTaskUpdateCapture(
+    val fingerprint: EditTaskDraftFingerprint,
+    val request: UpdateTaskRequest
 )
 
-internal data class EditNoScheduleSelection(
-    val draft: TaskEditorDraft,
-    val customRecurrenceUntouched: Boolean
-)
-
-internal fun selectEditNoSchedule(
-    draft: TaskEditorDraft,
-    customRecurrenceUntouched: Boolean
-): EditNoScheduleSelection = if (draft.assignee?.isCurrentUser == false) {
-    EditNoScheduleSelection(
-        draft = setNoSchedule(draft),
-        customRecurrenceUntouched = false
-    )
-} else {
-    EditNoScheduleSelection(
-        draft = draft,
-        customRecurrenceUntouched = customRecurrenceUntouched
-    )
-}
-
-internal data class EditTaskSubmitState(
-    val submitting: Boolean,
-    val resultMessage: String?
-)
-
-internal fun failedEditTaskSubmitState(error: Exception): EditTaskSubmitState {
-    val message = error.message?.trim().takeUnless { it.isNullOrEmpty() } ?: "Task update failed"
-    return EditTaskSubmitState(
-        submitting = false,
-        resultMessage = "$message. Your draft is still here; retry."
-    )
-}
-
-internal fun editRecurrencePresentation(
-    task: TaskSnapshotItem,
-    customRecurrenceUntouched: Boolean,
-    draftPreset: RecurrencePreset
-): EditRecurrencePresentation = if (customRecurrenceUntouched) {
-    val customRule = task.recurrence.rule?.trim().takeUnless { it.isNullOrEmpty() }
-    EditRecurrencePresentation(
-        rowValue = customRule?.let { "Custom: $it" } ?: "Custom recurrence",
-        selectedPreset = null
-    )
-} else {
-    EditRecurrencePresentation(
-        rowValue = recurrenceLabel(draftPreset),
-        selectedPreset = draftPreset
-    )
-}
+internal fun captureEditTaskUpdate(
+    captured: EditTaskUpdateCapture?,
+    fingerprint: EditTaskDraftFingerprint,
+    createRequest: () -> UpdateTaskRequest
+): EditTaskUpdateCapture = captured?.takeIf { it.fingerprint == fingerprint }
+    ?: EditTaskUpdateCapture(fingerprint = fingerprint, request = createRequest())
 
 @Composable
 fun EditTaskScreen(
@@ -217,18 +92,13 @@ fun EditTaskScreen(
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() },
     modifier: Modifier = Modifier
 ) {
-    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) AddTaskDependencies.projectRepository() else null
     }
     val loadProjectList = loadProjects ?: projectRepository!!::loadProjectsOnce
     val refreshProjectList = refreshProjects ?: projectRepository!!::refreshProjects
-    val initialDraft = remember(task.id) { initialEditTaskDraft(task) }
-    var draft by remember(task.id) { mutableStateOf(initialDraft) }
-    var projects by remember(task.id) { mutableStateOf<List<ProjectItem>>(emptyList()) }
-    var projectsLoading by remember(task.id) { mutableStateOf(true) }
-    var projectLoadError by remember(task.id) { mutableStateOf<String?>(null) }
+    var choices by remember(task.id) { mutableStateOf(TaskEditorUpdateChoices(loading = true)) }
     var projectLoadDialogMessage by remember(task.id) { mutableStateOf<String?>(null) }
     var projectFeedbackDismissed by remember(task.id) { mutableStateOf(false) }
     var existingDrafts by remember(task.id) {
@@ -236,215 +106,9 @@ fun EditTaskScreen(
     }
     var deletedChildren by remember(task.id) { mutableStateOf<Set<String>>(emptySet()) }
     var addedDrafts by remember(task.id) { mutableStateOf(initialAddedDrafts) }
-    var pendingRequest by remember(task.id) { mutableStateOf<UpdateTaskRequest?>(null) }
-    var submitting by remember(task.id) { mutableStateOf(false) }
-    var invalidField by remember(task.id) { mutableStateOf<AddTaskInvalidField?>(null) }
-    var errorText by remember(task.id) { mutableStateOf<String?>(null) }
-    var resultMessage by remember(task.id) { mutableStateOf<String?>(null) }
-    var scheduleValidation by remember(task.id) { mutableStateOf(TaskEditorScheduleValidation.valid()) }
-    var customRecurrenceUntouched by remember(task.id) {
-        mutableStateOf(task.recurrence.kind == RecurrenceKind.custom)
-    }
-    var discardConfirmationVisible by remember(task.id) { mutableStateOf(false) }
+    var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
     val now = remember(nowProvider) { nowProvider() }
-    val selectedProject = projects.firstOrNull { it.id == draft.projectId }
-    val currentUser = selectedProject?.collaborators?.firstOrNull { it.isCurrentUser }
-        ?: projects.asSequence().flatMap { it.collaborators.asSequence() }.firstOrNull { it.isCurrentUser }
-        ?: draft.assignee?.takeIf { it.isCurrentUser }
-        ?: ProjectCollaborator(id = "", displayName = "Me", isCurrentUser = true)
-    val collaboratorsBlocked = AddTaskProjectLoadFeedback.blocksSaveForCollaborators(selectedProject)
-    val hasCachedProjects = projects.isNotEmpty()
-    val saveEnabled = !submitting &&
-        !projectsLoading &&
-        hasCachedProjects &&
-        (projectLoadError == null || AddTaskProjectLoadFeedback.canUseCachedProjects(projects, projectLoadError)) &&
-        !collaboratorsBlocked
-    val projectFeedbackMessage = if (projectLoadDialogMessage != null || projectFeedbackDismissed) {
-        null
-    } else {
-        AddTaskProjectLoadFeedback.message(
-            projectsLoading = projectsLoading,
-            projects = projects,
-            projectLoadError = projectLoadError.takeUnless { hasCachedProjects }
-        )
-    }
-    val recurrencePresentation = editRecurrencePresentation(
-        task = task,
-        customRecurrenceUntouched = customRecurrenceUntouched,
-        draftPreset = draft.recurrencePreset
-    )
-
-    fun updateDraft(next: TaskEditorDraft) {
-        if (draft == next) return
-        draft = next
-        pendingRequest = null
-        invalidField = null
-        errorText = null
-        resultMessage = null
-        scheduleValidation = TaskEditorScheduleValidation.valid()
-    }
-
-    fun applyLoadedProjects(loaded: List<ProjectItem>, membershipWasRefreshed: Boolean) {
-        projects = loaded
-        val reconciledDraft = reconcileEditProjectMembership(
-            draft = draft,
-            projects = loaded,
-            currentUser = loaded.firstOrNull { project -> project.collaborators.any { it.isCurrentUser } }
-                ?.collaborators?.first { it.isCurrentUser }
-                ?: currentUser,
-            membershipWasRefreshed = membershipWasRefreshed
-        )
-        if (reconciledDraft == draft) return
-        val loadedProject = loaded.firstOrNull { it.id == reconciledDraft.projectId }
-        val changedSavedSelection = draft.projectId != reconciledDraft.projectId ||
-            assigneeIdForProject(loadedProject, draft.assignee) !=
-                assigneeIdForProject(loadedProject, reconciledDraft.assignee)
-        draft = reconciledDraft
-        if (changedSavedSelection) {
-            pendingRequest = null
-            invalidField = null
-            errorText = null
-            resultMessage = null
-            scheduleValidation = TaskEditorScheduleValidation.valid()
-        }
-    }
-
-    fun retryProjects() {
-        scope.launch {
-            projectsLoading = true
-            projectLoadError = null
-            projectLoadDialogMessage = null
-            projectFeedbackDismissed = false
-            try {
-                applyLoadedProjects(refreshProjectList(), membershipWasRefreshed = true)
-            } catch (error: Exception) {
-                AppLog.error(
-                    "edit_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
-                    error
-                )
-                val message = error.message ?: "Project loading failed"
-                projectLoadError = message
-                projectLoadDialogMessage = message
-            } finally {
-                projectsLoading = false
-            }
-        }
-    }
-
-    fun submitRequest(request: UpdateTaskRequest) {
-        if (submitting) return
-        submitting = true
-        resultMessage = null
-        scope.launch {
-            try {
-                when (val result = onUpdate(task.id, request)) {
-                    CoordinatorActionResult.Success -> onBack()
-                    is CoordinatorActionResult.Stale -> resultMessage = "Task changed elsewhere. Your draft is still here; reapply it after review."
-                    is CoordinatorActionResult.Pending -> resultMessage = "Saved; waiting for Todoist confirmation"
-                    is CoordinatorActionResult.RetryAfter -> resultMessage = "Retry in ${result.retryAfterSeconds} seconds"
-                    is CoordinatorActionResult.LocalReconciliationFailed -> resultMessage = result.message
-                    is CoordinatorActionResult.FailedAndHidden -> resultMessage = result.message
-                    CoordinatorActionResult.ChildActionInFlight -> resultMessage = "Checklist update is already in progress"
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                AppLog.error(
-                    "edit_task update_failed type=${error::class.simpleName} message=${error.message}",
-                    error
-                )
-                resultMessage = failedEditTaskSubmitState(error).resultMessage
-            } finally {
-                submitting = false
-            }
-        }
-    }
-
-    fun validateAndSubmit() {
-        if (submitting) return
-        val checklistValidation = validateChecklistDrafts(addedDrafts)
-        if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
-            invalidField = null
-            errorText = checklistValidation.bannerMessage ?: "Each checklist item needs a title"
-            return
-        }
-        if (AddTaskProjectLoadFeedback.blocksSaveForCollaborators(selectedProject)) {
-            invalidField = AddTaskInvalidField.Assignee
-            errorText = "Collaborators are unavailable. Retry before saving."
-            return
-        }
-        val project = selectedProject
-        if (project == null) {
-            invalidField = AddTaskInvalidField.Project
-            errorText = "Project is required"
-            return
-        }
-        val latestScheduleValidation = validateScheduleForSave(draft)
-        if (!latestScheduleValidation.isValid) {
-            invalidField = null
-            errorText = null
-            scheduleValidation = latestScheduleValidation
-            return
-        }
-        val deadline = draft.schedule.startDateTime()?.let { start ->
-            DateTimeSelection(start.toLocalDate(), start.hour, start.minute)
-        }
-        when (
-            val formResult = AddTaskFormValidator.validate(
-                title = draft.title,
-                selectedProject = project,
-                selectedAssignee = draft.assignee,
-                deadline = deadline,
-                durationMinutes = draft.schedule.durationMinutes,
-                description = draft.description,
-                recurrencePreset = draft.recurrencePreset,
-                timeZone = ZoneId.systemDefault().id,
-                actionId = "edit-validation",
-                deviceId = deviceId
-            )
-        ) {
-            is AddTaskFormResult.Invalid -> {
-                invalidField = formResult.field
-                if (formResult.field == AddTaskInvalidField.Start || formResult.field == AddTaskInvalidField.Duration) {
-                    scheduleValidation = validateScheduleForSave(draft)
-                    errorText = null
-                } else {
-                    errorText = formResult.message
-                }
-            }
-            is AddTaskFormResult.Valid -> {
-                invalidField = null
-                val request = pendingRequest ?: updateRequest(
-                    task = task,
-                    title = draft.title,
-                    description = draft.description,
-                    project = project,
-                    selectedAssignee = draft.assignee,
-                    schedule = draft.schedule,
-                    recurrencePreset = draft.recurrencePreset.takeUnless { customRecurrenceUntouched },
-                    existingDrafts = existingDrafts,
-                    deletedChildren = deletedChildren,
-                    addedDrafts = addedDrafts,
-                    deviceId = deviceId
-                ).also { pendingRequest = it }
-                submitRequest(request)
-            }
-        }
-    }
-
-    fun currentFingerprint() = editTaskDraftFingerprint(
-        title = draft.title,
-        description = draft.description,
-        projectId = draft.projectId,
-        assigneeId = assigneeIdForProject(selectedProject, draft.assignee)
-            ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() },
-        start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
-        durationMinutes = draft.schedule.durationMinutes,
-        recurrencePreset = draft.recurrencePreset.takeUnless { customRecurrenceUntouched },
-        existingChildren = existingDrafts.map { it.toFingerprint() },
-        deletedChildIds = deletedChildren,
-        addedChildren = addedDrafts.map { it.toFingerprint() }
-    )
+    val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
     val initialFingerprint = remember(task.id, initialAddedDrafts) {
         editTaskDraftFingerprint(
             title = initialDraft.title,
@@ -459,132 +123,155 @@ fun EditTaskScreen(
             addedChildren = initialAddedDrafts.map { it.toFingerprint() }
         )
     }
-    fun requestExit() {
-        when (decideDraftExit(initialFingerprint, currentFingerprint(), submitting)) {
-            DraftExitDecision.NavigateHome -> onBack()
-            DraftExitDecision.ConfirmDiscard -> {
-                focusManager.clearFocus(force = true)
-                discardConfirmationVisible = true
-            }
-            DraftExitDecision.Ignore -> Unit
-        }
+    val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(task, hostEnabled = true).enabled
+
+    fun currentFingerprint(draft: TaskEditorDraft): EditTaskDraftFingerprint {
+        val selectedProject = choices.selectedProject(draft)
+        return editTaskDraftFingerprint(
+            title = draft.title,
+            description = draft.description,
+            projectId = draft.projectId,
+            assigneeId = assigneeIdForProject(selectedProject, draft.assignee)
+                ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() },
+            start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
+            durationMinutes = draft.schedule.durationMinutes,
+            recurrencePreset = draft.recurrencePreset.takeUnless {
+                draft.recurrenceKind == RecurrenceKind.custom && !draft.repeatReplacementSelected
+            },
+            existingChildren = existingDrafts.map { it.toFingerprint() },
+            deletedChildIds = deletedChildren,
+            addedChildren = addedDrafts.map { it.toFingerprint() }
+        )
     }
 
-    BackHandler(enabled = discardConfirmationVisible) {
-        discardConfirmationVisible = false
-    }
-    BackHandler(enabled = !discardConfirmationVisible) {
-        requestExit()
+    fun retryProjects() {
+        scope.launch {
+            choices = choices.copy(loading = true, errorMessage = null)
+            projectLoadDialogMessage = null
+            projectFeedbackDismissed = false
+            try {
+                choices = TaskEditorUpdateChoices(
+                    projects = refreshProjectList(),
+                    membershipWasRefreshed = true
+                )
+            } catch (error: Exception) {
+                AppLog.error(
+                    "edit_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
+                    error
+                )
+                val message = error.message ?: "Project loading failed"
+                choices = choices.copy(loading = false, errorMessage = message)
+                projectLoadDialogMessage = message
+            }
+        }
     }
 
     LaunchedEffect(task.id) {
-        projectsLoading = true
-        projectLoadError = null
+        choices = TaskEditorUpdateChoices(loading = true)
         projectLoadDialogMessage = null
         projectFeedbackDismissed = false
         try {
-            applyLoadedProjects(loadProjectList(), membershipWasRefreshed = false)
+            choices = TaskEditorUpdateChoices(projects = loadProjectList())
         } catch (error: Exception) {
             AppLog.error("edit_task projects load_failed type=${error::class.simpleName} message=${error.message}", error)
             val message = error.message ?: "Project loading failed"
-            projectLoadError = message
+            choices = TaskEditorUpdateChoices(errorMessage = message)
             projectLoadDialogMessage = message
-        } finally {
-            projectsLoading = false
         }
     }
 
+    val projectFeedbackMessage = if (projectLoadDialogMessage != null || projectFeedbackDismissed) {
+        null
+    } else {
+        AddTaskProjectLoadFeedback.message(
+            projectsLoading = choices.loading,
+            projects = choices.projects,
+            projectLoadError = choices.errorMessage.takeUnless { choices.projects.isNotEmpty() }
+        )
+    }
+
     androidx.compose.foundation.layout.Box(modifier = modifier.fillMaxSize()) {
-        TaskEditorScaffold(
-            screenTitle = "Edit task",
-            title = draft.title,
-            onTitleChange = { updateDraft(draft.copy(title = it)) },
-            draft = draft,
+        TaskEditorUpdateScreen(
+            task = task,
+            choices = choices,
+            presentation = TaskEditorPresentation(
+                screenTitle = "Edit task",
+                primaryVerb = "Save",
+                showUpdateFooter = true
+            ),
             now = now,
-            projects = projects,
-            currentUser = currentUser,
             checklistDoneCount = existingDrafts.count { it.checked && it.id !in deletedChildren },
             checklistTotalCount = existingDrafts.count { it.id !in deletedChildren } + addedDrafts.size,
-            checklistContent = {
+            checklistContent = { checklistEnabled, checklistError ->
+                val checklistAccess = taskEditorUpdateChecklistAccess(task, checklistEnabled)
+                checklistAccess.warningMessage?.let { WarningStatus(it) }
+                checklistError?.let { Text(it) }
                 ExistingChecklistEditor(
                     drafts = existingDrafts.filterNot { it.id in deletedChildren },
-                    onDraftsChange = { next ->
-                        if (existingDrafts != next) {
-                            existingDrafts = next
-                            pendingRequest = null
-                            errorText = null
-                        }
-                    },
-                    onDelete = { childId ->
-                        deletedChildren = deletedChildren + childId
-                        pendingRequest = null
-                        errorText = null
-                    },
-                    enabled = !submitting
+                    onDraftsChange = { next -> existingDrafts = next },
+                    onDelete = { childId -> deletedChildren = deletedChildren + childId },
+                    enabled = checklistAccess.enabled
                 )
                 ChecklistEditor(
                     drafts = addedDrafts,
-                    onDraftsChange = { next ->
-                        if (addedDrafts != next) {
-                            addedDrafts = next
-                            pendingRequest = null
-                            errorText = null
-                        }
-                    },
+                    onDraftsChange = { next -> addedDrafts = next },
                     nextClientMutationId = { UUID.randomUUID().toString() },
-                    enabled = !submitting,
+                    enabled = checklistAccess.enabled,
                     maxItems = (30 - existingDrafts.count { it.id !in deletedChildren }).coerceAtLeast(0)
                 )
             },
-            afterChecklistContent = { ActivityLogSection(task) },
-            onScheduleChange = { schedule -> updateDraft(draft.copy(schedule = schedule)) },
-            onNoSchedule = {
-                val selection = selectEditNoSchedule(draft, customRecurrenceUntouched)
-                val replacedCustomRecurrence =
-                    customRecurrenceUntouched != selection.customRecurrenceUntouched
-                customRecurrenceUntouched = selection.customRecurrenceUntouched
-                if (selection.draft == draft && replacedCustomRecurrence) {
-                    pendingRequest = null
-                    errorText = null
-                    resultMessage = null
-                    scheduleValidation = TaskEditorScheduleValidation.valid()
-                } else {
-                    updateDraft(selection.draft)
+            footerContent = { ActivityLogSection(task) },
+            onRetryChoices = ::retryProjects,
+            contentValidation = {
+                val checklistValidation = validateChecklistDrafts(
+                    if (checklistMutationsAllowed) addedDrafts else emptyList()
+                )
+                TaskEditorUpdateContentValidation(
+                    canSubmit = checklistValidation.bannerMessage == null &&
+                        checklistValidation.invalidDraftIds.isEmpty(),
+                    message = checklistValidation.bannerMessage ?: "Each checklist item needs a title"
+                        .takeIf { checklistValidation.invalidDraftIds.isNotEmpty() }
+                )
+            },
+            isDirty = { draft -> currentFingerprint(draft) != initialFingerprint },
+            onUpdate = update@{ draft ->
+                val checklistValidation = validateChecklistDrafts(
+                    if (checklistMutationsAllowed) addedDrafts else emptyList()
+                )
+                if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
+                    return@update CoordinatorActionResult.FailedAndHidden("Checklist items need titles")
                 }
-            },
-            onProjectSelected = { project ->
-                updateDraft(selectAddTaskProject(draft, project, currentUser))
-            },
-            onAssigneeSelected = { assignee -> updateDraft(draft.copy(assignee = assignee)) },
-            onRecurrencePresetSelected = { preset ->
-                val replacesCustomRecurrence = customRecurrenceUntouched
-                customRecurrenceUntouched = false
-                if (replacesCustomRecurrence && draft.recurrencePreset == preset) {
-                    pendingRequest = null
-                    errorText = null
-                    resultMessage = null
-                } else {
-                    updateDraft(draft.copy(recurrencePreset = preset))
+                val project = choices.selectedProject(draft)
+                    ?: return@update CoordinatorActionResult.FailedAndHidden("Project is unavailable")
+                val fingerprint = currentFingerprint(draft)
+                val nextCapture = captureEditTaskUpdate(
+                    captured = capturedUpdate,
+                    fingerprint = fingerprint
+                ) {
+                    updateRequest(
+                        task = task,
+                        title = draft.title,
+                        description = draft.description,
+                        project = project,
+                        selectedAssignee = draft.assignee,
+                        schedule = draft.schedule,
+                        recurrencePreset = draft.recurrencePreset.takeUnless {
+                            draft.recurrenceKind == RecurrenceKind.custom && !draft.repeatReplacementSelected
+                        },
+                        existingDrafts = existingDrafts,
+                        deletedChildren = deletedChildren,
+                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),
+                        deviceId = deviceId
+                    )
                 }
+                capturedUpdate = nextCapture
+                onUpdate(task.id, nextCapture.request)
             },
-            onDescriptionChange = { description -> updateDraft(draft.copy(description = description)) },
-            onRetryCollaborators = { retryProjects() },
-            onSave = { validateAndSubmit() },
-            onBack = { requestExit() },
-            onCancel = { requestExit() },
-            scheduleValidation = scheduleValidation,
-            enabled = !submitting,
-            saveEnabled = saveEnabled,
-            saving = submitting,
-            titleError = errorText.takeIf { invalidField == AddTaskInvalidField.Title },
-            projectError = errorText.takeIf { invalidField == AddTaskInvalidField.Project },
-            assigneeError = errorText.takeIf { invalidField == AddTaskInvalidField.Assignee },
-            checklistError = errorText.takeIf { invalidField == null },
-            recurrenceValue = recurrencePresentation.rowValue,
-            selectedRecurrencePreset = recurrencePresentation.selectedPreset,
+            onSuccess = onBack,
+            onCancel = onBack,
             modifier = Modifier.fillMaxSize()
         )
-        if (projectsLoading) InlineLoadingStatus("Loading projects...")
+        if (choices.loading) InlineLoadingStatus("Loading projects...")
     }
 
     projectFeedbackMessage?.let { message ->
@@ -593,7 +280,7 @@ fun EditTaskScreen(
             message = message,
             onDismiss = { projectFeedbackDismissed = true },
             retryLabel = "Retry",
-            onRetry = { retryProjects() }
+            onRetry = ::retryProjects
         )
     }
     projectLoadDialogMessage?.let { message ->
@@ -602,32 +289,7 @@ fun EditTaskScreen(
             message = message,
             onDismiss = { projectLoadDialogMessage = null },
             retryLabel = "Retry",
-            onRetry = { retryProjects() }
-        )
-    }
-    resultMessage?.let { message ->
-        ErrorAlertDialog(
-            title = "Task update",
-            message = message,
-            onDismiss = { resultMessage = null },
-            retryLabel = "Retry".takeUnless { message == "Saved; waiting for Todoist confirmation" },
-            onRetry = {
-                resultMessage = null
-                validateAndSubmit()
-            }
-        )
-    }
-    if (discardConfirmationVisible) {
-        AlertDialog(
-            onDismissRequest = { discardConfirmationVisible = false },
-            title = { Text("Discard changes?") },
-            text = { Text("Your task edits have not been saved.") },
-            confirmButton = {
-                TextButton(onClick = onBack) { Text("Discard") }
-            },
-            dismissButton = {
-                TextButton(onClick = { discardConfirmationVisible = false }) { Text("Keep editing") }
-            }
+            onRetry = ::retryProjects
         )
     }
 }
@@ -700,19 +362,6 @@ private fun assigneeIdForProject(
     project: ProjectItem?,
     assignee: ProjectCollaborator?
 ): String? = assignee?.id?.takeIf { project?.canAssignTasks == true && it.isNotBlank() }
-
-private fun String.toTaskEditorSchedule(): TaskEditorSchedule? {
-    val local = runCatching { Instant.parse(this).atZone(ZoneId.systemDefault()).toLocalDateTime() }
-        .recoverCatching { LocalDateTime.parse(this) }
-        .getOrNull()
-        ?: return null
-    return TaskEditorSchedule(date = local.toLocalDate(), hour = local.hour, minute = local.minute)
-}
-
-private fun String.toTaskEditorDateSchedule(): TaskEditorSchedule? =
-    runCatching { java.time.LocalDate.parse(this) }
-        .getOrNull()
-        ?.let { TaskEditorSchedule(date = it) }
 
 private fun ExistingChecklistDraft.toFingerprint() = ChecklistDraftFingerprint(id, title, description, checked)
 
