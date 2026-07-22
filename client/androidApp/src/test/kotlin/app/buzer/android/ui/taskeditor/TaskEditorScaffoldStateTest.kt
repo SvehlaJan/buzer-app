@@ -155,6 +155,24 @@ class TaskEditorScaffoldStateTest {
     }
 
     @Test
+    fun visibleScheduleErrorExpandsScheduleAndUsesTheSharedFieldMessage() {
+        val visibleValidation = VisibleTaskEditorValidation(
+            errors = mapOf(TaskEditorField.Schedule to "Start time is required"),
+            unavailableFields = emptySet(),
+            canSubmit = false,
+            bannerMessage = "Fix the highlighted fields"
+        )
+
+        val validation = scheduleValidationForVisibleErrors(
+            draft = TaskEditorDraft(title = "Review", projectId = "shared", assignee = me),
+            visibleValidation = visibleValidation
+        )
+
+        assertEquals(EditorSection.Schedule, validation.focusSection)
+        assertEquals("Start time is required", scheduleValidationMessage(validation))
+    }
+
+    @Test
     fun fieldErrorOverridesTheNormalRowSupportingText() {
         assertEquals(
             "Project is required",

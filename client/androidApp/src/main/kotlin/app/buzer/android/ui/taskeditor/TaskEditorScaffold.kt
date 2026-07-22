@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import java.time.LocalDateTime
 
@@ -64,7 +65,8 @@ internal data class TaskEditorScheduleValidation(
     val focusSection: EditorSection? = null,
     val highlightDate: Boolean = false,
     val highlightStartTime: Boolean = false,
-    val highlightDuration: Boolean = false
+    val highlightDuration: Boolean = false,
+    val message: String? = null
 ) {
     companion object {
         fun valid() = TaskEditorScheduleValidation(isValid = true)
@@ -102,11 +104,25 @@ internal fun reduceSectionTap(
 internal fun editorDismissActionsEnabled(saving: Boolean): Boolean = !saving
 
 internal fun scheduleValidationMessage(validation: TaskEditorScheduleValidation): String? =
-    if (!validation.isValid && validation.focusSection == EditorSection.Schedule) {
+    validation.message ?: if (!validation.isValid && validation.focusSection == EditorSection.Schedule) {
         "Set date, start time, and duration to save this task."
     } else {
         null
     }
+
+internal fun scheduleValidationForVisibleErrors(
+    draft: TaskEditorDraft,
+    visibleValidation: VisibleTaskEditorValidation
+): TaskEditorScheduleValidation {
+    val scheduleError = visibleValidation.scheduleError ?: return TaskEditorScheduleValidation.valid()
+    val scheduleValidation = validateScheduleForSave(draft)
+
+    return scheduleValidation.copy(
+        isValid = false,
+        focusSection = EditorSection.Schedule,
+        message = scheduleError
+    )
+}
 
 internal fun selectionRowSupportingText(
     normalSupportingText: String?,
@@ -170,8 +186,69 @@ internal fun projectAssignees(
 }
 
 /**
- * Add/Edit-only task editor shell. It is intentionally fed entirely by values and callbacks:
- * screen owners retain repositories, action IDs, clocks, draft persistence, and submission.
+ * Presentation-neutral task editor shell. Hosts own draft state, validation, loading,
+ * navigation, and mutations; the shell owns only accordion and selection-sheet visibility.
+ */
+@Composable
+internal fun TaskEditorScaffold(
+    presentation: TaskEditorPresentation,
+    draft: TaskEditorDraft,
+    onDraftChange: (TaskEditorDraft) -> Unit,
+    now: LocalDateTime,
+    projects: List<ProjectItem>,
+    currentUser: ProjectCollaborator,
+    checklistDoneCount: Int,
+    checklistTotalCount: Int,
+    checklistContent: @Composable () -> Unit,
+    footerContent: @Composable () -> Unit = {},
+    onRetryCollaborators: () -> Unit,
+    onPrimaryAction: () -> Unit,
+    onCancel: () -> Unit,
+    validation: VisibleTaskEditorValidation,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    primaryActionInProgress: Boolean = false,
+    primaryActionInProgressLabel: String = "Saving...",
+    titleModifier: Modifier = Modifier,
+) = TaskEditorScaffoldContent(
+    screenTitle = presentation.screenTitle,
+    contextMessage = presentation.contextMessage,
+    draft = draft,
+    onDraftChange = onDraftChange,
+    now = now,
+    projects = projects,
+    currentUser = currentUser,
+    checklistDoneCount = checklistDoneCount,
+    checklistTotalCount = checklistTotalCount,
+    checklistContent = checklistContent,
+    footerContent = footerContent,
+    showFooter = presentation.showUpdateFooter,
+    onRetryCollaborators = onRetryCollaborators,
+    onPrimaryAction = onPrimaryAction,
+    onBack = onCancel,
+    onCancel = onCancel,
+    modifier = modifier,
+    scheduleValidation = scheduleValidationForVisibleErrors(draft, validation),
+    validationBanner = validation.bannerMessage,
+    enabled = enabled,
+    primaryActionEnabled = enabled && validation.canSubmit,
+    primaryActionInProgress = primaryActionInProgress,
+    primaryActionLabel = primaryActionLabel(presentation.primaryVerb, draft),
+    primaryActionInProgressLabel = primaryActionInProgressLabel,
+    titleModifier = titleModifier,
+    titleError = validation.titleError,
+    projectError = validation.projectError,
+    assigneeError = validation.assigneeError,
+    repeatError = validation.repeatError,
+    checklistError = null,
+    recurrenceValue = recurrenceValueFor(draft),
+    selectedRecurrencePreset = draft.recurrencePreset,
+    unavailableFields = validation.unavailableFields
+)
+
+/**
+ * Temporary adapter retained until Tasks 3 and 4 migrate their hosts to the universal shell.
+ * New hosts must use the presentation-neutral overload above.
  */
 @Composable
 internal fun TaskEditorScaffold(
@@ -210,6 +287,94 @@ internal fun TaskEditorScaffold(
     checklistError: String? = null,
     recurrenceValue: String = recurrenceLabel(draft.recurrencePreset),
     selectedRecurrencePreset: RecurrencePreset? = draft.recurrencePreset
+) = TaskEditorScaffoldContent(
+    screenTitle = screenTitle,
+    contextMessage = null,
+    draft = draft.copy(title = title),
+    onDraftChange = { nextDraft ->
+        when {
+            nextDraft.projectId != draft.projectId -> {
+                projects.firstOrNull { it.id == nextDraft.projectId }?.let(onProjectSelected)
+            }
+            nextDraft.assignee != draft.assignee -> nextDraft.assignee?.let(onAssigneeSelected)
+            nextDraft.schedule != draft.schedule -> {
+                if (nextDraft.schedule.isEmpty() && !draft.schedule.isEmpty()) onNoSchedule()
+                else onScheduleChange(nextDraft.schedule)
+            }
+            nextDraft.recurrencePreset != draft.recurrencePreset ||
+                nextDraft.repeatReplacementSelected != draft.repeatReplacementSelected -> {
+                onRecurrencePresetSelected(nextDraft.recurrencePreset)
+            }
+            nextDraft.title != title -> onTitleChange(nextDraft.title)
+            nextDraft.description != draft.description -> onDescriptionChange(nextDraft.description)
+        }
+    },
+    now = now,
+    projects = projects,
+    currentUser = currentUser,
+    checklistDoneCount = checklistDoneCount,
+    checklistTotalCount = checklistTotalCount,
+    checklistContent = checklistContent,
+    footerContent = afterChecklistContent,
+    showFooter = true,
+    onRetryCollaborators = onRetryCollaborators,
+    onPrimaryAction = onSave,
+    onBack = onBack,
+    onCancel = onCancel,
+    modifier = modifier,
+    scheduleValidation = scheduleValidation,
+    validationBanner = null,
+    enabled = enabled,
+    primaryActionEnabled = saveEnabled,
+    primaryActionInProgress = saving,
+    primaryActionLabel = saveLabel,
+    primaryActionInProgressLabel = savingLabel,
+    titleModifier = titleModifier,
+    titleError = titleError,
+    projectError = projectError,
+    assigneeError = assigneeError,
+    repeatError = null,
+    checklistError = checklistError,
+    recurrenceValue = recurrenceValue,
+    selectedRecurrencePreset = selectedRecurrencePreset,
+    unavailableFields = emptySet()
+)
+
+@Composable
+private fun TaskEditorScaffoldContent(
+    screenTitle: String,
+    contextMessage: String?,
+    draft: TaskEditorDraft,
+    onDraftChange: (TaskEditorDraft) -> Unit,
+    now: LocalDateTime,
+    projects: List<ProjectItem>,
+    currentUser: ProjectCollaborator,
+    checklistDoneCount: Int,
+    checklistTotalCount: Int,
+    checklistContent: @Composable () -> Unit,
+    footerContent: @Composable () -> Unit,
+    showFooter: Boolean,
+    onRetryCollaborators: () -> Unit,
+    onPrimaryAction: () -> Unit,
+    onBack: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier,
+    scheduleValidation: TaskEditorScheduleValidation,
+    validationBanner: String?,
+    enabled: Boolean,
+    primaryActionEnabled: Boolean,
+    primaryActionInProgress: Boolean,
+    primaryActionLabel: String,
+    primaryActionInProgressLabel: String,
+    titleModifier: Modifier,
+    titleError: String?,
+    projectError: String?,
+    assigneeError: String?,
+    repeatError: String?,
+    checklistError: String?,
+    recurrenceValue: String,
+    selectedRecurrencePreset: RecurrencePreset?,
+    unavailableFields: Set<TaskEditorField>
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
     LaunchedEffect(scheduleValidation.focusSection) {
@@ -223,7 +388,10 @@ internal fun TaskEditorScaffold(
     val conciseTitleError = conciseInlineError(titleError)
     val conciseChecklistError = conciseInlineError(checklistError)
     val expandedSection = resolvedExpandedSection(state, scheduleValidation)
-    val dismissActionsEnabled = editorDismissActionsEnabled(saving)
+    val dismissActionsEnabled = editorDismissActionsEnabled(primaryActionInProgress)
+    val primaryActionText = if (primaryActionInProgress) primaryActionInProgressLabel else primaryActionLabel
+    val projectUnavailable = TaskEditorField.Project in unavailableFields
+    val assigneeUnavailable = TaskEditorField.Assignee in unavailableFields
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -245,19 +413,33 @@ internal fun TaskEditorScaffold(
                 Text(screenTitle, style = MaterialTheme.typography.titleLarge)
             }
             BorderlessTitleField(
-                title = title,
-                onTitleChange = onTitleChange,
+                title = draft.title,
+                onTitleChange = { onDraftChange(draft.copy(title = it)) },
                 enabled = enabled,
                 errorText = conciseTitleError,
                 modifier = titleModifier
             )
+            contextMessage?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            validationBanner?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             EditorDisclosureRow(
                 label = "Schedule",
                 value = collapsedScheduleSummary(draft, now),
                 leadingSymbol = "◷",
                 expanded = expandedSection == EditorSection.Schedule,
-                isError = !scheduleValidation.isValid && scheduleValidation.focusSection == EditorSection.Schedule,
+                isError = scheduleValidation.message != null,
                 enabled = enabled,
                 onClick = { state = reduceSectionTap(state, EditorSection.Schedule, scheduleValidation) }
             )
@@ -266,8 +448,8 @@ internal fun TaskEditorScaffold(
                     draft = draft,
                     now = now,
                     validation = scheduleValidation,
-                    onScheduleChange = onScheduleChange,
-                    onNoSchedule = onNoSchedule,
+                    onScheduleChange = { schedule -> onDraftChange(draft.copy(schedule = schedule)) },
+                    onNoSchedule = { onDraftChange(setNoSchedule(draft)) },
                     enabled = enabled
                 )
             }
@@ -276,7 +458,7 @@ internal fun TaskEditorScaffold(
                 label = "Project",
                 value = selectedProject?.name ?: "Choose project",
                 leadingSymbol = "□",
-                enabled = enabled,
+                enabled = enabled && !projectUnavailable,
                 supportingText = selectionRowSupportingText(
                     normalSupportingText = null,
                     fieldError = projectError
@@ -292,7 +474,7 @@ internal fun TaskEditorScaffold(
                     else -> "Choose assignee"
                 },
                 leadingSymbol = "◎",
-                enabled = enabled && assigneeReady && !personalProject,
+                enabled = enabled && assigneeReady && !assigneeUnavailable && !personalProject,
                 showChevron = !personalProject,
                 supportingText = selectionRowSupportingText(
                     normalSupportingText = when {
@@ -317,6 +499,8 @@ internal fun TaskEditorScaffold(
                 value = recurrenceValue,
                 leadingSymbol = "↻",
                 enabled = enabled && !(draft.schedule.isEmpty() && draft.assignee?.isCurrentUser == false),
+                supportingText = conciseInlineError(repeatError),
+                isError = conciseInlineError(repeatError) != null,
                 onClick = { state = state.copy(openSheet = EditorSheet.Recurrence) }
             )
             EditorDisclosureRow(
@@ -330,7 +514,7 @@ internal fun TaskEditorScaffold(
             if (expandedSection == EditorSection.Notes) {
                 BasicTextField(
                     value = draft.description,
-                    onValueChange = onDescriptionChange,
+                    onValueChange = { onDraftChange(draft.copy(description = it)) },
                     enabled = enabled,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     modifier = Modifier
@@ -354,7 +538,7 @@ internal fun TaskEditorScaffold(
             if (expandedSection == EditorSection.Checklist) {
                 checklistContent()
             }
-            afterChecklistContent()
+            if (showFooter) footerContent()
             Spacer(Modifier.height(Spacing.xl))
         }
         Column(
@@ -378,10 +562,10 @@ internal fun TaskEditorScaffold(
                 modifier = Modifier.weight(1f)
             ) { Text("Cancel") }
             Button(
-                onClick = onSave,
-                enabled = saveEnabled && !saving,
+                onClick = onPrimaryAction,
+                enabled = primaryActionEnabled && !primaryActionInProgress,
                 modifier = Modifier.weight(1f)
-            ) { Text(if (saving) savingLabel else saveLabel) }
+            ) { Text(primaryActionText) }
         }
         }
     }
@@ -392,8 +576,9 @@ internal fun TaskEditorScaffold(
             projects = projects,
             selectedProjectId = draft.projectId,
             onProjectSelected = { project ->
-                onProjectSelected(project)
-                state = state.copy(openSheet = EditorSheet.None)
+                val selection = selectProject(state, draft, project, currentUser)
+                onDraftChange(selection.draft)
+                state = selection.state
             },
             onDismiss = { state = state.copy(openSheet = EditorSheet.None) }
         )
@@ -402,8 +587,9 @@ internal fun TaskEditorScaffold(
             selectedAssigneeId = draft.assignee?.id,
             collaboratorsReady = assigneeReady,
             onAssigneeSelected = { assignee ->
-                onAssigneeSelected(assignee)
-                state = state.copy(openSheet = EditorSheet.None)
+                val selection = selectAssignee(state, draft, assignee)
+                onDraftChange(selection.draft)
+                state = selection.state
             },
             onRetry = onRetryCollaborators,
             onDismiss = { state = state.copy(openSheet = EditorSheet.None) }
@@ -411,13 +597,25 @@ internal fun TaskEditorScaffold(
         EditorSheet.Recurrence -> RecurrenceSelectionSheet(
             selectedPreset = selectedRecurrencePreset,
             onPresetSelected = { preset ->
-                onRecurrencePresetSelected(preset)
+                onDraftChange(
+                    draft.copy(
+                        recurrencePreset = preset,
+                        repeatReplacementSelected = true
+                    )
+                )
                 state = state.copy(openSheet = EditorSheet.None)
             },
             onDismiss = { state = state.copy(openSheet = EditorSheet.None) }
         )
     }
 }
+
+private fun recurrenceValueFor(draft: TaskEditorDraft): String =
+    if (draft.recurrenceKind == RecurrenceKind.custom && !draft.repeatReplacementSelected) {
+        "Custom recurrence"
+    } else {
+        recurrenceLabel(draft.recurrencePreset)
+    }
 
 @Composable
 private fun BorderlessTitleField(
