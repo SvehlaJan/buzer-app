@@ -429,7 +429,7 @@ describe("debug surface parity", () => {
     });
   });
 
-  it("records only action metadata for a task mutation", async () => {
+  it("keeps metadata-only and full mutation call views separate", async () => {
     await withServer(async (server) => {
       await mutate(server, "/tasks", action({
         title: "Recorded task",
@@ -445,6 +445,19 @@ describe("debug surface parity", () => {
       expect(recorded).toMatchObject({ method: "POST", path: "/tasks" });
       expect(Object.keys(recorded.body).sort()).toEqual(["actionId", "deviceId"]);
       expect(recorded.body).not.toHaveProperty("title");
+
+      const fullCalls = (await server.app.inject({ method: "GET", url: "/__calls/full" })).json().calls;
+      const fullRecorded = fullCalls.find((call: { path: string }) => call.path === "/tasks");
+      expect(fullRecorded).toMatchObject({
+        method: "POST",
+        path: "/tasks",
+        payload: {
+          title: "Recorded task",
+          description: "must-not-be-recorded",
+          projectId: "project-test",
+          assigneeId: "user-me"
+        }
+      });
     });
   });
 
@@ -523,6 +536,7 @@ describe("debug surface parity", () => {
       const reseeded = await snapshotTask(server, "task-start");
       expect(reseeded.state).toBe("planned");
       expect((await server.app.inject({ method: "GET", url: "/__calls" })).json().calls).toHaveLength(0);
+      expect((await server.app.inject({ method: "GET", url: "/__calls/full" })).json().calls).toHaveLength(0);
       expect((await mutate(
         server,
         "/tasks/task-start/start",

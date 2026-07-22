@@ -255,3 +255,74 @@ Verification:
 
 - Continue the coordinating task's remaining broad fake/real Android E2E and device
   verification gates.
+
+---
+
+## Real E2E Edit fixture and debug-call parity follow-up (2026-07-22)
+
+### Scope / plan status
+
+- Plan: `docs/superpowers/plans/2026-07-21-task-editor-redesign.md`, Task 10 Android
+  real-E2E verification follow-up.
+- Repaired the real E2E fixture's offscreen Edit target and added the real test server's
+  full-mutation debug surface required by the existing Edit instrumentation contract.
+
+### Files changed
+
+- `backend/test/fakes/e2eFixtures.ts`
+  - Anchors `task-one-time-empty` at `iso(-31)`, making it a visible same-day overdue
+    Home row while retaining its scheduled, self-assigned, 30-minute semantics.
+- `backend/test/e2eServer.ts`
+  - Retains a structured clone of each mutation payload in a separate full-call log;
+    `/__calls` remains metadata-only and `/__calls/full` exposes the full request shape.
+    Both logs clear on `/__reset`.
+- `backend/test/e2eServer.test.ts`
+  - Proves that the metadata view omits a task title while the full view contains that
+    request payload, and confirms reset clears the full view too.
+
+### TDD / diagnosis evidence
+
+- The existing real Android Edit class was initially RED because the real fixture placed
+  `task-one-time-empty` at `iso(120)`, below the initial lazy-list viewport. Moving it
+  to `iso(-31)` let both flows reach their edit mutations.
+- That then exposed the test-debug parity gap: `EditTaskFakeBackendTest` requests
+  `/__calls/full` to compare full retry root patches, but the real E2E server only
+  offered the intentionally metadata-only `/__calls`. The new backend test first failed
+  because the full endpoint was absent, then passed after the isolated full-payload log
+  was implemented.
+
+### Verification
+
+Verification:
+
+- Command: `npm test -- test/fakes/e2eFixtures.test.ts` from `backend/`
+- Result: PASS
+- Evidence: 10 focused real-fixture tests passed.
+
+Verification:
+
+- Command: `npm test -- test/e2eServer.test.ts` from `backend/`
+- Result: PASS
+- Evidence: 20 real E2E-server tests passed, including metadata/full call separation
+  and reset clearing.
+
+Verification:
+
+- Command: `PORT=18441 ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_TEST_CLASS=app.buzer.android.addtask.EditTaskFakeBackendTest scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: `pixel8Api34` completed the two Edit instrumentation tests with `OK (2
+  tests)`, including full root-patch retry identity and dirty system-Back confirmation.
+
+### Verification boundary
+
+- Per the user, the TypeScript `tools/fake-backend` lane is deprecated. Do not modify or
+  invoke it; it is not a verification gate for this redesign. Real E2E backend coverage
+  is the authoritative lane.
+- When the coordinating task reruns the complete real lane, the only accepted remaining
+  failure is the documented fake-only `addTask_partialChildFailure...` bucket-C
+  discrepancy. Investigate every other failure.
+
+### Next recommended step
+
+- Run the complete `scripts/e2e-real-backend.sh` lane and retain only the documented
+  partial-child discrepancy, then complete the coordinating Task 10 verification.

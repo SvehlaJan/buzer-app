@@ -20,6 +20,10 @@ export interface RecordedCall {
   at: string;
 }
 
+interface RecordedFullCall extends RecordedCall {
+  payload: Record<string, unknown>;
+}
+
 export interface E2EServer {
   app: ReturnType<typeof buildServer>;
   adapter: E2ETodoistAdapter;
@@ -47,6 +51,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
   });
 
   const calls: RecordedCall[] = [];
+  const fullCalls: RecordedFullCall[] = [];
   const controls = { failActions: false, failSnapshot: false, failProjects: false };
 
   const seed = async (): Promise<void> => {
@@ -101,6 +106,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
       }
     })();
     calls.splice(0);
+    fullCalls.splice(0);
     controls.failActions = false;
     controls.failSnapshot = false;
     controls.failProjects = false;
@@ -108,7 +114,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
     await seed();
   };
 
-  registerDebugSurface(app, { adapter, calls, controls, snapshots, reset });
+  registerDebugSurface(app, { adapter, calls, fullCalls, controls, snapshots, reset });
   await seed();
   return { app, adapter, db, reset };
 }
@@ -116,6 +122,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
 interface DebugSurfaceOptions {
   adapter: E2ETodoistAdapter;
   calls: RecordedCall[];
+  fullCalls: RecordedFullCall[];
   controls: { failActions: boolean; failSnapshot: boolean; failProjects: boolean };
   snapshots: TaskSnapshotService;
   reset: () => Promise<void>;
@@ -130,7 +137,7 @@ const ACTION_METADATA_KEYS = [
 ] as const;
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
-  const { adapter, calls, controls, snapshots, reset } = options;
+  const { adapter, calls, fullCalls, controls, snapshots, reset } = options;
 
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? request.url;
@@ -140,7 +147,7 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       const body = typeof request.body === "object" && request.body !== null
         ? request.body as Record<string, unknown>
         : {};
-      calls.push({
+      const call: RecordedCall = {
         method: request.method,
         path,
         body: Object.fromEntries(
@@ -149,7 +156,9 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
             .map((key) => [key, body[key]])
         ),
         at: new Date().toISOString()
-      });
+      };
+      calls.push(call);
+      fullCalls.push({ ...call, payload: structuredClone(body) });
       if (controls.failActions) {
         return reply.code(500).send({
           code: "forced_failure",
@@ -179,6 +188,7 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     return { ok: true };
   });
   app.get("/__calls", async () => ({ calls }));
+  app.get("/__calls/full", async () => ({ calls: fullCalls }));
   app.post("/__fail-actions", async (request) => ({
     failActions: controls.failActions = (request.body as { enabled?: unknown } | null)?.enabled === true
   }));

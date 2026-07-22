@@ -262,7 +262,7 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     }),
     root("task-one-time-empty", {
       title: "One-time empty checklist",
-      dueDatetime: iso(120)
+      dueDatetime: iso(-31)
     }),
     root("task-one-time-partial", {
       title: "One-time partially checked",
