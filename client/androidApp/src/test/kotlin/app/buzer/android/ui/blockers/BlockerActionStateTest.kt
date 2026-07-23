@@ -4,12 +4,17 @@ import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.datetime.DateTimeSelection
 import app.buzer.android.ui.screens.descriptionAwareRescheduleRequest
 import app.buzer.android.ui.screens.rescheduleRequestFromEditorStart
-import app.buzer.android.ui.screens.updateTaskRequestFromEditorStart
+import app.buzer.android.ui.screens.updateRequest
+import app.buzer.android.ui.taskeditor.TaskEditorSchedule
+import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.NullablePatch
+import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.RescheduleTaskRequest
+import app.buzer.shared.model.TaskSnapshotItem
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -93,14 +98,35 @@ class BlockerActionStateTest {
 
     @Test
     fun updateTaskRequestUsesAllEditedTodoistFields() {
-        val request = updateTaskRequestFromEditorStart(
-            actionId = "action-update-test",
-            deviceId = "device-test",
-            expectedOccurrenceKey = "occurrence-test",
-            expectedTaskRevision = "opaque-root-revision",
+        val task = TaskSnapshotItem(
+            id = "task-update-test",
+            todoistTaskId = "todoist-update-test",
+            title = "Original title",
+            projectId = "project-original",
+            assigneeId = "user-me",
+            creatorId = null,
+            dueDatetime = "2026-07-10T08:00:00Z",
+            durationMinutes = 30,
+            startAt = null,
+            state = CommitmentState.invalid,
+            isAssignedToUser = true,
+            isCreatedByUser = false,
+            isCompleted = false,
+            isDeleted = false,
+            validationErrors = listOf("missing_duration"),
+            startedAt = null,
+            startDismissCount = 0,
+            deadlineExtensionCount = 0,
+            escalationSentAt = null,
+            updatedAt = "2026-07-10T07:00:00Z",
+            occurrenceKey = "occurrence-test",
+            taskRevision = "opaque-root-revision"
+        )
+        val request = updateRequest(
+            task = task,
             title = " Edited title ",
             description = " Updated details ",
-            selectedProject = ProjectItem(
+            project = ProjectItem(
                 id = "project-family",
                 name = "Family",
                 canAssignTasks = true,
@@ -108,23 +134,31 @@ class BlockerActionStateTest {
                 isInboxProject = false
             ),
             selectedAssignee = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true),
-            start = DateTimeSelection(
-                date = LocalDate.of(2026, 7, 10),
-                hour = 8,
-                minute = 5
-            ),
-            durationMinutes = 45,
-            zoneId = ZoneOffset.UTC
+            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 10), 8, 5, 45),
+            recurrencePreset = RecurrencePreset.never,
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList(),
+            deviceId = "device-test"
         )
 
         val patch = requireNotNull(request.rootPatch)
-        assertEquals("action-update-test", request.actionId)
+        assertTrue(request.actionId.isNotBlank())
         assertEquals("device-test", request.deviceId)
         assertEquals("occurrence-test", request.expectedOccurrenceKey)
         assertEquals("opaque-root-revision", patch.expectedTaskRevision)
         assertEquals("Edited title", patch.title)
         assertEquals("project-family", patch.projectId)
-        assertEquals(NullablePatch.Value("2026-07-10T08:05:00Z"), patch.dueDatetime)
+        assertEquals(
+            NullablePatch.Value(
+                LocalDate.of(2026, 7, 10)
+                    .atTime(8, 5)
+                    .atZone(ZoneId.systemDefault())
+                    .toInstant()
+                    .toString()
+            ),
+            patch.dueDatetime
+        )
         assertEquals(NullablePatch.Value(45), patch.durationMinutes)
     }
 }
