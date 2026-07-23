@@ -3,7 +3,6 @@ package app.buzer.shared.api
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.NullablePatch
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
@@ -49,35 +48,6 @@ class BuzerApiClientJsonTest {
 
         assertContains(body, "\"dueDatetime\":null")
         assertContains(body, "\"durationMinutes\":null")
-    }
-
-    @Test
-    fun taskRequestsEncodeDescriptionWhenPresent() {
-        val createBody = buzerApiJson.encodeToString(
-            CreateTaskRequest(
-                title = "Strict task",
-                description = "Gate code: 2468",
-                projectId = "project-personal",
-                assigneeId = null,
-                dueDatetime = "2026-06-13T12:00:00Z",
-                durationMinutes = 30,
-                actionId = "action-create-2",
-                deviceId = "device-1"
-            )
-        )
-        val rescheduleBody = buzerApiJson.encodeToString(
-            RescheduleTaskRequest(
-                dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45,
-                description = "  Updated gate code: 1357  ",
-                actionId = "action-reschedule-1",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-1"
-            )
-        )
-
-        assertContains(createBody, """"description":"Gate code: 2468"""")
-        assertContains(rescheduleBody, """"description":"Updated gate code: 1357"""")
     }
 
     @Test
@@ -148,53 +118,6 @@ class BuzerApiClientJsonTest {
         )
 
         assertContains(body, "\"childMutations\":[]")
-    }
-
-    @Test
-    fun rescheduleTaskRequestEncodesDescriptionPatchSemantics() {
-        val unchangedBody = buzerApiJson.encodeToString(
-            RescheduleTaskRequest(
-                dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45,
-                actionId = "action-reschedule-1",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-1"
-            )
-        )
-        val clearNullBody = buzerApiJson.encodeToString(
-            RescheduleTaskRequest.clearDescription(
-                dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45,
-                actionId = "action-reschedule-2",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-1"
-            )
-        )
-        val clearBlankBody = buzerApiJson.encodeToString(
-            RescheduleTaskRequest.setDescription(
-                dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45,
-                description = "   ",
-                actionId = "action-reschedule-3",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-1"
-            )
-        )
-        val setBody = buzerApiJson.encodeToString(
-            RescheduleTaskRequest.setDescription(
-                dueDatetime = "2026-06-13T13:00:00Z",
-                durationMinutes = 45,
-                description = "  Updated gate code: 1357  ",
-                actionId = "action-reschedule-4",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-1"
-            )
-        )
-
-        assertFalse(unchangedBody.contains("description"))
-        assertContains(clearNullBody, """"description":null""")
-        assertContains(clearBlankBody, """"description":""""")
-        assertContains(setBody, """"description":"Updated gate code: 1357"""")
     }
 
     @Test

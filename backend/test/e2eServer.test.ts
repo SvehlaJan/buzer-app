@@ -182,20 +182,37 @@ describe("happy-path mutation conformance (every action completes, never goes pe
     });
   });
 
-  it("reschedules a task", async () => {
+  it("updates a complete schedule through normal reconciliation and keeps an action retry idempotent", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-reschedule");
       const dueDatetime = new Date(Date.now() + 120 * 60_000).toISOString();
+      const actionId = "e2e-complete-schedule-update";
+      const request = {
+        actionId,
+        ...device,
+        expectedOccurrenceKey: task.occurrenceKey,
+        rootPatch: {
+          expectedTaskRevision: task.taskRevision,
+          dueDatetime,
+          durationMinutes: 45
+        },
+        childMutations: []
+      };
       const body = await mutate(
         server,
-        "/tasks/task-reschedule/reschedule",
-        action({ expectedOccurrenceKey: task.occurrenceKey, dueDatetime, durationMinutes: 45 })
+        "/tasks/task-reschedule/update",
+        request
       );
+      const retry = await mutate(server, "/tasks/task-reschedule/update", request);
       const after = await snapshotTask(server, "task-reschedule");
 
       expect(body.outcome).toBe("completed");
+      expect(retry.outcome).toBe("completed");
       expect(after.dueDatetime).toBe(dueDatetime);
       expect(after.durationMinutes).toBe(45);
+      expect(server.db.prepare(
+        "select step_key as stepKey from task_action_commands where action_id = ? order by step_key"
+      ).all(actionId)).toEqual([{ stepKey: "item_update" }]);
     });
   });
 
@@ -512,8 +529,16 @@ describe("debug surface parity", () => {
 
       const body = await mutate(
         server,
-        "/tasks/task-reschedule/reschedule",
-        action({ expectedOccurrenceKey: task.occurrenceKey, dueDatetime, durationMinutes: 45 }),
+        "/tasks/task-reschedule/update",
+        action({
+          expectedOccurrenceKey: task.occurrenceKey,
+          rootPatch: {
+            expectedTaskRevision: task.taskRevision,
+            dueDatetime,
+            durationMinutes: 45
+          },
+          childMutations: []
+        }),
         202
       );
       expect(body.outcome).toBe("reconciliation_pending");

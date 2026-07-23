@@ -58,8 +58,8 @@ import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TasksSnapshotResponse
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
-import app.buzer.shared.ui.commitment.validateChecklistDrafts
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID

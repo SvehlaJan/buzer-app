@@ -8,8 +8,6 @@ import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
-import app.buzer.shared.ui.commitment.CommitmentEditorDraft
-import kotlinx.datetime.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
@@ -64,16 +62,7 @@ class SnapshotReducerTest {
 
     @Test
     fun authoritativeStaleSnapshotReplacesCachedTasksWithoutDiscardingCallerDraft() {
-        val draft = CommitmentEditorDraft(
-            title = "Keep editing this",
-            description = "Unsaved detail",
-            projectName = "Home",
-            assigneeLabel = "Me",
-            start = LocalDateTime(2026, 5, 8, 9, 0),
-            durationMinutes = 30,
-            titleEditable = true,
-            descriptionExpanded = true
-        )
+        val draft = CallerDraft(title = "Keep editing this", description = "Unsaved detail")
         val cached = SnapshotWithCallerDraft(
             viewState = SnapshotReducer.reduce(
                 TasksSnapshotResponse(
@@ -164,4 +153,9 @@ class SnapshotReducerTest {
             reconciliationStatus = reconciliationStatus,
             occurrenceKey = occurrenceKey
         )
+
+    private data class CallerDraft(
+        val title: String,
+        val description: String
+    )
 }

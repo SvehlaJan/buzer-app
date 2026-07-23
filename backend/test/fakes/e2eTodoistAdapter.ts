@@ -3,7 +3,6 @@ import type {
   TodoistCreateTaskInput,
   TodoistCreateTaskResult,
   TodoistLegacyUpdateCommandIdentities,
-  TodoistRescheduleInput,
   TodoistSyncResult,
   TodoistUpdateTaskInput
 } from "../../src/todoist/todoistAdapter.js";
@@ -386,28 +385,6 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 
   async completeTask(todoistTaskId: string, _commandUuid: string): Promise<void> {
     this.runAcceptedCommand(_commandUuid, () => this.world.close(todoistTaskId));
-  }
-
-  async rescheduleTask(
-    input: TodoistRescheduleInput,
-    _commandUuid: string
-  ): Promise<void> {
-    this.runAcceptedCommand(_commandUuid, () =>
-      this.world.applyUpdate({
-        commandUuid: "e2e-legacy-reschedule",
-        todoistTaskId: input.todoistTaskId,
-        ...(input.description === undefined ? {} : { description: input.description }),
-        duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
-        due: {
-          kind: "replace",
-          datetime: input.dueDatetime,
-          string: null,
-          lang: null,
-          timezone: null
-        },
-        assignment: { kind: "preserve" }
-      })
-    );
   }
 
   async updateTask(

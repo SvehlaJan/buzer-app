@@ -7,7 +7,6 @@ import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectsResponse
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateChecklistItemRequest
@@ -85,9 +84,6 @@ class BuzerApiClient(
 
     suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse =
         mutationPost("$baseUrl/tasks/$id/extend", request)
-
-    suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest): MutationResponse =
-        mutationPost("$baseUrl/tasks/$id/reschedule", request)
 
     suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse =
         mutationPost("$baseUrl/tasks/$id/update", request)

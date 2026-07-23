@@ -44,8 +44,8 @@ import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.RootTaskPatch
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
-import app.buzer.shared.ui.commitment.validateChecklistDrafts
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID

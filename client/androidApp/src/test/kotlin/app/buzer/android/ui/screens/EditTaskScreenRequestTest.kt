@@ -19,7 +19,7 @@ import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test

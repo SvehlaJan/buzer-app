@@ -159,9 +159,6 @@ internal fun scheduleRangeLabel(schedule: TaskEditorSchedule): String? {
     return "${formatTime(start.toLocalTime())}–${formatTime(start.plusMinutes(duration.toLong()).toLocalTime())}"
 }
 
-/** Temporary bridge for the Add/Edit-only scaffold until hosts provide their own action verb. */
-internal fun saveActionLabel(draft: TaskEditorDraft): String = primaryActionLabel("Save", draft)
-
 internal fun formatDurationLabel(minutes: Int): String {
     val hours = minutes / 60
     val remainingMinutes = minutes % 60

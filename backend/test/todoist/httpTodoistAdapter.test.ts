@@ -134,60 +134,6 @@ describe("HttpTodoistAdapter", () => {
     });
   });
 
-  it("reschedules without description when omitted", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: { "reschedule-command": "ok" }
-    })));
-    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
-
-    await adapter.rescheduleTask({
-      todoistTaskId: "todoist-1",
-      dueDatetime: "2026-05-08T16:00:00Z",
-      durationMinutes: 30
-    }, "reschedule-command");
-
-    const body = new URLSearchParams(String(fetchMock.mock.calls[0]?.[1]?.body));
-    const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: Record<string, unknown> }>;
-    expect(commands[0]?.args).not.toHaveProperty("description");
-  });
-
-  it("reschedule trims, sets, and clears descriptions", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
-      sync_status: {
-        "reschedule-set": "ok",
-        "reschedule-blank": "ok",
-        "reschedule-clear": "ok"
-      }
-    })));
-    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
-
-    await adapter.rescheduleTask({
-      todoistTaskId: "todoist-1",
-      dueDatetime: "2026-05-08T16:00:00Z",
-      durationMinutes: 30,
-      description: "  Updated gate code: 1357  "
-    }, "reschedule-set");
-    await adapter.rescheduleTask({
-      todoistTaskId: "todoist-1",
-      dueDatetime: "2026-05-08T17:00:00Z",
-      durationMinutes: 45,
-      description: "   "
-    }, "reschedule-blank");
-    await adapter.rescheduleTask({
-      todoistTaskId: "todoist-1",
-      dueDatetime: "2026-05-08T18:00:00Z",
-      durationMinutes: 60,
-      description: null
-    }, "reschedule-clear");
-
-    const descriptions = fetchMock.mock.calls.map((call) => {
-      const body = new URLSearchParams(String(call[1]?.body));
-      const commands = JSON.parse(body.get("commands") ?? "[]") as Array<{ args: { description?: string } }>;
-      return commands[0]?.args.description;
-    });
-    expect(descriptions).toEqual(["Updated gate code: 1357", "", ""]);
-  });
-
   it("moves projects separately before updating editable task fields", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
       sync_status: { "legacy-move": "ok", "legacy-update": "ok" }

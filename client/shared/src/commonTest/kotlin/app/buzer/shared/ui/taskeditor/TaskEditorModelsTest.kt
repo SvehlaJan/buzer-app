@@ -1,4 +1,4 @@
-package app.buzer.shared.ui.commitment
+package app.buzer.shared.ui.taskeditor
 
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class ChecklistEditorModelsTest {
+class TaskEditorModelsTest {
     @Test
     fun recurrenceChoicesHaveTheFixedNumberedOrder() {
         assertEquals(

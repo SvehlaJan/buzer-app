@@ -43,8 +43,8 @@ import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.ui.blockers.BlockerKind
 import app.buzer.shared.ui.blockers.BlockerUiModel
 import app.buzer.shared.ui.blockers.buildBlockerUiModel
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
-import app.buzer.shared.ui.commitment.validateChecklistDrafts
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlinx.coroutines.launch

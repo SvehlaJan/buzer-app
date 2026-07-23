@@ -2,7 +2,6 @@ import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
   TodoistLegacyUpdateCommandIdentities,
-  TodoistRescheduleInput,
   TodoistUpdateTaskInput,
   TodoistSyncResult
 } from "./todoistAdapter.js";
@@ -156,25 +155,6 @@ export class HttpTodoistAdapter implements TodoistAdapter {
 
   async completeTask(todoistTaskId: string, commandUuid: string): Promise<void> {
     await this.itemClose({ commandUuid, todoistTaskId });
-  }
-
-  async rescheduleTask(input: TodoistRescheduleInput, commandUuid: string): Promise<void> {
-    await this.itemUpdate({
-      commandUuid,
-      todoistTaskId: input.todoistTaskId,
-      due: {
-        kind: "replace",
-        datetime: input.dueDatetime,
-        string: null,
-        lang: null,
-        timezone: null
-      },
-      assignment: { kind: "preserve" },
-      duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
-      ...("description" in input
-        ? { description: normalizeLegacyDescription(input.description) }
-        : {})
-    });
   }
 
   async updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities): Promise<void> {
@@ -478,9 +458,6 @@ function normalizeDurationMinutes(amount: number | null, unit: string | null): n
   return null;
 }
 
-function normalizeLegacyDescription(value: string | null | undefined): string | null {
-  return value === null || value === undefined || value.trim().length === 0 ? null : value.trim();
-}
 
 function formatCommandFailure(uuid: string, type: string, status: unknown): string {
   const serializedStatus = typeof status === "string" ? status : JSON.stringify(status);
