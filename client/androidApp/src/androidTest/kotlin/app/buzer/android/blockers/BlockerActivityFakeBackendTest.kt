@@ -7,11 +7,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.filter
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onChildren
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -111,25 +108,24 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun deadlineBlocker_rescheduleCallsFakeBackend() {
+    fun deadlineBlocker_rescheduleUsesSharedUpdateUi() {
         resetTestState()
 
         val scenario = launchDeadlineBlocker("task-reschedule")
 
         composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
-        waitForContentDescription("Start picker")
-        composeRule.onNodeWithContentDescription("Start picker").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Duration picker").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Save task").assertIsDisplayed()
+        waitForText("Reschedule task")
+        composeRule.onNodeWithText("Schedule").assertIsDisplayed()
+        composeRule.onNodeWithText("Notes").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Checklist").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
-        selectDefaultDeadline()
-        val saveLabel = waitForComputedSaveLabel()
-        composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
+        val rescheduleLabel = waitForComputedRescheduleLabel()
+        composeRule.onNodeWithText(rescheduleLabel).performScrollTo().performClick()
 
         waitForActivityDestroyed(scenario)
-        waitForRecordedCall("/tasks/task-reschedule/reschedule")
+        waitForRecordedCall("/tasks/task-reschedule/update")
         fakeBackend.assertRecorded(
-            "/tasks/task-reschedule/reschedule",
+            "/tasks/task-reschedule/update",
             "\"actionId\":",
             "\"deviceId\":",
             "\"expectedOccurrenceKey\":"
@@ -160,21 +156,21 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun deadlineBlocker_rescheduleBackendFailureShowsRetryDialogAndWritesErrorLog() {
+    fun deadlineBlocker_rescheduleFailureUsesUpdateAction() {
         resetTestState()
         fakeBackend.setFailActions(true)
         try {
             val scenario = launchDeadlineBlocker("task-reschedule-fail")
             try {
                 composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
-                selectDefaultDeadline()
-                val saveLabel = waitForComputedSaveLabel()
-                composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
+                waitForText("Reschedule task")
+                val rescheduleLabel = waitForComputedRescheduleLabel()
+                composeRule.onNodeWithText(rescheduleLabel).performScrollTo().performClick()
 
-                waitForRecordedCall("/tasks/task-reschedule-fail/reschedule")
-                waitForErrorLog("action=RESCHEDULE_TASK taskId=task-reschedule-fail", "forced_failure")
-                waitForText("Action failed")
-                assertFailureDialogSurvivesBack(scenario)
+                waitForRecordedCall("/tasks/task-reschedule-fail/update")
+                waitForErrorLog("action=UPDATE_TASK taskId=task-reschedule-fail", "forced_failure")
+                waitForText("Task update")
+                assertFailureDialogSurvivesBack(scenario, title = "Task update")
             } finally {
                 scenario.close()
             }
@@ -398,11 +394,11 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun waitForComputedSaveLabel(): String {
-        val matcher = Regex("""Save \d{2}:\d{2}-\d{2}:\d{2}""")
+    private fun waitForComputedRescheduleLabel(): String {
+        val matcher = Regex("""Reschedule \d{2}:\d{2}–\d{2}:\d{2}""")
         var match = ""
         composeRule.waitUntil(timeoutMillis = 15_000) {
-            match = composeRule.onAllNodesWithText("Save ", substring = true)
+            match = composeRule.onAllNodesWithText("Reschedule ", substring = true)
                 .fetchSemanticsNodes()
                 .asSequence()
                 .flatMap { node ->
@@ -453,20 +449,6 @@ class BlockerActivityFakeBackendTest {
         )
     }
 
-    private fun selectDefaultDeadline() {
-        // "Start picker" is a row of two side-by-side buttons (date, time); performClick() on
-        // the row itself lands at its geometric center, which falls in the gap between the two
-        // buttons and never opens the dialog. Click the first actual clickable child instead.
-        composeRule.onNodeWithContentDescription("Start picker")
-            .performScrollTo()
-            .onChildren()
-            .filter(hasClickAction())
-            .onFirst()
-            .performClick()
-        waitForText("OK")
-        composeRule.onNodeWithText("OK").performClick()
-    }
-
     private fun selectDefaultRepairSchedule() {
         composeRule.onNodeWithText("Today").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Custom start time").performScrollTo().performClick()
@@ -490,14 +472,17 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun assertFailureDialogSurvivesBack(scenario: ActivityScenario<out android.app.Activity>) {
-        composeRule.onNodeWithText("Action failed").assertIsDisplayed()
+    private fun assertFailureDialogSurvivesBack(
+        scenario: ActivityScenario<out android.app.Activity>,
+        title: String = "Action failed"
+    ) {
+        composeRule.onNodeWithText(title).assertIsDisplayed()
         composeRule.onNodeWithText("Retry").assertIsDisplayed()
         composeRule.onAllNodesWithText("Dismiss").assertCountEquals(0)
 
         pressBack()
 
-        composeRule.onNodeWithText("Action failed").assertIsDisplayed()
+        composeRule.onNodeWithText(title).assertIsDisplayed()
         composeRule.onNodeWithText("Retry").assertIsDisplayed()
         composeRule.onAllNodesWithText("Dismiss").assertCountEquals(0)
         assertActivityNotDestroyed(scenario)

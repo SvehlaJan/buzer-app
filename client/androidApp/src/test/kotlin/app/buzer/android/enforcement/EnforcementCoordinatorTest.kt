@@ -12,7 +12,6 @@ import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
@@ -852,7 +851,6 @@ class EnforcementCoordinatorTest {
             return completeHandler?.invoke(request) ?: response(request.actionId)
         }
         override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse = response(request.actionId)
-        override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest): MutationResponse = response(request.actionId)
         override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse = response(request.actionId)
         override suspend fun checkChecklistItem(
             taskId: String,
