@@ -94,6 +94,12 @@ Verification:
   asserts the retired route returns 404 and is not a product path.
 
 Verification:
+- Command: rg -n -S 'POST /tasks/:id/reschedule|/tasks/:id/reschedule|RescheduleTaskRequest|rescheduleTask' docs/notes/api-contract.md
+- Result: PASS
+- Evidence: no active API-contract references remain after removing the retired schedule-only
+  endpoint and request shape.
+
+Verification:
 - Command: git diff --check
 - Result: PASS
 - Evidence: no whitespace errors before staging.
