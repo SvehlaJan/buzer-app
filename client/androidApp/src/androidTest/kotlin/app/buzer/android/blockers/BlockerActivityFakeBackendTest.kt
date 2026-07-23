@@ -286,10 +286,9 @@ class BlockerActivityFakeBackendTest {
 
         waitForText("Invalid assigned fixture")
         repairInvalidTask()
-        waitForContentDescription("Start picker")
-        composeRule.onNodeWithContentDescription("Start picker").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Duration picker").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Save task").performScrollTo().performClick()
+        waitForContentDescription("Schedule: Set date, time & duration")
+        composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration").assertIsDisplayed()
+        composeRule.onNodeWithText("Repair").performScrollTo().assertIsDisplayed()
 
         waitForAnyText("Start time is required")
         composeRule.onNodeWithText("Start time is required").performScrollTo().assertIsDisplayed()
@@ -302,15 +301,16 @@ class BlockerActivityFakeBackendTest {
 
         waitForText("Invalid assigned fixture")
         repairInvalidTask()
-        waitForContentDescription("Start picker")
-        composeRule.onNodeWithContentDescription("Start picker").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Duration picker").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("More").performScrollTo().performClick()
-        composeRule.onNodeWithText("Details").performTextInput(" Updated repair note")
+        waitForContentDescription("Schedule: Set date, time & duration")
+        composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Notes: Clarify the missing commitment fields.")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithContentDescription("Notes").performTextInput(" Updated repair note")
         closeSoftKeyboard()
-        selectDefaultDeadline()
-        val saveLabel = waitForComputedSaveLabel()
-        composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
+        selectDefaultRepairSchedule()
+        val repairLabel = waitForComputedRepairLabel()
+        composeRule.onNodeWithText(repairLabel).performScrollTo().performClick()
 
         waitForRecordedCall("/tasks/task-invalid/update")
         fakeBackend.assertRecorded(
@@ -331,9 +331,9 @@ class BlockerActivityFakeBackendTest {
 
             waitForText("Invalid assigned fixture")
             repairInvalidTask()
-            selectDefaultDeadline()
-            val saveLabel = waitForComputedSaveLabel()
-            composeRule.onNodeWithText(saveLabel).performScrollTo().performClick()
+            selectDefaultRepairSchedule()
+            val repairLabel = waitForComputedRepairLabel()
+            composeRule.onNodeWithText(repairLabel).performScrollTo().performClick()
 
             waitForRecordedCall("/tasks/task-invalid/update")
             waitForErrorLog("action=UPDATE_TASK taskId=task-invalid", "forced_failure")
@@ -418,6 +418,26 @@ class BlockerActivityFakeBackendTest {
         return match
     }
 
+    private fun waitForComputedRepairLabel(): String {
+        val matcher = Regex("""Repair \d{2}:\d{2}–\d{2}:\d{2}""")
+        var match = ""
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            match = composeRule.onAllNodesWithText("Repair ", substring = true)
+                .fetchSemanticsNodes()
+                .asSequence()
+                .flatMap { node ->
+                    node.config.getOrNull(SemanticsProperties.Text)
+                        ?.asSequence()
+                        ?.map { it.text }
+                        ?: emptySequence()
+                }
+                .firstOrNull { matcher.matches(it) }
+                .orEmpty()
+            match.isNotEmpty()
+        }
+        return match
+    }
+
     private fun waitForRecordedCall(path: String) {
         val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastCalls = ""
@@ -445,6 +465,14 @@ class BlockerActivityFakeBackendTest {
             .performClick()
         waitForText("OK")
         composeRule.onNodeWithText("OK").performClick()
+    }
+
+    private fun selectDefaultRepairSchedule() {
+        composeRule.onNodeWithText("Today").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Custom start time").performScrollTo().performClick()
+        waitForContentDescription("Custom start time dialog apply")
+        composeRule.onNodeWithContentDescription("Custom start time dialog apply").performClick()
+        composeRule.onNodeWithText("30 min").performScrollTo().performClick()
     }
 
     private fun waitForActivityDestroyed(scenario: ActivityScenario<out android.app.Activity>) {

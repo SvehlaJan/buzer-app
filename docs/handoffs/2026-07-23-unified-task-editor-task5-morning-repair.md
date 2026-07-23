@@ -25,6 +25,14 @@ Plan: `docs/superpowers/plans/2026-07-22-unified-task-editor.md`
 - With parent authorization, migrated only `BlockerActionStateTest` from the deleted
   Morning Review helper to canonical `updateRequest`; no Blocker production code or
   Task 6 behavior was changed.
+- Follow-up code-quality test work: migrated only the three Morning Repair scenarios
+  in `BlockerActivityFakeBackendTest` from the removed form's selectors to shared
+  `Schedule`, `Notes`, and `Repair HH:MM–HH:MM` semantics. The Deadline Reschedule
+  test and its legacy selector helper remain Task 6-owned and untouched.
+- Added a local Compose host-callback test that drives `CoordinatorActionResult.Success`
+  through `MorningReviewScreen`'s real `onRepairSuccess` boundary. It verifies one
+  repaired task returns to the remaining review, the final repair reaches the host's
+  finish decision, and a clean Back cancellation performs no update.
 
 ## Files Changed
 
@@ -34,6 +42,8 @@ Plan: `docs/superpowers/plans/2026-07-22-unified-task-editor.md`
 - `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
 - Deleted `client/androidApp/src/main/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidator.kt`
 - Deleted `client/androidApp/src/test/kotlin/app/buzer/android/ui/addtask/AddTaskFormValidatorTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/MorningReviewRepairHostTest.kt`
 - This handoff.
 
 ## TDD Evidence
@@ -56,6 +66,18 @@ GREEN:
     authorized canonical request-builder tests passed after the device-identity and
     entry-validation coverage updates.
 
+Follow-up test-only RED/GREEN:
+
+- RED evidence: the three Morning Repair scenarios in
+  `BlockerActivityFakeBackendTest` still referenced `Start picker`, `Duration picker`,
+  `Save task`, and `More`/`Details` before this follow-up. Runtime RED execution was
+  intentionally not permitted because that class requires the fake backend, which was
+  explicitly out of scope.
+- GREEN command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:compileDebugAndroidTestKotlin`
+  - Result: PASS.
+  - Evidence: `BUILD SUCCESSFUL`; the migrated fake-backend test source and the new
+    local `MorningReviewRepairHostTest` both compile against the shared Repair UI.
+
 ## Verification
 
 Verification:
@@ -72,6 +94,18 @@ Verification:
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest`
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL`; shared Android-host suite completed.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; instrumentation source compilation covers the updated
+  Morning Repair selectors and host-callback UI test without launching a backend.
+
+Verification:
+- Command: `rg -n "Start picker|Duration picker|Save task|More|Details" client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+- Result: PASS
+- Evidence: matches remain only in the Deadline Reschedule scenario and its helper
+  (Task 6); none remain in the three Morning Repair scenarios.
 
 Verification:
 - Command: `rg -n "AddTaskInvalidField|AddTaskFormValidator|AddTaskFormResult" client --glob '!**/build/**'`
@@ -103,6 +137,11 @@ Verification:
 - No instrumentation lane was run. The shared scaffold's deterministic footer/order
   instrumentation coverage belongs to Task 2; Task 8 owns Repair's real-backend
   integration coverage.
+- The updated fake-backend instrumentation class was source/compilation-checked only;
+  it was not executed and `tools/fake-backend` was not started or modified. The new
+  host-callback test is local and has no backend dependency, but it was also compiled
+  rather than device-run to preserve this follow-up's requested instrumentation
+  compilation scope.
 - The first focused GREEN attempt exposed a Task 6 test-only dependency on the deleted
   Morning Review request helper. Parent explicitly authorized the narrow
   `BlockerActionStateTest` migration to `updateRequest`; this remains the only
@@ -120,3 +159,4 @@ Verification:
 ## Next Recommended Step
 
 - Integrate/review this branch, then proceed to Task 6's deadline-blocker migration.
+- Task 8 owns the real-backend Repair E2E lane: `scripts/e2e-real-backend.sh`.
