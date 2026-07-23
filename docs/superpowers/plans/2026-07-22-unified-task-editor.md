@@ -26,7 +26,7 @@
 
 - [x] Task 1 — centralize validation and presentation data
 - [x] Task 2 — make the scaffold universal
-- [ ] Task 3 — extract the Update host and migrate Edit
+- [x] Task 3 — extract the Update host and migrate Edit
 - [ ] Task 4 — migrate Add without changing Create semantics
 - [ ] Task 5 — migrate Morning Review repair
 - [ ] Task 6 — migrate deadline-blocker recovery
