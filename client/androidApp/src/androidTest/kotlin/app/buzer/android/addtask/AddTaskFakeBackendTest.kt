@@ -71,7 +71,7 @@ class AddTaskFakeBackendTest {
             enterTitle("Buy milk")
             selectDefaultSchedule()
             waitForScrollableContentDescription("Assignee: Me")
-            clickSaveBlockRange()
+            clickAddBlockRange()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -102,7 +102,7 @@ class AddTaskFakeBackendTest {
     }
 
     @Test
-    fun addTask_projectLoadFailureDisablesSaveAndRetryRecovers() {
+    fun addTask_projectLoadFailureDisablesAddAndRetryRecovers() {
         resetTestState()
         fakeBackend.setFailProjects(true)
         try {
@@ -110,7 +110,7 @@ class AddTaskFakeBackendTest {
             try {
                 openAddTaskFromHome()
                 waitForText("500")
-                composeRule.onNodeWithText("Save task").assertIsNotEnabled()
+                composeRule.onNodeWithText("Add").assertIsNotEnabled()
 
                 fakeBackend.setFailProjects(false)
                 composeRule.onNodeWithText("Retry").performClick()
@@ -136,7 +136,7 @@ class AddTaskFakeBackendTest {
                 enterTitle("Buy milk")
                 selectAssignee("Me")
                 selectDefaultSchedule()
-                clickSaveBlockRange()
+                clickAddBlockRange()
 
                 waitForRecordedCall("/tasks")
                 // "Task was not saved" / "Retry" are AlertDialog content (AddTaskFailurePresentation),
@@ -191,7 +191,7 @@ class AddTaskFakeBackendTest {
             composeRule.onNodeWithContentDescription("Notes").performTextInput("Gate code: 2468")
             selectAssignee("Me")
             selectDefaultSchedule()
-            clickSaveBlockRange()
+            clickAddBlockRange()
 
             waitForRecordedCall("/tasks")
             fakeBackend.assertRecorded(
@@ -218,7 +218,7 @@ class AddTaskFakeBackendTest {
             openChecklist()
             addChecklistDraft(1, "Created child")
             addChecklistDraft(2, "[partial-failure]")
-            clickSaveBlockRange()
+            clickAddBlockRange()
 
             waitForScrollableText("Checklist item 1")
             waitForScrollableText("[partial-failure]")
@@ -248,7 +248,7 @@ class AddTaskFakeBackendTest {
             verifyCustomDialogCanCancelAndApply("Custom duration", "Custom duration")
 
             composeRule.onNodeWithText("Schedule").performClick()
-            val label = waitForSaveBlockRangeLabel()
+            val label = waitForAddBlockRangeLabel()
             composeRule.onNodeWithText(label).assertIsDisplayed()
         } finally {
             scenario.close()
@@ -256,7 +256,7 @@ class AddTaskFakeBackendTest {
     }
 
     @Test
-    fun addTask_selectorSheetsAndAccordionKeepChangesInDraftUntilSave() {
+    fun addTask_selectorSheetsAndAccordionKeepChangesInDraftUntilAdd() {
         resetTestState()
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -371,8 +371,8 @@ class AddTaskFakeBackendTest {
         composeRule.onNodeWithContentDescription("$title dialog apply").performClick()
     }
 
-    private fun clickSaveBlockRange() {
-        val label = waitForSaveBlockRangeLabel()
+    private fun clickAddBlockRange() {
+        val label = waitForAddBlockRangeLabel()
         composeRule.onNodeWithText(label).performClick()
     }
 
@@ -381,7 +381,7 @@ class AddTaskFakeBackendTest {
         var lastError: Throwable? = null
         while (SystemClock.elapsedRealtime() < deadline) {
             try {
-                clickSaveBlockRange()
+                clickAddBlockRange()
                 composeRule.onNodeWithText(validationText, substring = true)
                     .performScrollTo()
                     .assertIsDisplayed()
@@ -394,26 +394,26 @@ class AddTaskFakeBackendTest {
         throw AssertionError("Expected validation containing $validationText", lastError)
     }
 
-    private fun waitForSaveBlockRangeLabel(): String {
+    private fun waitForAddBlockRangeLabel(): String {
         val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastLabels = emptyList<String>()
         while (SystemClock.elapsedRealtime() < deadline) {
-            lastLabels = saveLabels()
-            val matchingLabels = lastLabels.filter { it.matches(saveBlockRangeLabelPattern) }
+            lastLabels = addLabels()
+            val matchingLabels = lastLabels.filter { it.matches(addBlockRangeLabelPattern) }
             if (matchingLabels.size == 1) {
                 return matchingLabels.single()
             }
             SystemClock.sleep(100)
         }
         fail(
-            "Expected exactly one save button label matching " +
-                "${saveBlockRangeLabelPattern.pattern}. Found save labels: $lastLabels"
+            "Expected exactly one Add button label matching " +
+                "${addBlockRangeLabelPattern.pattern}. Found Add labels: $lastLabels"
         )
         error("unreachable")
     }
 
-    private fun saveLabels(): List<String> =
-        composeRule.onAllNodesWithText("Save ", substring = true)
+    private fun addLabels(): List<String> =
+        composeRule.onAllNodesWithText("Add ", substring = true)
             .fetchSemanticsNodes()
             .flatMap { node ->
                 node.config.getOrNull(SemanticsProperties.Text)
@@ -422,7 +422,7 @@ class AddTaskFakeBackendTest {
             }
 
     companion object {
-        private val saveBlockRangeLabelPattern = Regex("""Save \d{2}:\d{2}–\d{2}:\d{2}""")
+        private val addBlockRangeLabelPattern = Regex("""Add \d{2}:\d{2}–\d{2}:\d{2}""")
     }
 
     private fun resetTestState() {
