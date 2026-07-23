@@ -28,7 +28,7 @@
 - [x] Task 2 — make the scaffold universal
 - [x] Task 3 — extract the Update host and migrate Edit
 - [x] Task 4 — migrate Add without changing Create semantics
-- [ ] Task 5 — migrate Morning Review repair
+- [x] Task 5 — migrate Morning Review repair
 - [ ] Task 6 — migrate deadline-blocker recovery
 - [ ] Task 7 — retire legacy editor and reschedule protocol
 - [ ] Task 8 — add real e2e coverage and perform release verification
