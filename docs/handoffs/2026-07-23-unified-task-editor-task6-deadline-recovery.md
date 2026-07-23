@@ -25,6 +25,10 @@ Plan: `docs/superpowers/plans/2026-07-22-unified-task-editor.md`
   duplicate-submit prevention, authoritative success close, generic retained-draft failure,
   and top-Back/bottom-Cancel discard behavior. A late outer Back handler keeps Android system
   Back consumed while the full-screen blocker is active.
+- Follow-up independent-spec-review fix: a personal-project task can retain its self assignee
+  in the snapshot even though its project cannot assign tasks. The deadline editor now derives
+  both its initial and current dirty fingerprints from the same hydrated project-assignee
+  projection as `updateRequest`, so choice loading cannot create a false discard prompt.
 - Removed the Android enforcement-only schedule path: `RESCHEDULE_TASK`, coordinator
   `rescheduleTask`, and `EnforcementApi.rescheduleTask`. The shared `RescheduleTaskRequest`,
   shared client method, and backend endpoint remain intentionally for Task 7.
@@ -37,6 +41,7 @@ Plan: `docs/superpowers/plans/2026-07-22-unified-task-editor.md`
 - `client/androidApp/src/main/kotlin/app/buzer/android/blockers/BlockerTaskSnapshotGate.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/blockers/DeadlineBlockerActivity.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/EditTaskScreen.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementApi.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerAction.kt`
@@ -70,6 +75,12 @@ GREEN:
 - A subsequent strengthened range-label expectation initially failed because the test fixture's
   UTC deadline is correctly converted to the device time zone (09:00Z → 11:00 local). The test
   now derives the expected Reschedule range from the host draft; no production behavior changed.
+- A follow-up RED unit compile for
+  `personalProjectSelfAssigneeStaysCleanAfterChoicesLoadAndExitsWithoutDiscardPrompt` proved the
+  dedicated deadline fingerprint seam did not yet exist. The GREEN regression asserts that
+  hydration normalizes the personal self assignee from `me` to `null` in both baseline/current
+  fingerprints, both exits return directly without a discard prompt, and a real title edit still
+  requests discard confirmation.
 - Read-only spec review caught that a cached matching root remained editable after an
   authoritative refresh timeout/error. A second RED test added the unconfirmed-snapshot case;
   it passed after the activity started tracking refresh confirmation and the recovery state
@@ -85,7 +96,8 @@ Verification:
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*DeadlineBlockerUpdateStateTest' --tests '*BlockerTaskSnapshotGateTest' --tests '*BlockerActionStateTest'`
 - Result: PASS
 - Evidence: focused deadline/snapshot/update request state suites passed after the final lazy
-  project-repository initialization and snapshot-confirmation refinements.
+  project-repository initialization, snapshot-confirmation refinements, and personal-project
+  self-assignee clean-exit regression.
 
 Verification:
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest :shared:testAndroidHostTest :androidApp:compileDebugAndroidTestKotlin`

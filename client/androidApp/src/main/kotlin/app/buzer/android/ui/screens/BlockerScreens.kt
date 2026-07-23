@@ -381,6 +381,39 @@ private fun DeadlineBlockerRefreshRequired(
     }
 }
 
+/**
+ * Uses the same assignee projection as the Update request so choice hydration cannot dirty a
+ * pristine draft.
+ */
+internal fun deadlineBlockerDraftFingerprint(
+    draft: TaskEditorDraft,
+    choices: TaskEditorUpdateChoices,
+    recurrencePreset: app.buzer.shared.model.RecurrencePreset?,
+    existingChildren: List<ChecklistDraftFingerprint>,
+    deletedChildIds: Set<String>,
+    addedChildren: List<ChecklistDraftFingerprint>
+): EditTaskDraftFingerprint {
+    val selectedProject = choices.selectedProject(draft)
+    val assigneeId = assigneeIdForProject(selectedProject, draft.assignee)
+        ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
+    return editTaskDraftFingerprint(
+        title = draft.title,
+        description = draft.description,
+        projectId = draft.projectId,
+        assigneeId = assigneeId,
+        start = app.buzer.android.ui.datetime.DateTimeDraftSelection(
+            draft.schedule.date,
+            draft.schedule.hour,
+            draft.schedule.minute
+        ),
+        durationMinutes = draft.schedule.durationMinutes,
+        recurrencePreset = recurrencePreset,
+        existingChildren = existingChildren,
+        deletedChildIds = deletedChildIds,
+        addedChildren = addedChildren
+    )
+}
+
 @Composable
 private fun DeadlineBlockerUpdateEditor(
     task: TaskSnapshotItem,
@@ -399,18 +432,10 @@ private fun DeadlineBlockerUpdateEditor(
     var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
     val now = remember(task.id) { LocalDateTime.now() }
     val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
-    val initialFingerprint = remember(task.id) {
-        editTaskDraftFingerprint(
-            title = initialDraft.title,
-            description = initialDraft.description,
-            projectId = task.projectId,
-            assigneeId = task.assigneeId,
-            start = app.buzer.android.ui.datetime.DateTimeDraftSelection(
-                initialDraft.schedule.date,
-                initialDraft.schedule.hour,
-                initialDraft.schedule.minute
-            ),
-            durationMinutes = initialDraft.schedule.durationMinutes,
+    val initialFingerprint = remember(task.id, choices) {
+        deadlineBlockerDraftFingerprint(
+            draft = initialDraft,
+            choices = choices,
             recurrencePreset = task.recurrence.preset,
             existingChildren = task.checklistItems.sortedBy { it.order }.map {
                 ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
@@ -422,21 +447,9 @@ private fun DeadlineBlockerUpdateEditor(
     val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(task, hostEnabled = true).enabled
 
     fun currentFingerprint(draft: TaskEditorDraft): EditTaskDraftFingerprint {
-        val selectedProject = choices.selectedProject(draft)
-        val assigneeId = draft.assignee?.id?.takeIf {
-            selectedProject?.canAssignTasks == true && it.isNotBlank()
-        } ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
-        return editTaskDraftFingerprint(
-            title = draft.title,
-            description = draft.description,
-            projectId = draft.projectId,
-            assigneeId = assigneeId,
-            start = app.buzer.android.ui.datetime.DateTimeDraftSelection(
-                draft.schedule.date,
-                draft.schedule.hour,
-                draft.schedule.minute
-            ),
-            durationMinutes = draft.schedule.durationMinutes,
+        return deadlineBlockerDraftFingerprint(
+            draft = draft,
+            choices = choices,
             recurrencePreset = draft.recurrencePreset.takeUnless {
                 draft.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
                     !draft.repeatReplacementSelected

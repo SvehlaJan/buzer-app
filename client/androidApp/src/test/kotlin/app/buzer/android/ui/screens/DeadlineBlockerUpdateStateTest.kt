@@ -218,6 +218,79 @@ class DeadlineBlockerUpdateStateTest {
     }
 
     @Test
+    fun personalProjectSelfAssigneeStaysCleanAfterChoicesLoadAndExitsWithoutDiscardPrompt() {
+        val personalProject = sharedProject.copy(
+            id = "project-personal",
+            name = "Personal",
+            canAssignTasks = false,
+            shared = false,
+            collaborators = listOf(me)
+        )
+        val task = task().copy(projectId = personalProject.id, assigneeId = me.id)
+        val loadedChoices = TaskEditorUpdateChoices(projects = listOf(personalProject))
+        val draft = initialTaskEditorUpdateState(
+            task,
+            loadedChoices
+        ).draft
+        val beforeChoicesLoad = deadlineBlockerDraftFingerprint(
+            draft = draft,
+            choices = TaskEditorUpdateChoices(loading = true),
+            recurrencePreset = task.recurrence.preset,
+            existingChildren = emptyList(),
+            deletedChildIds = emptySet(),
+            addedChildren = emptyList()
+        )
+        val baseline = deadlineBlockerDraftFingerprint(
+            draft = draft,
+            choices = loadedChoices,
+            recurrencePreset = task.recurrence.preset,
+            existingChildren = emptyList(),
+            deletedChildIds = emptySet(),
+            addedChildren = emptyList()
+        )
+        val current = deadlineBlockerDraftFingerprint(
+            draft = draft,
+            choices = loadedChoices,
+            recurrencePreset = task.recurrence.preset,
+            existingChildren = emptyList(),
+            deletedChildIds = emptySet(),
+            addedChildren = emptyList()
+        )
+        val state = initialTaskEditorUpdateState(
+            task,
+            loadedChoices
+        )
+
+        assertEquals(me.id, beforeChoicesLoad.assigneeId)
+        assertNull(baseline.assigneeId)
+        assertEquals(baseline, current)
+        assertEquals(
+            TaskEditorUpdateCancelRequest.Cancel,
+            deadlineBlockerCancelRequest(state, isDirty = current != baseline),
+            "top Back must return directly to blocker actions"
+        )
+        assertEquals(
+            TaskEditorUpdateCancelRequest.Cancel,
+            deadlineBlockerCancelRequest(state, isDirty = current != baseline),
+            "bottom Cancel must return directly to blocker actions"
+        )
+
+        val changed = deadlineBlockerDraftFingerprint(
+            draft = draft.copy(title = "Changed title"),
+            choices = loadedChoices,
+            recurrencePreset = task.recurrence.preset,
+            existingChildren = emptyList(),
+            deletedChildIds = emptySet(),
+            addedChildren = emptyList()
+        )
+        assertTrue(changed != baseline)
+        assertEquals(
+            TaskEditorUpdateCancelRequest.ConfirmDiscard,
+            deadlineBlockerCancelRequest(state, isDirty = changed != baseline)
+        )
+    }
+
+    @Test
     fun nestedChecklistIsReadOnlyWithoutLockingRootRescheduleFields() {
         val task = task().copy(
             hierarchyStatus = HierarchyStatus.unsupported,

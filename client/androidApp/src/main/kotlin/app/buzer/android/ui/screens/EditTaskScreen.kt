@@ -358,7 +358,7 @@ internal fun updateRequest(
     )
 }
 
-private fun assigneeIdForProject(
+internal fun assigneeIdForProject(
     project: ProjectItem?,
     assignee: ProjectCollaborator?
 ): String? = assignee?.id?.takeIf { project?.canAssignTasks == true && it.isNotBlank() }
