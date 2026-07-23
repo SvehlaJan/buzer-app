@@ -4,7 +4,6 @@ import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.MutationResponse
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
@@ -15,7 +14,6 @@ interface EnforcementApi {
     suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse
     suspend fun completeTask(id: String, request: TaskActionRequest): MutationResponse
     suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse
-    suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest): MutationResponse
     suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse
     suspend fun checkChecklistItem(
         taskId: String,
@@ -44,9 +42,6 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
 
     override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse =
         client.extendTask(id, request)
-
-    override suspend fun rescheduleTask(id: String, request: RescheduleTaskRequest): MutationResponse =
-        client.rescheduleTask(id, request)
 
     override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse =
         client.updateTask(id, request)

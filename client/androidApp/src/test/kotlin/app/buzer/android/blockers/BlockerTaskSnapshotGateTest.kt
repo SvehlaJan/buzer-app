@@ -89,6 +89,33 @@ class BlockerTaskSnapshotGateTest {
     }
 
     @Test
+    fun currentTaskReturnsOnlyTheCompleteSnapshotForTheAlarmOccurrence() {
+        val current = task("task-1", occurrenceKey = "occurrence-current")
+
+        assertTrue(
+            BlockerTaskSnapshotGate.currentTask(
+                snapshot(current),
+                taskId = current.id,
+                occurrenceKey = current.occurrenceKey
+            ) === current
+        )
+        assertFalse(
+            BlockerTaskSnapshotGate.currentTask(
+                snapshot(current),
+                taskId = current.id,
+                occurrenceKey = "occurrence-stale"
+            ) != null
+        )
+        assertFalse(
+            BlockerTaskSnapshotGate.currentTask(
+                snapshot(),
+                taskId = current.id,
+                occurrenceKey = current.occurrenceKey
+            ) != null
+        )
+    }
+
+    @Test
     fun missingRootIsHiddenAfterAuthoritativeRefresh() {
         assertTrue(
             BlockerTaskSnapshotGate.shouldHideAfterRefresh(

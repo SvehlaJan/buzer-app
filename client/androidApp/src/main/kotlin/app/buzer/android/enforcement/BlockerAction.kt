@@ -5,7 +5,6 @@ enum class BlockerAction {
     POSTPONE_START,
     COMPLETE_TASK,
     EXTEND_TASK,
-    RESCHEDULE_TASK,
     UPDATE_TASK,
     CHECK_CHILD,
     UNCHECK_CHILD,

@@ -35,7 +35,8 @@ class DeadlineBlockerActivity : ComponentActivity() {
     private var actionInFlight = false
     private var checking by mutableStateOf(true)
     private var warningMessage by mutableStateOf<String?>(null)
-    private var taskRevision by mutableStateOf<String?>(null)
+    private var deadlineTask by mutableStateOf<TaskSnapshotItem?>(null)
+    private var fullSnapshotConfirmed by mutableStateOf(false)
     private var blockerModel by mutableStateOf(buildBlockerUiModel(BlockerKind.Deadline, null))
     private var actionState by mutableStateOf<BlockerActionState>(BlockerActionState.Idle)
     private var errorMessage by mutableStateOf<String?>(null)
@@ -81,10 +82,11 @@ class DeadlineBlockerActivity : ComponentActivity() {
         AppLog.debug("deadline_blocker prepare taskId=$taskId occurrence=$occurrenceKey")
         checking = true
         warningMessage = null
+        fullSnapshotConfirmed = false
         lifecycleScope.launch {
             try {
                 coordinator.loadLatestSnapshot()?.let { snapshot ->
-                    updateModelFromSnapshot(snapshot, taskId)
+                    updateModelFromSnapshot(snapshot, taskId, occurrenceKey, snapshotConfirmed = false)
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -101,7 +103,9 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 val refreshedSnapshot = withTimeoutOrNull(BLOCKER_REFRESH_TIMEOUT_MILLIS) {
                     coordinator.refreshAndReconcile()
                 }
-                refreshedSnapshot?.let { updateModelFromSnapshot(it, taskId) }
+                refreshedSnapshot?.let {
+                    updateModelFromSnapshot(it, taskId, occurrenceKey, snapshotConfirmed = true)
+                }
                 if (
                     refreshedSnapshot != null &&
                     BlockerTaskSnapshotGate.shouldHideAfterRefresh(
@@ -116,6 +120,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     return@launch
                 }
                 if (refreshedSnapshot == null) {
+                    fullSnapshotConfirmed = false
                     AppLog.warn("deadline_blocker refresh_timeout taskId=$taskId occurrence=$occurrenceKey")
                     warningMessage = "Could not refresh task state. This blocker may be stale."
                     errorReporter.report(
@@ -127,6 +132,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                fullSnapshotConfirmed = false
                 AppLog.error("deadline_blocker refresh failed taskId=$taskId occurrence=$occurrenceKey", error)
                 warningMessage = "Could not refresh task state. This blocker may be stale."
                 errorReporter.report(
@@ -154,16 +160,12 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 },
                 onExtend = {
                     AppLog.info("deadline_blocker extend_clicked taskId=$taskId occurrence=$occurrenceKey")
-                    val request = extendRequest(occurrenceKey, requireNotNull(taskRevision))
-                    runActionOnce("Extending...", occurrenceKey) { coordinator.extendTask(taskId, request) }
-                },
-                onReschedule = { request ->
-                    AppLog.info(
-                        "deadline_blocker reschedule_clicked taskId=$taskId occurrence=$occurrenceKey " +
-                            "duration=${request.durationMinutes}"
-                    )
-                    runActionOnce("Rescheduling...", occurrenceKey) {
-                        coordinator.rescheduleTask(taskId, request)
+                    val expectedTaskRevision = deadlineTask?.taskRevision
+                    if (expectedTaskRevision.isNullOrBlank()) {
+                        errorMessage = "Task details are unavailable. Refresh and try again."
+                    } else {
+                        val request = extendRequest(occurrenceKey, expectedTaskRevision)
+                        runActionOnce("Extending...", occurrenceKey) { coordinator.extendTask(taskId, request) }
                     }
                 },
                 onToggleChild = { child, checked ->
@@ -178,16 +180,29 @@ class DeadlineBlockerActivity : ComponentActivity() {
                         occurrenceKey = occurrenceKey,
                         closeOnSuccess = false,
                         onAppliedSnapshot = {
-                            coordinator.loadLatestSnapshot()?.let { updateModelFromSnapshot(it, taskId) }
+                            coordinator.loadLatestSnapshot()?.let {
+                                updateModelFromSnapshot(it, taskId, occurrenceKey)
+                            }
                         }
                     ) {
                         if (checked) coordinator.checkChild(taskId, child.id, request)
                         else coordinator.uncheckChild(taskId, child.id, request)
                     }
                 },
-                actionIdFactory = { UUID.randomUUID().toString() },
-                deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+                task = deadlineTask,
+                onUpdate = { request ->
+                    val currentTask = deadlineTask
+                    if (currentTask == null || currentTask.id != taskId || currentTask.occurrenceKey != occurrenceKey) {
+                        CoordinatorActionResult.FailedAndHidden("Task details are unavailable. Refresh and try again.")
+                    } else {
+                        AppLog.info("deadline_blocker update_clicked taskId=$taskId occurrence=$occurrenceKey")
+                        coordinator.updateTask(taskId, request)
+                    }
+                },
+                onUpdateSuccess = { finish() },
+                onRefreshTask = { prepareAndShowBlocker(coordinator, taskId, occurrenceKey) },
                 occurrenceKey = occurrenceKey,
+                snapshotConfirmed = fullSnapshotConfirmed,
                 onBack = { finish() },
                 showBack = false,
                 checking = checking,
@@ -206,9 +221,15 @@ class DeadlineBlockerActivity : ComponentActivity() {
         }
     }
 
-    private fun updateModelFromSnapshot(snapshot: TasksSnapshotResponse, taskId: String) {
+    private fun updateModelFromSnapshot(
+        snapshot: TasksSnapshotResponse,
+        taskId: String,
+        occurrenceKey: String,
+        snapshotConfirmed: Boolean? = null
+    ) {
         val task = snapshot.findTask(taskId)
-        taskRevision = task?.taskRevision
+        deadlineTask = BlockerTaskSnapshotGate.currentTask(snapshot, taskId, occurrenceKey)
+        snapshotConfirmed?.let { fullSnapshotConfirmed = it }
         blockerModel = buildBlockerUiModel(
             kind = BlockerKind.Deadline,
             task = task,

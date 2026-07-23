@@ -8,7 +8,6 @@ import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
-import app.buzer.shared.model.RescheduleTaskRequest
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
@@ -136,22 +135,6 @@ class EnforcementCoordinator(
             )
         ) {
             api.extendTask(taskId, request)
-        }
-
-    suspend fun rescheduleTask(
-        taskId: String,
-        request: RescheduleTaskRequest
-    ): CoordinatorActionResult =
-        runBackendAction(
-            action = BlockerAction.RESCHEDULE_TASK,
-            taskId = taskId,
-            request = TaskActionRequest(
-                actionId = request.actionId,
-                deviceId = request.deviceId,
-                expectedOccurrenceKey = request.expectedOccurrenceKey
-            )
-        ) {
-            api.rescheduleTask(taskId, request)
         }
 
     suspend fun updateTask(
