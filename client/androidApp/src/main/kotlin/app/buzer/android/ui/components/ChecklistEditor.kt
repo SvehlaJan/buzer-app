@@ -10,8 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import app.buzer.android.ui.theme.Spacing
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
-import app.buzer.shared.ui.commitment.validateChecklistDrafts
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 
 /** Direct-child editor shared by Add and repair; nesting and schedule fields intentionally do not exist. */
 @Composable

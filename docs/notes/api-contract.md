@@ -243,17 +243,6 @@ Snoozes the start blocker for 5 minutes. The second call triggers escalation.
 
 Extends Todoist `due_datetime` by exactly 30 minutes.
 
-### `POST /tasks/:id/reschedule`
-
-Request:
-
-```json
-{
-  "dueDatetime": "2026-05-08T18:00:00Z",
-  "durationMinutes": 45
-}
-```
-
 ## Mutation outcomes and errors
 
 - `200 completed`: apply the returned authoritative snapshot exactly

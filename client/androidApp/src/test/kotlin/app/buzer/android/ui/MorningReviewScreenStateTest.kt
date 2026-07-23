@@ -18,7 +18,7 @@ import app.buzer.android.ui.taskeditor.taskEditorUpdateCancelRequest
 import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
-import app.buzer.shared.ui.commitment.ChecklistEditorDraft
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ProjectItem

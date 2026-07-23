@@ -22,7 +22,6 @@ export type CommitmentAction =
   | { type: "deadline_active"; now: string }
   | { type: "complete"; now: string }
   | { type: "extend_deadline"; now: string }
-  | { type: "reschedule"; now: string }
   | { type: "mark_invalid"; now: string }
   | { type: "mark_deleted"; now: string };
 
@@ -53,8 +52,6 @@ export function applyAction(record: CommitmentRecord, action: CommitmentAction):
         deadlineExtensionCount: record.deadlineExtensionCount + 1,
         escalationRequired: false
       };
-    case "reschedule":
-      return { ...record, state: "planned", startDismissCount: 0, startedAt: null, escalationRequired: false };
     case "mark_invalid":
       return { ...record, state: "invalid", escalationRequired: false };
     case "mark_deleted":

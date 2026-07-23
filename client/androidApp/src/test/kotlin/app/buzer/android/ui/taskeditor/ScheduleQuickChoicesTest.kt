@@ -1,6 +1,5 @@
 package app.buzer.android.ui.taskeditor
 
-import app.buzer.shared.model.ProjectCollaborator
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -105,24 +104,6 @@ class ScheduleQuickChoicesTest {
         assertEquals(false, schedule.isComplete())
         assertEquals(null, scheduleSummary(schedule, now))
         assertEquals("Set date, time & duration", collapsedScheduleSummary(draft, now))
-        assertEquals("Save", saveActionLabel(draft))
-    }
-
-    @Test
-    fun saveLabelUsesTaskForAnUnscheduledNonSelfDraftAndTimesForACompleteDraft() {
-        val assignee = ProjectCollaborator(id = "wife", displayName = "Wife", isCurrentUser = false)
-        val noSchedule = TaskEditorDraft(
-            title = "Review finances",
-            projectId = "project-shared",
-            assignee = assignee,
-            schedule = TaskEditorSchedule()
-        )
-        val scheduled = noSchedule.copy(
-            schedule = TaskEditorSchedule(LocalDate.of(2026, 7, 21), 23, 30, 60)
-        )
-
-        assertEquals("Save", saveActionLabel(noSchedule))
-        assertEquals("Save 23:30–00:30", saveActionLabel(scheduled))
     }
 
     @Test

@@ -116,7 +116,7 @@ describe("HTTP routes", () => {
     const fixedRoutes = [
       ["GET", "/tasks/snapshot"], ["GET", "/projects"], ["POST", "/tasks"], ["POST", "/tasks/task-1/start"],
       ["POST", "/tasks/task-1/done"], ["POST", "/tasks/task-1/postpone-start"], ["POST", "/tasks/task-1/extend"],
-      ["POST", "/tasks/task-1/reschedule"], ["POST", "/tasks/task-1/update"], ["POST", "/tasks/task-1/checklist"],
+      ["POST", "/tasks/task-1/update"], ["POST", "/tasks/task-1/checklist"],
       ["POST", "/tasks/task-1/checklist/child-1/update"], ["POST", "/tasks/task-1/checklist/child-1/delete"],
       ["POST", "/tasks/task-1/checklist/child-1/check"], ["POST", "/tasks/task-1/checklist/child-1/uncheck"],
       ["POST", "/review/dismiss"], ["POST", "/device/check-in"]
@@ -660,7 +660,7 @@ describe("HTTP routes", () => {
     expect(journalOutput).not.toContain("private-audit");
   });
 
-  it("passes a trimmed reschedule description through the journaled mutation route", async () => {
+  it("does not register the retired schedule-only mutation route", async () => {
     const db = new Database(":memory:");
     migrate(db);
     markMirrorReady(db);
@@ -691,12 +691,12 @@ describe("HTTP routes", () => {
       method: "POST",
       url: "/tasks/task-1/reschedule",
       headers: auth,
-      payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  ", ...action("reschedule") }
+      payload: { dueDatetime: "2026-05-08T22:00:00Z", durationMinutes: 60, description: "  Updated gate code: 1357  ", ...action("retired-route") }
     });
     await app.close();
 
-    expect(response.statusCode).toBe(202);
-    expect(adapter.itemUpdates[0]?.description).toBe("Updated gate code: 1357");
+    expect(response.statusCode).toBe(404);
+    expect(adapter.itemUpdates).toEqual([]);
   });
 
   it("updates a root patch through the fixed update route", async () => {

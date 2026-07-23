@@ -28,13 +28,6 @@ export interface TodoistCreateTaskResult {
   task: TodoistTaskMirror;
 }
 
-export interface TodoistRescheduleInput {
-  todoistTaskId: string;
-  dueDatetime: string;
-  durationMinutes: number;
-  description?: string | null;
-}
-
 export interface TodoistUpdateTaskInput {
   todoistTaskId: string;
   title: string;
@@ -54,6 +47,5 @@ export interface TodoistAdapter extends TodoistMutationGateway {
   sync(syncToken: string): Promise<TodoistSyncResult>;
   createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult>;
   completeTask(todoistTaskId: string, commandUuid: string): Promise<void>;
-  rescheduleTask(input: TodoistRescheduleInput, commandUuid: string): Promise<void>;
   updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities): Promise<void>;
 }

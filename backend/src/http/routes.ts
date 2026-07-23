@@ -50,12 +50,6 @@ const createTaskBody = z.strictObject({
   checklistDrafts: z.array(checklistDraft).max(30).optional(),
   ...actionMetadata.shape
 });
-const rescheduleBody = z.strictObject({
-  dueDatetime: z.string().trim().min(1).max(100),
-  durationMinutes: z.number().int().positive(),
-  description: z.string().trim().max(MAX_TEXT_LENGTH).nullable().optional(),
-  ...occurrenceActionMetadata.shape
-});
 const addChecklistItemBody = z.strictObject({
   clientMutationId: opaqueValue,
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
@@ -207,17 +201,6 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = revisionActionMetadata.parse(request.body);
     await services.actions.extend(id, new Date().toISOString(), body);
-    return mutationResponse(body.actionId, undefined, services.snapshots);
-  });
-  app.post("/tasks/:id/reschedule", async (request) => {
-    const { id } = taskIdParams.parse(request.params);
-    const body = rescheduleBody.parse(request.body);
-    const descriptionPatch = Object.prototype.hasOwnProperty.call(body, "description") ? { description: body.description ?? null } : {};
-    await services.actions.reschedule(id, {
-      dueDatetime: body.dueDatetime, durationMinutes: body.durationMinutes,
-      actionId: body.actionId, deviceId: body.deviceId, expectedOccurrenceKey: body.expectedOccurrenceKey,
-      ...descriptionPatch, now: new Date().toISOString()
-    });
     return mutationResponse(body.actionId, undefined, services.snapshots);
   });
   app.post("/tasks/:id/update", async (request) => {

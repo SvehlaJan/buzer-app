@@ -251,7 +251,7 @@ describe("TaskActionService", () => {
     expect(adapter.itemAdds).toHaveLength(3);
   });
 
-  it("keeps action-aware reschedule pending without authoritative mirror confirmation", async () => {
+  it("keeps an action-aware schedule update pending without authoritative mirror confirmation", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -260,11 +260,24 @@ describe("TaskActionService", () => {
       occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
       occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
     });
-    const service = actionAwareService(db, repo, new ProjectRepository(db), new FakeTodoistAdapter());
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: null, projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: "user-self"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const service = actionAwareService(db, repo, projects, new FakeTodoistAdapter());
 
-    await expect(service.reschedule("task-1", {
-      dueDatetime: "2026-05-08T17:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "reschedule-needs-sync", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1"
+    await expect(service.update("task-1", {
+      actionId: "schedule-update-needs-sync", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        dueDatetime: "2026-05-08T17:00:00Z", durationMinutes: 30
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
     expect(repo.getById("task-1")).toMatchObject({ dueDatetime: "2026-05-08T16:00:00Z", occurrenceKey: "occurrence-1" });
   });
@@ -518,7 +531,7 @@ describe("TaskActionService", () => {
     expect(repo.getById("task-1")).toMatchObject({ occurrenceKey: "occurrence-2", occurrenceDueDatetime: "2026-05-09T16:00:00Z" });
   });
 
-  it("requires revision and occurrence metadata for action-aware edits and occurrence metadata for Done and reschedule", async () => {
+  it("requires revision and occurrence metadata for action-aware edits and occurrence metadata for Done", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
@@ -540,10 +553,6 @@ describe("TaskActionService", () => {
     })).rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
     await expect(service.done("task-1", "2026-07-15T10:00:00Z", { actionId: "done-missing", deviceId: "phone-a" }))
       .rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
-    await expect(service.reschedule("task-1", {
-      dueDatetime: "2026-05-08T17:00:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "reschedule-missing", deviceId: "phone-a"
-    })).rejects.toMatchObject({ code: "task_action_metadata_invalid", statusCode: 422 });
   });
 
   it("composes supplied checklist mutations into the durable root edit workflow", async () => {
@@ -992,13 +1001,13 @@ describe("TaskActionService", () => {
     expect(adapter.itemUpdates).toEqual([]);
   });
 
-  it("reschedules a supported recurring commitment with its recurrence and rotates the occurrence", async () => {
+  it("updates a supported recurring commitment schedule through the normal action journal", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
     repo.upsertTodoistTask({
       id: "task-1", todoistTaskId: "todoist-1", title: "Daily review", description: null,
-      projectId: null, assigneeId: "user-self", creatorId: "user-self",
+      projectId: "project-personal", assigneeId: null, creatorId: "user-self",
       dueDate: "2026-07-16T08:30:00Z", dueDatetime: "2026-07-16T08:30:00Z",
       dueString: "every day at 10:30", dueLang: "en", dueTimezone: "Europe/Bratislava", isRecurring: true,
       durationAmount: 30, durationUnit: "minute", durationMinutes: 30,
@@ -1010,12 +1019,21 @@ describe("TaskActionService", () => {
       updatedAt: "2026-07-15T09:00:00Z"
     });
     repo.updateCommitmentState("task-1", { state: "started", startedAt: "2026-07-15T09:00:00Z", updatedAt: "2026-07-15T09:01:00Z" });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
     const adapter = new FakeTodoistAdapter();
-    const service = actionAwareService(db, repo, new ProjectRepository(db), adapter);
+    const service = actionAwareService(db, repo, projects, adapter);
 
-    await expect(service.reschedule("task-1", {
-      dueDatetime: "2026-07-17T08:30:00Z", durationMinutes: 30, now: "2026-07-15T10:00:00Z",
-      actionId: "reschedule-command", deviceId: "phone-a", expectedOccurrenceKey: "old-occurrence"
+    await expect(service.update("task-1", {
+      actionId: "recurring-schedule-update", deviceId: "phone-a", expectedOccurrenceKey: "old-occurrence",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        dueDatetime: "2026-07-17T08:30:00Z", durationMinutes: 30
+      },
+      childMutations: []
     })).rejects.toMatchObject({ code: "reconciliation_pending", statusCode: 202 });
 
     expect(adapter.itemUpdates).toEqual([expect.objectContaining({
@@ -1045,7 +1063,7 @@ describe("TaskActionService", () => {
     expect(adapter.recurringCompletions).toEqual([]);
   });
 
-  it("starts, completes, postpones, reschedules, and creates tasks", async () => {
+  it("starts and postpones tasks", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);

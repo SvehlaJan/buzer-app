@@ -57,17 +57,6 @@ export interface CreateTaskInput {
   now: string;
 }
 
-export interface RescheduleTaskInput {
-  dueDatetime: string;
-  durationMinutes: number;
-  description?: string | null;
-  now: string;
-  actionId?: string;
-  deviceId?: string;
-  expectedOccurrenceKey?: string | null;
-  expectedTaskRevision?: string;
-}
-
 export interface RootEditPatch {
   expectedTaskRevision: string;
   title?: string;
@@ -502,37 +491,6 @@ export class TaskActionService {
     });
   }
 
-  async reschedule(taskId: string, input: RescheduleTaskInput): Promise<void> {
-    this.assertMirrorReady();
-    const task = this.requireTask(taskId);
-    const descriptionWasProvided = "description" in input;
-    const normalizedDescription = descriptionWasProvided
-      ? reconstructTaskDescription({
-          ...decodeTaskDescription(task.description),
-          userDescription: normalizeOptionalText(input.description ?? null) ?? ""
-        })
-      : undefined;
-    const recurrence = recurrenceForReschedule(task, input.dueDatetime);
-    await this.executeRootAction({
-      rootTaskId: taskId,
-      actionType: "reschedule",
-      payload: { dueDatetime: input.dueDatetime, durationMinutes: input.durationMinutes },
-      metadata: this.rootMetadata(input, { occurrence: true }),
-      isEffectPresent: () => this.tasks.getById(taskId)?.dueDatetime === input.dueDatetime,
-      responseAfterReconciliation: () => true
-    }, async (context) => {
-      await context.executeCommand("item_update", (commandUuid) => this.todoist.itemUpdate({
-        commandUuid,
-        todoistTaskId: task.todoistTaskId,
-        ...(normalizedDescription === undefined ? {} : { description: normalizedDescription }),
-        duration: { kind: "replace", amount: input.durationMinutes, unit: "minute" },
-        due: recurrence,
-        assignment: { kind: "preserve" }
-      }));
-      return true;
-    });
-  }
-
   async update(taskId: string, request: UpdateTaskRequest): Promise<void | ChecklistMutationResult> {
     this.assertMirrorReady();
     const task = this.requireTask(taskId);
@@ -937,7 +895,7 @@ function scheduleErrors(input: {
   return errors;
 }
 
-function recurrenceForReschedule(task: TaskWithCommitment, dueDatetime: string) {
+function recurrenceForScheduleUpdate(task: TaskWithCommitment, dueDatetime: string) {
   if (!task.isRecurring) {
     return { kind: "replace" as const, datetime: dueDatetime, string: null, lang: null, timezone: null };
   }
@@ -987,7 +945,7 @@ function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit) 
     return { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null };
   }
   if (scheduleChanged) {
-    return recurrenceForReschedule(task, input.dueDatetime);
+    return recurrenceForScheduleUpdate(task, input.dueDatetime);
   }
   return { kind: "preserve" as const };
 }
