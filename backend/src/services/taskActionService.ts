@@ -608,8 +608,12 @@ export class TaskActionService {
       return true;
     });
     if (checklistAction !== undefined) {
+      // The root edit above may have rotated occurrenceKey (e.g. a due-datetime resend that
+      // looks like an external change); re-read it so the checklist step's precondition,
+      // captured before the root edit ran, isn't checked against a now-stale value.
+      const currentOccurrenceKey = this.tasks.getById(taskId)?.occurrenceKey ?? null;
       return this.mutateChecklist(taskId, {
-        action: checklistAction,
+        action: this.checklistActionForRootEdit({ ...metadata, expectedOccurrenceKey: currentOccurrenceKey }),
         mutations: request.childMutations
       });
     }
