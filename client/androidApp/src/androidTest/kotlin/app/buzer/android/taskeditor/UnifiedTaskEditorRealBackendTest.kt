@@ -60,10 +60,6 @@ class UnifiedTaskEditorRealBackendTest {
 
     @Before
     fun resetAuthoritativeState() {
-        assumeTrue(
-            "backend has no /__scenario (tools/fake-backend) - skipping real-backend-only tests",
-            runCatching { e2eServer.setScenario("none") }.isSuccess
-        )
         File(ApplicationProvider.getApplicationContext<Context>().filesDir, "latest_snapshot.json").delete()
         e2eServer.reset()
         resetProjectRepository()
@@ -128,6 +124,10 @@ class UnifiedTaskEditorRealBackendTest {
 
     @Test
     fun pendingEdit_disablesDuplicateSubmission_thenUsesConfirmedAuthorityToExit() {
+        assumeTrue(
+            "backend has no /__scenario (tools/fake-backend) - skipping real-backend-only test",
+            runCatching { e2eServer.setScenario("none") }.isSuccess
+        )
         renderRealEditHost("task-one-time-empty")
         try {
             e2eServer.setScenario("after_command_sent_timeout")
