@@ -592,6 +592,60 @@ describe("TaskActionService", () => {
     expect(adapter.itemCloses).toHaveLength(0);
   });
 
+  it("re-reads occurrenceKey after a root edit rotates it, so a bundled checklist mutation is not rejected as stale", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    insertCommittedTask(repo);
+    repo.updateTaskFields("task-1", {
+      title: "Send invoice", description: "", projectId: "project-personal", assigneeId: null,
+      dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30, updatedAt: "2026-07-15T09:00:00Z", commitmentOwnerId: "user-self"
+    });
+    repo.createChecklistChild({
+      id: "child-local", todoistTaskId: "child-one", parentTodoistTaskId: "todoist-1", projectId: "project-personal",
+      title: "First step", description: null, childOrder: 0, updatedAt: "2026-07-15T09:00:00Z"
+    });
+    repo.initializeOccurrence("task-1", {
+      occurrenceKey: "occurrence-1", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+      occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({
+      todoistProjectId: "project-personal", name: "Personal", shared: false, canAssignTasks: false,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T09:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    // Simulates what OccurrenceReconciler/TodoistSyncService do mid-request when a
+    // resent due-datetime reads as an external schedule change (e.g. sub-minute
+    // precision drift): the coordinator's pre-execute sync (call 1) sees nothing new,
+    // but the post-execute sync (call 2, after the root edit's own Todoist command is
+    // sent) picks up the "change" and rotates occurrenceKey before the bundled
+    // checklist step runs.
+    let syncCalls = 0;
+    const synchronize = async () => {
+      syncCalls += 1;
+      if (syncCalls !== 2) return;
+      repo.rotateOccurrence("task-1", {
+        occurrenceKey: "occurrence-2", occurrenceDueDatetime: "2026-05-08T16:00:00Z",
+        occurrenceRecurrenceFingerprint: "one-time", updatedAt: "2026-07-15T10:00:00Z"
+      });
+    };
+    const service = actionAwareService(db, repo, projects, adapter, synchronize);
+
+    await service.update("task-1", {
+      actionId: "edit-with-rotation", deviceId: "phone-a", expectedOccurrenceKey: "occurrence-1",
+      rootPatch: {
+        expectedTaskRevision: `r:${repo.getById("task-1")?.mirrorRevision}`,
+        title: "Send invoice", description: "", projectId: "project-personal", assigneeId: null,
+        dueDatetime: "2026-05-08T16:00:00Z", durationMinutes: 30
+      },
+      childMutations: [{ type: "check", clientMutationId: "check-child", childId: "child-one", expectedChildRevision: "r:1" }]
+    });
+
+    expect(repo.getById("task-1")?.occurrenceKey).toBe("occurrence-2");
+    expect(adapter.itemCloses).toHaveLength(1);
+  });
+
   it("keeps a coordinated project move pending until the direct child tree is authoritative", async () => {
     const db = new Database(":memory:");
     migrate(db);
