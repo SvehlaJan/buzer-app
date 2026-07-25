@@ -41,6 +41,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -59,6 +60,10 @@ class UnifiedTaskEditorRealBackendTest {
 
     @Before
     fun resetAuthoritativeState() {
+        assumeTrue(
+            "backend has no /__scenario (tools/fake-backend) - skipping real-backend-only tests",
+            runCatching { e2eServer.setScenario("none") }.isSuccess
+        )
         File(ApplicationProvider.getApplicationContext<Context>().filesDir, "latest_snapshot.json").delete()
         e2eServer.reset()
         resetProjectRepository()
