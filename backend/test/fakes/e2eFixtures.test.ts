@@ -28,11 +28,11 @@ function localDateTimeParts(value: string, timeZone = "Europe/Bratislava") {
 }
 
 describe("e2eFixtureSeed", () => {
-  it("defines the 15 fixture roots plus 6 checklist children with pinned Todoist ids", () => {
+  it("defines the 16 fixture roots plus 6 checklist children with pinned Todoist ids", () => {
     const roots = seed.tasks.filter((task) => task.mirror.parentId === null);
     const children = seed.tasks.filter((task) => task.mirror.parentId !== null);
 
-    expect(roots).toHaveLength(15);
+    expect(roots).toHaveLength(16);
     expect(children).toHaveLength(6);
     expect(roots.map((task) => task.id)).toEqual([
       "task-start",
@@ -42,6 +42,7 @@ describe("e2eFixtureSeed", () => {
       "task-deadline-fail",
       "task-reschedule-fail",
       "task-invalid",
+      "task-invalid-blocker",
       "task-floating-time",
       "task-one-time-empty",
       "task-one-time-partial",
@@ -60,6 +61,8 @@ describe("e2eFixtureSeed", () => {
   it("expresses invalid, hierarchy, and recurrence outcomes as Todoist facts", () => {
     expect(byId.get("task-invalid")?.dueDatetime).toBeNull();
     expect(byId.get("task-invalid")?.durationMinutes).toBeNull();
+    expect(byId.get("task-invalid-blocker")?.dueDatetime).not.toBeNull();
+    expect(byId.get("task-invalid-blocker")?.durationMinutes).toBeNull();
     expect(byId.get("child-unsupported-hierarchy")?.dueDatetime).not.toBeNull();
     expect(byId.get("child-unsupported-hierarchy")?.parentId).toBe(
       "todoist-task-unsupported-hierarchy"

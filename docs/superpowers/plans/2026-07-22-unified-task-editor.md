@@ -31,7 +31,7 @@
 - [x] Task 5 — migrate Morning Review repair
 - [x] Task 6 — migrate deadline-blocker recovery
 - [x] Task 7 — retire legacy editor and reschedule protocol
-- [ ] Task 8 — add real e2e coverage and perform release verification
+- [x] Task 8 — add real e2e coverage and perform release verification (12 pre-existing, unrelated instrumentation-test failures remain in the full suite; see the Task 8 handoff)
 
 ---
 

@@ -47,7 +47,7 @@ describe("seeding", () => {
   it("serves the fixture snapshot with real-backend derivations", async () => {
     await withServer(async (server) => {
       const body = await snapshot(server);
-      expect(body.tasks).toHaveLength(15);
+      expect(body.tasks).toHaveLength(16);
       const byId = new Map<string, any>(body.tasks.map((task: { id: string }) => [task.id, task]));
       expect(byId.get("task-start").title).toBe("Start blocker fixture");
       expect(byId.get("task-start").occurrenceKey).toBe("occurrence-task-start-1");
@@ -213,6 +213,29 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       expect(server.db.prepare(
         "select step_key as stepKey from task_action_commands where action_id = ? order by step_key"
       ).all(actionId)).toEqual([{ stepKey: "item_update" }]);
+    });
+  });
+
+  it("completes the invalid deadline-blocker fixture update after restoring its duration", async () => {
+    await withServer(async (server) => {
+      const task = await snapshotTask(server, "task-invalid-blocker");
+      const body = await mutate(
+        server,
+        "/tasks/task-invalid-blocker/update",
+        action({
+          expectedOccurrenceKey: task.occurrenceKey,
+          rootPatch: {
+            expectedTaskRevision: task.taskRevision,
+            durationMinutes: 30
+          },
+          childMutations: []
+        })
+      );
+      const after = await snapshotTask(server, "task-invalid-blocker");
+
+      expect(body.outcome).toBe("completed");
+      expect(after.durationMinutes).toBe(30);
+      expect(after.dueDatetime).toBe(task.dueDatetime);
     });
   });
 

@@ -255,6 +255,16 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
       durationUnit: null,
       durationMinutes: null
     }),
+    // Deliberately overdue but missing only duration: the deadline-blocker Update host must
+    // expose its entry validation while still receiving a current, editable root snapshot.
+    root("task-invalid-blocker", {
+      title: "Invalid deadline blocker fixture",
+      description: "Restore the missing duration from deadline recovery.",
+      dueDatetime: iso(-30),
+      durationAmount: null,
+      durationUnit: null,
+      durationMinutes: null
+    }),
     root("task-floating-time", {
       title: "Canonical datetime fixture",
       description: "Snapshot datetimes are normalized to RFC3339 instants.",
