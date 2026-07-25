@@ -43,9 +43,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: |
-            backend/package-lock.json
-            tools/fake-backend/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       - name: Backend install
         working-directory: backend
@@ -62,11 +60,3 @@ jobs:
       - name: Backend build
         working-directory: backend
         run: npm run build
-
-      - name: Fake backend install
-        working-directory: tools/fake-backend
-        run: npm ci
-
-      - name: Fake backend tests
-        working-directory: tools/fake-backend
-        run: npm test

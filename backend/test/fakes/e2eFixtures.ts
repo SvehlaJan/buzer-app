@@ -117,9 +117,10 @@ function nextEveryTwoDaysOccurrence(now: Date, hour: number, minute: number): st
 }
 
 /**
- * The same 15 fixture tasks tools/fake-backend/src/fixtures.ts serves today, expressed
- * as Todoist mirrors so the real backend derives every state (invalid, unsupported
- * hierarchy, recurrence kind, checklist counts) instead of being handed it.
+ * Fixture tasks expressed as Todoist mirrors so the real backend derives every state
+ * (invalid, unsupported hierarchy, recurrence kind, checklist counts) instead of being
+ * handed it. Formerly mirrored by the now-removed tools/fake-backend/src/fixtures.ts
+ * (see docs/decisions/2026-07-25-remove-fake-backend-tool.md).
  */
 export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
   const iso = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();

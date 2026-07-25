@@ -96,11 +96,11 @@ Do not include secrets in Context7 queries.
 
 Backend agents must run relevant unit/integration tests before handing off. Android agents must run shared JVM tests and, when possible, Android unit/instrumentation tests. If a device/emulator is required and unavailable, document the exact manual check that remains.
 
-Any task that changes `client/` UI or user-visible behavior must run the deterministic emulator lane `scripts/e2e-fake-backend.sh` as part of its final verification (~2-3 minutes locally). JVM unit tests alone are not sufficient verification for UI-affecting changes: between 2026-06-15 and 2026-07-05 two UI reworks shipped with green JVM suites while silently breaking 10 of 21 instrumentation tests, discovered only when CI first ran the lane (`docs/handoffs/2026-07-04-ci-workflows.md`).
+Any task that changes `client/` UI or user-visible behavior must run `scripts/e2e-real-backend.sh` as part of its final verification — the sole instrumentation-test authority; `tools/fake-backend` was removed 2026-07-25 (`docs/decisions/2026-07-25-remove-fake-backend-tool.md`). Scope with `ANDROID_TEST_CLASS` to the relevant class(es) while iterating (~1-2 minutes); run the full unfiltered suite before considering a UI-affecting change done. JVM unit tests alone are not sufficient verification for UI-affecting changes: between 2026-06-15 and 2026-07-05 two UI reworks shipped with green JVM suites while silently breaking 10 of 21 instrumentation tests, discovered only when CI first ran the lane (`docs/handoffs/2026-07-04-ci-workflows.md`).
 
 When planning a change to existing behavior, the plan must list which existing test suites assert that behavior — including `client/androidApp/src/androidTest` — and migrate those tests within the same plan, not as a follow-up.
 
-Android enforcement agents should prefer native Android instrumentation tests over host-side ADB scripts. For blocker activity/action changes, start `tools/fake-backend` locally and run `pixel8Api34DebugAndroidTest` with `BUZER_BACKEND_BASE_URL=http://10.0.2.2:18433`, `BUZER_BACKEND_TOKEN=test-token`, and `FAKE_BACKEND_BASE_URL=http://10.0.2.2:18433`. Do not use live Todoist or WhatsApp for destructive action tests.
+Android enforcement agents should prefer native Android instrumentation tests over host-side ADB scripts. For blocker activity/action changes, use `scripts/e2e-real-backend.sh`, which starts `backend/test/e2eServer.ts` locally and runs `pixel8Api34DebugAndroidTest` (or `connectedDebugAndroidTest` with `ANDROID_SERIAL` set) against it. Do not use live Todoist or WhatsApp for destructive action tests.
 
 Toolchain notes (post 2026-06-08 dependency migration): the shared JVM unit-test task is `:shared:testAndroidHostTest` (the old `:shared:testDebugUnitTest` no longer exists). When building from a `git worktree`, export `ANDROID_HOME`/`ANDROID_SDK_ROOT` because `client/local.properties` is gitignored. An Android 16 / API 36 emulator (`Buzer_API_36`) is available for connected tests; scope multi-device runs with `ANDROID_SERIAL`. See `docs/notes/local-development.md` and `docs/notes/2026-06-08-android-16-emulator-setup.md`.
 
@@ -117,10 +117,7 @@ Verification:
 
 ## Continuous Integration
 
-GitHub Actions runs two workflows (added 2026-07-05, details in `docs/handoffs/2026-07-04-ci-workflows.md`):
-
-- `ci.yml` — every push: shared + androidApp JVM tests, `assembleDebug`, backend and fake-backend npm tests (~5 minutes).
-- `emulator-e2e.yml` — nightly at 02:30 UTC (skips idle days) and via manual dispatch: the full `scripts/e2e-fake-backend.sh` lane on a headless managed emulator.
+GitHub Actions runs `ci.yml` (added 2026-07-05, details in `docs/handoffs/2026-07-04-ci-workflows.md`) on every push: shared + androidApp JVM tests, `assembleDebug`, and backend npm tests (~5 minutes). There is no scheduled instrumentation-test CI lane as of 2026-07-25 — `emulator-e2e.yml` was removed along with `tools/fake-backend` (`docs/decisions/2026-07-25-remove-fake-backend-tool.md`); `scripts/e2e-real-backend.sh` must be run manually until a replacement CI lane is set up.
 
 Rules:
 
