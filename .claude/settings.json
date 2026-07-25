@@ -12,7 +12,17 @@
       "Bash(cd client && ./gradlew :androidApp:assembleDebug*)",
       "Bash(./gradlew :androidApp:assembleDebug*)",
       "Bash(cd client && ./gradlew :androidApp:compileDebugKotlin*)",
-      "Bash(./gradlew :androidApp:compileDebugKotlin*)"
+      "Bash(./gradlew :androidApp:compileDebugKotlin*)",
+      "Bash(scripts/e2e-real-backend.sh)",
+      "Bash(scripts/e2e-real-backend.sh *)",
+      "Bash(cd backend && npm test*)",
+      "Bash(npm test)",
+      "Bash(npm test *)",
+      "Bash(cd backend && npm run typecheck*)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run typecheck *)",
+      "Bash(ANDROID_TEST_CLASS=* scripts/e2e-real-backend.sh*)",
+      "Bash(git merge-base*)"
     ]
   }
 }
