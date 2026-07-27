@@ -10,7 +10,8 @@ Plan: `docs/superpowers/plans/2026-07-27-repository-consolidation.md`
 - Rejected all changes from `feature/fix-e2e-test-suite`: it added temporary `println` output and weakened occurrence-key validation through a fabricated fallback key. Its dirty worktree was intentionally discarded.
 - Committed the selected repair work as `bf9c976` and merged it into `master`.
 - Preserved the connected-device install handoff, Add/Repair audit, and the unimplemented editor-convergence plan as documentation.
-- Removed both stale worktrees and deleted all 17 non-master local branches after confirming each was merged into `master`.
+- Removed both stale worktrees and deleted all 17 merged local branches after confirming each was merged into `master`.
+- Retained `backup/pre-fix-21b1180`: it is not merged and contains six unique documentation files (977 lines), so deleting it would discard unreviewed work rather than clean stale state.
 
 ## Verification
 
@@ -47,6 +48,7 @@ Plan: `docs/superpowers/plans/2026-07-27-repository-consolidation.md`
   - `.worktrees/fix-e2e-test-suite`
   - `.worktrees/real-e2e-suite-repair`
 - Deleted local merged branches: two `codex/*`, one `feat/*`, and fourteen `feature/*` branches (the latter includes the two E2E repair branches), for 17 total.
+- Retained local branch: `backup/pre-fix-21b1180` (unmerged documentation backup).
 
 ## Next recommended step
 
