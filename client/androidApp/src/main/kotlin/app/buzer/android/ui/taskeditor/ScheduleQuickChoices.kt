@@ -74,7 +74,7 @@ internal fun startTimeChoices(
             ScheduleTimeChoice(
                 date = dateTime.toLocalDate(),
                 time = dateTime.toLocalTime(),
-                label = timeChoiceLabel(dateTime, now.toLocalDate())
+                label = timeChoiceLabel(dateTime)
             )
         }
 }
@@ -102,12 +102,8 @@ private fun initialQuickTimeDateTime(
     }
 }
 
-private fun timeChoiceLabel(dateTime: LocalDateTime, today: LocalDate): String =
-    if (dateTime.toLocalDate() == today) {
-        formatTime(dateTime.toLocalTime())
-    } else {
-        "${relativeDateLabel(dateTime.toLocalDate(), today)} ${formatTime(dateTime.toLocalTime())}"
-    }
+private fun timeChoiceLabel(dateTime: LocalDateTime): String =
+    formatTime(dateTime.toLocalTime())
 
 internal fun durationChoices(selectedMinutes: Int?): List<Int> {
     val canonical = listOf(15, 30, 60)

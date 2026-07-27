@@ -72,11 +72,22 @@ class ScheduleQuickChoicesTest {
 
         assertEquals(today.plusDays(1), choice.date)
         assertEquals(LocalTime.MIDNIGHT, choice.time)
-        assertEquals("Tomorrow 00:00", choice.label)
+        assertEquals("00:00", choice.label)
         assertEquals(
             draft.copy(schedule = TaskEditorSchedule(date = today.plusDays(1), hour = 0, minute = 0)),
             selectQuickStartTime(draft, choice)
         )
+    }
+
+    @Test
+    fun quickTimesUseBareTwentyFourHourLabelsForNonTodayDates() {
+        val choices = startTimeChoices(
+            selectedDate = LocalDate.of(2026, 7, 30),
+            selectedTime = null,
+            now = LocalDateTime.of(2026, 7, 24, 10, 1)
+        )
+
+        assertEquals(listOf("10:05", "10:35", "11:05"), choices.map { it.label })
     }
 
     @Test

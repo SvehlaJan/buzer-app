@@ -193,8 +193,7 @@ fun EditTaskScreen(
             choices = choices,
             presentation = TaskEditorPresentation(
                 screenTitle = "Edit task",
-                primaryVerb = "Save",
-                showUpdateFooter = true
+                primaryVerb = "Save"
             ),
             now = now,
             checklistDoneCount = existingDrafts.count { it.checked && it.id !in deletedChildren },

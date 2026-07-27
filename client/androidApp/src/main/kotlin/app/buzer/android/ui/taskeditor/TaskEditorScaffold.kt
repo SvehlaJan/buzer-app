@@ -196,7 +196,7 @@ internal fun TaskEditorScaffold(
     checklistDoneCount: Int,
     checklistTotalCount: Int,
     checklistContent: @Composable () -> Unit,
-    footerContent: @Composable () -> Unit = {},
+    footerContent: (@Composable () -> Unit)? = null,
     onRetryCollaborators: () -> Unit,
     onPrimaryAction: () -> Unit,
     onCancel: () -> Unit,
@@ -218,7 +218,6 @@ internal fun TaskEditorScaffold(
     checklistTotalCount = checklistTotalCount,
     checklistContent = checklistContent,
     footerContent = footerContent,
-    showFooter = presentation.showUpdateFooter,
     onRetryCollaborators = onRetryCollaborators,
     onPrimaryAction = onPrimaryAction,
     onBack = onCancel,
@@ -254,8 +253,7 @@ private fun TaskEditorScaffoldContent(
     checklistDoneCount: Int,
     checklistTotalCount: Int,
     checklistContent: @Composable () -> Unit,
-    footerContent: @Composable () -> Unit,
-    showFooter: Boolean,
+    footerContent: (@Composable () -> Unit)?,
     onRetryCollaborators: () -> Unit,
     onPrimaryAction: () -> Unit,
     onBack: () -> Unit,
@@ -440,7 +438,7 @@ private fun TaskEditorScaffoldContent(
             if (expandedSection == EditorSection.Checklist) {
                 checklistContent()
             }
-            if (showFooter) footerContent()
+            footerContent?.invoke()
             Spacer(Modifier.height(Spacing.xl))
         }
         Column(

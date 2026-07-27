@@ -13,7 +13,6 @@ import app.buzer.android.ui.taskeditor.TaskEditorUpdateCancelRequest
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateState
 import app.buzer.android.ui.taskeditor.primaryActionLabel
-import app.buzer.android.ui.taskeditor.shouldRenderTaskEditorUpdateFooter
 import app.buzer.android.ui.taskeditor.taskEditorUpdateCancelRequest
 import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.shared.model.ChecklistItem
@@ -159,7 +158,6 @@ class MorningReviewScreenStateTest {
 
         assertEquals("Repair task", morningReviewRepairPresentation.screenTitle)
         assertEquals("Repair", morningReviewRepairPresentation.primaryVerb)
-        assertTrue(shouldRenderTaskEditorUpdateFooter(morningReviewRepairPresentation))
         assertEquals("Fix the highlighted fields", state.visibleValidation.bannerMessage)
         assertEquals("Title is required", state.visibleValidation.titleError)
         assertTrue(TaskEditorField.Title in state.visibleValidation.errors)

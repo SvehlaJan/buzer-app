@@ -46,6 +46,7 @@ import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorField
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
+import app.buzer.android.ui.taskeditor.TaskEditorProjectLoadStatus
 import app.buzer.android.ui.taskeditor.TaskEditorScaffold
 import app.buzer.android.ui.taskeditor.TaskEditorValidation
 import app.buzer.android.ui.taskeditor.ValidationExposure
@@ -255,8 +256,6 @@ fun AddTaskScreen(
     var projects by remember { mutableStateOf<List<ProjectItem>>(emptyList()) }
     var projectsLoading by remember { mutableStateOf(true) }
     var projectLoadError by remember { mutableStateOf<String?>(null) }
-    var projectLoadDialogMessage by remember { mutableStateOf<String?>(null) }
-    var projectFeedbackDismissed by remember { mutableStateOf(false) }
     var touchedFields by remember { mutableStateOf<Set<TaskEditorField>>(emptySet()) }
     var submitAttempted by remember { mutableStateOf(false) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
@@ -270,16 +269,11 @@ fun AddTaskScreen(
     val deviceId = remember(context) {
         EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
     }
-    val hasCachedProjects = projects.isNotEmpty()
-    val projectFeedbackMessage = if (projectLoadDialogMessage != null || projectFeedbackDismissed) {
-        null
-    } else {
-        AddTaskProjectLoadFeedback.message(
-            projectsLoading = projectsLoading,
-            projects = projects,
-            projectLoadError = projectLoadError.takeUnless { hasCachedProjects }
-        )
-    }
+    val projectLoadStatusMessage = AddTaskProjectLoadFeedback.message(
+        projectsLoading = projectsLoading,
+        projects = projects,
+        projectLoadError = projectLoadError
+    )
     val editorState = addTaskEditorState(
         draft = draft,
         projects = projects,
@@ -340,8 +334,6 @@ fun AddTaskScreen(
         scope.launch {
             projectsLoading = true
             projectLoadError = null
-            projectLoadDialogMessage = null
-            projectFeedbackDismissed = false
             try {
                 applyLoadedProjects(refreshProjectList())
             } catch (error: Exception) {
@@ -351,7 +343,6 @@ fun AddTaskScreen(
                 )
                 val message = error.message ?: "Project loading failed"
                 projectLoadError = message
-                projectLoadDialogMessage = message
             } finally {
                 projectsLoading = false
             }
@@ -455,15 +446,12 @@ fun AddTaskScreen(
     LaunchedEffect(Unit) {
         projectsLoading = true
         projectLoadError = null
-        projectLoadDialogMessage = null
-        projectFeedbackDismissed = false
         try {
             applyLoadedProjects(loadProjectList())
         } catch (error: Exception) {
             AppLog.error("add_task projects load_failed type=${error::class.simpleName} message=${error.message}", error)
             val message = error.message ?: "Project loading failed"
             projectLoadError = message
-            projectLoadDialogMessage = message
         } finally {
             projectsLoading = false
         }
@@ -521,28 +509,10 @@ fun AddTaskScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        if (projectsLoading) {
-            InlineLoadingStatus("Loading projects...")
-        }
-    }
-
-    projectFeedbackMessage?.let { message ->
-        ErrorAlertDialog(
-            title = "Projects unavailable",
-            message = message,
-            onDismiss = { projectFeedbackDismissed = true },
-            retryLabel = "Retry",
-            onRetry = { retryProjects() }
-        )
-    }
-
-    projectLoadDialogMessage?.let { message ->
-        ErrorAlertDialog(
-            title = "Projects did not load",
-            message = message,
-            onDismiss = { projectLoadDialogMessage = null },
-            retryLabel = "Retry",
-            onRetry = { retryProjects() }
+        TaskEditorProjectLoadStatus(
+            loading = projectsLoading,
+            message = projectLoadStatusMessage,
+            onRetry = ::retryProjects
         )
     }
 
