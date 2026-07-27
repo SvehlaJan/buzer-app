@@ -89,13 +89,13 @@ class TaskEditorScaffoldStateTest {
     }
 
     @Test
-    fun scheduleValidationFocusExpandsScheduleEvenWhenAnotherSectionWasOpen() {
+    fun userSelectedSectionRemainsOpenWhileScheduleValidationIsVisible() {
         val validation = validateScheduleForSave(
             TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
         )
 
         assertEquals(
-            EditorSection.Schedule,
+            EditorSection.Notes,
             resolvedExpandedSection(
                 state = TaskEditorScaffoldState(expandedSection = EditorSection.Notes),
                 validation = validation
@@ -120,18 +120,18 @@ class TaskEditorScaffoldStateTest {
     }
 
     @Test
-    fun scheduleValidationFocusIgnoresOtherAccordionTapsUntilTheErrorClears() {
+    fun scheduleValidationFocusDoesNotLockOtherEditableAccordions() {
         val validation = validateScheduleForSave(
             TaskEditorDraft(title = "Review", projectId = "shared", assignee = me)
         )
         val scheduleState = TaskEditorScaffoldState(expandedSection = EditorSection.Schedule)
 
         assertEquals(
-            scheduleState,
+            TaskEditorScaffoldState(expandedSection = EditorSection.Notes),
             reduceSectionTap(scheduleState, EditorSection.Notes, validation)
         )
         assertEquals(
-            scheduleState,
+            TaskEditorScaffoldState(expandedSection = EditorSection.Checklist),
             reduceSectionTap(scheduleState, EditorSection.Checklist, validation)
         )
     }

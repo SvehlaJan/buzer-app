@@ -528,6 +528,47 @@ describe("debug surface parity", () => {
     });
   });
 
+  it("fails exactly one child add through the explicit adapter control", async () => {
+    await withServer(async (server) => {
+      const root = await server.adapter.itemAdd({
+        kind: "root",
+        commandUuid: "control-root-add",
+        tempId: "control-root-temp",
+        title: "Control root",
+        description: null,
+        projectId: "project-test",
+        assigneeId: "user-me",
+        due: { kind: "preserve" },
+        duration: null
+      });
+      await server.app.inject({
+        method: "POST",
+        url: "/__fail-next-child-add",
+        payload: { enabled: true }
+      });
+
+      await expect(server.adapter.itemAdd({
+        kind: "child",
+        commandUuid: "control-child-fail",
+        tempId: "control-child-fail-temp",
+        title: "First child",
+        description: null,
+        projectId: "project-test",
+        parentTodoistTaskId: root.todoistTaskId!
+      })).rejects.toMatchObject({ code: "e2e_forced_child_create_failure" });
+
+      await expect(server.adapter.itemAdd({
+        kind: "child",
+        commandUuid: "control-child-success",
+        tempId: "control-child-success-temp",
+        title: "Second child",
+        description: null,
+        projectId: "project-test",
+        parentTodoistTaskId: root.todoistTaskId!
+      })).resolves.toEqual({ todoistTaskId: expect.any(String) });
+    });
+  });
+
   it("drives after_command_sent_timeout through real reconciliation", async () => {
     await withServer(async (server) => {
       await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "after_command_sent_timeout" } });

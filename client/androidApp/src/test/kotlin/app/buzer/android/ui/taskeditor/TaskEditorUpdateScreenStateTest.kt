@@ -15,6 +15,7 @@ import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TaskEditorUpdateScreenStateTest {
@@ -229,6 +230,41 @@ class TaskEditorUpdateScreenStateTest {
         assertEquals(RecurrencePreset.never, cleared.draft.recurrencePreset)
         assertTrue(cleared.draft.repeatReplacementSelected)
         assertTrue(cleared.visibleValidation.repeatError == null)
+    }
+
+    @Test
+    fun recurrenceFingerprintPreservesTheUnchangedSnapshotMeaning() {
+        val noRepeat = initialTaskEditorUpdateDraft(
+            task().copy(recurrence = TaskRecurrence(RecurrenceKind.none, null, null))
+        )
+        val unmodifiedCustom = initialTaskEditorUpdateDraft(
+            task().copy(recurrence = TaskRecurrence(RecurrenceKind.custom, null, "every 2 days"))
+        )
+
+        assertEquals(RecurrencePreset.never, noRepeat.recurrencePresetForUpdate())
+        assertNull(unmodifiedCustom.recurrencePresetForUpdate())
+    }
+
+    @Test
+    fun fingerprintOmitsAPersonalProjectAssigneeOnlyAfterProjectChoicesLoad() {
+        val personalProject = sharedProject.copy(
+            id = "project-personal",
+            name = "Personal",
+            canAssignTasks = false,
+            shared = false,
+            collaborators = listOf(me)
+        )
+        val draft = initialTaskEditorUpdateDraft(
+            task().copy(projectId = personalProject.id, assigneeId = me.id)
+        )
+
+        assertEquals(
+            me.id,
+            TaskEditorUpdateChoices(loading = true).assigneeIdForFingerprint(draft)
+        )
+        assertNull(
+            TaskEditorUpdateChoices(projects = listOf(personalProject)).assigneeIdForFingerprint(draft)
+        )
     }
 
     @Test

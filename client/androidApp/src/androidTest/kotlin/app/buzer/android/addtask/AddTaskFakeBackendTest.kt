@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -207,6 +209,7 @@ class AddTaskFakeBackendTest {
     @Test
     fun addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft() {
         resetTestState()
+        fakeBackend.setFailNextChildAdd(true)
 
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         try {
@@ -216,15 +219,15 @@ class AddTaskFakeBackendTest {
             selectAssignee("Me")
             selectDefaultSchedule()
             openChecklist()
-            addChecklistDraft(1, "Created child")
-            addChecklistDraft(2, "[partial-failure]")
+            addChecklistDraft(1, "Failed child")
             clickAddBlockRange()
 
             waitForScrollableText("Checklist item 1")
-            waitForScrollableText("[partial-failure]")
+            waitForScrollableText("Failed child")
             assertEquals(1, recordedCreateActionIds().size)
         } finally {
             scenario.close()
+            fakeBackend.setFailNextChildAdd(false)
         }
     }
 
@@ -307,8 +310,16 @@ class AddTaskFakeBackendTest {
     }
 
     private fun addChecklistDraft(itemNumber: Int, title: String) {
-        composeRule.onNodeWithText("Add checklist item").performScrollTo().performClick()
-        composeRule.onNodeWithText("Checklist item $itemNumber").performScrollTo().performTextInput(title)
+        composeRule.onNodeWithTag("addChecklistItem")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
+        waitForScrollableText("Checklist item $itemNumber")
+        composeRule.onNodeWithText("Checklist item $itemNumber").performTextInput(title)
+        closeSoftKeyboard()
+        composeRule.waitForIdle()
+        waitForScrollableContentDescription("Checklist: Checklist · 0/$itemNumber done")
     }
 
     private fun openAddTaskFromHome() {
@@ -322,6 +333,7 @@ class AddTaskFakeBackendTest {
         composeRule.onNodeWithContentDescription("Project: Choose project").performClick()
         waitForText(label)
         composeRule.onNodeWithText(label).performClick()
+        composeRule.waitForIdle()
     }
 
     private fun selectAssignee(label: String) {
@@ -331,34 +343,44 @@ class AddTaskFakeBackendTest {
         val choiceDescription = if (label == "Me") "$label, selected" else label
         waitForContentDescription(choiceDescription)
         composeRule.onNodeWithContentDescription(choiceDescription).performClick()
+        composeRule.waitForIdle()
     }
 
     private fun selectDefaultSchedule() {
         openSchedule()
-        composeRule.onNodeWithContentDescription("Custom date").performClick()
-        waitForText("Custom date")
-        composeRule.onNodeWithContentDescription("Custom date dialog apply").performClick()
-        composeRule.onNodeWithContentDescription("Custom start time").performClick()
-        waitForText("Custom start time")
-        composeRule.onNodeWithContentDescription("Custom start time dialog apply").performClick()
-        composeRule.onNodeWithContentDescription("Custom duration").performClick()
-        waitForText("Custom duration")
-        composeRule.onNodeWithContentDescription("Custom duration dialog apply").performClick()
+        composeRule.onNodeWithTag("dateQuickChoice0").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("startTimeQuickChoice0").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("durationQuickChoice1").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        waitForScrollableText("Ends at")
     }
 
     private fun openSchedule() {
-        composeRule.onNodeWithText("Schedule").performScrollTo().performClick()
-        waitForText("Date")
+        val alreadyExpanded = runCatching {
+            composeRule.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
+        }.isSuccess
+        if (!alreadyExpanded) {
+            composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration")
+                .performScrollTo()
+                .performClick()
+        }
+        waitForScrollableText("Date")
     }
 
     private fun openNotes() {
-        composeRule.onNodeWithText("Notes").performScrollTo().performClick()
-        waitForContentDescription("Notes")
+        composeRule.onNodeWithContentDescription("Notes: Add notes")
+            .performScrollTo()
+            .performClick()
+        waitForScrollableContentDescription("Notes")
     }
 
     private fun openChecklist() {
-        composeRule.onNodeWithText("Checklist").performScrollTo().performClick()
-        waitForText("Add checklist item")
+        composeRule.onNodeWithContentDescription("Checklist: Checklist · 0/0 done")
+            .performScrollTo()
+            .performClick()
+        waitForScrollableText("Add checklist item")
     }
 
     private fun verifyCustomDialogCanCancelAndApply(contentDescription: String, title: String) {
@@ -428,6 +450,7 @@ class AddTaskFakeBackendTest {
     private fun resetTestState() {
         fakeBackend.setFailActions(false)
         fakeBackend.setFailProjects(false)
+        fakeBackend.setFailNextChildAdd(false)
         fakeBackend.resetCalls()
         resetProjectRepositoryCache()
         clearProjectSelection()
@@ -460,6 +483,20 @@ class AddTaskFakeBackendTest {
             }
         }
         throw AssertionError("Expected text containing $text", lastError)
+    }
+
+    private fun waitForTextToDisappear(text: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (runCatching {
+                    composeRule.onAllNodesWithText(text, substring = true).assertCountEquals(0)
+                }.isSuccess
+            ) {
+                return
+            }
+            SystemClock.sleep(100)
+        }
+        throw AssertionError("Expected text containing $text to disappear")
     }
 
     private fun waitForScrollableText(text: String) {

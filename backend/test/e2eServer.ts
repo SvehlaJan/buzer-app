@@ -52,7 +52,12 @@ export async function buildE2EServer(): Promise<E2EServer> {
 
   const calls: RecordedCall[] = [];
   const fullCalls: RecordedFullCall[] = [];
-  const controls = { failActions: false, failSnapshot: false, failProjects: false };
+  const controls = {
+    failActions: false,
+    failSnapshot: false,
+    failProjects: false,
+    failNextChildAdd: false
+  };
 
   const seed = async (): Promise<void> => {
     const fixture = e2eFixtureSeed(new Date());
@@ -110,7 +115,9 @@ export async function buildE2EServer(): Promise<E2EServer> {
     controls.failActions = false;
     controls.failSnapshot = false;
     controls.failProjects = false;
+    controls.failNextChildAdd = false;
     adapter.setScenario("none");
+    adapter.setFailNextChildAdd(false);
     await seed();
   };
 
@@ -123,7 +130,12 @@ interface DebugSurfaceOptions {
   adapter: E2ETodoistAdapter;
   calls: RecordedCall[];
   fullCalls: RecordedFullCall[];
-  controls: { failActions: boolean; failSnapshot: boolean; failProjects: boolean };
+  controls: {
+    failActions: boolean;
+    failSnapshot: boolean;
+    failProjects: boolean;
+    failNextChildAdd: boolean;
+  };
   snapshots: TaskSnapshotService;
   reset: () => Promise<void>;
 }
@@ -198,6 +210,12 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
   app.post("/__fail-projects", async (request) => ({
     failProjects: controls.failProjects = (request.body as { enabled?: unknown } | null)?.enabled === true
   }));
+  app.post("/__fail-next-child-add", async (request) => {
+    const enabled = (request.body as { enabled?: unknown } | null)?.enabled === true;
+    controls.failNextChildAdd = enabled;
+    adapter.setFailNextChildAdd(enabled);
+    return { failNextChildAdd: enabled };
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

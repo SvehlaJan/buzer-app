@@ -34,6 +34,7 @@ import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
 import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateDraft
+import app.buzer.android.ui.taskeditor.recurrencePresetForUpdate
 import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ChecklistItem
@@ -388,26 +389,22 @@ private fun DeadlineBlockerRefreshRequired(
 internal fun deadlineBlockerDraftFingerprint(
     draft: TaskEditorDraft,
     choices: TaskEditorUpdateChoices,
-    recurrencePreset: app.buzer.shared.model.RecurrencePreset?,
     existingChildren: List<ChecklistDraftFingerprint>,
     deletedChildIds: Set<String>,
     addedChildren: List<ChecklistDraftFingerprint>
 ): EditTaskDraftFingerprint {
-    val selectedProject = choices.selectedProject(draft)
-    val assigneeId = assigneeIdForProject(selectedProject, draft.assignee)
-        ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
     return editTaskDraftFingerprint(
         title = draft.title,
         description = draft.description,
         projectId = draft.projectId,
-        assigneeId = assigneeId,
+        assigneeId = choices.assigneeIdForFingerprint(draft),
         start = app.buzer.android.ui.datetime.DateTimeDraftSelection(
             draft.schedule.date,
             draft.schedule.hour,
             draft.schedule.minute
         ),
         durationMinutes = draft.schedule.durationMinutes,
-        recurrencePreset = recurrencePreset,
+        recurrencePreset = draft.recurrencePresetForUpdate(),
         existingChildren = existingChildren,
         deletedChildIds = deletedChildIds,
         addedChildren = addedChildren
@@ -436,7 +433,6 @@ private fun DeadlineBlockerUpdateEditor(
         deadlineBlockerDraftFingerprint(
             draft = initialDraft,
             choices = choices,
-            recurrencePreset = task.recurrence.preset,
             existingChildren = task.checklistItems.sortedBy { it.order }.map {
                 ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
             },
@@ -450,10 +446,6 @@ private fun DeadlineBlockerUpdateEditor(
         return deadlineBlockerDraftFingerprint(
             draft = draft,
             choices = choices,
-            recurrencePreset = draft.recurrencePreset.takeUnless {
-                draft.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
-                    !draft.repeatReplacementSelected
-            },
             existingChildren = existingDrafts.map {
                 ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
             },
@@ -522,10 +514,7 @@ private fun DeadlineBlockerUpdateEditor(
                         project = project,
                         selectedAssignee = draft.assignee,
                         schedule = draft.schedule,
-                        recurrencePreset = draft.recurrencePreset.takeUnless {
-                            draft.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
-                                !draft.repeatReplacementSelected
-                        },
+                        recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
                         addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),

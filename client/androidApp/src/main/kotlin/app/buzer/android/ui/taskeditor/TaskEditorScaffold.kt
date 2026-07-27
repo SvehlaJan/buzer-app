@@ -78,11 +78,11 @@ internal fun reduceSection(
     requested: EditorSection
 ): EditorSection = if (current == requested) EditorSection.None else requested
 
-/** A validation focus is controlled by the screen owner until the failing draft field changes. */
+/** Validation opens the failing section on entry, but never prevents editing another section. */
 internal fun resolvedExpandedSection(
     state: TaskEditorScaffoldState,
     validation: TaskEditorScheduleValidation
-): EditorSection = validation.focusSection ?: state.expandedSection
+): EditorSection = state.expandedSection
 
 internal fun persistValidationFocus(
     state: TaskEditorScaffoldState,
@@ -95,11 +95,7 @@ internal fun reduceSectionTap(
     state: TaskEditorScaffoldState,
     requested: EditorSection,
     validation: TaskEditorScheduleValidation
-): TaskEditorScaffoldState = if (validation.focusSection != null) {
-    persistValidationFocus(state, validation)
-} else {
-    state.copy(expandedSection = reduceSection(state.expandedSection, requested))
-}
+): TaskEditorScaffoldState = state.copy(expandedSection = reduceSection(state.expandedSection, requested))
 
 internal fun editorDismissActionsEnabled(saving: Boolean): Boolean = !saving
 

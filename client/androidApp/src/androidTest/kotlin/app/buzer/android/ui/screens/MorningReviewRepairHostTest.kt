@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.printToLog
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.theme.BuzerTheme
 import app.buzer.shared.model.CommitmentState
@@ -94,19 +95,20 @@ class MorningReviewRepairHostTest {
         }
 
         composeRule.onNodeWithTag("morning-repair-only").performClick()
-        composeRule.onNodeWithText("Repair 09:00–09:30").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Repair 09:00–09:30").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Back").performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             runCatching {
-                composeRule.onNodeWithTag("morning-repair-only").assertIsDisplayed()
+                composeRule.onNodeWithTag("morning-repair-only").assertExists()
             }.isSuccess
         }
+        composeRule.onNodeWithTag("morning-repair-only").performScrollTo().assertIsDisplayed()
         assertTrue(updateTaskIds.isEmpty())
     }
 
     private fun clickRepairAction() {
-        composeRule.onNodeWithText("Repair 09:00–09:30").performScrollTo().performClick()
+        composeRule.onNodeWithText("Repair 09:00–09:30").performClick()
     }
 
     private fun task(id: String, title: String) = TaskSnapshotItem(

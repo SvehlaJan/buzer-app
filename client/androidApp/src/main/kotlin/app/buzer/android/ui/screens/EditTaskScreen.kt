@@ -32,6 +32,7 @@ import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
 import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateDraft
+import app.buzer.android.ui.taskeditor.recurrencePresetForUpdate
 import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ChecklistMutation
@@ -109,15 +110,15 @@ fun EditTaskScreen(
     var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
     val now = remember(nowProvider) { nowProvider() }
     val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
-    val initialFingerprint = remember(task.id, initialAddedDrafts) {
+    val initialFingerprint = remember(task.id, initialAddedDrafts, choices) {
         editTaskDraftFingerprint(
             title = initialDraft.title,
             description = initialDraft.description,
-            projectId = task.projectId,
-            assigneeId = task.assigneeId,
+            projectId = initialDraft.projectId,
+            assigneeId = choices.assigneeIdForFingerprint(initialDraft),
             start = DateTimeDraftSelection(initialDraft.schedule.date, initialDraft.schedule.hour, initialDraft.schedule.minute),
             durationMinutes = initialDraft.schedule.durationMinutes,
-            recurrencePreset = task.recurrence.preset,
+            recurrencePreset = initialDraft.recurrencePresetForUpdate(),
             existingChildren = task.checklistItems.sortedBy { it.order }.map { it.toEditorDraft().toFingerprint() },
             deletedChildIds = emptySet(),
             addedChildren = initialAddedDrafts.map { it.toFingerprint() }
@@ -126,18 +127,14 @@ fun EditTaskScreen(
     val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(task, hostEnabled = true).enabled
 
     fun currentFingerprint(draft: TaskEditorDraft): EditTaskDraftFingerprint {
-        val selectedProject = choices.selectedProject(draft)
         return editTaskDraftFingerprint(
             title = draft.title,
             description = draft.description,
             projectId = draft.projectId,
-            assigneeId = assigneeIdForProject(selectedProject, draft.assignee)
-                ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() },
+            assigneeId = choices.assigneeIdForFingerprint(draft),
             start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
             durationMinutes = draft.schedule.durationMinutes,
-            recurrencePreset = draft.recurrencePreset.takeUnless {
-                draft.recurrenceKind == RecurrenceKind.custom && !draft.repeatReplacementSelected
-            },
+            recurrencePreset = draft.recurrencePresetForUpdate(),
             existingChildren = existingDrafts.map { it.toFingerprint() },
             deletedChildIds = deletedChildren,
             addedChildren = addedDrafts.map { it.toFingerprint() }
@@ -255,9 +252,7 @@ fun EditTaskScreen(
                         project = project,
                         selectedAssignee = draft.assignee,
                         schedule = draft.schedule,
-                        recurrencePreset = draft.recurrencePreset.takeUnless {
-                            draft.recurrenceKind == RecurrenceKind.custom && !draft.repeatReplacementSelected
-                        },
+                        recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
                         addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),

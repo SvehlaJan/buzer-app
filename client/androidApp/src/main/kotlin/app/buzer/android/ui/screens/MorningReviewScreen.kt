@@ -44,6 +44,7 @@ import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
 import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateDraft
+import app.buzer.android.ui.taskeditor.recurrencePresetForUpdate
 import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.diagnostics.AppLog
@@ -327,19 +328,19 @@ private fun MorningReviewRepairEditor(
     var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
     val now = remember(task.id) { LocalDateTime.now() }
     val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
-    val initialFingerprint = remember(task.id) {
+    val initialFingerprint = remember(task.id, choices) {
         editTaskDraftFingerprint(
             title = initialDraft.title,
             description = initialDraft.description,
-            projectId = task.projectId,
-            assigneeId = task.assigneeId,
+            projectId = initialDraft.projectId,
+            assigneeId = choices.assigneeIdForFingerprint(initialDraft),
             start = DateTimeDraftSelection(
                 initialDraft.schedule.date,
                 initialDraft.schedule.hour,
                 initialDraft.schedule.minute
             ),
             durationMinutes = initialDraft.schedule.durationMinutes,
-            recurrencePreset = task.recurrence.preset,
+            recurrencePreset = initialDraft.recurrencePresetForUpdate(),
             existingChildren = task.checklistItems.sortedBy { it.order }.map {
                 ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
             },
@@ -350,21 +351,14 @@ private fun MorningReviewRepairEditor(
     val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(task, hostEnabled = true).enabled
 
     fun currentFingerprint(draft: TaskEditorDraft): EditTaskDraftFingerprint {
-        val selectedProject = choices.selectedProject(draft)
-        val assigneeId = draft.assignee?.id?.takeIf {
-            selectedProject?.canAssignTasks == true && it.isNotBlank()
-        } ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
         return editTaskDraftFingerprint(
             title = draft.title,
             description = draft.description,
             projectId = draft.projectId,
-            assigneeId = assigneeId,
+            assigneeId = choices.assigneeIdForFingerprint(draft),
             start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
             durationMinutes = draft.schedule.durationMinutes,
-            recurrencePreset = draft.recurrencePreset.takeUnless {
-                draft.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
-                    !draft.repeatReplacementSelected
-            },
+            recurrencePreset = draft.recurrencePresetForUpdate(),
             existingChildren = existingDrafts.map {
                 ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
             },
@@ -433,10 +427,7 @@ private fun MorningReviewRepairEditor(
                         project = project,
                         selectedAssignee = draft.assignee,
                         schedule = draft.schedule,
-                        recurrencePreset = draft.recurrencePreset.takeUnless {
-                            draft.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
-                                !draft.repeatReplacementSelected
-                        },
+                        recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
                         addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),
