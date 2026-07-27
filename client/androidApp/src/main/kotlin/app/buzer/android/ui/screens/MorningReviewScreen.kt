@@ -180,7 +180,8 @@ fun MorningReviewScreen(
     onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
-    refreshProjects: (suspend () -> List<ProjectItem>)? = null
+    refreshProjects: (suspend () -> List<ProjectItem>)? = null,
+    nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
     val context = LocalContext.current
     val deviceId = remember(context) {
@@ -243,7 +244,8 @@ fun MorningReviewScreen(
             onRetryChoices = ::retryProjects,
             onRepair = onRepair,
             onSuccess = { onRepairSuccess(task.id) },
-            onCancel = { repairingTask = null }
+            onCancel = { repairingTask = null },
+            nowProvider = nowProvider
         )
         return
     }
@@ -318,7 +320,8 @@ private fun MorningReviewRepairEditor(
     onRetryChoices: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
     onSuccess: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
     var existingDrafts by remember(task.id) {
         mutableStateOf(task.checklistItems.sortedBy { it.order }.map(ChecklistItem::toEditorDraft))
@@ -326,7 +329,7 @@ private fun MorningReviewRepairEditor(
     var deletedChildren by remember(task.id) { mutableStateOf<Set<String>>(emptySet()) }
     var addedDrafts by remember(task.id) { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
     var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
-    val now = remember(task.id) { LocalDateTime.now() }
+    val now = remember(task.id, nowProvider) { nowProvider() }
     val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
     val initialFingerprint = remember(task.id, choices) {
         editTaskDraftFingerprint(

@@ -107,6 +107,32 @@ class MorningReviewRepairHostTest {
         assertTrue(updateTaskIds.isEmpty())
     }
 
+    @Test
+    fun morningReviewRepairUsesInjectedClockToDetermineQuickSuggestions() {
+        val taskWithMissingSchedule = task(id = "clock", title = "Clock repair").copy(
+            dueDatetime = null,
+            dueDate = null,
+            durationMinutes = null,
+            validationErrors = listOf("missing_due_datetime", "missing_duration")
+        )
+
+        composeRule.setContent {
+            BuzerTheme {
+                MorningReviewScreen(
+                    invalidTasks = listOf(taskWithMissingSchedule),
+                    onBack = {},
+                    onRepair = { _, _ -> CoordinatorActionResult.Success },
+                    loadProjects = { listOf(project) },
+                    refreshProjects = { listOf(project) },
+                    nowProvider = { java.time.LocalDateTime.of(2026, 7, 21, 10, 1) }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("morning-repair-clock").performClick()
+        composeRule.onNodeWithText("10:05").performScrollTo().assertIsDisplayed()
+    }
+
     private fun clickRepairAction() {
         composeRule.onNodeWithText("Repair 09:00–09:30").performClick()
     }
