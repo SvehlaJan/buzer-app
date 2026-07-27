@@ -202,8 +202,7 @@ class TaskEditorScaffoldLayoutTest {
                     presentation = TaskEditorPresentation(
                         screenTitle = "Edit task",
                         primaryVerb = "Update",
-                        contextMessage = "This task needs attention",
-                        showUpdateFooter = true
+                        contextMessage = "This task needs attention"
                     ),
                     draft = TaskEditorDraft(title = "Review", assignee = currentUser),
                     now = now(),

@@ -40,6 +40,7 @@ import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
+import app.buzer.android.ui.taskeditor.TaskEditorProjectLoadStatus
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
@@ -103,8 +104,7 @@ data class MorningReviewTaskCardState(
 
 internal val morningReviewRepairPresentation = TaskEditorPresentation(
     screenTitle = "Repair task",
-    primaryVerb = "Repair",
-    showUpdateFooter = true
+    primaryVerb = "Repair"
 )
 
 internal data class MorningReviewRepairCompletion(
@@ -444,10 +444,11 @@ private fun MorningReviewRepairEditor(
             onCancel = onCancel,
             modifier = Modifier.fillMaxSize()
         )
-        if (choices.loading) InlineLoadingStatus("Loading projects...")
-        choices.errorMessage?.let { message ->
-            WarningStatus("Projects did not load: $message", onRetry = onRetryChoices)
-        }
+        TaskEditorProjectLoadStatus(
+            loading = choices.loading,
+            message = choices.errorMessage,
+            onRetry = onRetryChoices
+        )
     }
 }
 

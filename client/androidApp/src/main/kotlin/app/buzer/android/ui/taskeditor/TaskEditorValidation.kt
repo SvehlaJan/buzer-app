@@ -20,8 +20,7 @@ internal enum class ValidationExposure {
 internal data class TaskEditorPresentation(
     val screenTitle: String,
     val primaryVerb: String,
-    val contextMessage: String? = null,
-    val showUpdateFooter: Boolean = false
+    val contextMessage: String? = null
 )
 
 internal data class TaskEditorValidation(

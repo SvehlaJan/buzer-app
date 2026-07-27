@@ -319,9 +319,6 @@ internal fun failTaskEditorUpdateSubmission(state: TaskEditorUpdateState): TaskE
     resultMessage = GENERIC_TASK_EDITOR_UPDATE_ERROR
 )
 
-internal fun shouldRenderTaskEditorUpdateFooter(presentation: TaskEditorPresentation): Boolean =
-    presentation.showUpdateFooter
-
 /**
  * Stateful Update host. It owns form state, eager validation, result transitions, and discard
  * confirmation; screen wrappers retain only their choice loading and full-request construction.
@@ -335,7 +332,7 @@ internal fun TaskEditorUpdateScreen(
     checklistDoneCount: Int,
     checklistTotalCount: Int,
     checklistContent: @Composable (enabled: Boolean, errorMessage: String?) -> Unit,
-    footerContent: @Composable () -> Unit = {},
+    footerContent: @Composable () -> Unit,
     onRetryChoices: () -> Unit,
     contentValidation: () -> TaskEditorUpdateContentValidation = { TaskEditorUpdateContentValidation() },
     isDirty: (TaskEditorDraft) -> Boolean,
@@ -432,7 +429,7 @@ internal fun TaskEditorUpdateScreen(
         checklistDoneCount = checklistDoneCount,
         checklistTotalCount = checklistTotalCount,
         checklistContent = { checklistContent(state.editingEnabled, currentContentValidation.message) },
-        footerContent = if (shouldRenderTaskEditorUpdateFooter(presentation)) footerContent else { {} },
+        footerContent = footerContent,
         onRetryCollaborators = onRetryChoices,
         onPrimaryAction = ::submit,
         onCancel = ::requestCancel,

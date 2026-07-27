@@ -203,17 +203,14 @@ class TaskEditorValidationTest {
         val repair = TaskEditorPresentation(
             screenTitle = "Repair task",
             primaryVerb = "Repair",
-            contextMessage = "This task needs attention",
-            showUpdateFooter = true
+            contextMessage = "This task needs attention"
         )
 
         assertEquals("Add task", add.screenTitle)
         assertEquals("Add", add.primaryVerb)
         assertEquals(null, add.contextMessage)
-        assertFalse(add.showUpdateFooter)
         assertEquals("Repair", repair.primaryVerb)
         assertEquals("This task needs attention", repair.contextMessage)
-        assertTrue(repair.showUpdateFooter)
     }
 
     @Test

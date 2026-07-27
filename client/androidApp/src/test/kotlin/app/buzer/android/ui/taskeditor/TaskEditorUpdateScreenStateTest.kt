@@ -69,22 +69,6 @@ class TaskEditorUpdateScreenStateTest {
     }
 
     @Test
-    fun hostPresentationRetainsTheOptionalFooterSlot() {
-        val presentation = TaskEditorPresentation(
-            screenTitle = "Edit task",
-            primaryVerb = "Save",
-            showUpdateFooter = true
-        )
-
-        assertTrue(shouldRenderTaskEditorUpdateFooter(presentation))
-        assertFalse(
-            shouldRenderTaskEditorUpdateFooter(
-                presentation.copy(showUpdateFooter = false)
-            )
-        )
-    }
-
-    @Test
     fun invalidChecklistContentDisablesSubmitAndStaysInlineWithTheEditor() {
         val state = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
 

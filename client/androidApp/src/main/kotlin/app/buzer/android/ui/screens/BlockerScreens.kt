@@ -271,8 +271,7 @@ internal sealed interface DeadlineBlockerRecoveryState {
 
 internal val deadlineBlockerUpdatePresentation = TaskEditorPresentation(
     screenTitle = "Reschedule task",
-    primaryVerb = "Reschedule",
-    showUpdateFooter = true
+    primaryVerb = "Reschedule"
 )
 
 internal fun deadlineBlockerRecoveryState(

@@ -49,7 +49,6 @@ class DeadlineBlockerUpdateStateTest {
         val state = initialTaskEditorUpdateState(editor.task, readyChoices())
 
         assertEquals("Reschedule", deadlineBlockerUpdatePresentation.primaryVerb)
-        assertTrue(deadlineBlockerUpdatePresentation.showUpdateFooter)
         assertEquals(task.id, editor.task.id)
         assertEquals("Title is required", state.visibleValidation.titleError)
         assertEquals("Start time is required", state.visibleValidation.scheduleError)
