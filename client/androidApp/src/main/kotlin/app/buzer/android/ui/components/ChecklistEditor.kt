@@ -9,6 +9,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
@@ -68,7 +69,8 @@ fun ChecklistEditor(
                         onDraftsChange(drafts + ChecklistEditorDraft(nextClientMutationId(), ""))
                     }
                 },
-                enabled = enabled && drafts.size < maxItems
+                enabled = enabled && drafts.size < maxItems,
+                modifier = Modifier.testTag("addChecklistItem")
             ) { Text("Add checklist item") }
         }
     }

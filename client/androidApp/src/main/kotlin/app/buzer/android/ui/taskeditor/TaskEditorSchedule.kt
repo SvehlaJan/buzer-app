@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.buzer.android.ui.theme.Spacing
@@ -57,11 +58,12 @@ internal fun ScheduleEditor(
             customDescription = "Custom date",
             onCustom = { customDialog = ScheduleCustomDialog.Date }
         ) {
-            choices.dates.forEach { choice ->
+            choices.dates.forEachIndexed { index, choice ->
                 QuickChoice(
                     label = choice.label,
                     selected = draft.schedule.date == choice.date,
                     enabled = enabled,
+                    modifier = Modifier.testTag("dateQuickChoice$index"),
                     onClick = { onScheduleChange(draft.schedule.copy(date = choice.date)) }
                 )
             }
@@ -73,11 +75,12 @@ internal fun ScheduleEditor(
             customDescription = "Custom start time",
             onCustom = { customDialog = ScheduleCustomDialog.Time }
         ) {
-            choices.startTimes.forEach { choice ->
+            choices.startTimes.forEachIndexed { index, choice ->
                 QuickChoice(
                     label = choice.label,
                     selected = draft.schedule.date == choice.date && draft.schedule.selectedTime() == choice.time,
                     enabled = enabled,
+                    modifier = Modifier.testTag("startTimeQuickChoice$index"),
                     onClick = {
                         onScheduleChange(selectQuickStartTime(draft, choice).schedule)
                     }
@@ -91,11 +94,12 @@ internal fun ScheduleEditor(
             customDescription = "Custom duration",
             onCustom = { customDialog = ScheduleCustomDialog.Duration }
         ) {
-            choices.durationMinutes.forEach { duration ->
+            choices.durationMinutes.forEachIndexed { index, duration ->
                 QuickChoice(
                     label = formatDurationLabel(duration),
                     selected = draft.schedule.durationMinutes == duration,
                     enabled = enabled,
+                    modifier = Modifier.testTag("durationQuickChoice$index"),
                     onClick = { onScheduleChange(draft.schedule.copy(durationMinutes = duration)) }
                 )
             }
@@ -191,11 +195,13 @@ private fun QuickChoice(
     label: String,
     selected: Boolean,
     enabled: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     AssistChip(
         onClick = onClick,
         enabled = enabled,
+        modifier = modifier,
         label = { Text(label) },
         colors = if (selected) {
             AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)

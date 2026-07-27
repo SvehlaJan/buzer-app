@@ -282,6 +282,7 @@ function normalizeDurationMinutes(
 export class E2ETodoistAdapter implements TodoistAdapter {
   readonly world: E2ETodoistWorld;
   private scenario: E2EScenario = "none";
+  private failNextChildAdd = false;
   private syncCount = 0;
   private readonly acceptedCommandOutcomes = new Map<string, unknown>();
   private acceptedCommandGeneration = 0;
@@ -296,6 +297,11 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 
   currentScenario(): E2EScenario {
     return this.scenario;
+  }
+
+  /** Test-only control for exercising root-created / child-failed reconciliation. */
+  setFailNextChildAdd(enabled: boolean): void {
+    this.failNextChildAdd = enabled;
   }
 
   async sync(_syncToken: string): Promise<TodoistSyncResult> {
@@ -315,6 +321,12 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   }
 
   async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
+    if (input.kind === "child" && this.failNextChildAdd) {
+      this.failNextChildAdd = false;
+      throw Object.assign(new Error("e2e_forced_child_create_failure"), {
+        code: "e2e_forced_child_create_failure"
+      });
+    }
     return this.runAcceptedCommand(input.commandUuid, () => ({
       todoistTaskId:
         input.kind === "root"

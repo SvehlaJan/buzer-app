@@ -19,6 +19,7 @@ import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
+import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskSnapshotItem
 import java.time.Instant
@@ -57,6 +58,14 @@ internal data class TaskEditorUpdateChoices(
     fun collaboratorsAvailable(draft: TaskEditorDraft): Boolean = selectedProject(draft)?.let { project ->
         !project.canAssignTasks || project.collaboratorsReady
     } == true
+
+    /** Mirrors the assignee projection sent by an update request for dirty-draft comparisons. */
+    fun assigneeIdForFingerprint(draft: TaskEditorDraft): String? {
+        val selectedProject = selectedProject(draft)
+        return draft.assignee?.id?.takeIf {
+            selectedProject?.canAssignTasks == true && it.isNotBlank()
+        } ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
+    }
 }
 
 /** State and transitions shared by Edit, Repair, and blocker-update callers. */
@@ -221,6 +230,15 @@ internal fun initialTaskEditorUpdateDraft(task: TaskSnapshotItem): TaskEditorDra
         originalSchedule = schedule.copy(durationMinutes = task.durationMinutes)
     )
 }
+
+/**
+ * A custom Todoist recurrence remains unchanged until the user explicitly replaces it. Every
+ * other editor draft has a concrete preset, including a snapshot with no recurrence (Never).
+ */
+internal fun TaskEditorDraft.recurrencePresetForUpdate(): RecurrencePreset? =
+    recurrencePreset.takeUnless {
+        recurrenceKind == RecurrenceKind.custom && !repeatReplacementSelected
+    }
 
 internal fun reconcileTaskEditorUpdateMembership(
     draft: TaskEditorDraft,

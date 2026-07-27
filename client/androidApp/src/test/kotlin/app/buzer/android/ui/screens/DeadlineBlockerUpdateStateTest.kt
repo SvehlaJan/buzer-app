@@ -235,7 +235,6 @@ class DeadlineBlockerUpdateStateTest {
         val beforeChoicesLoad = deadlineBlockerDraftFingerprint(
             draft = draft,
             choices = TaskEditorUpdateChoices(loading = true),
-            recurrencePreset = task.recurrence.preset,
             existingChildren = emptyList(),
             deletedChildIds = emptySet(),
             addedChildren = emptyList()
@@ -243,7 +242,6 @@ class DeadlineBlockerUpdateStateTest {
         val baseline = deadlineBlockerDraftFingerprint(
             draft = draft,
             choices = loadedChoices,
-            recurrencePreset = task.recurrence.preset,
             existingChildren = emptyList(),
             deletedChildIds = emptySet(),
             addedChildren = emptyList()
@@ -251,7 +249,6 @@ class DeadlineBlockerUpdateStateTest {
         val current = deadlineBlockerDraftFingerprint(
             draft = draft,
             choices = loadedChoices,
-            recurrencePreset = task.recurrence.preset,
             existingChildren = emptyList(),
             deletedChildIds = emptySet(),
             addedChildren = emptyList()
@@ -278,7 +275,6 @@ class DeadlineBlockerUpdateStateTest {
         val changed = deadlineBlockerDraftFingerprint(
             draft = draft.copy(title = "Changed title"),
             choices = loadedChoices,
-            recurrencePreset = task.recurrence.preset,
             existingChildren = emptyList(),
             deletedChildIds = emptySet(),
             addedChildren = emptyList()

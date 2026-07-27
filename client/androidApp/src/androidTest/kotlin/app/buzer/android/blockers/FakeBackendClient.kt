@@ -29,6 +29,10 @@ class FakeBackendClient(
         request("POST", "/__fail-projects", """{"enabled":$enabled}""")
     }
 
+    fun setFailNextChildAdd(enabled: Boolean) {
+        request("POST", "/__fail-next-child-add", """{"enabled":$enabled}""")
+    }
+
     fun setScenario(name: String) {
         request("POST", "/__scenario", """{"name":"$name"}""")
     }

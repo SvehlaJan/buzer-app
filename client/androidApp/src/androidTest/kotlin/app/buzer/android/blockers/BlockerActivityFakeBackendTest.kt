@@ -113,14 +113,14 @@ class BlockerActivityFakeBackendTest {
 
         val scenario = launchDeadlineBlocker("task-reschedule")
 
-        composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Reschedule action").performClick()
         waitForText("Reschedule task")
         composeRule.onNodeWithText("Schedule").assertIsDisplayed()
         composeRule.onNodeWithText("Notes").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Checklist").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
         val rescheduleLabel = waitForComputedRescheduleLabel()
-        composeRule.onNodeWithText(rescheduleLabel).performScrollTo().performClick()
+        composeRule.onNodeWithText(rescheduleLabel).performClick()
 
         waitForActivityDestroyed(scenario)
         waitForRecordedCall("/tasks/task-reschedule/update")
@@ -162,10 +162,10 @@ class BlockerActivityFakeBackendTest {
         try {
             val scenario = launchDeadlineBlocker("task-reschedule-fail")
             try {
-                composeRule.onNodeWithContentDescription("Reschedule action").performScrollTo().performClick()
+                composeRule.onNodeWithContentDescription("Reschedule action").performClick()
                 waitForText("Reschedule task")
                 val rescheduleLabel = waitForComputedRescheduleLabel()
-                composeRule.onNodeWithText(rescheduleLabel).performScrollTo().performClick()
+                composeRule.onNodeWithText(rescheduleLabel).performClick()
 
                 waitForRecordedCall("/tasks/task-reschedule-fail/update")
                 waitForErrorLog("action=UPDATE_TASK taskId=task-reschedule-fail", "forced_failure")
@@ -284,7 +284,7 @@ class BlockerActivityFakeBackendTest {
         repairInvalidTask()
         waitForContentDescription("Schedule: Set date, time & duration")
         composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration").assertIsDisplayed()
-        composeRule.onNodeWithText("Repair").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Repair").assertIsDisplayed()
 
         waitForAnyText("Start time is required")
         composeRule.onNodeWithText("Start time is required").performScrollTo().assertIsDisplayed()
@@ -306,7 +306,7 @@ class BlockerActivityFakeBackendTest {
         closeSoftKeyboard()
         selectDefaultRepairSchedule()
         val repairLabel = waitForComputedRepairLabel()
-        composeRule.onNodeWithText(repairLabel).performScrollTo().performClick()
+        composeRule.onNodeWithText(repairLabel).performClick()
 
         waitForRecordedCall("/tasks/task-invalid/update")
         fakeBackend.assertRecorded(
@@ -329,7 +329,7 @@ class BlockerActivityFakeBackendTest {
             repairInvalidTask()
             selectDefaultRepairSchedule()
             val repairLabel = waitForComputedRepairLabel()
-            composeRule.onNodeWithText(repairLabel).performScrollTo().performClick()
+            composeRule.onNodeWithText(repairLabel).performClick()
 
             waitForRecordedCall("/tasks/task-invalid/update")
             waitForErrorLog("action=UPDATE_TASK taskId=task-invalid", "forced_failure")
@@ -450,11 +450,23 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun selectDefaultRepairSchedule() {
+        val scheduleOpen = runCatching {
+            composeRule.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
+        }.isSuccess
+        if (!scheduleOpen) {
+            composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration")
+                .performScrollTo()
+                .performClick()
+        }
+        waitForText("Date")
         composeRule.onNodeWithText("Today").performScrollTo().performClick()
         composeRule.onNodeWithContentDescription("Custom start time").performScrollTo().performClick()
         waitForContentDescription("Custom start time dialog apply")
         composeRule.onNodeWithContentDescription("Custom start time dialog apply").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText("30 min").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        waitForText("Ends at")
     }
 
     private fun waitForActivityDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
