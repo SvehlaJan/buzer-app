@@ -339,6 +339,40 @@ describe("TodoistSyncService", () => {
     expect(adapter.sync).toHaveBeenNthCalledWith(2, "first-token");
   });
 
+  it("coalesces concurrent manual sync calls into a single adapter invocation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const adapter = new FakeTodoistAdapter();
+    let releaseFirst: (() => void) | undefined;
+    adapter.sync = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        releaseFirst = () => resolve({
+          syncToken: "first-token",
+          tasks: [],
+          collaborators: [],
+          collaboratorStates: [],
+          projects: []
+        });
+      }))
+      .mockResolvedValue({
+        syncToken: "second-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
+      });
+    const service = new TodoistSyncService(db, new TaskRepository(db), new ProjectRepository(db), adapter);
+
+    const first = service.syncNow();
+    const second = service.syncNow();
+    await Promise.resolve();
+    expect(adapter.sync).toHaveBeenCalledTimes(1);
+
+    releaseFirst?.();
+    await Promise.all([first, second]);
+
+    const third = service.syncNow();
+    await third;
+    expect(adapter.sync).toHaveBeenCalledTimes(2);
+  });
+
+
   it("rotates state when an authoritative one-time due instance changes", async () => {
     const db = new Database(":memory:");
     migrate(db);
