@@ -695,7 +695,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
   - the pull container semantics include custom action `Refresh tasks` and invoking it records `/tasks/sync`;
   - calendar/date-jump, search, overflow, and secondary Morning Review FAB are absent.
 
-- [ ] **Step 4: Run the scoped real-backend E2E class.**
+- [x] **Step 4: Run the scoped real-backend E2E class.**
 
   From repository root:
 
@@ -705,7 +705,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 
   Expected: PASS. This is the first runtime UI authority; JVM success is insufficient.
 
-- [ ] **Step 5: Commit fixtures and migrated instrumentation.**
+- [x] **Step 5: Commit fixtures and migrated instrumentation.**
 
   ```bash
   git add backend/test/fakes/e2eFixtures.ts backend/test/fakes/e2eFixtures.test.ts backend/test/e2eServer.ts backend/test/e2eServer.test.ts client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt
@@ -718,7 +718,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 - Create: `docs/handoffs/2026-08-02-smart-home-and-true-refresh.md`
 - Modify: this plan's checkboxes as tasks complete
 
-- [ ] **Step 1: Run backend verification.**
+- [x] **Step 1: Run backend verification.**
 
   From `backend/`:
 
@@ -730,7 +730,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 
   Expected: all PASS.
 
-- [ ] **Step 2: Run complete JVM/build verification.**
+- [x] **Step 2: Run complete JVM/build verification.**
 
   From `client/` with Android SDK variables exported:
 

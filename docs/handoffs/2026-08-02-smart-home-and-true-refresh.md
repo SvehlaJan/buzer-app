@@ -5,17 +5,16 @@
 - Plan: `docs/superpowers/plans/2026-08-02-smart-home-and-true-refresh.md`
 - Worktree: `/Users/svehla/playground/buzer-app/.worktrees/smart-home-and-true-refresh`
 - Branch: `feature/smart-home-and-true-refresh`
-- HEAD at handoff: `102c2b6 feat: render continuous smart Home`
+- Code HEAD before this documentation update: `f034400 test: verify smart Home end to end`
 - Tasks 1–6: implemented and committed.
-- Task 7: fixture and instrumentation implementation complete, but not committed because the scoped instrumentation class is 27/28 rather than green.
-- Task 8: stopped before full regression gates by the parent-agent time box after the scoped failure.
+- Task 7: complete and committed as `f034400`; the final scoped real-backend class passed all 28 tests.
+- Task 8: backend/JVM/build gates are green. The full unfiltered real-backend E2E suite remains unrun and its plan checkbox remains open.
 
 ## Plan steps attempted
 
-- Task 7 Steps 1–3 completed.
-- Task 7 Step 4 attempted repeatedly; final result is one sequence-dependent failure.
-- Task 7 Step 5 skipped because the required scoped class is red.
-- Task 8 hygiene and this handoff were completed. Backend-wide, client-wide, and unfiltered E2E gates were skipped after the stop directive.
+- Task 7 Steps 1–5 completed.
+- Task 8 Steps 1–2 and 4–7 completed.
+- Task 8 Step 3 remains open: the full unfiltered real-backend E2E suite was outside the bounded isolation rerun authorization.
 
 ## Existing commits for Tasks 1–6
 
@@ -26,14 +25,16 @@
 - `8d3e734 fix: use pure zoneId in parseInstant fallback`
 - `416b067 feat: wire authoritative Home refresh`
 - `102c2b6 feat: render continuous smart Home`
+- `f034400 test: verify smart Home end to end`
 
-## Uncommitted Task 7 files
+## Task 7 files committed in `f034400`
 
 - `backend/test/fakes/e2eFixtures.ts`
 - `backend/test/fakes/e2eFixtures.test.ts`
 - `backend/test/e2eServer.ts`
 - `backend/test/e2eServer.test.ts`
 - `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt`
 - `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
 
 The production Home file contains two focused defects exposed by the new instrumentation: the hero now renders `+N overlapping`, and Back to top becomes reachable when the third future header is visible near the end of a tall viewport.
@@ -76,20 +77,20 @@ The production Home file contains two focused defects exposed by the new instrum
 - Evidence: HTTP 200 with completed authoritative snapshot in approximately 30 ms. The equivalent full-payload `app.inject` backend test also passes. This localizes the remaining issue to sequence-dependent Android activity/request behavior, not payload validation or backend reconciliation.
 
 - Command: `npm test`
-- Result: SKIPPED
-- Evidence: Task 8 stopped after the scoped E2E failure by parent-agent time box.
+- Result: PASS
+- Evidence: final run passed 32 files and 400 tests.
 
 - Command: `npm run typecheck`
-- Result: SKIPPED
-- Evidence: Task 8 stopped after the scoped E2E failure by parent-agent time box.
+- Result: PASS
+- Evidence: TypeScript no-emit check exited 0.
 
 - Command: `npm run build`
-- Result: SKIPPED
-- Evidence: Task 8 stopped after the scoped E2E failure by parent-agent time box.
+- Result: PASS
+- Evidence: backend TypeScript build exited 0.
 
-- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
-- Result: SKIPPED
-- Evidence: Task 8 stopped after the scoped E2E failure by parent-agent time box.
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: final run completed with `BUILD SUCCESSFUL in 2s`.
 
 - Command: `PORT=18434 scripts/e2e-real-backend.sh`
 - Result: SKIPPED
@@ -107,11 +108,80 @@ The production Home file contains two focused defects exposed by the new instrum
 
 No separate screenshot/manual-device pass was performed. The managed-device instrumentation exercised the listed visual interactions against `backend/test/e2eServer.ts`. All E2E work used port 18434; the unrelated server on port 18433/PID 42419 was not touched.
 
-## Known failure and recommended follow-up
+## 2026-08-02 deadline-reschedule isolation follow-up
 
-The remaining failure is order/sequence dependent. `deadlineBlocker_rescheduleUsesSharedUpdateUi` passes in isolation and its exact request completes through both backend injection and real HTTP, but the Activity stays resumed when the whole 28-test class runs. Two hypotheses—closing Home `ActivityScenario` instances after each test and draining in-flight actions before `/__reset`—were tested and did not fix it; those speculative changes were removed.
+Historical status after the first strict three-invocation budget: **BLOCKED**. The user then authorized exactly two more Android invocations; both passed and resolved Task 7.
 
-Recommended next step: inspect the Android blocker/editor coroutine and Activity lifecycle state immediately before/after the successful update response when this method runs after `homeSwipeToRefresh_recordsSync`, then make the smallest proven isolation or lifecycle correction. Do not weaken the assertion or commit Task 7 until the scoped class passes.
+### Root-cause evidence
+
+The deterministic reproducer now runs the preceding Home swipe-refresh flow and proves these boundaries before starting deadline reschedule:
+
+1. backend `/tasks/sync` request received;
+2. backend response completed;
+3. Android logged HTTP 200 and persisted the coordinator-applied snapshot;
+4. `MainActivity` reached `DESTROYED`.
+
+On the RED deadline update, Fastify recorded action `f099f89b-1951-4c90-8b5f-504b2ee88f34`, received it at `2026-08-02T18:00:36.050Z`, and completed HTTP 200 at `18:00:36.062Z`. Android then emitted no Ktor `http RESPONSE`, no coordinator `mutation applied`, and no Activity-finish marker for 45 seconds. `JobCancellationException` appeared only when test teardown cancelled the request.
+
+The proven cause is the test wait boundary: `waitForActivityDestroyed` used a `SystemClock.sleep` polling loop while the update was launched from the Compose editor coroutine. The polling monopolized the Compose test scheduler. A fast isolated response could win the race before the loop; after Home refresh, the response continuation waited until teardown. The one fix preserves the 45-second `DESTROYED` predicate but services the test scheduler with `composeRule.waitUntil`.
+
+The focused GREEN log then showed the complete expected chain: backend request received, Android HTTP 200, coordinator `mutation applied ... outcome=completed`, and Activity finish. No production file was changed for this fix.
+
+### Strict Android instrumentation ledger
+
+1. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#deadlineBlocker_rescheduleUsesSharedUpdateUi' scripts/e2e-real-backend.sh`
+   - Result: **FAIL**, deterministic RED 0/1.
+   - Evidence: backend response completed HTTP 200 in 12 ms; Android response/coordinator/finish markers absent until teardown cancellation.
+2. Same focused command after the single scheduler-aware wait fix.
+   - Result: **PASS**, 1/1, `BUILD SUCCESSFUL in 57s`.
+   - Evidence: HTTP response, `mutation applied`, and Activity-finish markers all present.
+3. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+   - Result: **FAIL**, 27/28, `BUILD FAILED in 2m 15s`.
+   - Evidence: `deadlineBlocker_rescheduleUsesSharedUpdateUi` passed in its original sequence-dependent position. The sole failure moved to `morningReview_repairCallsFakeBackend`: after the scheduler-aware helper observed Activity `DESTROYED`, its immediate `assertCountEquals(0)` still found one disabled `Invalid assigned fixture` editor semantics node. The budget was exhausted, so the plausible same-boundary `waitForIdle` refinement was intentionally not added or tested.
+
+One sandboxed preflight attempt failed before backend startup or Gradle/instrumentation (`tsx` IPC `listen EPERM`). It did not invoke Android and is not counted in the three Android invocations; the identical escalated command became ledger entry 1.
+
+### Authorized two-run completion ledger
+
+The final narrow refinement calls `composeRule.waitForIdle()` immediately after the scheduler-aware wait observes `Lifecycle.State.DESTROYED`. This drains disposed Activity semantics before callers assert UI absence. It does not add sleep, retry, timeout, forced finish, ignored coverage, or production behavior.
+
+1. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#morningReview_repairCallsFakeBackend' scripts/e2e-real-backend.sh`
+   - Result: **PASS**, 1/1, `BUILD SUCCESSFUL in 1m 1s`.
+2. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+   - Result: **PASS**, 28/28, zero skipped and zero failed, `BUILD SUCCESSFUL in 2m 29s`.
+
+The deterministic Home→deadline-reschedule regression, backend received/completed markers, Android response/coordinator result, Activity finish, and the Morning Review semantics cleanup all passed in the final class sequence.
+
+### Cheap verification after the fix
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 32 files and 400 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: TypeScript no-emit check exited 0.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: backend TypeScript build exited 0.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: final rerun completed with `BUILD SUCCESSFUL in 2s`.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Remaining work
+
+Task 7 has no remaining work. Do not rerun the discarded scenario-closing or backend-drain hypotheses. Task 8 Step 3 still requires a separately authorized full unfiltered `PORT=18434 scripts/e2e-real-backend.sh` before claiming the whole Change 1 instrumentation suite is green.
 
 ## Contract and scope confirmations
 
@@ -124,4 +194,4 @@ Recommended next step: inspect the Android blocker/editor coroutine and Activity
 ## Assumptions
 
 - The accepted Smart Home design and this plan remain product truth.
-- A red scoped instrumentation authority blocks claiming Change 1 complete even though 27/28 tests and all focused backend checks pass.
+- The scoped 28-test Task 7 authority is green. The broader Change 1 completion claim still depends on the open Task 8 unfiltered-E2E checkbox.
