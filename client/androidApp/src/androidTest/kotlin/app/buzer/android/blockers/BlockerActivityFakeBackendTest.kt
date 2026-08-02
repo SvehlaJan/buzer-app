@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasScrollAction
@@ -392,6 +393,8 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Unassigned root fixture").assertIsDisplayed()
         composeRule.onNodeWithText("Assign").performClick()
         waitForText("Edit task")
+        waitForContentDescription("Task title")
+        composeRule.onNodeWithContentDescription("Task title").assertTextContains("Unassigned root fixture")
     }
 
     @Test
@@ -427,6 +430,37 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
         composeRule.onNodeWithText("Tomorrow task").performClick()
         waitForText("Edit task")
+        waitForContentDescription("Task title")
+        composeRule.onNodeWithContentDescription("Task title").assertTextContains("Tomorrow task")
+    }
+
+    @Test
+    fun homeOverdueActions_routeDoneAndEditToTheExactTask() {
+        resetTestState()
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForAnyText("Incomplete checklist task")
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue task 4"))
+            composeRule.onNodeWithTag("home-row:task-overdue-4").performClick()
+            waitForText("Edit task")
+            waitForContentDescription("Task title")
+            composeRule.onNodeWithContentDescription("Task title").assertTextContains("Overdue task 4")
+
+            pressBack()
+            waitForAnyText("Incomplete checklist task")
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue task 4"))
+            composeRule.onNodeWithTag("home-done:task-overdue-4").performClick()
+
+            waitForRecordedCall("/tasks/task-overdue-4/done")
+            fakeBackend.assertRecorded(
+                "/tasks/task-overdue-4/done",
+                "\"actionId\":",
+                "\"deviceId\":",
+                "\"expectedOccurrenceKey\":"
+            )
+        } finally {
+            scenario.close()
+        }
     }
 
     @Test
@@ -447,6 +481,28 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
         waitForRecordedCall("/tasks/sync")
         fakeBackend.assertRecorded("/tasks/sync")
+    }
+
+    @Test
+    fun homeForcedRefresh_retainsCachedContentWhileSyncResponseIsHeld() {
+        resetTestState()
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForAnyText("Incomplete checklist task")
+            fakeBackend.holdNextSync()
+
+            invokeRefreshTasksAccessibilityAction()
+            waitForSyncHoldState("waiting")
+
+            composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+
+            fakeBackend.releaseSync()
+            waitForBackendResponseCompleted("/tasks/sync")
+            composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+        } finally {
+            fakeBackend.releaseSync()
+            scenario.close()
+        }
     }
 
     @Test
@@ -746,6 +802,22 @@ class BlockerActivityFakeBackendTest {
             SystemClock.sleep(100)
         }
         fail("Expected at least $expectedCount fake backend calls to $path. Recorded calls: $lastCalls")
+    }
+
+    private fun waitForSyncHoldState(expectedState: String) {
+        var observedState = "unknown"
+        val matched = runCatching {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                observedState = runCatching { fakeBackend.syncHoldState() }.getOrDefault(observedState)
+                observedState == expectedState
+            }
+        }.isSuccess
+        if (!matched) {
+            fail(
+                "Expected sync hold state $expectedState, observed $observedState. " +
+                    "Recorded calls: ${fakeBackend.calls()}"
+            )
+        }
     }
 
     private fun invokeRefreshTasksAccessibilityAction() {

@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -135,6 +136,7 @@ fun HomeScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .testTag("home-agenda-list")
                     .padding(horizontal = Spacing.lg),
                 contentPadding = PaddingValues(top = Spacing.md, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
@@ -260,7 +262,10 @@ fun HomeScreen(
                         // 7. Future date groups with sticky headers
                         state.futureGroups.forEach { group ->
                             stickyHeader(key = "future:header:${group.date}") {
-                                DateGroupHeader(heading = group.heading)
+                                DateGroupHeader(
+                                    heading = group.heading,
+                                    testTag = "date-header:${group.date}"
+                                )
                             }
                             items(
                                 items = group.rows,
@@ -409,9 +414,11 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun DateGroupHeader(heading: String) {
+private fun DateGroupHeader(heading: String, testTag: String) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(testTag),
         color = MaterialTheme.colorScheme.background
     ) {
         Text(
@@ -511,6 +518,7 @@ private fun AgendaRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("home-row:${row.taskId}")
             .clickable(onClick = onEdit),
         color = MaterialTheme.colorScheme.surface
     ) {
@@ -563,10 +571,14 @@ private fun AgendaRow(
                 PrimaryActionButton(
                     label = "Done",
                     onClick = onDone,
-                    enabled = row.doneEnabled
+                    enabled = row.doneEnabled,
+                    modifier = Modifier.testTag("home-done:${row.taskId}")
                 )
             } else if (onAssign != null) {
-                OutlinedButton(onClick = onAssign) {
+                OutlinedButton(
+                    onClick = onAssign,
+                    modifier = Modifier.testTag("home-assign:${row.taskId}")
+                ) {
                     Text("Assign")
                 }
             }

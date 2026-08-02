@@ -43,6 +43,22 @@ class FakeBackendClient(
         request("POST", "/__scenario", """{"name":"$name"}""")
     }
 
+    fun holdNextSync() {
+        request("POST", "/__hold-next-sync")
+    }
+
+    fun syncHoldState(): String = Json.parseToJsonElement(request("GET", "/__sync-hold"))
+        .jsonObject
+        .getValue("state")
+        .jsonPrimitive
+        .content
+
+    fun releaseSync(): String = Json.parseToJsonElement(request("POST", "/__release-sync"))
+        .jsonObject
+        .getValue("state")
+        .jsonPrimitive
+        .content
+
     fun taskReconciliationStatus(taskId: String): String? {
         val body = request("GET", "/tasks/snapshot", authorized = true)
         val tasks = Json.parseToJsonElement(body).jsonObject["tasks"]?.jsonArray ?: return null

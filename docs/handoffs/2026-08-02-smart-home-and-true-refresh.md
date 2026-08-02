@@ -5,16 +5,18 @@
 - Plan: `docs/superpowers/plans/2026-08-02-smart-home-and-true-refresh.md`
 - Worktree: `/Users/svehla/playground/buzer-app/.worktrees/smart-home-and-true-refresh`
 - Branch: `feature/smart-home-and-true-refresh`
-- Code HEAD before this documentation update: `6be621a test: harden smart Home E2E authority`
+- Code HEAD before the final coverage commit: `0494387 docs: design E2E harness improvements`
 - Tasks 1–6: implemented and committed.
-- Task 7: fixture/instrumentation work is committed through `6be621a`, and the final scoped class is green (28/28). Step 3 remains incomplete for the enumerated coverage gaps, so this is not a full Smart Home completion claim.
-- Task 8: open. Backend/JVM/build gates were green before the correction pass, while the full unfiltered real-backend E2E suite remains unrun.
+- Task 7: complete, including the four previously enumerated coverage gaps.
+- Task 8: Step 3 remains open. An unfiltered run completed 69 tests with 6 legacy
+  Add/Edit helper failures; the affected Add and Edit classes passed after correction,
+  but the user deferred another full unfiltered run.
 
 ## Plan steps attempted
 
-- Task 7 Steps 1–2 and 4–5 completed. Step 3 remains open for the reviewed coverage gaps.
+- Task 7 Steps 1–5 completed.
 - Task 8 Steps 1–2 and 4–7 completed.
-- Task 8 Step 3 remains open: the full unfiltered real-backend E2E suite was outside the bounded isolation rerun authorization.
+- Task 8 Step 3 remains open pending the explicitly deferred unfiltered rerun.
 
 ## Existing commits for Tasks 1–6
 
@@ -265,7 +267,9 @@ Verification:
 
 ### Remaining work
 
-Task 7 Step 3 remains open for sticky-header pinning, explicit Overdue Done/Edit routing, exact opened-task identity for Unassigned/future rows, and cached-content retention during a controlled in-flight refresh. Task 8 Step 3 still requires a separately authorized full unfiltered `PORT=18434 scripts/e2e-real-backend.sh`; do not claim the Smart Home change complete.
+Task 7 Step 3 was completed in the coverage pass below. Task 8 Step 3 still requires a
+fresh unfiltered `PORT=18434 scripts/e2e-real-backend.sh`; do not claim the full suite is
+green until that deferred rerun passes.
 
 ## Contract and scope confirmations
 
@@ -279,4 +283,91 @@ Task 7 Step 3 remains open for sticky-header pinning, explicit Overdue Done/Edit
 ## Assumptions
 
 - The accepted Smart Home design and this plan remain product truth.
-- The scoped 28-test class is green. The broader Change 1 completion claim still depends on Task 7 Step 3's enumerated coverage gaps and the open Task 8 unfiltered-E2E checkbox.
+- Smart Home's scoped behavior and the formerly missing coverage paths are green. The
+  broader Change 1 completion claim still depends on the open Task 8 unfiltered-E2E rerun.
+
+## 2026-08-02 coverage completion and deferred full-suite rerun
+
+Task 7 Step 3 is now complete. The implementation adds stable Home row/action semantics,
+a focused sticky-header pinning test, exact editor identity assertions for Overdue,
+Unassigned, and future rows, explicit Overdue Done/Edit routing, and a deterministic
+one-shot `/tasks/sync` response barrier that proves cached content stays visible while an
+explicit refresh is genuinely in flight.
+
+The first unfiltered run exposed legacy test-helper assumptions rather than Smart Home
+product failures: Add Task helpers targeted absent/off-screen semantics through ambiguous
+nested scroll containers and left the IME open; Edit Task navigation assumed its target
+row was already composed and used an ambiguous substring matcher for `Task update`.
+The helpers now target tagged vertical surfaces, normalize the IME after text entry,
+wait for each quick choice to become selected, and use exact dialog text.
+
+Files changed in this completion pass:
+
+- `backend/test/e2eServer.ts`
+- `backend/test/e2eServer.test.ts`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorScaffold.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/taskeditor/TaskEditorSchedule.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/HomeScreenTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/FakeBackendClient.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/AddTaskFakeBackendTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/addtask/EditTaskFakeBackendTest.kt`
+- this plan and handoff
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 32 files and 404 backend tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: TypeScript no-emit check exited 0.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: backend TypeScript build exited 0.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; 70 Gradle tasks completed or were up to date.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.ui.screens.HomeScreenTest' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: all 8 focused Home renderer tests passed, including sticky pinning and stable action IDs.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#homeOverdueActions_routeDoneAndEditToTheExactTask,app.buzer.android.blockers.BlockerActivityFakeBackendTest#homeUnassignedSection_initiallyCollapsed_expands_tappingAssignOpensEdit,app.buzer.android.blockers.BlockerActivityFakeBackendTest#homeFutureRow_editOpensTask' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: all 3 Overdue/Unassigned/future routing and identity tests passed.
+
+Verification:
+- Command: `PORT=18434 scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: 69 tests ran; 63 passed and 6 legacy Add/Edit tests failed before their helper corrections. The Smart Home/blocker tests, including the held-response case, passed in this unfiltered sequence.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.addtask.AddTaskFakeBackendTest,app.buzer.android.addtask.EditTaskFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: the combined diagnostic runs localized nested-scroll and exact-text failures; after the explicit Home/editor scroll and exact-dialog fixes, both Edit tests passed while four Add tests still failed. The final Add-only rerun below covers the subsequent IME fix.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.addtask.AddTaskFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: all 11 Add Task tests passed after explicit editor scrolling, selected-choice barriers, and IME normalization.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors; Git emitted only the known worktree fsmonitor warning.
+
+Known deferred check:
+
+- Task 8 Step 3 remains open. The user explicitly chose to defer another full unfiltered
+  69-test run after the affected Add and Edit classes passed in scoped verification.
+- Do not claim the full suite is green until `PORT=18434 scripts/e2e-real-backend.sh`
+  is rerun unfiltered and passes.

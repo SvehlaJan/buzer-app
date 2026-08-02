@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildE2EServer, type E2EServer } from "./e2eServer.js";
 
 const auth = { authorization: "Bearer test-token" };
@@ -116,6 +116,35 @@ describe("seeding", () => {
 });
 
 describe("happy-path mutation conformance (every action completes, never goes pending)", () => {
+  it("holds and releases exactly the next forced sync response", async () => {
+    await withServer(async (server) => {
+      const armed = await server.app.inject({ method: "POST", url: "/__hold-next-sync", payload: {} });
+      expect(armed.statusCode).toBe(200);
+      expect(armed.json()).toEqual({ state: "armed" });
+
+      const syncPromise = server.app.inject({
+        method: "POST",
+        url: "/tasks/sync",
+        headers: auth,
+        payload: {}
+      });
+
+      await vi.waitFor(async () => {
+        const status = await server.app.inject({ method: "GET", url: "/__sync-hold" });
+        expect(status.json()).toEqual({ state: "waiting" });
+      });
+
+      const release = await server.app.inject({ method: "POST", url: "/__release-sync", payload: {} });
+      expect(release.statusCode).toBe(200);
+      expect(release.json()).toEqual({ state: "released" });
+
+      const syncResponse = await syncPromise;
+      expect(syncResponse.statusCode).toBe(200);
+      const idle = await server.app.inject({ method: "GET", url: "/__sync-hold" });
+      expect(idle.json()).toEqual({ state: "idle" });
+    });
+  });
+
   it("records the exact serialized authority returned by a completed forced sync", async () => {
     await withServer(async (server) => {
       await server.app.inject({ method: "POST", url: "/__reset", payload: {} });

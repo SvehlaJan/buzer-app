@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import app.buzer.android.ui.theme.Spacing
 import java.time.LocalDateTime
@@ -201,7 +202,7 @@ private fun QuickChoice(
     AssistChip(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier,
+        modifier = modifier.semantics { this.selected = selected },
         label = { Text(label) },
         colors = if (selected) {
             AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)

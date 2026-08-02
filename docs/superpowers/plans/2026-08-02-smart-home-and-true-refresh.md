@@ -671,7 +671,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 
   `backend/test/e2eServer.ts` already records `/tasks...` POST paths and its `failActions` hook already covers `/tasks/sync`; change it only if the new endpoint is not observable through those existing facilities.
 
-- [ ] **Step 3: Migrate existing Home instrumentation; do not append contradictory tests.**
+- [x] **Step 3: Migrate existing Home instrumentation; do not append contradictory tests.**
 
   In `BlockerActivityFakeBackendTest.kt`, update at least these existing cases:
 
@@ -695,7 +695,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
   - the pull container semantics include custom action `Refresh tasks` and invoking it records `/tasks/sync`;
   - calendar/date-jump, search, overflow, and secondary Morning Review FAB are absent.
 
-  Remaining coverage follow-up: prove sticky-header pinning rather than only reaching later grouped content; assert explicit Overdue Done/Edit routing; assert the exact task identity opened from Unassigned and future rows; and use a controlled delayed sync response to prove cached Home content remains visible while refresh is in flight.
+  Coverage completion: a focused Compose test proves the first future-date header remains pinned while scrolling within its group; stable task/action semantics prove Overdue Done/Edit routing; real-backend tests assert the exact editor title for Overdue, Unassigned, and future rows; and a one-shot test-server sync barrier proves cached Home content remains visible while the forced-sync response is held.
 
 - [x] **Step 4: Run the scoped real-backend E2E class.**
 
@@ -751,6 +751,13 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
   ```
 
   Expected: PASS. Do not claim Change 1 complete based only on the scoped Home class.
+
+  Deferred verification note (2026-08-02): one unfiltered run executed all 69 tests and
+  reported 63 passed / 6 failed in legacy Add/Edit task helpers. The failures were traced
+  to ambiguous nested scroll surfaces, off-screen Home rows, an ambiguous substring dialog
+  matcher, and an unclosed IME. The corrected Add class subsequently passed 11/11; both Edit
+  tests passed in the corrected combined class run. Per user direction, do not spend another
+  five-minute unfiltered run in this session; this checkbox remains open until that rerun passes.
 
 - [x] **Step 4: Run repository hygiene checks.**
 

@@ -39,6 +39,14 @@ export interface E2EServer {
   reset: () => Promise<void>;
 }
 
+type SyncHoldState = "armed" | "waiting" | "released";
+
+interface SyncHold {
+  state: SyncHoldState;
+  waiting: Promise<void>;
+  release: () => void;
+}
+
 export async function buildE2EServer(): Promise<E2EServer> {
   const db = new Database(":memory:");
   migrate(db);
@@ -64,7 +72,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
     failActions: false,
     failSnapshot: false,
     failProjects: false,
-    failNextChildAdd: false
+    failNextChildAdd: false,
+    syncHold: null as SyncHold | null
   };
 
   const seed = async (): Promise<void> => {
@@ -102,6 +111,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
   };
 
   const reset = async (): Promise<void> => {
+    controls.syncHold?.release();
+    controls.syncHold = null;
     db.transaction(() => {
       for (const table of [
         "task_action_commands",
@@ -143,6 +154,7 @@ interface DebugSurfaceOptions {
     failSnapshot: boolean;
     failProjects: boolean;
     failNextChildAdd: boolean;
+    syncHold: SyncHold | null;
   };
   snapshots: TaskSnapshotService;
   reset: () => Promise<void>;
@@ -192,6 +204,12 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       }
     }
 
+    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "armed") {
+      const hold = controls.syncHold;
+      hold.state = "waiting";
+      await hold.waiting;
+    }
+
     if (controls.failSnapshot && ((request.method === "GET" && path === "/tasks/snapshot") || (request.method === "POST" && path === "/tasks/sync"))) {
       return reply.code(500).send({ error: "forced_snapshot_failure" });
     }
@@ -214,6 +232,10 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     call.responseCompletedAt = new Date().toISOString();
     call.responseStatusCode = reply.statusCode;
     correlatedCalls.delete(request.id);
+    const path = request.url.split("?")[0] ?? request.url;
+    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "released") {
+      controls.syncHold = null;
+    }
   });
 
   app.post("/__scenario", async (request, reply) => {
@@ -245,6 +267,40 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     adapter.setFailNextChildAdd(enabled);
     return { failNextChildAdd: enabled };
   });
+  app.post("/__hold-next-sync", async (_request, reply) => {
+    if (controls.syncHold !== null) {
+      return reply.code(409).send({ state: controls.syncHold.state });
+    }
+    controls.syncHold = createSyncHold();
+    return { state: controls.syncHold.state };
+  });
+  app.get("/__sync-hold", async () => ({ state: controls.syncHold?.state ?? "idle" }));
+  app.post("/__release-sync", async () => {
+    const hold = controls.syncHold;
+    if (hold === null) return { state: "idle" };
+    hold.release();
+    return { state: hold.state };
+  });
+}
+
+function createSyncHold(): SyncHold {
+  let resolveWaiting: (() => void) | null = null;
+  let timeout: NodeJS.Timeout | null = null;
+  const hold: SyncHold = {
+    state: "armed",
+    waiting: new Promise<void>((resolve) => {
+      resolveWaiting = resolve;
+    }),
+    release: () => {
+      if (hold.state === "released") return;
+      hold.state = "released";
+      if (timeout !== null) clearTimeout(timeout);
+      resolveWaiting?.();
+    }
+  };
+  timeout = setTimeout(hold.release, 30_000);
+  timeout.unref();
+  return hold;
 }
 
 function responseAuthorityFromSerializedPayload(payload: unknown): RecordedResponseAuthority | null {
