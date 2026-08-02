@@ -68,6 +68,15 @@ class EnforcementCoordinator(
         return appliedSnapshot
     }
 
+    suspend fun forceSyncAndReconcile(): TasksSnapshotResponse {
+        logger("force_sync start")
+        val snapshot = api.forceSync()
+        logger("force_sync fetched ${SnapshotDiagnostics.describe(snapshot)}")
+        val appliedSnapshot = applyFreshSnapshot(snapshot)
+        logger("force_sync complete scheduleVersion=${appliedSnapshot.scheduleVersion}")
+        return appliedSnapshot
+    }
+
     /** Applies mutation authority already received from the backend; never refetches it. */
     fun applyReturnedSnapshot(snapshot: TasksSnapshotResponse): TasksSnapshotResponse =
         applyFreshSnapshot(snapshot)

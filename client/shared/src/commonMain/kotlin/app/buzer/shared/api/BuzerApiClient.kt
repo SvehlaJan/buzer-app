@@ -62,6 +62,12 @@ class BuzerApiClient(
     suspend fun getSnapshot(): TasksSnapshotResponse =
         httpClient.get("$baseUrl/tasks/snapshot").decodeBody()
 
+    suspend fun forceSync(): TasksSnapshotResponse =
+        httpClient.post("$baseUrl/tasks/sync") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { })
+        }.decodeBody()
+
     suspend fun getProjects(): ProjectsResponse =
         httpClient.get("$baseUrl/projects").decodeBody()
 
