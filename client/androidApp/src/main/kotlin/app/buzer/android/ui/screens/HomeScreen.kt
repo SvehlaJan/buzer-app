@@ -13,16 +13,10 @@ import app.buzer.android.ui.status.BlockingLoadingState
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.theme.Spacing
-import app.buzer.shared.model.CommitmentState
-import app.buzer.shared.model.HealthStatus
-import app.buzer.shared.model.TaskSnapshotItem
-import app.buzer.shared.state.SnapshotViewState
 import app.buzer.shared.ui.home.HomeAgendaRow
 import app.buzer.shared.ui.home.HomeAgendaRowState
-import app.buzer.shared.ui.home.HomeAttention
 import app.buzer.shared.ui.home.HomeAttentionAction
 import app.buzer.shared.ui.home.HomeCurrentBlock
-import app.buzer.shared.ui.home.homeTaskProgress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,86 +43,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.time.Duration
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-
-sealed interface HomeContentState {
-    data object Loading : HomeContentState
-    data object Ready : HomeContentState
-    data class Error(val message: String) : HomeContentState
-}
-
-data class HomeScreenState(
-    val weekdayLabel: String,
-    val dateLabel: String,
-    val contentState: HomeContentState,
-    val statusMessage: String?,
-    val attention: HomeAttention?,
-    val currentBlock: HomeCurrentBlock?,
-    val agendaRows: List<HomeAgendaRow>,
-    val canOpenMorningReview: Boolean
-)
-
-fun buildHomeScreenState(
-    snapshot: SnapshotViewState?,
-    refreshInFlight: Boolean = false,
-    refreshError: String? = null,
-    now: OffsetDateTime
-): HomeScreenState {
-    val emptyState = HomeScreenState(
-        weekdayLabel = weekdayFormatter.format(now),
-        dateLabel = dateFormatter.format(now),
-        contentState = if (refreshError != null && snapshot == null) {
-            HomeContentState.Error(refreshError)
-        } else if (snapshot == null) {
-            HomeContentState.Loading
-        } else {
-            HomeContentState.Ready
-        },
-        statusMessage = null,
-        attention = null,
-        currentBlock = null,
-        agendaRows = emptyList(),
-        canOpenMorningReview = false
-    )
-
-    if (snapshot == null) return emptyState
-
-    val agendaRows = buildAgendaRows(snapshot, now)
-    val currentBlock = agendaRows
-        .firstOrNull { it.state == HomeAgendaRowState.Current }
-        ?.let { current ->
-            val progress = snapshot.tasks.firstOrNull { it.id == current.taskId }?.let(::homeTaskProgress)
-            HomeCurrentBlock(
-                taskId = current.taskId,
-                title = current.title,
-                blockWindow = current.timeLabel,
-                remainingLabel = current.subline.removePrefix("Current - "),
-                description = current.description,
-                checkedCount = progress?.checkedCount ?: 0,
-                totalCount = progress?.totalCount ?: 0,
-                nextUncheckedChildTitle = progress?.nextUncheckedChildTitle,
-                checklistItems = snapshot.tasks.firstOrNull { it.id == current.taskId }?.checklistItems.orEmpty(),
-                doneEnabled = progress?.doneEnabled ?: true,
-                extendEnabled = progress?.extendEnabled ?: true
-            )
-        }
-
-    return emptyState.copy(
-        contentState = HomeContentState.Ready,
-        statusMessage = when {
-            refreshInFlight -> "Refreshing..."
-            else -> null
-        },
-        attention = buildAttention(snapshot, refreshError),
-        currentBlock = currentBlock,
-        agendaRows = agendaRows,
-        canOpenMorningReview = snapshot.invalidTasks.isNotEmpty()
-    )
-}
 
 @Composable
 fun HomeScreen(
@@ -170,13 +84,11 @@ fun HomeScreen(
                         actionLabel = when (attention.action) {
                             HomeAttentionAction.OpenMorningReview -> "Review"
                             HomeAttentionAction.RetryRefresh -> "Retry"
-                            HomeAttentionAction.ShowHealthDetail -> null
                         }
                     ),
                     onAction = when (attention.action) {
                         HomeAttentionAction.OpenMorningReview -> onMorningReview
                         HomeAttentionAction.RetryRefresh -> onRetryRefresh
-                        HomeAttentionAction.ShowHealthDetail -> null
                     }
                 )
             }
@@ -307,13 +219,9 @@ private fun AgendaRow(row: HomeAgendaRow, onClick: () -> Unit) {
         HomeAgendaRowState.Overdue -> MaterialTheme.colorScheme.error
         HomeAgendaRowState.Current -> MaterialTheme.colorScheme.primary
         HomeAgendaRowState.Upcoming -> MaterialTheme.colorScheme.outline
-        HomeAgendaRowState.Done -> MaterialTheme.colorScheme.outlineVariant
+        HomeAgendaRowState.Unassigned -> MaterialTheme.colorScheme.outlineVariant
     }
-    val contentColor = if (row.state == HomeAgendaRowState.Done) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val contentColor = MaterialTheme.colorScheme.onSurface
 
     Row(
         modifier = Modifier
@@ -363,128 +271,3 @@ private fun AgendaRow(row: HomeAgendaRow, onClick: () -> Unit) {
         }
     }
 }
-
-private fun buildAgendaRows(
-    snapshot: SnapshotViewState,
-    deviceNow: OffsetDateTime
-): List<HomeAgendaRow> {
-    val offset = deviceNow.offset
-    val today = deviceNow.toLocalDate()
-    val tasks = snapshot.tasks
-        .distinctBy { it.id }
-        .filterNot { it.isDeleted }
-
-    return tasks.mapNotNull { task ->
-        val start = task.dueDatetime?.let { parseTaskTime(it, offset) } ?: return@mapNotNull null
-        val duration = task.durationMinutes ?: return@mapNotNull null
-        val end = start.plusMinutes(duration.toLong())
-        val isToday = start.toLocalDate() == today || end.toLocalDate() == today
-        if (!isToday) return@mapNotNull null
-        val rowState = when {
-            task.isCompleted || task.state == CommitmentState.completed -> HomeAgendaRowState.Done
-            !deviceNow.isBefore(start) && deviceNow.isBefore(end) -> HomeAgendaRowState.Current
-            !deviceNow.isBefore(end) -> HomeAgendaRowState.Overdue
-            else -> HomeAgendaRowState.Upcoming
-        }
-        val progress = homeTaskProgress(task)
-        HomeAgendaRow(
-            taskId = task.id,
-            timeLabel = "${timeFormatter.format(start)}-${timeFormatter.format(end)}",
-            title = task.title,
-            state = rowState,
-            subline = sublineFor(rowState, deviceNow, start, end),
-            description = task.description,
-            checkedCount = progress.checkedCount,
-            totalCount = progress.totalCount,
-            nextUncheckedChildTitle = progress.nextUncheckedChildTitle
-        )
-    }.sortedWith(
-        compareBy<HomeAgendaRow> {
-            when (it.state) {
-                HomeAgendaRowState.Done -> 0
-                HomeAgendaRowState.Overdue -> 1
-                HomeAgendaRowState.Current -> 2
-                HomeAgendaRowState.Upcoming -> 3
-            }
-        }.thenBy { it.timeLabel }
-    )
-}
-
-private fun sublineFor(
-    rowState: HomeAgendaRowState,
-    deviceNow: OffsetDateTime,
-    start: OffsetDateTime,
-    end: OffsetDateTime
-): String =
-    when (rowState) {
-        HomeAgendaRowState.Done -> "Done"
-        HomeAgendaRowState.Current -> "${durationLabel(Duration.between(deviceNow, end))} remaining"
-        HomeAgendaRowState.Upcoming -> "Upcoming - starts in ${durationLabel(Duration.between(deviceNow, start))}"
-        HomeAgendaRowState.Overdue -> "Overdue - ended ${durationLabel(Duration.between(end, deviceNow))} ago"
-    }
-
-private fun buildAttention(
-    snapshot: SnapshotViewState,
-    refreshError: String?
-): HomeAttention? {
-    val invalidCount = snapshot.invalidTasks.size
-    if (invalidCount > 0) {
-        return HomeAttention(
-            message = if (invalidCount == 1) {
-                "1 invalid task needs review"
-            } else {
-                "$invalidCount invalid tasks need review"
-            },
-            action = HomeAttentionAction.OpenMorningReview
-        )
-    }
-
-    val permissionIssue = snapshot.healthWarnings.firstOrNull {
-        it.key.contains("alarm", ignoreCase = true) ||
-            it.key.contains("notification", ignoreCase = true)
-    }
-    if (permissionIssue != null) {
-        return HomeAttention(permissionIssue.message, HomeAttentionAction.ShowHealthDetail)
-    }
-
-    if (refreshError != null) {
-        return HomeAttention("Refresh failed. Showing last known tasks.", HomeAttentionAction.RetryRefresh)
-    }
-
-    if (snapshot.healthWarnings.any { it.key.contains("backend", ignoreCase = true) }) {
-        return HomeAttention("Backend refresh needs attention", HomeAttentionAction.RetryRefresh)
-    }
-
-    val whatsappIssue = snapshot.healthWarnings.firstOrNull { it.key.contains("whatsapp", ignoreCase = true) }
-    return whatsappIssue?.let { HomeAttention(it.message, HomeAttentionAction.ShowHealthDetail) }
-}
-
-private fun parseTaskTime(value: String, offset: java.time.ZoneOffset): OffsetDateTime? {
-    val normalized = value.substringBefore('[')
-    return runCatching { OffsetDateTime.parse(normalized).withOffsetSameInstant(offset) }
-        .getOrElse {
-            runCatching { LocalDateTime.parse(normalized).atOffset(offset) }
-                .getOrNull()
-        }
-}
-
-private fun durationLabel(duration: Duration): String {
-    val minutes = duration.toMinutes().coerceAtLeast(0)
-    if (minutes < 1) return "<1m"
-    val hours = minutes / 60
-    val remainingMinutes = minutes % 60
-    return when {
-        hours == 0L -> "${remainingMinutes}m"
-        remainingMinutes == 0L -> "${hours}h"
-        else -> "${hours}h ${remainingMinutes}m"
-    }
-}
-
-private val weekdayFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("EEEE", Locale.US)
-
-private val dateFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("MMMM d", Locale.US)
-
-private val timeFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("HH:mm", Locale.US)

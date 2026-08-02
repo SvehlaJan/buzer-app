@@ -119,5 +119,6 @@ internal fun buildBuzerHomeState(
         snapshot = snapshot,
         refreshInFlight = homeRefreshInFlight,
         refreshError = homeRefreshError,
-        now = now
+        now = now.toInstant(),
+        zoneId = now.offset
     )

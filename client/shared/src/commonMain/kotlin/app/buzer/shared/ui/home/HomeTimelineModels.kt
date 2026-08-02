@@ -1,14 +1,14 @@
 package app.buzer.shared.ui.home
 
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.TaskSnapshotItem
-import app.buzer.shared.model.ChecklistItem
 
 enum class HomeAgendaRowState {
     Overdue,
     Current,
     Upcoming,
-    Done
+    Unassigned
 }
 
 data class HomeAgendaRow(
@@ -20,7 +20,10 @@ data class HomeAgendaRow(
     val description: String?,
     val checkedCount: Int = 0,
     val totalCount: Int = 0,
-    val nextUncheckedChildTitle: String? = null
+    val nextUncheckedChildTitle: String? = null,
+    val doneEnabled: Boolean = true,
+    val pendingLabel: String? = null,
+    val actionAvailable: Boolean = true
 )
 
 data class HomeCurrentBlock(
@@ -71,6 +74,5 @@ data class HomeAttention(
 
 enum class HomeAttentionAction {
     OpenMorningReview,
-    ShowHealthDetail,
     RetryRefresh
 }
