@@ -140,6 +140,7 @@ class BlockerActivityFakeBackendTest {
 
         waitForRecordedCall("/tasks/task-reschedule/update")
         Log.i(CORRELATION_TAG, "deadline_update backend_request_received")
+        waitForBackendResponseCompleted("/tasks/task-reschedule/update")
         waitForActivityDestroyed(scenario)
         fakeBackend.assertRecorded(
             "/tasks/task-reschedule/update",
@@ -186,7 +187,13 @@ class BlockerActivityFakeBackendTest {
                 composeRule.onNodeWithText(rescheduleLabel).performClick()
 
                 waitForRecordedCall("/tasks/task-reschedule-fail/update")
-                waitForAnyText("failed")
+                waitForErrorLog("action=UPDATE_TASK taskId=task-reschedule-fail", "forced_failure")
+                waitForExactText("Task update")
+                waitForExactText("Task update failed. Your draft is still here; retry.")
+                composeRule.onNodeWithText("Task update").assertIsDisplayed()
+                composeRule.onNodeWithText("Task update failed. Your draft is still here; retry.").assertIsDisplayed()
+                composeRule.onNodeWithText("Retry").assertIsDisplayed()
+                composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
                 assertActivityNotDestroyed(scenario)
             } finally {
                 scenario.close()
@@ -327,7 +334,10 @@ class BlockerActivityFakeBackendTest {
         }
         waitForContentDescription("Back to top")
         composeRule.onNodeWithContentDescription("Back to top").performClick()
-        waitForText("Incomplete checklist task")
+        waitForText("Sunday")
+        composeRule.onNodeWithText("Sunday").assertIsDisplayed()
+        composeRule.onNodeWithText("August 2").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Back to top").assertDoesNotExist()
     }
 
     @Test
@@ -500,7 +510,9 @@ class BlockerActivityFakeBackendTest {
             "\"deviceId\":",
             "\"expectedOccurrenceKey\":"
         )
+        waitForTextAbsent("Invalid assigned fixture")
         composeRule.onAllNodesWithText("Invalid assigned fixture").assertCountEquals(0)
+        assertActivityNotDestroyed(scenario)
     }
 
     @Test
@@ -517,8 +529,13 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText(repairLabel).performClick()
 
             waitForRecordedCall("/tasks/task-invalid/update")
-            waitForAnyText("failed")
-            waitForAnyText("Retry")
+            waitForErrorLog("action=UPDATE_TASK taskId=task-invalid", "forced_failure")
+            waitForExactText("Task update")
+            waitForExactText("Task update failed. Your draft is still here; retry.")
+            composeRule.onNodeWithText("Task update").assertIsDisplayed()
+            composeRule.onNodeWithText("Task update failed. Your draft is still here; retry.").assertIsDisplayed()
+            composeRule.onNodeWithText("Retry").assertIsDisplayed()
+            composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
             assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
@@ -590,11 +607,27 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
+    private fun waitForExactText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            runCatching {
+                composeRule.onNodeWithText(text).assertIsDisplayed()
+            }.isSuccess
+        }
+    }
+
     private fun waitForAnyText(text: String) {
         composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText(text, substring = true)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
+        }
+    }
+
+    private fun waitForTextAbsent(text: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.onAllNodesWithText(text)
+                .fetchSemanticsNodes()
+                .isEmpty()
         }
     }
 
@@ -747,16 +780,19 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun waitForErrorLog(vararg fragments: String) {
-        val deadline = SystemClock.elapsedRealtime() + 15_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            val text = blockerErrorLog().takeIf { it.exists() }?.readText().orEmpty()
-            if (fragments.all(text::contains)) return
-            SystemClock.sleep(100)
+        var text = ""
+        val completed = runCatching {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                text = blockerErrorLog().takeIf { it.exists() }?.readText().orEmpty()
+                fragments.all(text::contains)
+            }
+        }.isSuccess
+        if (!completed) {
+            fail(
+                "Expected blocker error log to contain ${fragments.toList()}.\n" +
+                    "Blocker error log: $text"
+            )
         }
-        fail(
-            "Expected blocker error log to contain ${fragments.toList()}.\n" +
-                "Blocker error log: ${blockerErrorLog().takeIf { it.exists() }?.readText().orEmpty()}"
-        )
     }
 
     private fun launchStartBlocker(taskId: String): ActivityScenario<StartBlockerActivity> =
