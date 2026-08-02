@@ -516,6 +516,80 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun forceSyncAndReconcileCallsOnlyForceSyncAndPersistsSnapshot() = runBlocking {
+        val initialSnapshot = snapshot(task("initial-task"), snapshotGeneration = 1)
+        val forcedSnapshot = snapshot(task("forced-task"), snapshotGeneration = 2)
+        val store = FakeSnapshotStore(initialSnapshot)
+        val api = FakeBuzerApi(
+            snapshot = initialSnapshot,
+            forceSyncSnapshot = forcedSnapshot
+        )
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.forceSyncAndReconcile()
+
+        assertEquals(1, api.forceSyncCalls)
+        assertEquals(0, api.snapshotCalls)
+        assertEquals(forcedSnapshot, result)
+        assertEquals(forcedSnapshot, store.saved)
+    }
+
+    @Test
+    fun forceSyncAndReconcileReconcilesAlarmsThroughSamePathAsOrdinaryRefresh() = runBlocking {
+        val forcedSnapshot = snapshot(task("task-1"), snapshotGeneration = 2)
+        val scheduler = RecordingAlarmScheduler()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(forceSyncSnapshot = forcedSnapshot),
+            snapshotStore = FakeSnapshotStore(),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T10:30:00Z" }
+        )
+
+        coordinator.forceSyncAndReconcile()
+
+        assertEquals(
+            listOf(
+                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
+                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+            ),
+            scheduler.scheduled
+        )
+    }
+
+    @Test
+    fun forceSyncAndReconcilePropagatesNetworkFailureWithoutReplacingStoredSnapshot() = runBlocking {
+        val initialSnapshot = snapshot(task("task-1"), snapshotGeneration = 1)
+        val store = FakeSnapshotStore(initialSnapshot)
+        val api = FakeBuzerApi(
+            snapshot = initialSnapshot,
+            failForceSync = true
+        )
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertFailsWith<IllegalStateException> {
+            coordinator.forceSyncAndReconcile()
+        }
+
+        assertEquals(1, api.forceSyncCalls)
+        assertEquals(0, api.snapshotCalls)
+        assertEquals(initialSnapshot, store.saved)
+    }
+
+    @Test
     fun postponeFailureReportsErrorAndSchedulesFiveMinuteStartBlockerRetry() = runBlocking {
         val scheduler = RecordingAlarmScheduler()
         val reporter = RecordingErrorReporter()
@@ -814,7 +888,9 @@ class EnforcementCoordinatorTest {
         )
 
     private class FakeBuzerApi(
-        private val snapshot: TasksSnapshotResponse,
+        private val snapshot: TasksSnapshotResponse? = null,
+        private val forceSyncSnapshot: TasksSnapshotResponse? = null,
+        private val failForceSync: Boolean = false,
         private val startHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val postponeHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val checkHandler: (suspend (app.buzer.shared.model.FocusedChecklistMutationRequest) -> MutationResponse)? = null,
@@ -826,13 +902,29 @@ class EnforcementCoordinatorTest {
     ) : EnforcementApi {
         var snapshotCalls = 0
             private set
+        var forceSyncCalls = 0
+            private set
         val startRequests = mutableListOf<TaskActionRequest>()
         val postponeRequests = mutableListOf<TaskActionRequest>()
         val focusedActionIds = mutableListOf<String>()
 
+        private val effectiveSnapshot get() = snapshot ?: TasksSnapshotResponse(
+            scheduleVersion = 1,
+            snapshotGeneration = 1,
+            serverTime = "2026-05-28T09:30:00Z",
+            health = emptyList(),
+            tasks = emptyList()
+        )
+
         override suspend fun getSnapshot(): TasksSnapshotResponse {
             snapshotCalls += 1
-            return snapshot
+            return effectiveSnapshot
+        }
+
+        override suspend fun forceSync(): TasksSnapshotResponse {
+            forceSyncCalls += 1
+            if (failForceSync) error("backend unavailable")
+            return forceSyncSnapshot ?: effectiveSnapshot
         }
         override suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse {
             startRequests += request
@@ -875,7 +967,7 @@ class EnforcementCoordinatorTest {
         private fun response(actionId: String): MutationResponse = MutationResponse(
             actionId = actionId,
             outcome = MutationOutcome.completed,
-            snapshot = snapshot
+            snapshot = effectiveSnapshot
         )
     }
 

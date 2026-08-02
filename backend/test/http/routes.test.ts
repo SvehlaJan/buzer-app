@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { migrate } from "../../src/db/migrations.js";
 import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
@@ -114,7 +114,7 @@ describe("HTTP routes", () => {
     migrate(db);
     const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: new FakeTodoistAdapter() });
     const fixedRoutes = [
-      ["GET", "/tasks/snapshot"], ["GET", "/projects"], ["POST", "/tasks"], ["POST", "/tasks/task-1/start"],
+      ["GET", "/tasks/snapshot"], ["GET", "/projects"], ["POST", "/tasks"], ["POST", "/tasks/sync"], ["POST", "/tasks/task-1/start"],
       ["POST", "/tasks/task-1/done"], ["POST", "/tasks/task-1/postpone-start"], ["POST", "/tasks/task-1/extend"],
       ["POST", "/tasks/task-1/update"], ["POST", "/tasks/task-1/checklist"],
       ["POST", "/tasks/task-1/checklist/child-1/update"], ["POST", "/tasks/task-1/checklist/child-1/delete"],
@@ -204,6 +204,91 @@ describe("HTTP routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ tasks: [] });
     expect(response.json().snapshotGeneration).toBeGreaterThan(0);
+  });
+
+  it("triggers a coalesced authoritative sync and returns current snapshot via POST /tasks/sync", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    new ProjectRepository(db).upsertProject({
+      todoistProjectId: "project-family", name: "Family", shared: true, canAssignTasks: true,
+      isInboxProject: false, isDeleted: false, isArchived: false, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks/sync",
+      headers: { authorization: "Bearer secret" },
+      payload: {}
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ tasks: expect.any(Array) });
+    expect(response.json().snapshotGeneration).toBeGreaterThan(0);
+    expect(adapter.syncTokens).toEqual(["ready-token"]);
+  });
+
+  it("returns 500 error envelope without snapshot when sync fails via POST /tasks/sync", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    adapter.sync = vi.fn().mockRejectedValue(new Error("Todoist API connection lost"));
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks/sync",
+      headers: { authorization: "Bearer secret" },
+      payload: {}
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      code: "internal_error",
+      message: "Todoist API connection lost"
+    });
+    expect(response.json()).not.toHaveProperty("snapshot");
+  });
+
+  it("coalesces overlapping POST /tasks/sync requests into a single sync invocation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    let releaseFirst: (() => void) | undefined;
+    adapter.sync = vi.fn().mockImplementation(() => new Promise((resolve) => {
+      releaseFirst = () => resolve({
+        syncToken: "new-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
+      });
+    }));
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+
+    const firstPromise = app.inject({
+      method: "POST",
+      url: "/tasks/sync",
+      headers: { authorization: "Bearer secret" },
+      payload: {}
+    });
+    const secondPromise = app.inject({
+      method: "POST",
+      url: "/tasks/sync",
+      headers: { authorization: "Bearer secret" },
+      payload: {}
+    });
+    await vi.waitFor(() => expect(adapter.sync).toHaveBeenCalledTimes(1));
+
+    releaseFirst?.();
+    const [res1, res2] = await Promise.all([firstPromise, secondPromise]);
+    await app.close();
+
+    expect(res1.statusCode).toBe(200);
+    expect(res2.statusCode).toBe(200);
+    expect(adapter.sync).toHaveBeenCalledTimes(1);
   });
 
   it("returns active projects with auth token", async () => {

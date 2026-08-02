@@ -8,6 +8,12 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+
+data class RecordedResponseAuthority(
+    val serverTime: String,
+    val snapshotGeneration: Long
+)
 
 class FakeBackendClient(
     private val baseUrl: String = InstrumentationRegistry.getArguments()
@@ -37,6 +43,22 @@ class FakeBackendClient(
         request("POST", "/__scenario", """{"name":"$name"}""")
     }
 
+    fun holdNextSync() {
+        request("POST", "/__hold-next-sync")
+    }
+
+    fun syncHoldState(): String = Json.parseToJsonElement(request("GET", "/__sync-hold"))
+        .jsonObject
+        .getValue("state")
+        .jsonPrimitive
+        .content
+
+    fun releaseSync(): String = Json.parseToJsonElement(request("POST", "/__release-sync"))
+        .jsonObject
+        .getValue("state")
+        .jsonPrimitive
+        .content
+
     fun taskReconciliationStatus(taskId: String): String? {
         val body = request("GET", "/tasks/snapshot", authorized = true)
         val tasks = Json.parseToJsonElement(body).jsonObject["tasks"]?.jsonArray ?: return null
@@ -47,6 +69,46 @@ class FakeBackendClient(
     fun calls(): String = request("GET", "/__calls")
 
     fun fullCalls(): String = request("GET", "/__calls/full")
+
+    fun hasCompletedCall(path: String): Boolean {
+        val callsArray = Json.parseToJsonElement(calls())
+            .jsonObject["calls"]
+            ?.jsonArray
+            ?: return false
+        return callsArray.any { call ->
+            val callObject = call.jsonObject
+            callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
+                callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
+                callObject["responseStatusCode"]?.jsonPrimitive?.contentOrNull != null
+        }
+    }
+
+    fun completedCallResponseAuthority(path: String): RecordedResponseAuthority? {
+        val callsArray = Json.parseToJsonElement(calls())
+            .jsonObject["calls"]
+            ?.jsonArray
+            ?: return null
+        return callsArray.mapNotNull { call ->
+            val callObject = call.jsonObject
+            val responseAuthority = runCatching {
+                callObject["responseAuthority"]?.jsonObject
+            }.getOrNull() ?: return@mapNotNull null
+            val serverTime = responseAuthority["serverTime"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: return@mapNotNull null
+            val snapshotGeneration = responseAuthority["snapshotGeneration"]
+                ?.jsonPrimitive
+                ?.longOrNull
+                ?: return@mapNotNull null
+            RecordedResponseAuthority(serverTime, snapshotGeneration).takeIf {
+                callObject["method"]?.jsonPrimitive?.contentOrNull == "POST" &&
+                    callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
+                    callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
+                    callObject["responseStatusCode"]?.jsonPrimitive?.longOrNull in 200L..299L
+            }
+        }.lastOrNull()
+    }
 
     fun assertRecorded(path: String) {
         val body = calls()

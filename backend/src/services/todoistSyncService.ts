@@ -14,6 +14,7 @@ import {
 
 export class TodoistSyncService {
   private syncTail: Promise<void> = Promise.resolve();
+  private manualSyncInFlight: Promise<void> | null = null;
   private readonly occurrenceReconciler = new OccurrenceReconciler();
 
   constructor(
@@ -24,6 +25,15 @@ export class TodoistSyncService {
     private readonly currentUserId = "",
     private readonly collaborators = new CollaboratorRepository(db)
   ) {}
+
+  syncNow(): Promise<void> {
+    if (this.manualSyncInFlight !== null) return this.manualSyncInFlight;
+    const run = this.syncOnce().finally(() => {
+      if (this.manualSyncInFlight === run) this.manualSyncInFlight = null;
+    });
+    this.manualSyncInFlight = run;
+    return run;
+  }
 
   async syncOnce(): Promise<void> {
     const run = this.syncTail.then(() => this.syncOnceSerialized());

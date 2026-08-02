@@ -17,6 +17,16 @@ import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.model.UpdateChecklistItemRequest
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
+import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -24,6 +34,55 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 
 class BuzerApiClientContractTest {
+    @Test
+    fun forceSyncPostsEmptyObjectAndReturnsSnapshot() = runBlocking {
+        val snapshotResponseJson = """
+            {
+              "scheduleVersion": 10,
+              "snapshotGeneration": 5,
+              "serverTime": "2026-07-16T10:00:00Z",
+              "health": [],
+              "tasks": []
+            }
+        """.trimIndent()
+
+        var capturedMethod: HttpMethod? = null
+        var capturedPath: String? = null
+        var capturedAuth: String? = null
+        var capturedContentType: String? = null
+        var capturedBodyText: String? = null
+
+        val client = BuzerApiClient(
+            baseUrl = "https://fake.invalid",
+            token = "test-token",
+            httpClient = defaultHttpClient(
+                token = "test-token",
+                engine = MockEngine { request ->
+                    capturedMethod = request.method
+                    capturedPath = request.url.encodedPath
+                    capturedAuth = request.headers[HttpHeaders.Authorization]
+                    capturedContentType = request.body.contentType?.toString()
+                    capturedBodyText = (request.body as? TextContent)?.text
+                    respond(
+                        content = ByteReadChannel(snapshotResponseJson),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            )
+        )
+
+        val result = client.forceSync()
+
+        assertEquals(HttpMethod.Post, capturedMethod)
+        assertEquals("/tasks/sync", capturedPath)
+        assertEquals("Bearer test-token", capturedAuth)
+        assertEquals("application/json", capturedContentType)
+        assertEquals("{}", capturedBodyText)
+        assertEquals(10, result.scheduleVersion)
+        assertEquals(5, result.snapshotGeneration)
+    }
+
     @Test
     fun snapshotDecodesFixedRecurringChecklistFields() {
         val response = buzerApiJson.decodeFromString<TasksSnapshotResponse>(

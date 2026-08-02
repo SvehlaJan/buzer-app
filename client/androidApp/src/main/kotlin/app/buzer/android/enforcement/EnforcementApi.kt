@@ -10,6 +10,7 @@ import app.buzer.shared.model.UpdateTaskRequest
 
 interface EnforcementApi {
     suspend fun getSnapshot(): TasksSnapshotResponse
+    suspend fun forceSync(): TasksSnapshotResponse
     suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse
     suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse
     suspend fun completeTask(id: String, request: TaskActionRequest): MutationResponse
@@ -30,6 +31,8 @@ interface EnforcementApi {
 
 class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
     override suspend fun getSnapshot(): TasksSnapshotResponse = client.getSnapshot()
+
+    override suspend fun forceSync(): TasksSnapshotResponse = client.forceSync()
 
     override suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse =
         client.startTask(id, request)

@@ -9,21 +9,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import app.buzer.android.blockers.MorningReviewActivity
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.EditTaskScreen
 import app.buzer.android.ui.screens.HomeScreen
 import app.buzer.android.ui.screens.HomeScreenState
 import app.buzer.android.ui.screens.buildHomeScreenState
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.state.SnapshotViewState
-import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.model.TasksSnapshotResponse
-import java.time.OffsetDateTime
+import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.state.SnapshotViewState
+import java.time.Instant
+import java.time.ZoneId
 
 private enum class AppSection {
     Home,
@@ -37,21 +39,28 @@ fun BuzerApp(
     snapshot: SnapshotViewState? = null,
     homeRefreshInFlight: Boolean = false,
     homeRefreshError: String? = null,
+    homeActionStatusMessage: String? = null,
     onRetryHomeRefresh: () -> Unit = {},
-    onDoneCurrentTask: (String) -> Unit = {},
+    onPullToRefresh: () -> Unit = {},
+    onDoneTask: (String) -> Unit = {},
+    onDoneCurrentTask: (String) -> Unit = onDoneTask,
     onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
     onToggleCurrentChild: (String, String, Boolean) -> Unit = { _, _, _ -> },
     deviceId: String = "",
     onUpdateTask: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
         CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
     },
-    nowProvider: () -> OffsetDateTime = { OffsetDateTime.now() }
+    nowProvider: () -> Instant = { Instant.now() },
+    zoneIdProvider: () -> ZoneId = { ZoneId.systemDefault() }
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         val context = LocalContext.current
         val initialSection = if (openAddTask) AppSection.Add else AppSection.Home
         var section by remember { mutableStateOf(initialSection) }
         var editingTaskId by remember { mutableStateOf<String?>(null) }
+        var overdueExpanded by rememberSaveable { mutableStateOf(false) }
+        var unassignedExpanded by rememberSaveable { mutableStateOf(false) }
+
         fun openMorningReview() {
             AppLog.info("ui navigate section=Review source=home mode=activity")
             context.startActivity(Intent(context, MorningReviewActivity::class.java))
@@ -61,26 +70,38 @@ fun BuzerApp(
             snapshot = snapshot,
             homeRefreshInFlight = homeRefreshInFlight,
             homeRefreshError = homeRefreshError,
-            now = nowProvider()
+            homeActionStatusMessage = homeActionStatusMessage,
+            now = nowProvider(),
+            zoneId = zoneIdProvider(),
+            overdueExpanded = overdueExpanded,
+            unassignedExpanded = unassignedExpanded
         )
         Column(modifier = Modifier.fillMaxSize()) {
             when (section) {
                 AppSection.Home -> HomeScreen(
+                    state = homeState,
+                    onRefreshTasks = onPullToRefresh,
                     onAddTask = {
                         AppLog.debug("ui navigate section=Add source=home")
                         section = AppSection.Add
                     },
-                    onMorningReview = {
-                        openMorningReview()
-                    },
-                    onDoneCurrentTask = onDoneCurrentTask,
                     onEditTask = { taskId ->
                         editingTaskId = taskId
                         section = AppSection.Edit
                     },
-                    onToggleCurrentChild = onToggleCurrentChild,
-                    onRetryRefresh = onRetryHomeRefresh,
-                    state = homeState
+                    onDoneTask = onDoneTask,
+                    onToggleChecklistItem = { taskId, itemId ->
+                        val task = snapshot?.tasks?.firstOrNull { it.id == taskId }
+                        val child = task?.checklistItems?.firstOrNull { it.id == itemId }
+                        if (child != null) {
+                            onToggleCurrentChild(taskId, itemId, !child.checked)
+                        }
+                    },
+                    onOpenMorningReview = {
+                        openMorningReview()
+                    },
+                    onToggleOverdueExpanded = { overdueExpanded = !overdueExpanded },
+                    onToggleUnassignedExpanded = { unassignedExpanded = !unassignedExpanded }
                 )
 
                 AppSection.Add -> AddTaskScreen(
@@ -113,11 +134,19 @@ internal fun buildBuzerHomeState(
     snapshot: SnapshotViewState?,
     homeRefreshInFlight: Boolean,
     homeRefreshError: String?,
-    now: OffsetDateTime
+    homeActionStatusMessage: String? = null,
+    now: Instant,
+    zoneId: ZoneId,
+    overdueExpanded: Boolean = false,
+    unassignedExpanded: Boolean = false
 ): HomeScreenState =
     buildHomeScreenState(
         snapshot = snapshot,
         refreshInFlight = homeRefreshInFlight,
         refreshError = homeRefreshError,
-        now = now
+        actionStatusMessage = homeActionStatusMessage,
+        now = now,
+        zoneId = zoneId,
+        overdueExpanded = overdueExpanded,
+        unassignedExpanded = unassignedExpanded
     )

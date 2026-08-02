@@ -8,7 +8,10 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -17,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.closeSoftKeyboard
@@ -307,6 +311,8 @@ class AddTaskFakeBackendTest {
 
     private fun enterTitle(title: String) {
         composeRule.onNodeWithTag("titleInput").performTextInput(title)
+        closeSoftKeyboard()
+        composeRule.waitForIdle()
     }
 
     private fun addChecklistDraft(itemNumber: Int, title: String) {
@@ -348,13 +354,18 @@ class AddTaskFakeBackendTest {
 
     private fun selectDefaultSchedule() {
         openSchedule()
-        composeRule.onNodeWithTag("dateQuickChoice0").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("startTimeQuickChoice0").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("durationQuickChoice1").performScrollTo().performClick()
-        composeRule.waitForIdle()
+        selectQuickChoice("dateQuickChoice0")
+        selectQuickChoice("startTimeQuickChoice0")
+        selectQuickChoice("durationQuickChoice1")
         waitForScrollableText("Ends at")
+    }
+
+    private fun selectQuickChoice(testTag: String) {
+        composeRule.onNodeWithTag("task-editor-scroll").performScrollToNode(hasTestTag(testTag))
+        composeRule.onNodeWithTag(testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            runCatching { composeRule.onNodeWithTag(testTag).assertIsSelected() }.isSuccess
+        }
     }
 
     private fun openSchedule() {
@@ -500,18 +511,19 @@ class AddTaskFakeBackendTest {
     }
 
     private fun waitForScrollableText(text: String) {
-        val deadline = SystemClock.elapsedRealtime() + 15_000
         var lastError: Throwable? = null
-        while (SystemClock.elapsedRealtime() < deadline) {
-            try {
-                composeRule.onNodeWithText(text, substring = true).performScrollTo().assertIsDisplayed()
-                return
-            } catch (error: Throwable) {
-                lastError = error
-                SystemClock.sleep(100)
+        val found = runCatching {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                runCatching {
+                    composeRule.onNodeWithTag("task-editor-scroll")
+                        .performScrollToNode(hasText(text, substring = true))
+                    composeRule.onNodeWithText(text, substring = true).assertIsDisplayed()
+                }.onFailure { lastError = it }.isSuccess
             }
+        }.isSuccess
+        if (!found) {
+            throw AssertionError("Expected scrollable text containing $text", lastError)
         }
-        throw AssertionError("Expected scrollable text containing $text", lastError)
     }
 
     private fun waitForContentDescription(contentDescription: String) {

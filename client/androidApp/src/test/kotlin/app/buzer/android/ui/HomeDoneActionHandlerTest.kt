@@ -12,22 +12,60 @@ import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HomeDoneActionHandlerTest {
+
+    @Test
+    fun automaticRefreshForwardsFalseToSnapshotProvider() = runBlocking {
+        var capturedForce: Boolean? = null
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { force ->
+                capturedForce = force
+                emptySnapshot()
+            },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {}
+        )
+
+        handler.refresh(forceTodoist = false)
+
+        assertEquals(false, capturedForce)
+    }
+
+    @Test
+    fun forcedRefreshForwardsTrueToSnapshotProvider() = runBlocking {
+        var capturedForce: Boolean? = null
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { force ->
+                capturedForce = force
+                emptySnapshot()
+            },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {}
+        )
+
+        handler.refresh(forceTodoist = true)
+
+        assertEquals(true, capturedForce)
+    }
+
     @Test
     fun pendingCompletionAppliesAuthoritativeSnapshotAndShowsPendingStatus() = runBlocking {
         var statusMessage: String? = null
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
         val pendingSnapshot = emptySnapshot(scheduleVersion = 23)
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = { error("refresh should not run") },
+            refreshSnapshot = { _ -> error("refresh should not run") },
             completeTask = { _, _ -> CoordinatorActionResult.Pending(response()) },
             latestSnapshot = { pendingSnapshot },
             applySnapshot = appliedSnapshots::add,
             setStatusMessage = { statusMessage = it }
         )
 
-        handler.completeCurrentTask("task-current", action())
+        handler.completeTask("task-current", action())
 
         assertEquals(listOf(pendingSnapshot), appliedSnapshots)
         assertEquals("Saved; waiting for Todoist confirmation", statusMessage)
@@ -39,7 +77,7 @@ class HomeDoneActionHandlerTest {
         var retryCalls = 0
         var statusMessage: String? = null
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = { error("refresh should not run") },
+            refreshSnapshot = { _ -> error("refresh should not run") },
             completeTask = { _, _ ->
                 completeCalls += 1
                 CoordinatorActionResult.RetryAfter(
@@ -56,7 +94,7 @@ class HomeDoneActionHandlerTest {
             setStatusMessage = { statusMessage = it }
         )
 
-        handler.completeCurrentTask("task-current", action())
+        handler.completeTask("task-current", action())
         handler.retryCompletion()
 
         assertEquals(1, completeCalls)
@@ -70,7 +108,7 @@ class HomeDoneActionHandlerTest {
         var latestSnapshotCalls = 0
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = { error("refresh should not run after failed completion") },
+            refreshSnapshot = { _ -> error("refresh should not run after failed completion") },
             completeTask = { _, _ -> CoordinatorActionResult.FailedAndHidden("500 forced failure") },
             latestSnapshot = {
                 latestSnapshotCalls += 1
@@ -80,7 +118,7 @@ class HomeDoneActionHandlerTest {
             setStatusMessage = { statusMessage = it }
         )
 
-        handler.completeCurrentTask("task-current", action())
+        handler.completeTask("task-current", action())
 
         assertEquals("500 forced failure", statusMessage)
         assertEquals(0, latestSnapshotCalls)
@@ -94,7 +132,7 @@ class HomeDoneActionHandlerTest {
         val refreshedSnapshot = emptySnapshot(scheduleVersion = 42)
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = { emptySnapshot(scheduleVersion = 10) },
+            refreshSnapshot = { _ -> emptySnapshot(scheduleVersion = 10) },
             completeTask = { _, _ -> CoordinatorActionResult.Success },
             latestSnapshot = {
                 latestSnapshotCalls += 1
@@ -104,7 +142,7 @@ class HomeDoneActionHandlerTest {
             setStatusMessage = { statusMessage = it }
         )
 
-        handler.completeCurrentTask("task-current", action())
+        handler.completeTask("task-current", action())
 
         assertNull(statusMessage)
         assertEquals(1, latestSnapshotCalls)
@@ -112,12 +150,12 @@ class HomeDoneActionHandlerTest {
     }
 
     @Test
-    fun successfulCompletionWaitsForActiveRefreshThenAppliesLatestCachedSnapshot() = runBlocking {
+    fun mutexPreventsCompletionAndRefreshFromApplyingSnapshotsOutOfOrder() = runBlocking {
         val refreshStarted = CompletableDeferred<Unit>()
         val refreshCanFinish = CompletableDeferred<Unit>()
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = {
+            refreshSnapshot = { _ ->
                 refreshStarted.complete(Unit)
                 refreshCanFinish.await()
                 emptySnapshot(scheduleVersion = 10)
@@ -128,10 +166,10 @@ class HomeDoneActionHandlerTest {
             setStatusMessage = {}
         )
 
-        val refreshJob = launch { handler.refresh() }
+        val refreshJob = launch { handler.refresh(forceTodoist = false) }
         refreshStarted.await()
 
-        val completionJob = launch { handler.completeCurrentTask("task-current", action()) }
+        val completionJob = launch { handler.completeTask("task-current", action()) }
         yield()
         assertEquals(emptyList(), appliedSnapshots)
 
@@ -140,6 +178,78 @@ class HomeDoneActionHandlerTest {
         completionJob.join()
 
         assertEquals(listOf(10L, 42L), appliedSnapshots.map { it.scheduleVersion })
+    }
+
+    @Test
+    fun failedForcedRefreshDoesNotCallApplySnapshotAndReportsFailure() = runBlocking {
+        var appliedSnapshot: SnapshotViewState? = null
+        var reportedError: Throwable? = null
+        val inFlightStates = mutableListOf<Boolean>()
+        var actionStatus: String? = "Existing action status"
+
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> throw IllegalStateException("Network error") },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = { appliedSnapshot = it },
+            setStatusMessage = { actionStatus = it },
+            setRefreshInFlight = { inFlightStates.add(it) },
+            reportRefreshFailure = { reportedError = it }
+        )
+
+        handler.refresh(forceTodoist = true)
+
+        assertNull(appliedSnapshot)
+        assertEquals("Network error", reportedError?.message)
+        assertEquals(listOf(true, false), inFlightStates)
+        assertEquals("Existing action status", actionStatus)
+    }
+
+    @Test
+    fun successfulRetryClearsRefreshError() = runBlocking {
+        var refreshErrorCleared = false
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> emptySnapshot() },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {},
+            clearRefreshFailure = { refreshErrorCleared = true }
+        )
+
+        handler.refresh(forceTodoist = true)
+
+        assertTrue(refreshErrorCleared)
+    }
+
+    @Test
+    fun completionWorksForAnyHomeRowUsingOneRetainedTaskActionRequestPerRetryChain() = runBlocking {
+        val receivedRequests = mutableListOf<TaskActionRequest>()
+        var retryCalls = 0
+        val initialRequest = action()
+
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> emptySnapshot() },
+            completeTask = { _, request ->
+                receivedRequests.add(request)
+                CoordinatorActionResult.RetryAfter(
+                    retryAfterSeconds = 5,
+                    message = "Rate limited",
+                    retry = {
+                        retryCalls += 1
+                        CoordinatorActionResult.Success
+                    }
+                )
+            },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {}
+        )
+
+        handler.completeTask("unassigned-task-99", initialRequest)
+        handler.retryCompletion()
+
+        assertEquals(1, receivedRequests.size)
+        assertEquals(initialRequest, receivedRequests.first())
+        assertEquals(1, retryCalls)
     }
 
     private fun emptySnapshot(scheduleVersion: Long = 1): SnapshotViewState =
@@ -171,5 +281,4 @@ class HomeDoneActionHandlerTest {
             snapshotGeneration = 23
         )
     )
-
 }

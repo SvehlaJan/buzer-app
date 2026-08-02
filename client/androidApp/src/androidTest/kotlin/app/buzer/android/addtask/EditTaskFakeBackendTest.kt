@@ -4,12 +4,15 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.pressBack
@@ -90,7 +93,7 @@ class EditTaskFakeBackendTest {
                     .performTextInput(" updated")
                 clickSaveBlockRange()
                 waitForRecordedCall("/tasks/task-one-time-empty/update")
-                waitForText("Task update")
+                waitForExactText("Task update")
                 composeRule.onNodeWithText("Retry").performClick()
                 waitForUpdateCallCount(2)
                 val retriedPayloads = fullUpdatePayloads()
@@ -116,7 +119,7 @@ class EditTaskFakeBackendTest {
     }
 
     private fun openEditorFor(title: String) {
-        waitForText(title)
+        composeRule.onNodeWithTag("home-agenda-list").performScrollToNode(hasText(title))
         composeRule.onNodeWithText(title).performClick()
         waitForText("Edit task")
     }
@@ -174,6 +177,12 @@ class EditTaskFakeBackendTest {
     private fun waitForText(text: String) {
         composeRule.waitUntil(timeoutMillis = 15_000) {
             runCatching { composeRule.onNodeWithText(text, substring = true).assertIsDisplayed() }.isSuccess
+        }
+    }
+
+    private fun waitForExactText(text: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            runCatching { composeRule.onNodeWithText(text).assertIsDisplayed() }.isSuccess
         }
     }
 

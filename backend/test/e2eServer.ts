@@ -18,6 +18,14 @@ export interface RecordedCall {
   path: string;
   body: Record<string, unknown>;
   at: string;
+  responseCompletedAt: string | null;
+  responseStatusCode: number | null;
+  responseAuthority: RecordedResponseAuthority | null;
+}
+
+export interface RecordedResponseAuthority {
+  serverTime: string;
+  snapshotGeneration: number;
 }
 
 interface RecordedFullCall extends RecordedCall {
@@ -29,6 +37,14 @@ export interface E2EServer {
   adapter: E2ETodoistAdapter;
   db: Database.Database;
   reset: () => Promise<void>;
+}
+
+type SyncHoldState = "armed" | "waiting" | "released";
+
+interface SyncHold {
+  state: SyncHoldState;
+  waiting: Promise<void>;
+  release: () => void;
 }
 
 export async function buildE2EServer(): Promise<E2EServer> {
@@ -56,7 +72,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
     failActions: false,
     failSnapshot: false,
     failProjects: false,
-    failNextChildAdd: false
+    failNextChildAdd: false,
+    syncHold: null as SyncHold | null
   };
 
   const seed = async (): Promise<void> => {
@@ -94,6 +111,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
   };
 
   const reset = async (): Promise<void> => {
+    controls.syncHold?.release();
+    controls.syncHold = null;
     db.transaction(() => {
       for (const table of [
         "task_action_commands",
@@ -135,6 +154,7 @@ interface DebugSurfaceOptions {
     failSnapshot: boolean;
     failProjects: boolean;
     failNextChildAdd: boolean;
+    syncHold: SyncHold | null;
   };
   snapshots: TaskSnapshotService;
   reset: () => Promise<void>;
@@ -150,6 +170,7 @@ const ACTION_METADATA_KEYS = [
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
   const { adapter, calls, fullCalls, controls, snapshots, reset } = options;
+  const correlatedCalls = new Map<string, RecordedCall>();
 
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? request.url;
@@ -167,10 +188,14 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
             .filter((key) => body[key] !== undefined)
             .map((key) => [key, body[key]])
         ),
-        at: new Date().toISOString()
+        at: new Date().toISOString(),
+        responseCompletedAt: null,
+        responseStatusCode: null,
+        responseAuthority: null
       };
       calls.push(call);
       fullCalls.push({ ...call, payload: structuredClone(body) });
+      correlatedCalls.set(request.id, call);
       if (controls.failActions) {
         return reply.code(500).send({
           code: "forced_failure",
@@ -179,11 +204,37 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       }
     }
 
-    if (controls.failSnapshot && request.method === "GET" && path === "/tasks/snapshot") {
+    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "armed") {
+      const hold = controls.syncHold;
+      hold.state = "waiting";
+      await hold.waiting;
+    }
+
+    if (controls.failSnapshot && ((request.method === "GET" && path === "/tasks/snapshot") || (request.method === "POST" && path === "/tasks/sync"))) {
       return reply.code(500).send({ error: "forced_snapshot_failure" });
     }
     if (controls.failProjects && request.method === "GET" && path === "/projects") {
       return reply.code(500).send({ error: "forced_project_failure" });
+    }
+  });
+
+  app.addHook("onSend", async (request, _reply, payload) => {
+    const call = correlatedCalls.get(request.id);
+    if (call !== undefined) {
+      call.responseAuthority = responseAuthorityFromSerializedPayload(payload);
+    }
+    return payload;
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    const call = correlatedCalls.get(request.id);
+    if (call === undefined) return;
+    call.responseCompletedAt = new Date().toISOString();
+    call.responseStatusCode = reply.statusCode;
+    correlatedCalls.delete(request.id);
+    const path = request.url.split("?")[0] ?? request.url;
+    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "released") {
+      controls.syncHold = null;
     }
   });
 
@@ -216,6 +267,71 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     adapter.setFailNextChildAdd(enabled);
     return { failNextChildAdd: enabled };
   });
+  app.post("/__hold-next-sync", async (_request, reply) => {
+    if (controls.syncHold !== null) {
+      return reply.code(409).send({ state: controls.syncHold.state });
+    }
+    controls.syncHold = createSyncHold();
+    return { state: controls.syncHold.state };
+  });
+  app.get("/__sync-hold", async () => ({ state: controls.syncHold?.state ?? "idle" }));
+  app.post("/__release-sync", async () => {
+    const hold = controls.syncHold;
+    if (hold === null) return { state: "idle" };
+    hold.release();
+    return { state: hold.state };
+  });
+}
+
+function createSyncHold(): SyncHold {
+  let resolveWaiting: (() => void) | null = null;
+  let timeout: NodeJS.Timeout | null = null;
+  const hold: SyncHold = {
+    state: "armed",
+    waiting: new Promise<void>((resolve) => {
+      resolveWaiting = resolve;
+    }),
+    release: () => {
+      if (hold.state === "released") return;
+      hold.state = "released";
+      if (timeout !== null) clearTimeout(timeout);
+      resolveWaiting?.();
+    }
+  };
+  timeout = setTimeout(hold.release, 30_000);
+  timeout.unref();
+  return hold;
+}
+
+function responseAuthorityFromSerializedPayload(payload: unknown): RecordedResponseAuthority | null {
+  const serialized = typeof payload === "string"
+    ? payload
+    : Buffer.isBuffer(payload)
+      ? payload.toString("utf8")
+      : null;
+  if (serialized === null) return null;
+
+  const parsed = (() => {
+    try {
+      return JSON.parse(serialized) as unknown;
+    } catch {
+      return null;
+    }
+  })();
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const body = parsed as Record<string, unknown>;
+  const nestedSnapshot = body.snapshot;
+  const authority = typeof nestedSnapshot === "object" && nestedSnapshot !== null
+    ? nestedSnapshot as Record<string, unknown>
+    : body;
+  return typeof authority.serverTime === "string" &&
+    typeof authority.snapshotGeneration === "number"
+    ? {
+        serverTime: authority.serverTime,
+        snapshotGeneration: authority.snapshotGeneration
+      }
+    : null;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

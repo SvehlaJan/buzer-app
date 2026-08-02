@@ -9,24 +9,24 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class HomeDoneActionHandler(
-    private val refreshSnapshot: suspend () -> SnapshotViewState,
+    private val refreshSnapshot: suspend (forceTodoist: Boolean) -> SnapshotViewState,
     private val completeTask: suspend (String, TaskActionRequest) -> CoordinatorActionResult,
     private val latestSnapshot: () -> SnapshotViewState?,
     private val applySnapshot: (SnapshotViewState) -> Unit,
-    private val setStatusMessage: (String?) -> Unit,
+    private val setStatusMessage: (String?) -> Unit = {},
     private val setRefreshInFlight: (Boolean) -> Unit = {},
+    private val clearRefreshFailure: () -> Unit = {},
     private val reportRefreshFailure: (Throwable) -> Unit = {}
 ) {
     private val mutex = Mutex()
     private var retryCurrentAction: (suspend () -> CoordinatorActionResult)? = null
 
-    suspend fun refresh() {
+    suspend fun refresh(forceTodoist: Boolean = false) {
         mutex.withLock {
             setRefreshInFlight(true)
-            setStatusMessage(null)
+            clearRefreshFailure()
             try {
-                applySnapshot(refreshSnapshot())
-                setStatusMessage(null)
+                applySnapshot(refreshSnapshot(forceTodoist))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -38,9 +38,9 @@ class HomeDoneActionHandler(
     }
 
     /** The request is created by the UI once and retained by the coordinator's retry closure. */
-    suspend fun completeCurrentTask(taskId: String, request: TaskActionRequest) {
+    suspend fun completeTask(taskId: String, request: TaskActionRequest) {
         mutex.withLock {
-            handleCompletionResult(completeTask(taskId, request))
+            handleCompletionResult(this.completeTask.invoke(taskId, request))
         }
     }
 

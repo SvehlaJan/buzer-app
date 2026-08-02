@@ -23,6 +23,7 @@ export interface BuildServerOptions {
   currentUserId: string;
   androidApiToken: string;
   todoist: TodoistAdapter;
+  synchronizer?: TodoistSyncService;
   escalationService?: EscalationService | null;
   rateLimit?: { max: number; timeWindowMs: number };
 }
@@ -43,7 +44,7 @@ export function buildServer(options: BuildServerOptions) {
   const projects = new ProjectRepository(options.db);
   const collaborators = new CollaboratorRepository(options.db);
   const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true);
-  const synchronizer = new TodoistSyncService(
+  const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
   const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
@@ -69,7 +70,7 @@ export function buildServer(options: BuildServerOptions) {
     }
   );
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots, collaborators });
+    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
@@ -107,15 +108,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     await whatsappSender.initialize();
   }
   const escalationService = new EscalationService(db, tasks, whatsappSender, whatsappRecipientId);
+  const synchronizer = new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators);
   const app = buildServer({
     db,
     currentUserId,
     androidApiToken,
     todoist,
-    escalationService
+    escalationService,
+    synchronizer
   });
   const poller = new TodoistPoller(
-    new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators),
+    synchronizer,
     {
       runImmediately: true,
       onError: (error) => app.log.error({ err: error }, "Todoist sync failed")

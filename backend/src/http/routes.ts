@@ -5,6 +5,7 @@ import { CollaboratorRepository } from "../repositories/collaboratorRepository.j
 import { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskActionService } from "../services/taskActionService.js";
 import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
+import type { TodoistSyncService } from "../services/todoistSyncService.js";
 import type { BuildServerOptions } from "../server.js";
 import { isBearerTokenValid, requireBearerToken } from "./auth.js";
 
@@ -91,6 +92,7 @@ export interface RouteServices {
   actions: TaskActionService;
   snapshots: TaskSnapshotService;
   collaborators: CollaboratorRepository;
+  synchronizer: TodoistSyncService;
 }
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions, services: RouteServices): void {
@@ -145,6 +147,11 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   });
 
   app.get("/tasks/snapshot", async () => services.snapshots.getSnapshot(new Date().toISOString()));
+  app.post("/tasks/sync", async (request) => {
+    emptyBody.parse(request.body ?? {});
+    await services.synchronizer.syncNow();
+    return services.snapshots.getSnapshot(new Date().toISOString());
+  });
   app.get("/projects", async () => {
     const collaboratorsReady = services.collaborators.isMirrorContractReady();
     return {
