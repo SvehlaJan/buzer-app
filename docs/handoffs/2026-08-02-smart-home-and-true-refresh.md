@@ -371,3 +371,70 @@ Known deferred check:
   69-test run after the affected Add and Edit classes passed in scoped verification.
 - Do not claim the full suite is green until `PORT=18434 scripts/e2e-real-backend.sh`
   is rerun unfiltered and passes.
+
+## 2026-08-02 Physical-device installation follow-up
+
+The first Pixel 10 installation was built directly from this worktree without Gradle
+backend properties. Because the worktree intentionally has no gitignored
+`client/local.properties`, its generated debug `BuildConfig` contained an empty backend
+base URL and token. The app therefore refused to initialize its coordinator and Home
+showed `Refresh failed`; no network request was attempted.
+
+The APK was rebuilt from the same commit with `BUZER_BACKEND_BASE_URL`,
+`BUZER_BACKEND_TOKEN`, and assignee IDs passed as Gradle properties from the existing
+primary-checkout local configuration. No configuration value was copied into or persisted
+in this worktree. The corrected APK was installed on physical device `56061FDCR005J0`.
+
+Verification:
+- Command: `ANDROID_SERIAL=56061FDCR005J0 ./gradlew :androidApp:installDebug` with the
+  four existing local Gradle properties supplied at invocation time
+- Result: PASS
+- Evidence: Gradle reported `Installed on 1 device` and `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: clean app relaunch followed by `android layout --device=56061FDCR005J0 -p`
+  and `BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh logcat 180`
+- Result: PASS
+- Evidence: Home displayed an updated agenda with one overdue task and future tasks;
+  filtered logs showed authenticated snapshot requests returning HTTP 200, 47 total
+  tasks, 13 visible tasks, schedule version 4746, and `refresh complete`.
+
+Operational note:
+
+- When installing from a git worktree, always pass the four `BUZER_*` Gradle properties
+  or otherwise provide that worktree its own ignored `client/local.properties`. A plain
+  `installDebug` silently builds empty configuration and produces the same failure.
+
+## 2026-08-02 merge readiness
+
+Plan/task attempted: integrate the completed Smart Home branch into `master` after the
+user explicitly retained the deferred Task 8 Step 3 unfiltered E2E rerun. Four pre-existing
+extra blank lines at EOF were removed after `git diff --check master` exposed them; this
+was a whitespace-only correction.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: 32 backend files and 404 tests passed.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: TypeScript no-emit check exited 0.
+
+Verification:
+- Command: `npm run build`
+- Result: PASS
+- Evidence: backend production build exited 0.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; 70 tasks executed or were up to date.
+
+Verification:
+- Command: `PORT=18434 scripts/e2e-real-backend.sh`
+- Result: SKIPPED
+- Evidence: the user explicitly retained the earlier decision to defer the final
+  unfiltered 69-test rerun; the corrected affected classes and physical-device smoke are
+  recorded above, but Task 8 Step 3 remains unchecked.

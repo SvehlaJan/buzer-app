@@ -177,4 +177,3 @@ class MainActivity : ComponentActivity() {
             throw IllegalStateException("Refresh failed")
         }
 }
-
