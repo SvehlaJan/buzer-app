@@ -98,7 +98,7 @@ Home contains one scroll surface in this order:
 6. collapsed `Unassigned (N)` section;
 7. every future owner commitment in sticky local-date groups.
 
-The persistent FAB is Add Task only. Morning Review remains reachable only from its attention strip in this change. There is no calendar, date-jump, search, or overflow action. A transient `Back to top` pill appears once the first visible item reaches the third future-date header (and never appears when fewer than three future groups exist), then calls `animateScrollToItem(0)` and disappears at the top.
+The persistent FAB is Add Task only. Morning Review remains reachable only from its attention strip in this change. There is no calendar, date-jump, search, or overflow action. A transient `Back to top` pill appears once the third future-date header becomes visible (and never appears when fewer than three future groups exist), then calls `animateScrollToItem(0)` and disappears at the top.
 
 Use a half-open interval `[start, end)`: a task is current when `now >= start && now < end`; it is overdue at `now >= end`. If multiple tasks are current, the one ending soonest is the hero and task ID breaks ties. The hero displays `+N overlapping`; every other current task follows as a compact row. The hero ID must not appear in another section.
 
@@ -620,7 +620,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 
   Preserve the hero checklist and toggle callback. Add Edit to the hero. Give overlap/overdue rows Done+Edit and respect `doneEnabled`. Future rows have Edit only. Unassigned rows expose Assign/Edit routing only and no Done. Remove the secondary Morning Review FAB from `IconFabStack`; pass `secondaryActions = emptyList()`.
 
-  Record the rendered Lazy-list index of each future-date header. Render `Back to top` as a small transient pill above the Add FAB when `firstVisibleItemIndex` reaches the third future-date header; do not render it if there are fewer than three future groups. Use `derivedStateOf` and a remembered coroutine scope; do not store scroll position in the pure state or expansion flags.
+  Record the rendered Lazy-list index of each future-date header. Render `Back to top` as a small transient pill above the Add FAB when `visibleItemsInfo` contains the third future-date header or any later item; do not render it if there are fewer than three future groups. Use `derivedStateOf` and a remembered coroutine scope; do not store scroll position in the pure state or expansion flags.
 
 - [x] **Step 6: Render failures and empty state without false claims.**
 
@@ -671,7 +671,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
 
   `backend/test/e2eServer.ts` already records `/tasks...` POST paths and its `failActions` hook already covers `/tasks/sync`; change it only if the new endpoint is not observable through those existing facilities.
 
-- [x] **Step 3: Migrate existing Home instrumentation; do not append contradictory tests.**
+- [ ] **Step 3: Migrate existing Home instrumentation; do not append contradictory tests.**
 
   In `BlockerActivityFakeBackendTest.kt`, update at least these existing cases:
 
@@ -695,6 +695,8 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
   - the pull container semantics include custom action `Refresh tasks` and invoking it records `/tasks/sync`;
   - calendar/date-jump, search, overflow, and secondary Morning Review FAB are absent.
 
+  Remaining coverage follow-up: prove sticky-header pinning rather than only reaching later grouped content; assert explicit Overdue Done/Edit routing; assert the exact task identity opened from Unassigned and future rows; and use a controlled delayed sync response to prove cached Home content remains visible while refresh is in flight.
+
 - [x] **Step 4: Run the scoped real-backend E2E class.**
 
   From repository root:
@@ -703,7 +705,7 @@ On Android, refresh failure must leave the already displayed `SnapshotViewState`
   ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest scripts/e2e-real-backend.sh
   ```
 
-  Expected: PASS. This is the first runtime UI authority; JVM success is insufficient.
+  Expected: PASS. This is the first runtime UI authority; JVM success is insufficient. The final exact-matcher correction run passed 28/28 with zero skipped and zero failed. Step 3 remains open for the explicitly enumerated coverage gaps above.
 
 - [x] **Step 5: Commit fixtures and migrated instrumentation.**
 

@@ -5,14 +5,14 @@
 - Plan: `docs/superpowers/plans/2026-08-02-smart-home-and-true-refresh.md`
 - Worktree: `/Users/svehla/playground/buzer-app/.worktrees/smart-home-and-true-refresh`
 - Branch: `feature/smart-home-and-true-refresh`
-- Code HEAD before this documentation update: `f034400 test: verify smart Home end to end`
+- Code HEAD before this documentation update: `4adcb66 test: strengthen smart Home end-to-end coverage`
 - Tasks 1–6: implemented and committed.
-- Task 7: complete and committed as `f034400`; the final scoped real-backend class passed all 28 tests.
-- Task 8: backend/JVM/build gates are green. The full unfiltered real-backend E2E suite remains unrun and its plan checkbox remains open.
+- Task 7: fixture/instrumentation work is committed through `4adcb66`, and the final scoped class is green (28/28). Step 3 remains incomplete for the enumerated coverage gaps, so this is not a full Smart Home completion claim.
+- Task 8: open. Backend/JVM/build gates were green before the correction pass, while the full unfiltered real-backend E2E suite remains unrun.
 
 ## Plan steps attempted
 
-- Task 7 Steps 1–5 completed.
+- Task 7 Steps 1–2 and 4–5 completed. Step 3 remains open for the reviewed coverage gaps.
 - Task 8 Steps 1–2 and 4–7 completed.
 - Task 8 Step 3 remains open: the full unfiltered real-backend E2E suite was outside the bounded isolation rerun authorization.
 
@@ -43,7 +43,8 @@ The production Home file contains two focused defects exposed by the new instrum
 
 - Deterministic current overlap, four overdue tasks, tomorrow/later/next-year/cross-midnight future tasks, unassigned root plus child, assigned-other exclusion, and incomplete-checklist fixtures.
 - Server snapshot assertions for unassigned hierarchy, assigned-other exclusion, and checklist totals.
-- Home instrumentation for attention-only Morning Review, Add-only controls, current completion, cached forced-refresh failure and Retry, sticky future groups, Back to top, unique hero/overlap count, overdue expansion, unassigned expansion/Edit, assigned-other exclusion, checklist action/Done eligibility, future Edit, swipe refresh, and refresh accessibility semantics.
+- Home instrumentation for attention-only Morning Review, Add-only controls, current completion, cached forced-refresh failure and Retry, reaching future groups, Back to top, unique hero/overlap count, overdue expansion, unassigned expansion/Edit, assigned-other exclusion, checklist action/Done eligibility, future Edit, swipe refresh, and refresh accessibility semantics.
+- Remaining explicit coverage gaps: sticky-header pinning, Overdue Done/Edit routing, exact opened-task identity for Unassigned/future rows, and cached-content retention during a controlled in-flight refresh.
 - Existing blocker editor selectors were migrated to the current computed Repair/Reschedule labels and fixture-pinned occurrence keys.
 
 ## Verification
@@ -179,9 +180,54 @@ Verification:
 - Result: PASS
 - Evidence: no whitespace errors.
 
+## 2026-08-02 mandatory coverage-correction pass
+
+This pass made test/documentation changes only; no production file changed. Each full-class invocation was explicitly authorized and none was retried. The final exact-text correction passed and is committed in `4adcb66`.
+
+Test corrections attempted:
+
+- wait for the deadline update backend response to complete before asserting Activity destruction;
+- make the shared error-log wait Compose-scheduler-aware;
+- assert both UPDATE_TASK failures write the exact action/task ID and `forced_failure` fragments;
+- assert the intended exact `Task update` title, draft-retention message, Retry, Dismiss, and open Activity;
+- wait for the repaired Morning Review task semantics to disappear while asserting the Activity remains open, matching the fixture evidence `remainingInvalid=3`;
+- assert Back to top returns to the exact weekday/date title and removes the pill.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 1s`.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: initial TDD proof ran 28 tests; 25 passed and 3 failed. The two UPDATE_TASK tests timed out in the raw error-log polling helper with an empty file, and Morning Review success timed out expecting Activity destruction even though the success log proved `remainingInvalid=3`.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: after the evidence-driven wait/lifecycle correction, `BUILD SUCCESSFUL in 1s`.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: 28 tests ran; 26 passed and 2 failed. Both `morningReview_repairBackendFailureShowsErrorAndStaysOpen` and `deadlineBlocker_rescheduleFailureUsesUpdateAction` reached the expected error log (`action failed action=UPDATE_TASK ... message=forced_failure`) but timed out after 15 seconds waiting for the exact `Task update` UI. The other corrections passed in the same class sequence, including Morning Review success remaining open and the strengthened Back-to-top assertion. No retry was run.
+
+Read-only trace resolved that RED without a production change: the dialog was created, but `waitForText("Task update")` used `substring = true`, matching both the title and the longer message and making `onNode` ambiguous until timeout. The final correction waits for the exact title and exact generic message separately.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: exact-text correction compiled with `BUILD SUCCESSFUL in 1s`.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: all 28 tests passed with zero skipped and zero failed; Gradle reported `BUILD SUCCESSFUL`. No retry was run.
+
 ### Remaining work
 
-Task 7 has no remaining work. Do not rerun the discarded scenario-closing or backend-drain hypotheses. Task 8 Step 3 still requires a separately authorized full unfiltered `PORT=18434 scripts/e2e-real-backend.sh` before claiming the whole Change 1 instrumentation suite is green.
+Task 7 Step 3 remains open for sticky-header pinning, explicit Overdue Done/Edit routing, exact opened-task identity for Unassigned/future rows, and cached-content retention during a controlled in-flight refresh. Task 8 Step 3 still requires a separately authorized full unfiltered `PORT=18434 scripts/e2e-real-backend.sh`; do not claim the Smart Home change complete.
 
 ## Contract and scope confirmations
 
@@ -194,4 +240,4 @@ Task 7 has no remaining work. Do not rerun the discarded scenario-closing or bac
 ## Assumptions
 
 - The accepted Smart Home design and this plan remain product truth.
-- The scoped 28-test Task 7 authority is green. The broader Change 1 completion claim still depends on the open Task 8 unfiltered-E2E checkbox.
+- The scoped 28-test class is green. The broader Change 1 completion claim still depends on Task 7 Step 3's enumerated coverage gaps and the open Task 8 unfiltered-E2E checkbox.
