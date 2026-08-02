@@ -103,7 +103,7 @@ fun buildHomeScreenState(
         )
     }
 
-    val updatedLabel = parseInstant(snapshot.serverTime)?.let {
+    val updatedLabel = parseInstant(snapshot.serverTime, zoneId)?.let {
         "Updated " + DateTimeFormatter.ofPattern("HH:mm", Locale.US).format(it.atZone(zoneId))
     }
     val refreshAttention = refreshError?.let {
@@ -136,12 +136,12 @@ fun buildHomeScreenState(
         .filter { !it.isAssignedToUser && it.assigneeId == null }
         .filterNot { reviewIds.contains(it.id) }
         .sortedWith(
-            compareByDescending<TaskSnapshotItem> { parseInstant(it.updatedAt) ?: Instant.EPOCH }
+            compareByDescending<TaskSnapshotItem> { parseInstant(it.updatedAt, zoneId) ?: Instant.EPOCH }
                 .thenBy { it.id }
         )
     val unassignedRows = unassignedTasks.map { task ->
         val progress = homeTaskProgress(task)
-        val dueInstant = task.dueDatetime?.let { parseInstant(it) }
+        val dueInstant = task.dueDatetime?.let { parseInstant(it, zoneId) }
         val duration = task.durationMinutes
         val timeLabel = if (dueInstant != null && duration != null && duration > 0) {
             formatTimeWindow(dueInstant, dueInstant.plusSeconds(duration * 60L), zoneId)
@@ -181,7 +181,7 @@ fun buildHomeScreenState(
 
     val timedOwnerTasks = ownerTasks.mapNotNull { task ->
         val due = task.dueDatetime ?: return@mapNotNull null
-        val start = parseInstant(due) ?: return@mapNotNull null
+        val start = parseInstant(due, zoneId) ?: return@mapNotNull null
         val dur = task.durationMinutes ?: return@mapNotNull null
         if (dur <= 0) return@mapNotNull null
         val end = start.plusSeconds(dur * 60L)
@@ -334,13 +334,13 @@ fun buildHomeScreenState(
     )
 }
 
-private fun parseInstant(value: String): Instant? {
+private fun parseInstant(value: String, zoneId: ZoneId = ZoneId.of("UTC")): Instant? {
     val normalized = value.substringBefore('[')
     return runCatching { Instant.parse(normalized) }
         .getOrElse {
             runCatching { OffsetDateTime.parse(normalized).toInstant() }
                 .getOrElse {
-                    runCatching { LocalDateTime.parse(normalized).atZone(ZoneId.systemDefault()).toInstant() }
+                    runCatching { LocalDateTime.parse(normalized).atZone(zoneId).toInstant() }
                         .getOrNull()
                 }
         }
