@@ -92,3 +92,30 @@ Verification:
 Have the user review the committed written specification. After approval, invoke the
 writing-plans workflow and produce a task-by-task implementation plan that migrates
 the named JVM and Android instrumentation suites in the same change sequence.
+
+## Scope-Review Revision
+
+After the first written-spec review, the user requested a grilling session and then a
+complexity-reduction pass. The revised accepted scope:
+
+- includes owner-assigned, implicitly owner-owned, and every unassigned root task;
+- excludes tasks assigned to other people;
+- retains owner-only strict scheduling and enforcement;
+- removes Completed today, universal scheduling, foreground Todoist sync, same-day
+  repair re-gating, post-boot first-unlock review, unverified review state, checklist
+  preview expansion, partial-success refresh metadata, and dedicated Reschedule;
+- retains true user-initiated Todoist refresh, daily Morning Review, and mandatory
+  foreground readiness checks;
+- splits implementation into Smart Home, Morning Review, then readiness changes;
+- adds parent completion Undo and accurate Completed today to the product backlog.
+
+Files additionally changed by this revision:
+
+- `docs/notes/2026-06-13-product-backlog.md`
+
+Verification for this revision:
+- Command: placeholder/contradiction scan and `git diff --check`
+- Result: PASS
+- Evidence: the final scan found no placeholders or unresolved decisions; owner versus
+  genuinely unassigned personal/shared-project semantics are explicit, removed features
+  appear only as exclusions/backlog items, and Git reported no whitespace errors.

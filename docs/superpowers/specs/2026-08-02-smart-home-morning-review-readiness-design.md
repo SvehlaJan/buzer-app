@@ -4,387 +4,400 @@ Date: 2026-08-02
 
 ## Status
 
-Accepted product and technical design. This specification records the completed
-Home-screen audit and brainstorming decisions. It intentionally supersedes the
-earlier mockup's calendar and overflow buttons: the final Home has neither.
+Accepted reduced-scope design after visual review and a full grilling session. This
+revision supersedes the broader first draft committed earlier on the same feature
+branch.
+
+The work is deliberately split into three sequential, independently verified feature
+changes:
+
+1. Smart Home and authoritative pull-to-refresh.
+2. Daily Morning Review scheduling and flow.
+3. Foreground enforcement-readiness gate.
+
+Each change receives its own implementation plan, branch/worktree, test migration,
+and verification. They are not one big-bang implementation.
 
 ## Purpose
 
-Make Home the useful default surface for the commitment companion. On every visit,
-it should immediately answer:
+Make Home answer four questions without becoming a second Todoist client:
 
-- What needs my attention now?
+- What should I be doing now?
 - What have I missed?
+- Which work has no owner?
 - What is coming today and later?
-- What is the most useful action I can take from here?
 
-Home must show every future task returned by the authoritative snapshot in one
-continuously scrolling, date-grouped agenda. The redesign also closes two reliability
-gaps discovered during the audit: Morning Review is not currently scheduled for the
-start of each day, and Android enforcement readiness is not comprehensively checked
-on every app start.
+Home shows all future commitments assigned to the device owner in one continuously
+scrolling agenda. It also keeps every unassigned root task discoverable without
+importing or managing tasks assigned to other people.
 
-## Current Gaps
+The two later changes make the daily review reliable at local 08:00 and ensure the
+Android capabilities required for enforcement are checked whenever Buzer returns to
+the foreground.
 
-The current Home implementation filters agenda rows to tasks whose local start or end
-date is today. The backend already returns future tasks, so this client-side filter
-makes valid upcoming work disappear and can produce a misleading `No tasks for today`
-empty state while future tasks exist.
+## Reduced Product Boundary
 
-Other observed Home gaps:
+Included in Buzer's task snapshot:
 
-- current work is duplicated between the hero and agenda;
-- overlapping current tasks have no explicit priority rule;
-- rows are grouped by status rather than forming a chronological agenda;
-- overdue and completed work can overwhelm the useful future view;
-- row actions are discoverable only by tapping, with no contextual quick actions;
-- refresh feedback shifts the layout;
-- the old Morning Review `R` action is cryptic;
-- the UI tests do not lock future grouping, hero deduplication, or overlap behavior.
+- root tasks explicitly assigned to the device owner;
+- personal-project roots that are implicitly owned by the device owner even though
+  Todoist stores no assignee;
+- every genuinely unassigned root in synchronized assignable/shared projects;
+- checklist children nested under their root task.
 
-Morning Review is a real, functional repair surface, but its production alarm is only
-created by its own five-minute Snooze action. There is no initial daily 08:00 alarm.
-It currently focuses on invalid tasks and does not transition into an overdue/today
-day-start summary.
+Root tasks explicitly assigned to another person remain excluded from the task
+snapshot. Home also omits deleted tasks, completed-history browsing, and checklist
+children as independent agenda rows. Terminal task records may still travel in an
+authoritative mutation response when required for reconciliation; they are not Home
+sections.
 
-Android has a permission-health reader, but no functional Health screen consumes it.
-The checks omit full-screen-intent access and global/channel notification state, and
-there is no sequential startup path for acquiring missing enforcement permissions.
+The existing strict commitment rule remains owner-only. Explicitly and implicitly
+owner-owned tasks require an exact start date/time and a positive duration. Genuinely
+unassigned shared-project tasks do not require a schedule, do not enter the agenda,
+and never block Morning Review. Assigning one to the owner activates the existing
+strict schedule validation. Assigning it to another person removes it from Buzer's
+next authoritative snapshot.
 
-## Scope
+This deliberately avoids collaborator agendas, assignee badges, `Others overdue`,
+universal scheduling validation, and editing another person's commitments.
 
-In scope:
+## Change 1: Smart Home And True Refresh
 
-- a smart Home hierarchy with current, overdue, completed-today, and all future tasks;
-- one continuously scrolling agenda grouped by local date;
-- contextual quick actions and a single Add Task floating action button;
-- pull-to-refresh with cached-content retention and accessible fallback;
-- an attention banner that opens Morning Review when review is relevant;
-- a reliable local 08:00 Morning Review blocker and day-start flow;
-- comprehensive enforcement-readiness checks on every launcher start;
-- sequential permission/setup guidance when readiness is incomplete;
-- deterministic state builders, scheduling logic, and regression coverage.
+### Current Gap
 
-Out of scope:
+The current Home filters agenda rows to tasks whose start or end local date is today.
+The backend already returns later owner commitments, so valid future work disappears.
+The current hero is duplicated in the agenda, overlapping work lacks an explicit
+priority rule, refresh feedback shifts layout, and empty copy can claim that no tasks
+exist while later tasks are available.
 
-- backend or Todoist API expansion;
-- calendar integration or a date-picker/date-jump feature;
-- a Health & permissions screen or Home overflow menu;
-- changing Todoist's authority over visible task data;
-- changing the action-journal and authoritative-snapshot reconciliation protocol;
-- calendar blocking, webhooks, or push invalidation.
+The current snapshot excludes genuinely unassigned shared-project roots as `NOT_OWNED`.
+The backend projection must add a non-enforced unassigned classification while
+continuing to exclude tasks assigned to other people.
 
-## Final Home Information Architecture
+### Information Architecture
 
-Home is one `LazyColumn` inside Material 3 `PullToRefreshBox`. It uses this order:
+Home is one Material 3 `PullToRefreshBox` containing one `LazyColumn`:
 
-1. Greeting/title and sync context.
-2. Attention banner, only when Morning Review or a retryable sync condition needs
-   attention.
-3. `Now` hero for the most relevant current task.
-4. Compact `Now` rows for any other overlapping current tasks.
-5. `Overdue` section.
-6. Collapsed `Completed today (N)` section.
-7. Continuous future agenda, grouped by sticky local-date headers.
+1. Title and synchronization context.
+2. Morning Review/repair attention banner, only when review is available or due.
+3. Owner `Now` hero.
+4. Compact owner `Now` rows for overlapping current commitments.
+5. Owner `Overdue` section.
+6. Collapsed `Unassigned (N)` section.
+7. All future owner commitments, grouped by sticky local-date headers.
 
-The only persistent global action is the Add Task floating action button. The final
-top app bar has no calendar button and no three-dot overflow. Refresh is a pull gesture
-and accessibility action. Morning Review is reachable from its attention banner, not
-from a permanent menu item. There is no Health destination.
+The Home app bar has no calendar button, date jump, search button, or overflow menu.
+The only persistent global action is the Add Task floating action button. After the
+user scrolls several date groups, a small transient `Back to top` pill appears and
+disappears again at the top.
+
+There is no `Completed today` section in this change.
 
 ### Now
 
-A task is current when its local instant interval contains the injected current
-instant and it is not completed. When several tasks are current, the hero is the task
-ending soonest. Stable task identity is the final tie-breaker. The hero shows a
-`+N overlapping` cue when additional current tasks exist; those tasks appear in a
-compact Now list immediately below it.
+An unfinished owner task is current when the injected current instant is within its
+committed half-open interval. When several are current, the task ending soonest is the
+hero; stable task identity breaks ties. The hero displays `+N overlapping`, and the
+remaining current owner tasks appear as compact rows immediately below it.
 
-The hero is excluded from every later list. Other current tasks are also excluded
-from the future agenda, so every task has one visible placement.
+The hero and overlapping rows are excluded from every later section. Tasks cannot be
+duplicated across presentation sections.
 
-Hero quick actions:
-
-- `Done` completes the task through the existing authoritative action flow;
-- `Edit` opens the unified task editor;
-- `Reschedule` is available when the task is overdue or its commitment can no longer
-  be met as scheduled.
+The hero shows all existing checklist children inline, preserving the current Home
+toggle behavior. `Done` is disabled while checklist items remain incomplete and the
+progress count explains why.
 
 ### Overdue
 
-An unfinished task is overdue when the relevant committed end/deadline is before the
-injected current instant. Show the three most recently missed tasks initially, ordered
-most recent first. The section always shows the total count. `Show all N` expands the
-full list; the expanded list uses the same deterministic ordering.
+An unfinished owner task becomes overdue when its committed interval ends. Show the
+three most recently missed tasks initially, newest miss first, together with the total
+count. `Show all N` expands the complete deterministic list inline.
 
-Each overdue row exposes `Done` and `Reschedule`, with Edit available through the task
-details/editor path. Overdue tasks do not also appear in the future agenda.
+### Unassigned
 
-### Completed Today
-
-Only tasks completed on the device's current local date are represented. The section
-is collapsed by default and labelled `Completed today (N)`. Expanding it reveals the
-rows in most-recently-completed order. Older completed tasks are absent from Home.
-
-If the snapshot cannot provide a trustworthy completion instant, the implementation
-must use the existing domain evidence rather than inventing a date. Such a task may be
-omitted from this section until authoritative completion data exists.
+Every genuinely unassigned assignable/shared-project root appears in a collapsed
+`Unassigned (N)` section. Personal-project roots with implicit owner responsibility are
+owner commitments, not Unassigned rows. An Unassigned row never appears in Now,
+Overdue, the dated agenda, or Morning Review's blocking queue. Expanding the section
+reveals all such roots inline, ordered most recently updated first. Tapping a row opens
+Edit so an assignee can be selected. Normal owner schedule validation applies if the
+owner is selected.
 
 ### Future Agenda
 
-Every unfinished task with a future scheduled occurrence is included, not only tasks
-touching today. Date groups are ordered ascending by local date. Rows within a group
-are ordered by start instant, then end/deadline instant, then stable task identity.
+Include every unfinished, valid, future owner commitment in the authoritative
+snapshot—not only tasks touching today. Groups are ordered by local start date. Rows
+within each group are ordered by start instant, end instant, then stable task identity.
 
-Date headers remain sticky while scrolling. Labels are human-friendly (`Today`,
-`Tomorrow`, weekday/date, then full date when needed) but their grouping keys are
-local dates derived with the device zone injected into the state builder.
+Sticky headers use `Today`, `Tomorrow`, weekday/date, and an unambiguous full date when
+needed. The state builder receives the device zone; composables do not read the system
+clock directly. A task crossing midnight belongs to its start-date group and exposes
+the cross-day end in its row.
 
-A task spanning midnight belongs to the group containing its start. Its row makes the
-cross-day end explicit. Unscheduled invalid/pending tasks do not get silently placed
-in a guessed date group; they contribute to the attention/review state instead.
+A recurring task contributes only Todoist's current active/next occurrence. The client
+does not project speculative future recurrence rows.
 
-Future rows expose Edit as their direct action. Invalid or reconciliation-pending
-rows use `Review` and route to the existing repair/reconciliation surface.
+Owner tasks with incomplete schedules remain invalid and route through the existing
+repair/Morning Review attention path rather than being placed in a guessed date group.
+Reconciliation-pending work is labelled `Sync pending`; conflicting mutations remain
+disabled and Retry uses the existing reconciliation path.
 
-When there is no current, overdue, completed-today, or future work, Home shows one
-true all-clear empty state. It must not claim there are no tasks merely because today
-is empty while later tasks exist.
+When no Now, overdue, unassigned, or future task exists, Home shows one true all-clear
+state. It does not say `No tasks for today` while future tasks exist.
 
-## Pure Home State
+### Actions
 
-Build presentation state with a pure function receiving the complete authoritative
-snapshot, device zone, injected current instant, and local expansion state. It returns
-explicit sections rather than making composables classify tasks.
+- Owner Now/overdue rows: one-tap `Done` and `Edit`.
+- Owner future rows: `Edit`.
+- Owner invalid rows in repair: one-tap `Done` when completable and `Fix`.
+- Unassigned rows: Edit/assign only.
+- Reconciliation-pending rows: `Retry sync` only until resolved.
 
-Classification precedence is:
+There is no dedicated Reschedule action. Schedule changes happen in the unified Edit
+screen. Parent completion remains one tap with no confirmation and no Undo in this
+change. An Undo/reopen contract is explicitly deferred to the product backlog.
 
-1. invalid or unresolved reconciliation attention;
-2. completed today;
-3. overdue;
-4. current;
-5. future agenda;
-6. not shown.
+All mutations continue through `EnforcementCoordinator` and the action-journal/
+authoritative-snapshot protocol. Home never removes a task optimistically without an
+authoritative response.
 
-Where current and overdue semantics could overlap at a boundary, domain commitment
-semantics and half-open time intervals must be encoded once in this builder and locked
-with tests. The same task ID cannot appear in more than one output section.
+### Pure Home State
 
-UI-only expansion state (`overdue expanded`, `completed expanded`) is saveable and
-does not change task authority. Changes caused by an action are rendered from the
-authoritative response/snapshot immediately, consistent with `EnforcementCoordinator`
-and the repository's reconciliation protocol.
+Build presentation state with a pure function receiving the complete snapshot, device
+zone, injected current instant, and the two saveable expansion flags (Overdue and
+Unassigned). Composables render explicit section models rather than classifying tasks.
 
-## Pull To Refresh
+Owner-task classification precedence is:
 
-Use Material 3 `PullToRefreshBox` around the single Home `LazyColumn` and the existing
-authoritative refresh/reconciliation path.
+1. invalid or reconciliation attention;
+2. overdue;
+3. current;
+4. future agenda;
+5. not shown.
 
-- cached tasks stay visible throughout refresh;
-- the indicator overlays content instead of inserting a row and shifting layout;
-- success applies the authoritative snapshot without rebuilding a parallel cache;
-- failure preserves cached content and shows a concise, retryable attention strip;
-- concurrent pulls coalesce with the existing in-flight refresh semantics;
-- the list exposes an accessibility custom action named `Refresh tasks`;
-- the retry action provides a visible non-gesture alternative.
+Unassigned roots are projected separately and cannot enter owner classification.
+Deleted/completed tasks are not shown. Every visible row identity is unique.
 
-## Morning Review
+### Authoritative Pull-To-Refresh
 
-Morning Review remains a full-screen blocker, but becomes a deliberate daily start
-flow at local 08:00.
+The existing foreground/open path continues to load the backend mirror immediately;
+the backend's five-minute Todoist polling remains unchanged. Buzer does not force a
+Todoist synchronization on every foreground.
 
-### Entry Points
+Pull-to-refresh adds an authenticated backend operation that:
 
-There are exactly two product entry points:
+- coalesces concurrent synchronization attempts through the existing serialized sync
+  boundary;
+- synchronizes Todoist immediately;
+- returns the resulting authoritative snapshot on success;
+- returns a normal error on failure.
 
-1. the Home attention banner when today's review is due, snoozed, or incomplete;
-2. the automated full-screen Morning Review blocker.
+On failure, Home retains its already displayed cached/mirrored snapshot and shows a
+concise Retry strip. The response does not add partial-success or stale-snapshot
+metadata. Manual and automatic snapshot loading use the same overlaid refresh
+indicator, which never inserts a row or shifts layout.
 
-There is no permanent Home button or overflow item for Morning Review.
+The list exposes an accessibility custom action named `Refresh tasks`; visible Retry
+is the non-gesture alternative.
 
-### Daily Flow
+### Change 1 Verification
 
-The blocker launches every local day at 08:00 even when all commitments are valid.
-Its states are:
+Pure/JVM coverage must lock:
 
-1. Load the freshest available authoritative snapshot while retaining usable cached
-   data and communicating refresh failure.
-2. Present invalid/unsupported/pending tasks first. Each must be repaired, reconciled,
-   or the whole review snoozed. `Start day` is unavailable while blocking items remain.
-3. Once commitments are valid, show overdue work and today's chronological agenda.
-4. Permit contextual overdue actions, but do not require overdue completion or
-   rescheduling before starting the day.
-5. `Start day` records acknowledgement for the current local date and closes the
-   blocker. `Snooze 5 min` schedules a new one-shot alarm and leaves the day
-   unacknowledged.
+- all future owner dates and deterministic chronology;
+- ending-soonest hero selection, overlap count, and no duplicate IDs;
+- overdue three-item cap, total, expansion, and ordering;
+- unassigned inclusion, exclusion from enforcement sections, expansion, and ordering;
+- exclusion of tasks assigned to other people;
+- cross-midnight grouping;
+- current/overdue boundary behavior;
+- recurring current-occurrence-only behavior;
+- invalid, pending, empty, loading, and cached-error states;
+- disabled Done for incomplete checklists.
 
-Home displays the attention banner after 08:00 whenever today's review is not
-acknowledged. Before 08:00 it may display only a specifically snoozed/incomplete state,
-not a premature daily-review prompt.
+Android instrumentation must cover future scrolling, sticky headers, Back to top,
+owner quick actions, inline checklist toggles, unassigned assignment routing,
+pull-to-refresh success/failure/Retry/accessibility, and absence of calendar/search/
+overflow controls.
 
-### Scheduling And Persistence
+The implementation plan must migrate at least:
 
-Introduce a focused `MorningReviewScheduler` and a small local state store containing
-the last acknowledged local date and any pending snooze metadata. No backend endpoint
-is needed.
+- `HomeScreenStateTest.kt`;
+- `HomeDoneActionHandlerTest.kt`;
+- affected `BlockerActivityFakeBackendTest.kt` snapshot fixtures;
+- relevant real-backend instrumentation fixtures and expectations.
 
-The scheduler:
+Final verification includes relevant JVM tests, Android assembly, scoped
+`scripts/e2e-real-backend.sh` runs while iterating, and the full unfiltered real-backend
+E2E suite before completion.
 
-- computes the next local 08:00 and converts it to an instant using the current zone;
-- uses a one-shot alarm-clock delivery path consistent with reliable task blockers;
-- schedules the next daily alarm after firing, acknowledgement, or reconciliation;
+## Change 2: Daily Morning Review
+
+### Entry And Timing
+
+Morning Review has exactly two entry paths:
+
+1. the Home attention banner;
+2. the automated full-screen daily blocker.
+
+There is no permanent Home action or overflow item. The Home banner is available from
+local midnight whenever the current local date is unacknowledged, allowing an early
+review to cancel that day's 08:00 alarm.
+
+The blocker fires at local 08:00 every calendar day, including weekends and task-free
+days. Review identity follows the current device local date and timezone. A timezone
+change recomputes the next local occurrence; a date already acknowledged in local
+state is not repeated.
+
+### Review Flow
+
+1. Load cached data immediately and attempt a fresh authoritative sync.
+2. Present invalid/pending owner tasks first. `Start day` remains unavailable until
+   they are repaired/resolved, or the entire review is snoozed.
+3. Once blocking items are clear, show owner overdue work and today's chronological
+   owner agenda.
+4. Overdue work is actionable but does not block `Start day`.
+5. `Start day` records acknowledgement for the current local date and closes review.
+6. `Snooze 5 min` closes review temporarily and schedules one one-shot retry alarm.
+
+Unassigned tasks never enter the blocking queue or day summary. When review/repair is
+active, the review banner is the only review-related Home surface; the normal
+Unassigned section remains below it but has no review authority.
+
+Cached data is sufficient for normal acknowledgement. If no cache and no network data
+exist, the screen clearly says that task data is unavailable but permits
+`Start day without data`; this records a normal acknowledgement. There is no separate
+unverified state machine.
+
+New invalid owner tasks discovered after `Start day` show the Home attention banner
+and become blocking in the next daily review. They do not trigger a same-day critical
+notification or foreground repair gate.
+
+### Scheduling
+
+Introduce a focused `MorningReviewScheduler` and small local state store containing
+the last acknowledged local date and pending snooze metadata.
+
+The scheduler uses a reliable one-shot alarm-clock path and:
+
+- computes the next local 08:00 using the current zone;
 - replaces rather than stacks equivalent daily alarms;
-- restores/recomputes alarms after boot, package replacement, manual clock change,
-  and timezone change;
-- catches up on launcher start when local time is after 08:00 and today is not
-  acknowledged;
-- treats DST gaps/overlaps deterministically according to Android/java.time zone
-  resolution and tests the resulting local-day behavior;
-- keeps the existing five-minute Snooze behavior as an explicit one-shot alarm.
+- schedules the next alarm after fire, acknowledgement, or reconciliation;
+- recomputes after boot, package replacement, manual time change, and timezone change;
+- performs app-open catch-up after 08:00 when today is unacknowledged;
+- handles DST gaps/overlaps deterministically in pure tested date calculations;
+- preserves the explicit five-minute Snooze alarm.
 
-A launch caused by the daily alarm must not mark the review acknowledged. Only the
-successful `Start day` action does so.
+If the phone was off at 08:00, no special first-unlock receiver launches review. The
+review catches up when Buzer next opens.
 
-## Enforcement Readiness On App Start
+Explicit blocker priority remains:
 
-Remove the unused Health & permissions navigation concept. Replace it with a reusable,
-typed readiness checker and a startup setup gate.
+1. deadline blocker;
+2. start blocker;
+3. Morning Review.
+
+If review fires over an active editor, it appears above the editor and returns to the
+preserved draft after acknowledgement or Snooze.
+
+### Change 2 Verification
+
+Tests must cover early acknowledgement, clean-day 08:00 delivery, invalid-owner
+blocking, overdue non-blocking behavior, cached and no-data acknowledgement, Snooze,
+next-day scheduling, app-open catch-up, boot/package/time/timezone reconciliation, DST
+boundaries, blocker priority, and preserved editor state.
+
+Migrate `MorningReviewScreenStateTest.kt`, `MorningReviewRepairHostTest.kt`, relevant
+`BlockerActivityFakeBackendTest.kt` scenarios, alarm/receiver tests, and the full
+real-backend instrumentation flow.
+
+## Change 3: Foreground Enforcement Readiness
+
+Remove the unused Health & permissions navigation concept. Replace it with a typed
+readiness checker and a sequential startup/foreground gate.
 
 ### Checks
 
-On every launcher start, and again after returning from a system Settings intent,
-evaluate:
+On every background-to-foreground transition and after returning from a Settings
+intent, check:
 
+- notification runtime permission where required;
+- global app-notification and required channel state;
 - exact-alarm capability;
-- runtime notification permission where required;
-- global app-notification state and required notification-channel state;
-- full-screen-intent capability where the Android version exposes user control;
+- full-screen-intent capability on applicable Android versions;
 - overlay permission;
-- battery-optimization exemption required by the enforcement model;
-- boot receiver component/configuration readiness.
+- battery-optimization exemption.
 
-The checker returns typed results with `Ready`, `NeedsRuntimePermission`,
-`NeedsSettingsAction`, or `ConfigurationFailure` semantics and OS-version-aware
-details. It contains no Compose navigation logic and can be tested independently.
+Boot receiver wiring is not part of this user-facing gate. It is application
+configuration verified through manifest/unit/instrumentation tests, while boot alarm
+reconciliation remains production behavior.
 
-### Startup Gate
+The checker is UI-independent and returns typed `Ready`, `NeedsRuntimePermission`, and
+`NeedsSettingsAction` results with OS-version-aware details.
 
-Readiness is checked before displaying normal Home. When all checks pass, startup
-goes directly to Home without flashing a gate. When checks fail, show one focused
-requirement at a time in enforcement-critical order.
+### Gate Behavior
 
-- Ask for normal runtime notification permission with the platform prompt.
-- Open the specific system Settings surface for exact alarms, full-screen intent,
-  overlay, notifications/channel, or battery exemption.
-- Recheck the entire readiness set in `onResume` after every prompt/Settings return.
-- Explain why the current capability is required and provide one primary action.
-- Keep the gate until enforcement-critical permissions are ready; do not present a
-  false healthy state.
-- Check and self-repair boot receiver configuration when safe. If self-repair is not
-  possible, surface an actionable configuration failure instead of asking the user to
-  grant a nonexistent permission.
+When healthy, Home appears without a readiness-screen flash. When unhealthy, the gate
+hard-blocks normal app access and presents one requirement at a time in this order:
 
-Permission acquisition remains user-driven: the app never loops system prompts or
-launches multiple Settings panels at once. Denial retains a clear retry path.
+1. notifications;
+2. exact alarms;
+3. full-screen intent;
+4. overlay;
+5. battery exemption.
 
-The readiness checker is also available to alarm/Morning Review startup logic so
-background components can report real capability failures without depending on a
-removed Health screen.
+All five capabilities are mandatory. Runtime notification permission uses the normal
+platform prompt; special capabilities open their specific Settings surfaces. On every
+return, recheck the whole readiness set.
 
-## Data Flow And Actions
+The gate never launches Settings automatically. A denied capability leaves the gate
+visible and requires another explicit `Open settings` tap. If a check unexpectedly
+cannot progress, the surface offers Retry only; there is no bypass or Health screen.
 
-The backend snapshot remains the source of visible task truth. Home receives the
-complete snapshot already available through the client API and never requests a
-separate future-agenda endpoint.
+Readiness precedes Morning Review and task-repair gates. It is layered above current
+app navigation so an Add/Edit draft survives and resumes exactly after permissions are
+restored.
 
-All task mutations (`Done`, Edit/Reschedule saves, and repair) continue through the
-existing coordinator/action-journal protocol. Pending, timeout, or stale responses
-must preserve the current authoritative/cached display and expose reconciliation
-state; they must not optimistically remove work without authority.
+### Change 3 Verification
 
-Morning Review acknowledgement and snooze are device-local scheduling state, not
-Todoist task mutations. Permission readiness is device capability state. Keeping these
-three authorities separate prevents Home rendering from becoming a second source of
-truth.
+Unit tests cover every typed state, ordering, denial/retry, Settings return, healthy
+bypass, and Android-version boundary. Instrumentation covers the sequential gate,
+preserved underlying editor state, no automatic Settings loop, and direct healthy
+Home startup. Existing `PermissionHealthTest.kt` is migrated rather than left as a
+parallel unused model.
 
-## Errors, Loading, And Accessibility
+Final verification again includes the full real-backend E2E suite because foreground
+navigation and Home visibility change.
 
-- Initial startup may use the existing cached snapshot while a fresh snapshot loads.
-- Refresh and action failures appear close to the affected section without replacing
-  the entire agenda when usable data exists.
-- Empty, loading, stale, and error states are distinct.
-- Sticky headers are announced as headings; relative date labels include an absolute
-  date in semantics.
-- Every icon-only action has a content description and a minimum touch target.
-- Quick actions have text or explicit accessibility labels and deterministic focus
-  order.
-- Collapsed sections expose expanded/collapsed semantics and their counts.
-- Morning Review and the readiness gate remain usable with large font and TalkBack.
-- Pull-to-refresh has both the custom accessibility action and visible Retry fallback.
+## Shared Errors And Accessibility
 
-## Existing Tests To Migrate
+- Cached task data stays visible during ordinary loads and refreshes.
+- Empty, loading, stale-cache, and error states remain distinct.
+- Every icon-only action has a content description and minimum touch target.
+- Sticky date headers are headings and expose absolute dates in semantics.
+- Expanded/collapsed sections expose state and count.
+- Pull refresh has both a custom accessibility action and visible Retry.
+- Morning Review and readiness support TalkBack, large text, and deterministic focus.
 
-The implementation plan must inspect and migrate all existing suites that assert the
-changed behavior, not defer them to follow-up work:
+## Explicitly Deferred
 
-- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
-- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeDoneActionHandlerTest.kt`
-- `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
-- `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/MorningReviewRepairHostTest.kt`
-- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
-- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/PermissionHealthTest.kt`
-- `client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt`
-- receiver/alarm registry tests affected by the new daily alarm and time-change events.
+- tasks assigned to other people and collaborator agendas;
+- universal scheduling validation;
+- calendar/date-jump/search/overflow controls;
+- a Health & permissions screen;
+- same-day invalid-task notification/re-gating;
+- automatic full-screen catch-up after post-08:00 device boot;
+- automatic Todoist sync on every foreground;
+- parent task Undo/reopen;
+- accurate occurrence-level `Completed today` history;
+- projected future recurrence rows;
+- backend push invalidation or Todoist webhooks.
 
-The instrumentation class name still contains `FakeBackend` for historical reasons,
-but final UI verification must use the repository's current real-backend E2E runner;
-the removed fake-backend tool must not be restored.
-
-## Required New Verification
-
-Pure/JVM coverage:
-
-- all future dates are included and date groups/rows are chronological;
-- current hero selection, overlap count, and no duplicate task IDs;
-- overdue cap, total count, expansion, and ordering;
-- completed-today collapse and exclusion of older completion history;
-- cross-midnight grouping and labels;
-- invalid/pending placement and true all-clear state;
-- Morning Review before/after-08:00, acknowledgement, snooze, catch-up, next alarm,
-  boot/package/time/timezone reconciliation, and DST boundaries;
-- invalid tasks block `Start day`, while overdue tasks do not;
-- every readiness state, sequential progression, Settings return, healthy bypass,
-  denial/retry, and Android-version-specific behavior.
-
-Android instrumentation coverage:
-
-- future scrolling and sticky date headers;
-- hero/overlap/overdue/completed section behavior;
-- Done, Edit, Reschedule, Review, and Add routing;
-- pull refresh success, failure with retained content, Retry, and accessibility action;
-- absence of calendar and overflow actions;
-- daily Morning Review launch and day-start flow;
-- readiness gate progression and direct healthy launch.
-
-Final verification for the UI-affecting implementation must include relevant JVM
-tests, Android compilation/assembly, scoped real-backend E2E tests while iterating,
-and the full unfiltered `scripts/e2e-real-backend.sh` suite before completion.
-
-## Product Decisions Recorded
-
-- Home shows all future tasks in a continuous agenda.
-- Smart zones precede the future agenda.
-- Current work uses an ending-soonest hero with explicit overlap handling.
-- Overdue initially shows three; completed today is collapsed; older completions are
-  absent.
-- Home has no calendar/date-jump button and no overflow menu.
-- Morning Review is available only through attention and the automated daily blocker.
-- Morning Review always launches at local 08:00, including on clean days.
-- Health & permissions is not a screen; readiness is checked/guided at every start.
-- Home refresh is pull-to-refresh using the authoritative snapshot path.
-- No backend API expansion is required.
+The two explicitly requested future product items—parent completion Undo and accurate
+`Completed today`—are recorded in `docs/notes/2026-06-13-product-backlog.md`.
 
 ## Open Questions
 
-None. Exact visual tokens, spacing, and copy may be tuned during implementation as
-long as they preserve this hierarchy, behavior, and accessibility contract.
+None. Visual spacing and copy may be tuned during implementation without changing the
+section hierarchy, authority boundaries, or behavior above.

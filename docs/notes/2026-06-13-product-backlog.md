@@ -126,6 +126,12 @@ Supersedes/extends the remaining polish items in "Show Current In-Progress Task"
 (remaining time, direct action routing) — fold those into the agenda design rather than doing
 them separately.
 
+Status update 2026-08-02: the accepted reduced-scope Smart Home design supersedes the
+today-only boundary. Home will show Now, owner overdue work, every genuinely unassigned
+shared-project root in a collapsed section, and all future owner commitments in a
+continuous date-grouped agenda. See
+`docs/superpowers/specs/2026-08-02-smart-home-morning-review-readiness-design.md`.
+
 ## UI Overhaul (AI-Assisted)
 
 Added: 2026-07-05 (owner request). Priority: after the Home task list.
@@ -152,3 +158,40 @@ Owner decisions (2026-07-06, after the five-phase process proposal was accepted)
   for Phase 3 implementation plans — plans are engine-agnostic and AGENTS.md carries the
   verification gates; one branch/agent at a time (use worktrees if overlapping, as the
   earlier codex/* work did). Concept generation stays with Stitch.
+
+## Parent Task Completion Undo
+
+Added: 2026-08-02 during the Smart Home scope review.
+
+Smart Home deliberately keeps owner-task completion as a one-tap action with no
+confirmation. Add a short-lived Snackbar `Undo` backed by a real, reconciled parent-task
+reopen operation. This is not a local optimistic toggle: reopening must use a dedicated
+backend/Todoist command, preserve action-journal idempotency, return an authoritative
+snapshot, restore the correct recurring/non-recurring occurrence, and reconcile alarms.
+
+The implementation requires explicit behavior for a recurring task whose completion
+already advanced its occurrence. Do not expose Undo until that boundary is designed and
+covered by backend, coordinator, and real-backend instrumentation tests.
+
+## Accurate Completed-Today History
+
+Added: 2026-08-02 during the Smart Home scope review.
+
+Add a collapsed `Completed today (N)` Home section only after the backend can project
+occurrence-level completion events accurately enough for recurring tasks. The active
+Todoist row is insufficient because completing a recurrence advances the same task to
+its next occurrence.
+
+Candidate accepted direction from the review:
+
+- store completion events for owner occurrences, including recurring occurrences;
+- use exact timestamps for Buzer completions;
+- for recurring completions performed directly in Todoist, use first-observed sync time
+  when exact activity history is unavailable and retain timestamp provenance;
+- return a rolling 72-hour event window so the client can derive its current local day
+  across timezone changes;
+- keep the section collapsed by default and owner-only.
+
+This remains out of the initial Smart Home implementation because it adds persistence,
+snapshot-contract, recurrence, retention, and timezone complexity without affecting
+actionable work.
