@@ -466,3 +466,14 @@ Known deferred check:
 
 - Task 8 Step 3 remains intentionally open exactly as documented above. Do not infer an
   unfiltered 69-test pass from the green standard lane or scoped E2E evidence.
+
+Integration correction:
+
+- A final ancestry audit found that accepted-design commit `a7c85a6` was not yet an
+  ancestor of the first implementation merge. The documentation-only
+  `feature/smart-home` branch was therefore merged as `26c042a`.
+- Its add/add plan conflict was resolved by retaining `master`'s newer 824-line plan with
+  completed checkboxes and the deferred Task 8 Step 3 record. The merge added the accepted
+  design, its planning handoffs, and backlog decisions.
+- Both completed Smart Home worktrees and their local branches were removed. The separate
+  `feature/daily-morning-review-plan` worktree was deliberately preserved as active work.
