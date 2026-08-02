@@ -79,21 +79,29 @@ fun BuzerApp(
         Column(modifier = Modifier.fillMaxSize()) {
             when (section) {
                 AppSection.Home -> HomeScreen(
+                    state = homeState,
+                    onRefreshTasks = onPullToRefresh,
                     onAddTask = {
                         AppLog.debug("ui navigate section=Add source=home")
                         section = AppSection.Add
                     },
-                    onMorningReview = {
-                        openMorningReview()
-                    },
-                    onDoneCurrentTask = onDoneCurrentTask,
                     onEditTask = { taskId ->
                         editingTaskId = taskId
                         section = AppSection.Edit
                     },
-                    onToggleCurrentChild = onToggleCurrentChild,
-                    onRetryRefresh = onRetryHomeRefresh,
-                    state = homeState
+                    onDoneTask = onDoneTask,
+                    onToggleChecklistItem = { taskId, itemId ->
+                        val task = snapshot?.tasks?.firstOrNull { it.id == taskId }
+                        val child = task?.checklistItems?.firstOrNull { it.id == itemId }
+                        if (child != null) {
+                            onToggleCurrentChild(taskId, itemId, !child.checked)
+                        }
+                    },
+                    onOpenMorningReview = {
+                        openMorningReview()
+                    },
+                    onToggleOverdueExpanded = { overdueExpanded = !overdueExpanded },
+                    onToggleUnassignedExpanded = { unassignedExpanded = !unassignedExpanded }
                 )
 
                 AppSection.Add -> AddTaskScreen(
