@@ -111,7 +111,7 @@ No separate screenshot/manual-device pass was performed. The managed-device inst
 
 ## 2026-08-02 deadline-reschedule isolation follow-up
 
-Historical status after the first strict three-invocation budget: **BLOCKED**. The user then authorized exactly two more Android invocations; both passed and resolved Task 7.
+Historical status after the first strict three-invocation budget: **BLOCKED**. The user then authorized exactly two more Android invocations; both passed and resolved the original deadline-reschedule isolation failure. They did not complete Task 7: Step 3 remains open for the declared coverage gaps.
 
 ### Root-cause evidence
 
@@ -138,20 +138,22 @@ The focused GREEN log then showed the complete expected chain: backend request r
    - Evidence: HTTP response, `mutation applied`, and Activity-finish markers all present.
 3. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
    - Result: **FAIL**, 27/28, `BUILD FAILED in 2m 15s`.
-   - Evidence: `deadlineBlocker_rescheduleUsesSharedUpdateUi` passed in its original sequence-dependent position. The sole failure moved to `morningReview_repairCallsFakeBackend`: after the scheduler-aware helper observed Activity `DESTROYED`, its immediate `assertCountEquals(0)` still found one disabled `Invalid assigned fixture` editor semantics node. The budget was exhausted, so the plausible same-boundary `waitForIdle` refinement was intentionally not added or tested.
+   - Superseded evidence: `deadlineBlocker_rescheduleUsesSharedUpdateUi` passed in its original sequence-dependent position. The sole failure moved to `morningReview_repairCallsFakeBackend`, where the then-current test incorrectly expected Activity `DESTROYED` before checking for stale semantics. Later fixture evidence proved three invalid items remain, so Activity destruction is not the final contract.
 
 One sandboxed preflight attempt failed before backend startup or Gradle/instrumentation (`tsx` IPC `listen EPERM`). It did not invoke Android and is not counted in the three Android invocations; the identical escalated command became ledger entry 1.
 
-### Authorized two-run completion ledger
+### Superseded authorized two-run ledger
 
-The final narrow refinement calls `composeRule.waitForIdle()` immediately after the scheduler-aware wait observes `Lifecycle.State.DESTROYED`. This drains disposed Activity semantics before callers assert UI absence. It does not add sleep, retry, timeout, forced finish, ignored coverage, or production behavior.
+This ledger records an intermediate, now-superseded refinement that called `composeRule.waitForIdle()` after observing `Lifecycle.State.DESTROYED`. It explains the historical results below but is not the final Morning Review success contract.
 
 1. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#morningReview_repairCallsFakeBackend' scripts/e2e-real-backend.sh`
    - Result: **PASS**, 1/1, `BUILD SUCCESSFUL in 1m 1s`.
 2. `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
    - Result: **PASS**, 28/28, zero skipped and zero failed, `BUILD SUCCESSFUL in 2m 29s`.
 
-The deterministic Home→deadline-reschedule regression, backend received/completed markers, Android response/coordinator result, Activity finish, and the Morning Review semantics cleanup all passed in the final class sequence.
+The deterministic Home→deadline-reschedule regression, backend received/completed markers, Android response/coordinator result, Activity finish, and the then-current Morning Review semantics cleanup all passed in that historical class sequence.
+
+Final Morning Review success contract: wait until the repaired `Invalid assigned fixture` title semantics disappear, assert the title is absent, and assert `MorningReviewActivity` remains open because three invalid items remain. Do not restore a post-destruction or `waitForIdle()`-after-destruction assertion for this fixture.
 
 ### Cheap verification after the fix
 
@@ -236,6 +238,7 @@ Task 7 Step 3 remains open for sticky-header pinning, explicit Overdue Done/Edit
 - Assigned-other roots remain excluded; genuinely unassigned roots are presentation-only and non-enforced.
 - No Change 2 Morning Review scheduling/redesign or Change 3 health gating was implemented.
 - The separate next product step remains planning Change 2, not implementing it in this branch.
+- Final integration ancestry must include canonical accepted-design commit `a7c85a6` from `feature/smart-home`. The current untracked duplicate `docs/superpowers/specs/2026-08-02-smart-home-morning-review-readiness-design.md` is not delivered by this implementation branch and must not be accidentally staged as a second copy.
 
 ## Assumptions
 
