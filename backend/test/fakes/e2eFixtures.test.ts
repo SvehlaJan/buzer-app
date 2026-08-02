@@ -28,12 +28,12 @@ function localDateTimeParts(value: string, timeZone = "Europe/Bratislava") {
 }
 
 describe("e2eFixtureSeed", () => {
-  it("defines the 16 fixture roots plus 6 checklist children with pinned Todoist ids", () => {
+  it("defines the 28 fixture roots plus 8 checklist children with pinned Todoist ids", () => {
     const roots = seed.tasks.filter((task) => task.mirror.parentId === null);
     const children = seed.tasks.filter((task) => task.mirror.parentId !== null);
 
-    expect(roots).toHaveLength(16);
-    expect(children).toHaveLength(6);
+    expect(roots).toHaveLength(28);
+    expect(children).toHaveLength(8);
     expect(roots.map((task) => task.id)).toEqual([
       "task-start",
       "task-deadline",
@@ -50,7 +50,19 @@ describe("e2eFixtureSeed", () => {
       "task-recurring-extend-disabled",
       "task-custom-recurrence",
       "task-unsupported-hierarchy",
-      "task-reconciliation-pending"
+      "task-reconciliation-pending",
+      "task-current-overlapping",
+      "task-overdue-1",
+      "task-overdue-2",
+      "task-overdue-3",
+      "task-overdue-4",
+      "task-future-tomorrow",
+      "task-future-later",
+      "task-future-next-year",
+      "task-future-midnight",
+      "task-unassigned-root",
+      "task-assigned-other",
+      "task-incomplete-checklist"
     ]);
     expect(byId.get("task-start")?.title).toBe("Start blocker fixture");
     for (const { id, mirror } of seed.tasks) {
@@ -160,11 +172,65 @@ describe("e2eFixtureSeed", () => {
   it("nudges exactly the started and reconciliation-pending roots", () => {
     expect(seed.nudges).toEqual([
       { id: "task-deadline", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
+      { id: "task-current-overlapping", kind: "started", startedAt: "2026-07-18T09:46:00.000Z" },
       { id: "task-reschedule", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
       { id: "task-deadline-fail", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
       { id: "task-reschedule-fail", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
       { id: "task-reconciliation-pending", kind: "reconciliation_pending" }
     ]);
+  });
+
+  it("defines deterministic Smart Home timing, ownership, and checklist relationships", () => {
+    const endAt = (id: string) => {
+      const task = byId.get(id);
+      if (task?.dueDatetime === null || task?.dueDatetime === undefined || task.durationMinutes === null) {
+        throw new Error(`missing schedule for ${id}`);
+      }
+      return Date.parse(task.dueDatetime) + task.durationMinutes * 60_000;
+    };
+
+    expect(endAt("task-incomplete-checklist")).toBeGreaterThan(now.getTime());
+    expect(endAt("task-current-overlapping")).toBeGreaterThan(now.getTime());
+    expect(Date.parse(byId.get("task-incomplete-checklist")?.dueDatetime ?? "")).toBeLessThan(now.getTime());
+    expect(Date.parse(byId.get("task-current-overlapping")?.dueDatetime ?? "")).toBeLessThan(now.getTime());
+
+    expect([
+      "task-overdue-1",
+      "task-overdue-2",
+      "task-overdue-3",
+      "task-overdue-4"
+    ].map(endAt)).toEqual([
+      Date.parse("2026-07-18T07:30:00.000Z"),
+      Date.parse("2026-07-18T08:30:00.000Z"),
+      Date.parse("2026-07-18T09:20:00.000Z"),
+      Date.parse("2026-07-18T09:35:00.000Z")
+    ]);
+    expect(localDateTimeParts(byId.get("task-future-tomorrow")?.dueDatetime ?? "").date)
+      .toBe("2026-07-19");
+    expect(localDateTimeParts(byId.get("task-future-later")?.dueDatetime ?? "").date)
+      .toBe("2026-07-21");
+    expect(localDateTimeParts(byId.get("task-future-next-year")?.dueDatetime ?? "").date)
+      .toBe("2027-07-18");
+    expect(localDateTimeParts(byId.get("task-future-midnight")?.dueDatetime ?? "").time)
+      .toBe("23:30");
+    expect(new Date(endAt("task-future-midnight")).toISOString()).toBe("2026-07-18T23:00:00.000Z");
+
+    expect(byId.get("task-unassigned-root")).toMatchObject({
+      projectId: "project-test",
+      assigneeId: null,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+    expect(byId.get("child-unassigned-1")).toMatchObject({
+      parentId: "todoist-task-unassigned-root",
+      assigneeId: null,
+      completedAt: null
+    });
+    expect(byId.get("task-assigned-other")?.assigneeId).toBe("user-wife");
+    expect(byId.get("child-incomplete-open")).toMatchObject({
+      parentId: "todoist-task-incomplete-checklist",
+      completedAt: null
+    });
   });
 
   it("defines the two fixture projects the AddTask flow selects by name", () => {

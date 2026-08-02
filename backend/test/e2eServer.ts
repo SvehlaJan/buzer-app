@@ -18,6 +18,8 @@ export interface RecordedCall {
   path: string;
   body: Record<string, unknown>;
   at: string;
+  responseCompletedAt: string | null;
+  responseStatusCode: number | null;
 }
 
 interface RecordedFullCall extends RecordedCall {
@@ -150,6 +152,7 @@ const ACTION_METADATA_KEYS = [
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
   const { adapter, calls, fullCalls, controls, snapshots, reset } = options;
+  const correlatedCalls = new Map<string, RecordedCall>();
 
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? request.url;
@@ -167,10 +170,13 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
             .filter((key) => body[key] !== undefined)
             .map((key) => [key, body[key]])
         ),
-        at: new Date().toISOString()
+        at: new Date().toISOString(),
+        responseCompletedAt: null,
+        responseStatusCode: null
       };
       calls.push(call);
       fullCalls.push({ ...call, payload: structuredClone(body) });
+      correlatedCalls.set(request.id, call);
       if (controls.failActions) {
         return reply.code(500).send({
           code: "forced_failure",
@@ -179,12 +185,20 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       }
     }
 
-    if (controls.failSnapshot && request.method === "GET" && path === "/tasks/snapshot") {
+    if (controls.failSnapshot && ((request.method === "GET" && path === "/tasks/snapshot") || (request.method === "POST" && path === "/tasks/sync"))) {
       return reply.code(500).send({ error: "forced_snapshot_failure" });
     }
     if (controls.failProjects && request.method === "GET" && path === "/projects") {
       return reply.code(500).send({ error: "forced_project_failure" });
     }
+  });
+
+  app.addHook("onResponse", async (request, reply) => {
+    const call = correlatedCalls.get(request.id);
+    if (call === undefined) return;
+    call.responseCompletedAt = new Date().toISOString();
+    call.responseStatusCode = reply.statusCode;
+    correlatedCalls.delete(request.id);
   });
 
   app.post("/__scenario", async (request, reply) => {

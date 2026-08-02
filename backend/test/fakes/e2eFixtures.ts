@@ -309,7 +309,87 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     root("task-reconciliation-pending", {
       title: "Pending reconciliation",
       dueDatetime: iso(1680)
-    })
+    }),
+    root("task-current-overlapping", {
+      title: "Overlapping current fixture",
+      description: "Overlapping current task block",
+      dueDatetime: iso(-15),
+      durationAmount: 75,
+      durationMinutes: 75
+    }),
+    root("task-overdue-1", {
+      title: "Overdue task 1",
+      dueDatetime: iso(-180),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-overdue-2", {
+      title: "Overdue task 2",
+      dueDatetime: iso(-120),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-overdue-3", {
+      title: "Overdue task 3",
+      dueDatetime: iso(-70),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-overdue-4", {
+      title: "Overdue task 4",
+      dueDatetime: iso(-45),
+      durationAmount: 20,
+      durationMinutes: 20
+    }),
+    root("task-future-tomorrow", {
+      title: "Tomorrow task",
+      dueDatetime: iso(24 * 60),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-future-later", {
+      title: "Later task",
+      dueDatetime: iso(3 * 24 * 60),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-future-next-year", {
+      title: "Next year task",
+      dueDatetime: iso(365 * 24 * 60),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-future-midnight", {
+      title: "Midnight crossing task",
+      dueDatetime: zonedIso(localDateAt(now, TIME_ZONE), 23, 30, TIME_ZONE),
+      durationAmount: 90,
+      durationMinutes: 90
+    }),
+    root("task-unassigned-root", {
+      title: "Unassigned root fixture",
+      projectId: "project-test",
+      assigneeId: null,
+      dueDatetime: null,
+      durationAmount: null,
+      durationUnit: null,
+      durationMinutes: null
+    }),
+    child("child-unassigned-1", "task-unassigned-root", "Unassigned child task", 1, false),
+    root("task-assigned-other", {
+      title: "Wife task assigned to other",
+      projectId: "project-test",
+      assigneeId: "user-wife",
+      dueDatetime: iso(60),
+      durationAmount: 30,
+      durationMinutes: 30
+    }),
+    root("task-incomplete-checklist", {
+      title: "Incomplete checklist task",
+      dueDatetime: iso(-20),
+      durationAmount: 35,
+      durationMinutes: 35
+    }),
+    child("child-incomplete-open", "task-incomplete-checklist", "Incomplete child item", 1, false)
   ];
 
   const projects: TodoistProjectMirror[] = [
@@ -383,6 +463,7 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
 
   const nudges: E2ECommitmentNudge[] = [
     { id: "task-deadline", kind: "started", startedAt: iso(-29) },
+    { id: "task-current-overlapping", kind: "started", startedAt: iso(-14) },
     { id: "task-reschedule", kind: "started", startedAt: iso(-29) },
     { id: "task-deadline-fail", kind: "started", startedAt: iso(-29) },
     { id: "task-reschedule-fail", kind: "started", startedAt: iso(-29) },

@@ -47,7 +47,7 @@ describe("seeding", () => {
   it("serves the fixture snapshot with real-backend derivations", async () => {
     await withServer(async (server) => {
       const body = await snapshot(server);
-      expect(body.tasks).toHaveLength(16);
+      expect(body.tasks).toHaveLength(27);
       const byId = new Map<string, any>(body.tasks.map((task: { id: string }) => [task.id, task]));
       expect(byId.get("task-start").title).toBe("Start blocker fixture");
       expect(byId.get("task-start").occurrenceKey).toBe("occurrence-task-start-1");
@@ -61,6 +61,20 @@ describe("seeding", () => {
       expect(byId.get("task-recurring-all-checked").checkedCount).toBe(2);
       expect(byId.get("task-recurring-all-checked").totalCount).toBe(2);
       expect(byId.get("task-reconciliation-pending").reconciliationStatus).toBe("pending");
+      expect(byId.has("task-assigned-other")).toBe(false);
+      expect(byId.get("task-unassigned-root")).toMatchObject({
+        assigneeId: null,
+        isAssignedToUser: false,
+        validationErrors: [],
+        hierarchyStatus: "valid"
+      });
+      expect(byId.get("task-unassigned-root").checklistItems).toEqual([
+        expect.objectContaining({ id: "child-unassigned-1", checked: false })
+      ]);
+      expect(byId.get("task-incomplete-checklist")).toMatchObject({
+        checkedCount: 0,
+        totalCount: 1
+      });
       const partialChildren = byId.get("task-one-time-partial").checklistItems;
       expect(partialChildren.map((child: { id: string }) => child.id).sort())
         .toEqual(["child-one-time-partial-done", "child-one-time-partial-open"]);
@@ -102,6 +116,38 @@ describe("seeding", () => {
 });
 
 describe("happy-path mutation conformance (every action completes, never goes pending)", () => {
+  it("records the response-completed boundary for correlated Android mutations", async () => {
+    await withServer(async (server) => {
+      const task = await snapshotTask(server, "task-reschedule");
+      const actionId = "e2e-response-correlation";
+
+      await mutate(
+        server,
+        "/tasks/task-reschedule/update",
+        {
+          actionId,
+          ...device,
+          expectedOccurrenceKey: task.occurrenceKey,
+          rootPatch: {
+            expectedTaskRevision: task.taskRevision,
+            durationMinutes: 30
+          },
+          childMutations: []
+        }
+      );
+
+      const callsResponse = await server.app.inject({ method: "GET", url: "/__calls" });
+      const call = callsResponse.json().calls.find(
+        (candidate: { path: string; body: { actionId?: string } }) =>
+          candidate.path === "/tasks/task-reschedule/update" && candidate.body.actionId === actionId
+      );
+      expect(call).toMatchObject({
+        responseStatusCode: 200,
+        responseCompletedAt: expect.any(String)
+      });
+    });
+  });
+
   it("starts a task", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-start");
@@ -185,7 +231,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
   it("updates a complete schedule through normal reconciliation and keeps an action retry idempotent", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-reschedule");
-      const dueDatetime = new Date(Date.now() + 120 * 60_000).toISOString();
+      const dueDatetime = "2026-08-03T16:47:00.000Z";
       const actionId = "e2e-complete-schedule-update";
       const request = {
         actionId,
@@ -193,8 +239,12 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         expectedOccurrenceKey: task.occurrenceKey,
         rootPatch: {
           expectedTaskRevision: task.taskRevision,
+          title: task.title,
+          description: null,
+          projectId: task.projectId,
+          assigneeId: task.assigneeId,
           dueDatetime,
-          durationMinutes: 45
+          durationMinutes: 30
         },
         childMutations: []
       };
@@ -209,7 +259,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       expect(body.outcome).toBe("completed");
       expect(retry.outcome).toBe("completed");
       expect(after.dueDatetime).toBe(dueDatetime);
-      expect(after.durationMinutes).toBe(45);
+      expect(after.durationMinutes).toBe(30);
       expect(server.db.prepare(
         "select step_key as stepKey from task_action_commands where action_id = ? order by step_key"
       ).all(actionId)).toEqual([{ stepKey: "item_update" }]);

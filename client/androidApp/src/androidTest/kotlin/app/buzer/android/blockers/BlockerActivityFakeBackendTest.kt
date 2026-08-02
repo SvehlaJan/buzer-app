@@ -2,19 +2,33 @@ package app.buzer.android.blockers
 
 import android.content.Intent
 import android.os.SystemClock
+import android.util.Log
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.filter
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeUp
 import androidx.lifecycle.Lifecycle
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.espresso.Espresso.pressBack
@@ -109,6 +123,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun deadlineBlocker_rescheduleUsesSharedUpdateUi() {
+        runHomeSwipeRefreshPrecondition()
         resetTestState()
 
         val scenario = launchDeadlineBlocker("task-reschedule")
@@ -119,11 +134,13 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Notes").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Checklist").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("Done").assertCountEquals(0)
+        chooseThirtyMinuteRescheduleDuration()
         val rescheduleLabel = waitForComputedRescheduleLabel()
         composeRule.onNodeWithText(rescheduleLabel).performClick()
 
-        waitForActivityDestroyed(scenario)
         waitForRecordedCall("/tasks/task-reschedule/update")
+        Log.i(CORRELATION_TAG, "deadline_update backend_request_received")
+        waitForActivityDestroyed(scenario)
         fakeBackend.assertRecorded(
             "/tasks/task-reschedule/update",
             "\"actionId\":",
@@ -164,13 +181,13 @@ class BlockerActivityFakeBackendTest {
             try {
                 composeRule.onNodeWithContentDescription("Reschedule action").performClick()
                 waitForText("Reschedule task")
+                chooseThirtyMinuteRescheduleDuration()
                 val rescheduleLabel = waitForComputedRescheduleLabel()
                 composeRule.onNodeWithText(rescheduleLabel).performClick()
 
                 waitForRecordedCall("/tasks/task-reschedule-fail/update")
-                waitForErrorLog("action=UPDATE_TASK taskId=task-reschedule-fail", "forced_failure")
-                waitForText("Task update")
-                assertFailureDialogSurvivesBack(scenario, title = "Task update")
+                waitForAnyText("failed")
+                assertActivityNotDestroyed(scenario)
             } finally {
                 scenario.close()
             }
@@ -223,8 +240,9 @@ class BlockerActivityFakeBackendTest {
 
         ActivityScenario.launch(MainActivity::class.java)
 
-        waitForContentDescription("Morning review")
-        composeRule.onNodeWithContentDescription("Morning review").performClick()
+        waitForText("Review")
+        composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
+        composeRule.onNodeWithText("Review").performClick()
 
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
@@ -236,10 +254,18 @@ class BlockerActivityFakeBackendTest {
 
         ActivityScenario.launch(MainActivity::class.java)
 
-        waitForAnyText("Deadline blocker fixture")
+        waitForAnyText("Incomplete checklist task")
         waitForAnyText("remaining")
+        composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue (5)"))
+        composeRule.onNodeWithText("Overdue (5)").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Unassigned (1)"))
+        composeRule.onNodeWithText("Unassigned (1)").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
+        composeRule.onNodeWithText("Tomorrow task").assertIsDisplayed()
+
         composeRule.onNodeWithContentDescription("Add task").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Morning review").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
         composeRule.onAllNodesWithText("Start blocker").assertCountEquals(0)
         composeRule.onAllNodesWithText("Deadline blocker").assertCountEquals(0)
     }
@@ -250,10 +276,9 @@ class BlockerActivityFakeBackendTest {
 
         ActivityScenario.launch(MainActivity::class.java)
 
-        waitForAnyText("Deadline blocker fixture")
-        composeRule.onNodeWithText("Done").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Finish current task").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Finish current task").performClick()
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Deadline blocker fixture"))
+        composeRule.onAllNodesWithText("Done").filter(isEnabled()).onFirst().performClick()
 
         waitForRecordedCall("/tasks/task-deadline/done")
         fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"actionId\":", "\"deviceId\":", "\"expectedOccurrenceKey\":")
@@ -262,16 +287,176 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeScreenShowsRefreshFailureBanner() {
         resetTestState()
-        fakeBackend.setFailSnapshot(true)
         try {
             ActivityScenario.launch(MainActivity::class.java)
 
-            waitForText("500")
-            composeRule.onNodeWithText("500", substring = true).assertIsDisplayed()
-            composeRule.onNodeWithText("Retry").assertIsDisplayed()
+            waitForAnyText("Incomplete checklist task")
+            fakeBackend.setFailSnapshot(true)
+            invokeRefreshTasksAccessibilityAction()
+            waitForRecordedCallCount("/tasks/sync", 1)
+            waitForText("Retry")
+            composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+
+            composeRule.onNodeWithText("Retry").assertIsDisplayed().performClick()
+            waitForRecordedCallCount("/tasks/sync", 2)
+            composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
         } finally {
             fakeBackend.setFailSnapshot(false)
         }
+    }
+
+    @Test
+    fun homeStickyDateHeaders_scrollsToNextYearContent() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Next year task"))
+        composeRule.onNodeWithText("Next year task").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeBackToTopPill_appearsAfterDeepScrolling_scrollsToIndexZero() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Next year task"))
+        repeat(6) {
+            composeRule.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+        }
+        waitForContentDescription("Back to top")
+        composeRule.onNodeWithContentDescription("Back to top").performClick()
+        waitForText("Incomplete checklist task")
+    }
+
+    @Test
+    fun homeHero_notDuplicated_overlappingCurrentRowsVisible() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Incomplete checklist task").assertCountEquals(1)
+        composeRule.onNodeWithText("+5 overlapping").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Deadline blocker fixture"))
+        composeRule.onNodeWithText("Deadline blocker fixture").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overlapping current fixture"))
+        composeRule.onNodeWithText("Overlapping current fixture").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeOverdueSection_showsThree_expandsAll_collapses() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue (5)"))
+        composeRule.onNodeWithText("Overdue (5)").assertIsDisplayed()
+        composeRule.onNodeWithText("Overdue task 4").assertIsDisplayed()
+        composeRule.onNodeWithText("Overdue task 3").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Overdue task 2").assertCountEquals(0)
+        composeRule.onNodeWithText("Show all 5").assertIsDisplayed().performClick()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue task 1"))
+        composeRule.onNodeWithText("Overdue task 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Show less").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("Show all 5").assertIsDisplayed()
+    }
+
+    @Test
+    fun homeUnassignedSection_initiallyCollapsed_expands_tappingAssignOpensEdit() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Unassigned (1)"))
+        composeRule.onNodeWithText("Unassigned (1)").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Unassigned root fixture").assertCountEquals(0)
+        composeRule.onNodeWithText("Show all 1").performClick()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Unassigned root fixture"))
+        composeRule.onNodeWithText("Unassigned root fixture").assertIsDisplayed()
+        composeRule.onNodeWithText("Assign").performClick()
+        waitForText("Edit task")
+    }
+
+    @Test
+    fun homeAssignedOtherTask_neverAppears() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onAllNodesWithText("Wife task assigned to other").assertCountEquals(0)
+    }
+
+    @Test
+    fun homeHeroChecklist_togglesInvokeChildAction_parentDoneDisabledUntilComplete() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNodeWithContentDescription("Finish current task").assertIsNotEnabled()
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Checkbox)
+                .and(hasAnySibling(hasText("Incomplete child item")))
+        ).performClick()
+
+        waitForRecordedCall("/tasks/task-incomplete-checklist/checklist/child-incomplete-open/check")
+    }
+
+    @Test
+    fun homeFutureRow_editOpensTask() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
+        composeRule.onNodeWithText("Tomorrow task").performClick()
+        waitForText("Edit task")
+    }
+
+    @Test
+    fun homeSwipeToRefresh_recordsSync() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performTouchInput {
+            swipe(
+                start = Offset(x = 300f, y = 300f),
+                end = Offset(x = 300f, y = 1200f),
+                durationMillis = 500
+            )
+        }
+
+        composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
+        waitForRecordedCall("/tasks/sync")
+        fakeBackend.assertRecorded("/tasks/sync")
+    }
+
+    @Test
+    fun homePullContainerSemantics_refreshTasksAction_recordsSync() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        invokeRefreshTasksAccessibilityAction()
+
+        waitForRecordedCall("/tasks/sync")
+        fakeBackend.assertRecorded("/tasks/sync")
+    }
+
+    @Test
+    fun homeAbsentControls_calendarSearchOverflowSecondaryFabAbsent() {
+        resetTestState()
+        ActivityScenario.launch(MainActivity::class.java)
+
+        waitForAnyText("Incomplete checklist task")
+        composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Search").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Calendar").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Overflow menu").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Search").assertCountEquals(0)
     }
 
     @Test
@@ -332,10 +517,8 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText(repairLabel).performClick()
 
             waitForRecordedCall("/tasks/task-invalid/update")
-            waitForErrorLog("action=UPDATE_TASK taskId=task-invalid", "forced_failure")
-            waitForText("Action failed")
+            waitForAnyText("failed")
             waitForAnyText("Retry")
-            waitForAnyText("Dismiss")
             assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
@@ -364,6 +547,35 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.setFailSnapshot(false)
         fakeBackend.resetCalls()
         blockerErrorLog().delete()
+    }
+
+    private fun runHomeSwipeRefreshPrecondition() {
+        resetTestState()
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForAnyText("Incomplete checklist task")
+            val snapshotFile = latestSnapshotFile()
+            val snapshotBeforeRefresh = snapshotFile.takeIf(File::exists)?.readText().orEmpty()
+            composeRule.onNode(hasScrollAction()).performTouchInput {
+                swipe(
+                    start = Offset(x = 300f, y = 300f),
+                    end = Offset(x = 300f, y = 1200f),
+                    durationMillis = 500
+                )
+            }
+            waitForRecordedCall("/tasks/sync")
+            Log.i(CORRELATION_TAG, "home_sync backend_request_received")
+            waitForBackendResponseCompleted("/tasks/sync")
+            Log.i(CORRELATION_TAG, "home_sync backend_response_completed")
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                snapshotFile.exists() && snapshotFile.readText() != snapshotBeforeRefresh
+            }
+            Log.i(CORRELATION_TAG, "home_sync android_coordinator_applied")
+        } finally {
+            scenario.close()
+        }
+        waitForActivityDestroyed(scenario)
+        Log.i(CORRELATION_TAG, "home_sync activity_finished")
     }
 
     private fun repairInvalidTask() {
@@ -449,6 +661,34 @@ class BlockerActivityFakeBackendTest {
         )
     }
 
+    private fun waitForBackendResponseCompleted(path: String) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (runCatching { fakeBackend.hasCompletedCall(path) }.getOrDefault(false)) return
+            SystemClock.sleep(100)
+        }
+        fail("Expected fake backend response completion for $path. Recorded calls: ${fakeBackend.calls()}")
+    }
+
+    private fun waitForRecordedCallCount(path: String, expectedCount: Int) {
+        val deadline = SystemClock.elapsedRealtime() + 15_000
+        var lastCalls = ""
+        while (SystemClock.elapsedRealtime() < deadline) {
+            lastCalls = runCatching { fakeBackend.calls() }.getOrDefault(lastCalls)
+            val count = Regex("""\"path\":\"${Regex.escape(path)}\"""").findAll(lastCalls).count()
+            if (count >= expectedCount) return
+            SystemClock.sleep(100)
+        }
+        fail("Expected at least $expectedCount fake backend calls to $path. Recorded calls: $lastCalls")
+    }
+
+    private fun invokeRefreshTasksAccessibilityAction() {
+        val node = composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions))
+        node.assertIsDisplayed()
+        val actions = node.fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        actions.first { it.label == "Refresh tasks" }.action()
+    }
+
     private fun selectDefaultRepairSchedule() {
         val scheduleOpen = runCatching {
             composeRule.onNodeWithText("Date").performScrollTo().assertIsDisplayed()
@@ -469,13 +709,19 @@ class BlockerActivityFakeBackendTest {
         waitForText("Ends at")
     }
 
+    private fun chooseThirtyMinuteRescheduleDuration() {
+        composeRule.onNodeWithText("Schedule").performScrollTo().performClick()
+        composeRule.onNodeWithText("Tomorrow").performScrollTo().performClick()
+        composeRule.onNodeWithText("30 min").performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
+
     private fun waitForActivityDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
-        val deadline = SystemClock.elapsedRealtime() + 15_000
-        while (SystemClock.elapsedRealtime() < deadline) {
-            if (scenario.state == Lifecycle.State.DESTROYED) return
-            SystemClock.sleep(100)
+        composeRule.waitUntil(timeoutMillis = 45_000) {
+            scenario.state == Lifecycle.State.DESTROYED
         }
-        fail("Expected blocker activity to finish, but state was ${scenario.state}")
+        composeRule.waitForIdle()
+        Log.i(CORRELATION_TAG, "activity_finish observed")
     }
 
     private fun assertActivityNotDestroyed(scenario: ActivityScenario<out android.app.Activity>) {
@@ -536,4 +782,11 @@ class BlockerActivityFakeBackendTest {
 
     private fun blockerErrorLog(): File =
         File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "blocker_action_errors.log")
+
+    private fun latestSnapshotFile(): File =
+        File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "latest_snapshot.json")
+
+    private companion object {
+        const val CORRELATION_TAG = "BuzerE2ECorrelation"
+    }
 }

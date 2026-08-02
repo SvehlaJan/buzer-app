@@ -112,7 +112,7 @@ fun HomeScreen(
     val showBackToTop by remember(state, thirdFutureHeaderIndex) {
         derivedStateOf {
             val targetIndex = thirdFutureHeaderIndex ?: return@derivedStateOf false
-            listState.firstVisibleItemIndex >= targetIndex
+            listState.layoutInfo.visibleItemsInfo.any { it.index >= targetIndex }
         }
     }
 
@@ -191,6 +191,7 @@ fun HomeScreen(
                             item(key = "hero:${hero.taskId}") {
                                 CurrentBlockHero(
                                     currentBlock = hero,
+                                    overlappingCount = state.overlappingCurrentRows.size,
                                     onDone = { onDoneTask(hero.taskId) },
                                     onEdit = { onEditTask(hero.taskId) },
                                     onToggleChecklistItem = { itemId -> onToggleChecklistItem(hero.taskId, itemId) }
@@ -426,6 +427,7 @@ private fun DateGroupHeader(heading: String) {
 @Composable
 private fun CurrentBlockHero(
     currentBlock: HomeCurrentBlock,
+    overlappingCount: Int,
     onDone: () -> Unit,
     onEdit: () -> Unit,
     onToggleChecklistItem: (String) -> Unit
@@ -445,6 +447,13 @@ private fun CurrentBlockHero(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold
             )
+            if (overlappingCount > 0) {
+                Text(
+                    text = "+$overlappingCount overlapping",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
             Text(
                 text = currentBlock.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -564,4 +573,3 @@ private fun AgendaRow(
         }
     }
 }
-

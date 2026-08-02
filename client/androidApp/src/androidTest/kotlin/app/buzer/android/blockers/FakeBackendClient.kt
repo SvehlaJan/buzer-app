@@ -48,6 +48,19 @@ class FakeBackendClient(
 
     fun fullCalls(): String = request("GET", "/__calls/full")
 
+    fun hasCompletedCall(path: String): Boolean {
+        val callsArray = Json.parseToJsonElement(calls())
+            .jsonObject["calls"]
+            ?.jsonArray
+            ?: return false
+        return callsArray.any { call ->
+            val callObject = call.jsonObject
+            callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
+                callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
+                callObject["responseStatusCode"]?.jsonPrimitive?.contentOrNull != null
+        }
+    }
+
     fun assertRecorded(path: String) {
         val body = calls()
         check(body.contains("\"path\":\"$path\"")) {
