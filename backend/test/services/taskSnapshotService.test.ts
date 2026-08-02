@@ -277,27 +277,109 @@ describe("TaskSnapshotService", () => {
     });
   });
 
-  it("does not validate unassigned user-created tasks as current-user commitments without an owner", () => {
+  it("projects genuinely unassigned task roots with nested checklist children", () => {
     const db = new Database(":memory:");
     migrate(db);
     const repo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-shared",
+      name: "Shared Project",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
     repo.upsertTodoistTask({
       id: "task-unassigned",
       todoistTaskId: "todoist-unassigned",
-      title: "Loose personal task",
+      title: "Shared unassigned task",
       description: null,
-      projectId: "project-personal",
+      projectId: "project-shared",
       assigneeId: null,
       creatorId: "user-self",
-      dueDatetime: "2026-06-13T12:00:00Z",
-      durationMinutes: 30,
+      dueDatetime: null,
+      durationMinutes: null,
       completedAt: null,
       deletedAt: null,
       rawJson: "{}",
       updatedAt: "2026-06-13T10:00:00Z",
       commitmentOwnerId: null
     });
-    const service = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self");
+    repo.upsertTodoistTask({
+      id: "child-unassigned",
+      todoistTaskId: "todoist-child-unassigned",
+      title: "Subtask item",
+      description: null,
+      projectId: "project-shared",
+      parentId: "todoist-unassigned",
+      childOrder: 1,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z",
+      commitmentOwnerId: null
+    });
+    const service = new TaskSnapshotService(repo, projectRepo, "user-self");
+
+    const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
+
+    expect(snapshot.tasks).toHaveLength(1);
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "task-unassigned",
+      assigneeId: null,
+      isAssignedToUser: false,
+      state: "planned",
+      validationErrors: [],
+      hierarchyStatus: "valid",
+      checklistItems: [
+        expect.objectContaining({
+          id: "child-unassigned",
+          title: "Subtask item"
+        })
+      ]
+    });
+  });
+
+  it("omits tasks assigned to another user from snapshot", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-shared",
+      name: "Shared Project",
+      shared: true,
+      canAssignTasks: true,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    repo.upsertTodoistTask({
+      id: "task-assigned-other",
+      todoistTaskId: "todoist-assigned-other",
+      title: "Task assigned to teammate",
+      description: null,
+      projectId: "project-shared",
+      assigneeId: "teammate-id",
+      creatorId: "user-self",
+      dueDatetime: "2026-06-13T12:00:00Z",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-06-13T10:00:00Z"
+    });
+    const service = new TaskSnapshotService(repo, projectRepo, "user-self");
 
     const snapshot = service.getSnapshot("2026-06-13T10:00:00Z");
 

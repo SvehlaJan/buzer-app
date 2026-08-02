@@ -54,7 +54,7 @@ export class TaskSnapshotService {
     task: TaskWithCommitment,
     children: readonly TaskWithCommitment[],
     hierarchy: {
-      classification: "ROOT_COMMITMENT" | "ROOT_CANDIDATE_INVALID" | "UNSUPPORTED_HIERARCHY";
+      classification: "ROOT_COMMITMENT" | "ROOT_CANDIDATE_INVALID" | "ROOT_UNASSIGNED" | "UNSUPPORTED_HIERARCHY";
       violation: string | null;
       checkedCount: number;
       totalCount: number;
@@ -89,7 +89,7 @@ export class TaskSnapshotService {
       startAt: task.dueDatetime !== null && task.durationMinutes !== null
         ? computeStartAt(task.dueDatetime, task.durationMinutes)
         : null,
-      state: terminalState ?? (hierarchy.classification === "ROOT_COMMITMENT" ? task.state : "invalid"),
+      state: terminalState ?? (hierarchy.classification === "ROOT_COMMITMENT" || hierarchy.classification === "ROOT_UNASSIGNED" ? task.state : "invalid"),
       isAssignedToUser: task.assigneeId === this.currentUserId || isCompanionOwnedByUser,
       isCreatedByUser: task.creatorId === this.currentUserId,
       isCompleted: task.completedAt !== null,

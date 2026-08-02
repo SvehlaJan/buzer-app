@@ -3,6 +3,7 @@ import { validateTaskStrictness, type ValidationResult } from "./taskValidation.
 export type TaskEnforcementClassification =
   | "ROOT_COMMITMENT"
   | "ROOT_CANDIDATE_INVALID"
+  | "ROOT_UNASSIGNED"
   | "CHECKLIST_CHILD"
   | "UNSUPPORTED_HIERARCHY"
   | "NOT_OWNED";
@@ -74,7 +75,13 @@ export class TaskEnforcementPolicy {
 
   private classifyRoot(task: EnforceableTask, allTasks: readonly EnforceableTask[]): TaskEnforcementResult {
     const isCompanionOwned = this.isCompanionOwned(task);
-    if (task.assigneeId !== this.options.currentUserId && !isCompanionOwned) {
+    const isGenuinelyUnassigned =
+      task.assigneeId === null &&
+      !isCompanionOwned &&
+      task.projectId !== null &&
+      this.options.projectsById.get(task.projectId)?.canAssignTasks === true;
+
+    if (task.assigneeId !== this.options.currentUserId && !isCompanionOwned && !isGenuinelyUnassigned) {
       return notOwned();
     }
 
@@ -84,6 +91,15 @@ export class TaskEnforcementPolicy {
         classification: "UNSUPPORTED_HIERARCHY",
         violation,
         isCompanionOwned
+      };
+    }
+
+    if (isGenuinelyUnassigned) {
+      return {
+        classification: "ROOT_UNASSIGNED",
+        violation: null,
+        isCompanionOwned: false,
+        validationErrors: []
       };
     }
 
@@ -111,7 +127,7 @@ export class TaskEnforcementPolicy {
     }
 
     const parentResult = this.classifyRoot(parent, allTasks);
-    if (parentResult.classification !== "ROOT_COMMITMENT") {
+    if (parentResult.classification !== "ROOT_COMMITMENT" && parentResult.classification !== "ROOT_UNASSIGNED") {
       return notOwned();
     }
 

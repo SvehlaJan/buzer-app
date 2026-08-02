@@ -26,7 +26,10 @@ function task(overrides: Partial<EnforceableTask> = {}): EnforceableTask {
 function policy() {
   return new TaskEnforcementPolicy({
     currentUserId,
-    projectsById: new Map([["project-personal", { canAssignTasks: false }]])
+    projectsById: new Map([
+      ["project-personal", { canAssignTasks: false }],
+      ["project-shared", { canAssignTasks: true }]
+    ])
   });
 }
 
@@ -244,6 +247,138 @@ describe("TaskEnforcementPolicy", () => {
     expect(policy().classify(root, [root, ...children])).toMatchObject({
       classification: "ROOT_COMMITMENT",
       violation: null
+    });
+  });
+
+  it("classifies an unassigned root in an assignable project as ROOT_UNASSIGNED without validation errors", () => {
+    const root = task({
+      id: "unassigned-root",
+      todoistTaskId: "todoist-unassigned-root",
+      projectId: "project-shared",
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+
+    expect(policy().classify(root, [root])).toEqual({
+      classification: "ROOT_UNASSIGNED",
+      violation: null,
+      isCompanionOwned: false,
+      validationErrors: []
+    });
+  });
+
+  it("classifies an unassigned self-created task in a non-assignable project as ROOT_COMMITMENT when strictly valid", () => {
+    const root = task({
+      id: "personal-root",
+      todoistTaskId: "todoist-personal-root",
+      projectId: "project-personal",
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: "2026-07-15T12:00:00Z",
+      durationMinutes: 30
+    });
+
+    expect(policy().classify(root, [root])).toEqual({
+      classification: "ROOT_COMMITMENT",
+      violation: null,
+      isCompanionOwned: true
+    });
+  });
+
+  it("requires strict validation for unassigned self-created task in a non-assignable project", () => {
+    const root = task({
+      id: "personal-root-invalid",
+      todoistTaskId: "todoist-personal-root-invalid",
+      projectId: "project-personal",
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+
+    expect(policy().classify(root, [root])).toMatchObject({
+      classification: "ROOT_CANDIDATE_INVALID",
+      violation: null,
+      isCompanionOwned: true,
+      validationErrors: ["due_datetime_required", "duration_required"]
+    });
+  });
+
+  it("remains NOT_OWNED when a root is assigned to another user even in an assignable project", () => {
+    const root = task({
+      id: "other-user-root",
+      todoistTaskId: "todoist-other-user-root",
+      projectId: "project-shared",
+      assigneeId: "wife",
+      creatorId: currentUserId
+    });
+
+    expect(policy().classify(root, [root])).toEqual({
+      classification: "NOT_OWNED",
+      violation: null,
+      isCompanionOwned: false
+    });
+  });
+
+  it("classifies an eligible child under a ROOT_UNASSIGNED parent as CHECKLIST_CHILD", () => {
+    const root = task({
+      id: "unassigned-root",
+      todoistTaskId: "todoist-unassigned-root",
+      projectId: "project-shared",
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+    const child = task({
+      id: "child",
+      todoistTaskId: "todoist-child",
+      projectId: "project-shared",
+      parentId: root.todoistTaskId,
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+
+    expect(policy().classify(child, [root, child])).toEqual({
+      classification: "CHECKLIST_CHILD",
+      violation: null,
+      isCompanionOwned: false
+    });
+  });
+
+  it("rejects an unassigned root with unsupported children as UNSUPPORTED_HIERARCHY", () => {
+    const root = task({
+      id: "unassigned-root",
+      todoistTaskId: "todoist-unassigned-root",
+      projectId: "project-shared",
+      assigneeId: null,
+      creatorId: currentUserId,
+      dueDatetime: null,
+      durationMinutes: null
+    });
+    const childWithSchedule = task({
+      id: "child-scheduled",
+      todoistTaskId: "todoist-child-scheduled",
+      projectId: "project-shared",
+      parentId: root.todoistTaskId,
+      assigneeId: null,
+      dueDatetime: "2026-07-15T13:00:00Z",
+      durationMinutes: null
+    });
+
+    expect(policy().classify(root, [root, childWithSchedule])).toMatchObject({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_schedule"
+    });
+
+    expect(policy().classify(childWithSchedule, [root, childWithSchedule])).toEqual({
+      classification: "NOT_OWNED",
+      violation: null,
+      isCompanionOwned: false
     });
   });
 });
