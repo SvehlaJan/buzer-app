@@ -5,9 +5,9 @@
 - Plan: `docs/superpowers/plans/2026-08-02-smart-home-and-true-refresh.md`
 - Worktree: `/Users/svehla/playground/buzer-app/.worktrees/smart-home-and-true-refresh`
 - Branch: `feature/smart-home-and-true-refresh`
-- Code HEAD before this documentation update: `4adcb66 test: strengthen smart Home end-to-end coverage`
+- Code HEAD before this documentation update: `6be621a test: harden smart Home E2E authority`
 - Tasks 1–6: implemented and committed.
-- Task 7: fixture/instrumentation work is committed through `4adcb66`, and the final scoped class is green (28/28). Step 3 remains incomplete for the enumerated coverage gaps, so this is not a full Smart Home completion claim.
+- Task 7: fixture/instrumentation work is committed through `6be621a`, and the final scoped class is green (28/28). Step 3 remains incomplete for the enumerated coverage gaps, so this is not a full Smart Home completion claim.
 - Task 8: open. Backend/JVM/build gates were green before the correction pass, while the full unfiltered real-backend E2E suite remains unrun.
 
 ## Plan steps attempted
@@ -226,6 +226,42 @@ Verification:
 - Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
 - Result: PASS
 - Evidence: all 28 tests passed with zero skipped and zero failed; Gradle reported `BUILD SUCCESSFUL`. No retry was run.
+
+## 2026-08-02 deterministic harness quality correction
+
+Root cause: the Home→deadline precondition treated any persisted snapshot-file change plus path-only `/tasks/sync` completion as proof that the explicit forced-sync response had been applied. A racing automatic launch/resume GET could satisfy the file-change predicate first. Separately, `+365 days` does not define an explicit next-calendar-year date, and a same-day 23:30 cross-midnight fixture is already past when the suite starts late at night.
+
+The E2E debug surface now captures exact `{ serverTime, snapshotGeneration }` authority from the actual serialized correlated POST response in Fastify `onSend`, before `onResponse` marks completion. `FakeBackendClient` returns the completed 2xx POST authority after reset, and the Android precondition waits until `latest_snapshot.json` contains both exact values. It no longer uses a baseline file change, path-only completion, sleep, or production-only logs. The next-year fixture is local January 2 at 10:00 in `year + 1`; the cross-midnight fixture starts two local calendar days ahead at 23:30 and ends at 01:00 the following day.
+
+Verification:
+- Command: `npm test -- test/fakes/e2eFixtures.test.ts test/e2eServer.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: 34 passed and 3 failed: response authority was absent, leap-night next-year resolved to February 28 at 23:59, and the local-year-end cross-midnight start was in the past.
+
+Verification:
+- Command: `npm test -- test/fakes/e2eFixtures.test.ts test/e2eServer.test.ts`
+- Result: PASS
+- Evidence: 2 files and 37 tests passed after the minimal harness/fixture correction.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: backend TypeScript no-emit check exited 0.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: Kotlin response-authority parsing and the Android-test source compiled with `BUILD SUCCESSFUL in 2s`.
+
+Verification:
+- Command: `PORT=18434 ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: the sole actual instrumentation invocation passed all 28 tests with zero skipped/failed; `BUILD SUCCESSFUL in 2m 27s`. An earlier permission-review timeout ended before process creation and did not invoke Android; no test retry was performed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors; Git emitted only the known worktree fsmonitor IPC warning.
 
 ### Remaining work
 
