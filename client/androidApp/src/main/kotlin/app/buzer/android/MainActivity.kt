@@ -30,11 +30,17 @@ class MainActivity : ComponentActivity() {
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
     private var homeRefreshInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
+    private var homeActionStatusMessage by mutableStateOf<String?>(null)
     private val homeActionHandler: HomeDoneActionHandler by lazy {
         HomeDoneActionHandler(
-            refreshSnapshot = {
+            refreshSnapshot = { forceTodoist ->
                 val coordinator = requireCoordinator("snapshot refresh")
-                SnapshotReducer.reduce(coordinator.refreshAndReconcile())
+                val snapshot = if (forceTodoist) {
+                    coordinator.forceSyncAndReconcile()
+                } else {
+                    coordinator.refreshAndReconcile()
+                }
+                SnapshotReducer.reduce(snapshot)
             },
             completeTask = { taskId, request ->
                 val coordinator = coordinator
@@ -45,8 +51,9 @@ class MainActivity : ComponentActivity() {
                 coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)
             },
             applySnapshot = { snapshotViewState = it },
-            setStatusMessage = { homeRefreshError = it },
+            setStatusMessage = { homeActionStatusMessage = it },
             setRefreshInFlight = { homeRefreshInFlight = it },
+            clearRefreshFailure = { homeRefreshError = null },
             reportRefreshFailure = ::reportRefreshFailure
         )
     }
@@ -64,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             .getOrNull()
-        refreshEnforcement()
+        refreshEnforcement(forceTodoist = false)
         val openAddTask = intent.getBooleanExtra(AddTaskWidgetProvider.EXTRA_OPEN_ADD_TASK, false)
         setBuzerContent {
             BuzerApp(
@@ -72,8 +79,11 @@ class MainActivity : ComponentActivity() {
                 snapshot = snapshotViewState,
                 homeRefreshInFlight = homeRefreshInFlight,
                 homeRefreshError = homeRefreshError,
-                onRetryHomeRefresh = ::refreshEnforcement,
-                onDoneCurrentTask = ::completeCurrentTask,
+                homeActionStatusMessage = homeActionStatusMessage,
+                onRetryHomeRefresh = ::forceRefreshEnforcement,
+                onPullToRefresh = ::forceRefreshEnforcement,
+                onDoneTask = ::completeHomeTask,
+                onDoneCurrentTask = ::completeHomeTask,
                 onTaskCreated = { returnedSnapshot ->
                     val applied = coordinator?.applyReturnedSnapshot(returnedSnapshot) ?: returnedSnapshot
                     snapshotViewState = SnapshotReducer.reduce(applied)
@@ -87,18 +97,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshEnforcement()
+        refreshEnforcement(forceTodoist = false)
     }
 
-    private fun refreshEnforcement() {
-        AppLog.debug("main refresh requested")
+    private fun refreshEnforcement(forceTodoist: Boolean = false) {
+        AppLog.debug("main refresh requested forceTodoist=$forceTodoist")
         lifecycleScope.launch {
-            homeActionHandler.refresh()
+            homeActionHandler.refresh(forceTodoist = forceTodoist)
             AppLog.debug(
                 "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
                     "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
             )
         }
+    }
+
+    private fun forceRefreshEnforcement() {
+        refreshEnforcement(forceTodoist = true)
     }
 
     private fun reportRefreshFailure(error: Throwable) {
@@ -111,7 +125,7 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun completeCurrentTask(taskId: String) {
+    private fun completeHomeTask(taskId: String) {
         AppLog.info("main current_done_clicked taskId=$taskId")
         val occurrenceKey = snapshotViewState
             ?.tasks
@@ -119,7 +133,7 @@ class MainActivity : ComponentActivity() {
             ?.occurrenceKey
             ?.takeIf { it.isNotBlank() }
             ?: run {
-                homeRefreshError = "Task occurrence is no longer current"
+                homeActionStatusMessage = "Task occurrence is no longer current"
                 return
             }
         val request = TaskActionRequest(
@@ -128,7 +142,7 @@ class MainActivity : ComponentActivity() {
             expectedOccurrenceKey = occurrenceKey
         )
         lifecycleScope.launch {
-            homeActionHandler.completeCurrentTask(taskId, request)
+            homeActionHandler.completeTask(taskId, request)
         }
     }
 
@@ -163,3 +177,4 @@ class MainActivity : ComponentActivity() {
             throw IllegalStateException("Refresh failed")
         }
 }
+
