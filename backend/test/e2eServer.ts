@@ -20,6 +20,12 @@ export interface RecordedCall {
   at: string;
   responseCompletedAt: string | null;
   responseStatusCode: number | null;
+  responseAuthority: RecordedResponseAuthority | null;
+}
+
+export interface RecordedResponseAuthority {
+  serverTime: string;
+  snapshotGeneration: number;
 }
 
 interface RecordedFullCall extends RecordedCall {
@@ -172,7 +178,8 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
         ),
         at: new Date().toISOString(),
         responseCompletedAt: null,
-        responseStatusCode: null
+        responseStatusCode: null,
+        responseAuthority: null
       };
       calls.push(call);
       fullCalls.push({ ...call, payload: structuredClone(body) });
@@ -191,6 +198,14 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     if (controls.failProjects && request.method === "GET" && path === "/projects") {
       return reply.code(500).send({ error: "forced_project_failure" });
     }
+  });
+
+  app.addHook("onSend", async (request, _reply, payload) => {
+    const call = correlatedCalls.get(request.id);
+    if (call !== undefined) {
+      call.responseAuthority = responseAuthorityFromSerializedPayload(payload);
+    }
+    return payload;
   });
 
   app.addHook("onResponse", async (request, reply) => {
@@ -230,6 +245,37 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     adapter.setFailNextChildAdd(enabled);
     return { failNextChildAdd: enabled };
   });
+}
+
+function responseAuthorityFromSerializedPayload(payload: unknown): RecordedResponseAuthority | null {
+  const serialized = typeof payload === "string"
+    ? payload
+    : Buffer.isBuffer(payload)
+      ? payload.toString("utf8")
+      : null;
+  if (serialized === null) return null;
+
+  const parsed = (() => {
+    try {
+      return JSON.parse(serialized) as unknown;
+    } catch {
+      return null;
+    }
+  })();
+  if (typeof parsed !== "object" || parsed === null) return null;
+
+  const body = parsed as Record<string, unknown>;
+  const nestedSnapshot = body.snapshot;
+  const authority = typeof nestedSnapshot === "object" && nestedSnapshot !== null
+    ? nestedSnapshot as Record<string, unknown>
+    : body;
+  return typeof authority.serverTime === "string" &&
+    typeof authority.snapshotGeneration === "number"
+    ? {
+        serverTime: authority.serverTime,
+        snapshotGeneration: authority.snapshotGeneration
+      }
+    : null;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

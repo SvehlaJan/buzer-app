@@ -125,6 +125,9 @@ function nextEveryTwoDaysOccurrence(now: Date, hour: number, minute: number): st
 export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
   const iso = (minutes: number) => new Date(now.getTime() + minutes * 60_000).toISOString();
   const nowIso = now.toISOString();
+  const localToday = localDateAt(now, TIME_ZONE);
+  const nextYearDate: LocalDate = { year: localToday.year + 1, month: 1, day: 2 };
+  const futureMidnightDate = addCalendarDays(localToday, 2);
 
   const root = (
     id: string,
@@ -355,13 +358,13 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     }),
     root("task-future-next-year", {
       title: "Next year task",
-      dueDatetime: iso(365 * 24 * 60),
+      dueDatetime: zonedIso(nextYearDate, 10, 0, TIME_ZONE),
       durationAmount: 30,
       durationMinutes: 30
     }),
     root("task-future-midnight", {
       title: "Midnight crossing task",
-      dueDatetime: zonedIso(localDateAt(now, TIME_ZONE), 23, 30, TIME_ZONE),
+      dueDatetime: zonedIso(futureMidnightDate, 23, 30, TIME_ZONE),
       durationAmount: 90,
       durationMinutes: 90
     }),

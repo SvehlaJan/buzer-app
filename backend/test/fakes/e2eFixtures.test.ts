@@ -210,10 +210,10 @@ describe("e2eFixtureSeed", () => {
     expect(localDateTimeParts(byId.get("task-future-later")?.dueDatetime ?? "").date)
       .toBe("2026-07-21");
     expect(localDateTimeParts(byId.get("task-future-next-year")?.dueDatetime ?? "").date)
-      .toBe("2027-07-18");
+      .toBe("2027-01-02");
     expect(localDateTimeParts(byId.get("task-future-midnight")?.dueDatetime ?? "").time)
       .toBe("23:30");
-    expect(new Date(endAt("task-future-midnight")).toISOString()).toBe("2026-07-18T23:00:00.000Z");
+    expect(new Date(endAt("task-future-midnight")).toISOString()).toBe("2026-07-20T23:00:00.000Z");
 
     expect(byId.get("task-unassigned-root")).toMatchObject({
       projectId: "project-test",
@@ -231,6 +231,33 @@ describe("e2eFixtureSeed", () => {
       parentId: "todoist-task-incomplete-checklist",
       completedAt: null
     });
+  });
+
+  it("pins next-year content to an explicit date in the next local calendar year", () => {
+    const leapNight = new Date("2028-02-29T22:59:00.000Z");
+    const leapSeed = e2eFixtureSeed(leapNight);
+    const leapById = new Map(leapSeed.tasks.map((task) => [task.id, task.mirror]));
+    const nextYear = localDateTimeParts(
+      leapById.get("task-future-next-year")?.dueDatetime ?? ""
+    );
+
+    expect(nextYear).toMatchObject({ date: "2029-01-02", time: "10:00" });
+    expect(Date.parse(leapById.get("task-future-next-year")?.dueDatetime ?? ""))
+      .toBeGreaterThan(leapNight.getTime());
+  });
+
+  it("keeps the cross-midnight fixture future at the local year-end edge", () => {
+    const localYearEnd = new Date("2028-12-31T22:59:00.000Z");
+    const edgeSeed = e2eFixtureSeed(localYearEnd);
+    const edgeById = new Map(edgeSeed.tasks.map((task) => [task.id, task.mirror]));
+    const midnightTask = edgeById.get("task-future-midnight");
+    const start = midnightTask?.dueDatetime ?? "";
+    const end = new Date(Date.parse(start) + (midnightTask?.durationMinutes ?? 0) * 60_000)
+      .toISOString();
+
+    expect(localDateTimeParts(start)).toMatchObject({ date: "2029-01-02", time: "23:30" });
+    expect(Date.parse(start)).toBeGreaterThan(localYearEnd.getTime());
+    expect(localDateTimeParts(end)).toMatchObject({ date: "2029-01-03", time: "01:00" });
   });
 
   it("defines the two fixture projects the AddTask flow selects by name", () => {

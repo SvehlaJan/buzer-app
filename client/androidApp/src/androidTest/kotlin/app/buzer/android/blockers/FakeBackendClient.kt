@@ -8,6 +8,12 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+
+data class RecordedResponseAuthority(
+    val serverTime: String,
+    val snapshotGeneration: Long
+)
 
 class FakeBackendClient(
     private val baseUrl: String = InstrumentationRegistry.getArguments()
@@ -59,6 +65,33 @@ class FakeBackendClient(
                 callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
                 callObject["responseStatusCode"]?.jsonPrimitive?.contentOrNull != null
         }
+    }
+
+    fun completedCallResponseAuthority(path: String): RecordedResponseAuthority? {
+        val callsArray = Json.parseToJsonElement(calls())
+            .jsonObject["calls"]
+            ?.jsonArray
+            ?: return null
+        return callsArray.mapNotNull { call ->
+            val callObject = call.jsonObject
+            val responseAuthority = runCatching {
+                callObject["responseAuthority"]?.jsonObject
+            }.getOrNull() ?: return@mapNotNull null
+            val serverTime = responseAuthority["serverTime"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: return@mapNotNull null
+            val snapshotGeneration = responseAuthority["snapshotGeneration"]
+                ?.jsonPrimitive
+                ?.longOrNull
+                ?: return@mapNotNull null
+            RecordedResponseAuthority(serverTime, snapshotGeneration).takeIf {
+                callObject["method"]?.jsonPrimitive?.contentOrNull == "POST" &&
+                    callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
+                    callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
+                    callObject["responseStatusCode"]?.jsonPrimitive?.longOrNull in 200L..299L
+            }
+        }.lastOrNull()
     }
 
     fun assertRecorded(path: String) {

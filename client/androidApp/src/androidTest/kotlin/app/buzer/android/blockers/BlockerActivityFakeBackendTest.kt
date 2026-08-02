@@ -39,6 +39,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.MainActivity
 import app.buzer.android.enforcement.AlarmIntentFactory
 import java.io.File
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -572,7 +577,6 @@ class BlockerActivityFakeBackendTest {
         try {
             waitForAnyText("Incomplete checklist task")
             val snapshotFile = latestSnapshotFile()
-            val snapshotBeforeRefresh = snapshotFile.takeIf(File::exists)?.readText().orEmpty()
             composeRule.onNode(hasScrollAction()).performTouchInput {
                 swipe(
                     start = Offset(x = 300f, y = 300f),
@@ -582,11 +586,9 @@ class BlockerActivityFakeBackendTest {
             }
             waitForRecordedCall("/tasks/sync")
             Log.i(CORRELATION_TAG, "home_sync backend_request_received")
-            waitForBackendResponseCompleted("/tasks/sync")
+            val syncAuthority = waitForBackendResponseAuthority("/tasks/sync")
             Log.i(CORRELATION_TAG, "home_sync backend_response_completed")
-            composeRule.waitUntil(timeoutMillis = 15_000) {
-                snapshotFile.exists() && snapshotFile.readText() != snapshotBeforeRefresh
-            }
+            waitForPersistedSnapshotAuthority(snapshotFile, syncAuthority)
             Log.i(CORRELATION_TAG, "home_sync android_coordinator_applied")
         } finally {
             scenario.close()
@@ -701,6 +703,37 @@ class BlockerActivityFakeBackendTest {
             SystemClock.sleep(100)
         }
         fail("Expected fake backend response completion for $path. Recorded calls: ${fakeBackend.calls()}")
+    }
+
+    private fun waitForBackendResponseAuthority(path: String): RecordedResponseAuthority {
+        var authority: RecordedResponseAuthority? = null
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            authority = runCatching { fakeBackend.completedCallResponseAuthority(path) }.getOrNull()
+            authority != null
+        }
+        return checkNotNull(authority)
+    }
+
+    private fun waitForPersistedSnapshotAuthority(
+        snapshotFile: File,
+        expected: RecordedResponseAuthority
+    ) {
+        var observed = ""
+        val applied = runCatching {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                observed = snapshotFile.takeIf(File::exists)?.readText().orEmpty()
+                val snapshot = runCatching { Json.parseToJsonElement(observed).jsonObject }.getOrNull()
+                snapshot?.get("serverTime")?.jsonPrimitive?.contentOrNull == expected.serverTime &&
+                    snapshot["snapshotGeneration"]?.jsonPrimitive?.longOrNull == expected.snapshotGeneration
+            }
+        }.isSuccess
+        if (!applied) {
+            fail(
+                "Expected persisted snapshot authority $expected.\n" +
+                    "Persisted snapshot: $observed\n" +
+                    "Recorded calls: ${fakeBackend.calls()}"
+            )
+        }
     }
 
     private fun waitForRecordedCallCount(path: String, expectedCount: Int) {

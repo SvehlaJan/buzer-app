@@ -116,6 +116,35 @@ describe("seeding", () => {
 });
 
 describe("happy-path mutation conformance (every action completes, never goes pending)", () => {
+  it("records the exact serialized authority returned by a completed forced sync", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__reset", payload: {} });
+
+      const response = await server.app.inject({
+        method: "POST",
+        url: "/tasks/sync",
+        headers: auth,
+        payload: {}
+      });
+      expect(response.statusCode).toBe(200);
+      const responseSnapshot = response.json();
+
+      const callsResponse = await server.app.inject({ method: "GET", url: "/__calls" });
+      expect(callsResponse.json().calls).toEqual([
+        expect.objectContaining({
+          method: "POST",
+          path: "/tasks/sync",
+          responseCompletedAt: expect.any(String),
+          responseStatusCode: 200,
+          responseAuthority: {
+            serverTime: responseSnapshot.serverTime,
+            snapshotGeneration: responseSnapshot.snapshotGeneration
+          }
+        })
+      ]);
+    });
+  });
+
   it("records the response-completed boundary for correlated Android mutations", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-reschedule");
