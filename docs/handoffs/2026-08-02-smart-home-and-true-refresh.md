@@ -438,3 +438,31 @@ Verification:
 - Evidence: the user explicitly retained the earlier decision to defer the final
   unfiltered 69-test rerun; the corrected affected classes and physical-device smoke are
   recorded above, but Task 8 Step 3 remains unchecked.
+
+## 2026-08-02 master integration
+
+The branch was merged locally into `master` as `4bc81fb` with no conflicts. The merged
+tree was verified independently rather than relying only on the feature-worktree runs.
+The feature was not pushed, so no push-triggered CI run exists for this integration.
+
+Verification:
+- Command: `npm test`
+- Result: PASS
+- Evidence: on merged `master`, 32 backend files and 404 tests passed.
+
+Verification:
+- Command: `npm run typecheck` and `npm run build`
+- Result: PASS
+- Evidence: both commands exited 0 on merged `master`.
+
+Verification:
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: on merged `master`, Gradle reported `BUILD SUCCESSFUL`; 70 tasks executed or
+  were up to date. Four pre-existing unnecessary-cast warnings remain in
+  `EnforcementCoordinatorTest.kt`.
+
+Known deferred check:
+
+- Task 8 Step 3 remains intentionally open exactly as documented above. Do not infer an
+  unfiltered 69-test pass from the green standard lane or scoped E2E evidence.
