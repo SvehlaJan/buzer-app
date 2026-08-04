@@ -31,7 +31,7 @@ fun selectOwnerAgenda(
     val invalidIds = snapshot.invalidTasks.mapTo(mutableSetOf()) { it.id }
     val activeOwnerTasks = snapshot.tasks
         .distinctBy { it.id }
-        .filterNot(::isTerminalOrUnsupported)
+        .filterNot(::isTerminal)
         .filter { it.isAssignedToUser }
 
     val blocking = activeOwnerTasks
@@ -45,6 +45,7 @@ fun selectOwnerAgenda(
     val timed = activeOwnerTasks
         .asSequence()
         .filterNot { it.id in blockingIds }
+        .filter { it.hierarchyStatus != HierarchyStatus.unsupported }
         .mapNotNull { task -> task.toAgendaEntry(zoneId) }
         .toList()
 
@@ -66,11 +67,11 @@ fun selectOwnerAgenda(
     )
 }
 
-private fun isTerminalOrUnsupported(task: TaskSnapshotItem): Boolean =
+private fun isTerminal(task: TaskSnapshotItem): Boolean =
     task.isDeleted ||
         task.isCompleted ||
         task.state == CommitmentState.completed ||
-        task.hierarchyStatus == HierarchyStatus.unsupported
+        task.state == CommitmentState.deleted
 
 private fun TaskSnapshotItem.toAgendaEntry(zoneId: ZoneId): OwnerAgendaEntry? {
     val due = dueDatetime?.let { parseAgendaInstant(it, zoneId) } ?: return null

@@ -115,7 +115,9 @@ fun buildHomeScreenState(
         .filterNot { it.isDeleted || it.isCompleted || it.state == CommitmentState.completed || it.hierarchyStatus == HierarchyStatus.unsupported }
 
     val ownerAgenda = selectOwnerAgenda(snapshot, now, zoneId)
-    val reviewTasks = ownerAgenda.blocking
+    // Home omits unsupported hierarchy roots; Morning Review still exposes their
+    // authoritative invalid projection through the shared selector for repair.
+    val reviewTasks = ownerAgenda.blocking.filter { it.hierarchyStatus != HierarchyStatus.unsupported }
     val reviewIds = reviewTasks.map { it.id }.toSet()
     val reviewAttention = if (reviewTasks.isNotEmpty()) {
         val count = reviewTasks.size

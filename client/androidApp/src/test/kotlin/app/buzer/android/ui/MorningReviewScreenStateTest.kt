@@ -5,6 +5,7 @@ import app.buzer.android.ui.screens.MorningReviewPhase
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
@@ -29,6 +30,19 @@ class MorningReviewScreenStateTest {
         assertEquals(listOf("today"), loading.todayRows.map { it.taskId })
         assertEquals("Refresh failed. Showing last known tasks.", failed.warning)
         assertEquals(listOf("today"), failed.todayRows.map { it.taskId })
+    }
+
+    @Test
+    fun cachedSnapshotRemainsVisibleDuringInitialLoadingFlag() {
+        val state = buildMorningReviewScreenState(
+            snapshot(task("today", due = "2026-08-02T12:00:00Z", duration = 30)),
+            loading = true,
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(MorningReviewPhase.Summary, state.phase)
+        assertEquals(listOf("today"), state.todayRows.map { it.taskId })
     }
 
     @Test
@@ -72,6 +86,22 @@ class MorningReviewScreenStateTest {
         assertIs<MorningReviewBlockingCard.Repair>(state.blockingCards[0])
         assertIs<MorningReviewBlockingCard.SyncPending>(state.blockingCards[1])
         assertEquals(listOf("invalid", "pending"), state.blockingCards.map { it.taskId })
+    }
+
+    @Test
+    fun authoritativeUnsupportedInvalidOwnerUsesRepairAndDisablesStartDay() {
+        val unsupported = task(
+            "unsupported",
+            hierarchyStatus = HierarchyStatus.unsupported,
+            validationErrors = listOf("missing_due_datetime", "missing_duration"),
+            description = "  Bring the form.  "
+        )
+        val state = buildMorningReviewScreenState(snapshotWithInvalid(unsupported), now = NOW, zoneId = ZONE)
+
+        val card = assertIs<MorningReviewBlockingCard.Repair>(state.blockingCards.single())
+        assertEquals("No start time or duration set", card.problemText)
+        assertEquals("Bring the form.", card.description)
+        assertFalse(state.startDayEnabled)
     }
 
     @Test
@@ -128,6 +158,21 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
+    fun todayIncludesSameDayOverdueAndCrossMidnightCurrentEntries() {
+        val state = buildMorningReviewScreenState(
+            snapshot(
+                task("same-day-overdue", due = "2026-08-02T08:00:00Z", duration = 30),
+                task("cross-midnight-current", due = "2026-08-01T21:30:00Z", duration = 780)
+            ),
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(listOf("same-day-overdue"), state.overdueRows.map { it.taskId })
+        assertEquals(listOf("cross-midnight-current", "same-day-overdue"), state.todayRows.map { it.taskId })
+    }
+
+    @Test
     fun todayContainsCurrentAndTodaysStartsInStartEndIdOrderOnly() {
         val state = buildMorningReviewScreenState(
             snapshot(
@@ -172,10 +217,46 @@ class MorningReviewScreenStateTest {
         assertEquals(listOf("today"), state.todayRows.map { it.taskId })
     }
 
+    @Test
+    fun actionInFlightRetainsBlockingAndNoDataContentWhileDisablingGlobalActions() {
+        val blocking = buildMorningReviewScreenState(
+            snapshot(task("invalid", state = CommitmentState.invalid)),
+            actionInFlight = true,
+            now = NOW,
+            zoneId = ZONE
+        )
+        val noData = buildMorningReviewScreenState(
+            snapshot = null,
+            refreshError = "Offline",
+            actionInFlight = true,
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(MorningReviewPhase.Blocking, blocking.phase)
+        assertEquals(listOf("invalid"), blocking.blockingCards.map { it.taskId })
+        assertFalse(blocking.snoozeEnabled)
+        assertEquals(MorningReviewPhase.NoData, noData.phase)
+        assertEquals("Offline", noData.warning)
+        assertFalse(noData.startDayEnabled)
+        assertFalse(noData.snoozeEnabled)
+    }
+
     private fun snapshot(vararg items: TaskSnapshotItem) = SnapshotViewState(
         scheduleVersion = 1,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = emptyList(),
+        activeBlockers = emptyList(),
+        inProgressTasks = emptyList(),
+        startingToday = emptyList(),
+        healthWarnings = emptyList(),
+        tasks = items.toList()
+    )
+
+    private fun snapshotWithInvalid(vararg items: TaskSnapshotItem) = SnapshotViewState(
+        scheduleVersion = 1,
+        serverTime = "2026-08-02T10:00:00Z",
+        invalidTasks = items.toList(),
         activeBlockers = emptyList(),
         inProgressTasks = emptyList(),
         startingToday = emptyList(),
@@ -191,11 +272,15 @@ class MorningReviewScreenStateTest {
         duration: Int? = null,
         state: CommitmentState = CommitmentState.planned,
         reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
-        isCompleted: Boolean = false
+        isCompleted: Boolean = false,
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
+        validationErrors: List<String> = emptyList(),
+        description: String? = null
     ) = TaskSnapshotItem(
         id = id,
         todoistTaskId = "todoist-$id",
         title = id,
+        description = description,
         projectId = "project",
         assigneeId = assigneeId,
         creatorId = "creator",
@@ -207,7 +292,7 @@ class MorningReviewScreenStateTest {
         isCreatedByUser = true,
         isCompleted = isCompleted,
         isDeleted = false,
-        validationErrors = emptyList(),
+        validationErrors = validationErrors,
         startedAt = null,
         startDismissCount = 0,
         deadlineExtensionCount = 0,
@@ -216,6 +301,7 @@ class MorningReviewScreenStateTest {
         checklistItems = listOf(ChecklistItem("child", "Child", checked = false, order = 0, childRevision = "r1")),
         checkedCount = 0,
         totalCount = 1,
+        hierarchyStatus = hierarchyStatus,
         reconciliationStatus = reconciliationStatus
     )
 

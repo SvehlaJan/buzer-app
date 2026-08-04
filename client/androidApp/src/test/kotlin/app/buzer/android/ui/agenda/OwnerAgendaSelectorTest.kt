@@ -65,13 +65,35 @@ class OwnerAgendaSelectorTest {
     }
 
     @Test
+    fun authoritativeUnsupportedInvalidOwnerIsBlockingButNeverTimed() {
+        val unsupported = task(
+            "unsupported-invalid",
+            due = "2026-08-02T12:00:00Z",
+            duration = 30,
+            hierarchyStatus = HierarchyStatus.unsupported
+        )
+
+        val buckets = selectOwnerAgenda(
+            snapshot(tasks = listOf(unsupported), invalidTasks = listOf(unsupported)),
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(listOf("unsupported-invalid"), buckets.blocking.map { it.id })
+        assertTrue(buckets.overdue.isEmpty())
+        assertTrue(buckets.current.isEmpty())
+        assertTrue(buckets.future.isEmpty())
+    }
+
+    @Test
     fun excludesCompletedDeletedUnsupportedAndMalformedOwnerTasks() {
         val snapshot = snapshot(
             task("completed", due = "2026-08-02T12:00:00Z", duration = 30, isCompleted = true),
             task("deleted", due = "2026-08-02T12:00:00Z", duration = 30, isDeleted = true),
             task("unsupported", due = "2026-08-02T12:00:00Z", duration = 30, hierarchyStatus = HierarchyStatus.unsupported),
             task("bad-time", due = "not-a-time", duration = 30),
-            task("bad-duration", due = "2026-08-02T12:00:00Z", duration = 0)
+            task("bad-duration", due = "2026-08-02T12:00:00Z", duration = 0),
+            task("state-deleted", due = "2026-08-02T12:00:00Z", duration = 30, state = CommitmentState.deleted)
         )
 
         val buckets = selectOwnerAgenda(snapshot, now = NOW, zoneId = ZONE)
@@ -96,6 +118,21 @@ class OwnerAgendaSelectorTest {
         val buckets = selectOwnerAgenda(snapshot, now = NOW, zoneId = ZONE)
 
         assertEquals(listOf("overdue-b", "overdue-a"), buckets.overdue.map { it.task.id })
+        assertEquals(listOf("current-a", "current-b"), buckets.current.map { it.task.id })
+        assertEquals(listOf("future-a", "future-b"), buckets.future.map { it.task.id })
+    }
+
+    @Test
+    fun equalTimeEntriesUseStableTaskIdTieBreakers() {
+        val snapshot = snapshot(
+            task("current-b", due = "2026-08-02T09:00:00Z", duration = 120),
+            task("current-a", due = "2026-08-02T09:00:00Z", duration = 120),
+            task("future-b", due = "2026-08-02T12:00:00Z", duration = 30),
+            task("future-a", due = "2026-08-02T12:00:00Z", duration = 30)
+        )
+
+        val buckets = selectOwnerAgenda(snapshot, now = NOW, zoneId = ZONE)
+
         assertEquals(listOf("current-a", "current-b"), buckets.current.map { it.task.id })
         assertEquals(listOf("future-a", "future-b"), buckets.future.map { it.task.id })
     }

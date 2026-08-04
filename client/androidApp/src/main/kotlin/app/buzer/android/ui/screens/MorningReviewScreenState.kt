@@ -118,7 +118,12 @@ fun buildMorningReviewScreenState(
     }
 
     val today = now.atZone(zoneId).toLocalDate()
-    val todayEntries = (agenda.current + agenda.future.filter { it.start.atZone(zoneId).toLocalDate() == today })
+    val todayEntries = (
+        agenda.overdue.filter { it.start.atZone(zoneId).toLocalDate() == today } +
+            agenda.current +
+            agenda.future.filter { it.start.atZone(zoneId).toLocalDate() == today }
+        )
+        .distinctBy { it.task.id }
         .sortedWith(compareBy<OwnerAgendaEntry> { it.start }.thenBy { it.end }.thenBy { it.task.id })
     return screenState(
         phase = MorningReviewPhase.Summary,

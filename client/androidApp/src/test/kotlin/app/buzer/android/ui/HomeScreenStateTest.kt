@@ -296,6 +296,31 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun test10c_authoritativeUnsupportedInvalidStaysOutOfHomeAttentionAndKeepsUnassigned() {
+        val unsupported = createTaskFixture(
+            "unsupported",
+            isAssignedToUser = true,
+            hierarchyStatus = HierarchyStatus.unsupported
+        )
+        val unassigned = createTaskFixture("unassigned", isAssignedToUser = false, assigneeId = null)
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 1,
+            serverTime = "2026-08-02T10:00:00Z",
+            invalidTasks = listOf(unsupported),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = emptyList(),
+            healthWarnings = emptyList(),
+            tasks = listOf(unsupported, unassigned)
+        )
+
+        val state = buildHomeScreenState(snapshot, now = FIXED_NOW, zoneId = FIXED_ZONE, unassignedExpanded = true)
+
+        assertNull(state.reviewAttention)
+        assertEquals(listOf("unassigned"), state.unassigned.rows.map { it.taskId })
+    }
+
+    @Test
     fun test11_completedDeletedAndUnsupportedHierarchyAbsent() {
         val tasks = listOf(
             createTaskFixture("completed-1", dueDatetime = "2026-08-02T14:00:00Z", durationMinutes = 30, isCompleted = true),

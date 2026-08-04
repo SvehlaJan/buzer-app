@@ -483,6 +483,36 @@ Verification:
   `buildMorningReviewScreenState`; Task 6 should replace the legacy raw-task Compose
   branching with this explicit state model.
 
+### Task 4 review amendments (2026-08-05)
+
+- Authoritative unsupported owner tasks now remain in the selector's blocking bucket
+  for Morning Review Repair, while timed selector buckets exclude them and Home filters
+  them from its accepted repair-attention presentation.
+- `CommitmentState.deleted` is terminal even when `isDeleted` is false. Today summary
+  rows now include owner entries that started today and have since become overdue, as
+  well as cross-midnight current entries; duplicate IDs are removed before ordering.
+- The expanded matrix also locks cached `loading=true`, global action disabling while
+  retaining Blocking/NoData content, direct ID tie-breaking, and Repair-card problem
+  and trimmed-description presentation.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
+- Result: FAIL (expected RED)
+- Evidence: 38 focused tests ran with four expected behavioral failures: unsupported
+  authoritative invalid omission, `state=deleted` omission, and missing same-day
+  overdue Today rows (including its dependent Repair-state assertion).
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; 7 selector, 17 Home, and 14 Morning Review tests
+  passed (38 total, zero failures).
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
 ---
 
 ## Task 3 runtime-hardening correction (2026-08-05)
