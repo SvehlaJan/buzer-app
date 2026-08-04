@@ -80,20 +80,75 @@ class MorningReviewScheduler(
         val desiredScheduledAlarm = desired.asScheduledAlarm()
         val replacementRequired = previousAlarm?.identity() != desiredScheduledAlarm.identity
         val persisted = next.copy(scheduledAlarm = desired)
-        var desiredWasAttempted = false
+
+        // This legacy identity predates occurrence-keyed Morning Review alarms.
+        alarmScheduler.cancel(legacyIdentity)
+        if (replacementRequired) previousAlarm?.let { alarmScheduler.cancel(it.identity()) }
 
         try {
-            // This legacy identity predates occurrence-keyed Morning Review alarms.
-            alarmScheduler.cancel(legacyIdentity)
-            if (replacementRequired) previousAlarm?.let { alarmScheduler.cancel(it.identity()) }
             // AlarmManager is cleared on reboot/package replacement while the persisted
             // identity remains. Re-scheduling the same PendingIntent replaces/re-arms it.
-            desiredWasAttempted = true
             alarmScheduler.schedule(desiredScheduledAlarm)
+        } catch (scheduleFailure: Throwable) {
+            recoverScheduleFailure(
+                primaryFailure = scheduleFailure,
+                previousAlarm = previousAlarm,
+                desiredAlarm = desiredScheduledAlarm,
+                replacementRequired = replacementRequired
+            )
+            throw scheduleFailure
+        }
+
+        try {
             stateStore.replace(persisted)
-        } catch (error: Throwable) {
-            if (desiredWasAttempted) runCatching { alarmScheduler.cancel(desiredScheduledAlarm.identity) }
-            throw error
+        } catch (persistenceFailure: Throwable) {
+            recoverPersistenceFailure(persistenceFailure, desiredScheduledAlarm)
+            throw persistenceFailure
+        }
+    }
+
+    private fun recoverScheduleFailure(
+        primaryFailure: Throwable,
+        previousAlarm: MorningReviewScheduledAlarm?,
+        desiredAlarm: ScheduledAlarm,
+        replacementRequired: Boolean
+    ) {
+        // A failed re-arm for the same identity may leave the previously valid alarm in place.
+        // Never cancel it merely because the replacement call reported a failure.
+        if (!replacementRequired) return
+
+        recover(primaryFailure) { alarmScheduler.cancel(desiredAlarm.identity) }
+        previousAlarm?.let { previous ->
+            recover(primaryFailure) { alarmScheduler.schedule(previous.asScheduledAlarm()) }
+        }
+    }
+
+    private fun recoverPersistenceFailure(
+        primaryFailure: Throwable,
+        desiredAlarm: ScheduledAlarm
+    ) {
+        val observedState = try {
+            stateStore.read()
+        } catch (readFailure: Throwable) {
+            primaryFailure.addSuppressed(readFailure)
+            // Scheduling succeeded. Without an observable state authority, retain that armed
+            // identity rather than cancelling an alarm the store may already have recorded.
+            return
+        }
+        val observedAlarm = observedState.scheduledAlarm
+        if (observedAlarm?.identity() == desiredAlarm.identity) return
+
+        recover(primaryFailure) { alarmScheduler.cancel(desiredAlarm.identity) }
+        observedAlarm?.let { observed ->
+            recover(primaryFailure) { alarmScheduler.schedule(observed.asScheduledAlarm()) }
+        }
+    }
+
+    private inline fun recover(primaryFailure: Throwable, action: () -> Unit) {
+        try {
+            action()
+        } catch (recoveryFailure: Throwable) {
+            primaryFailure.addSuppressed(recoveryFailure)
         }
     }
 

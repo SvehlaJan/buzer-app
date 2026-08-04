@@ -33,6 +33,7 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
     @Test
@@ -47,6 +48,7 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
     @Test
@@ -66,6 +68,7 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
     @Test
@@ -197,7 +200,7 @@ class MorningReviewSchedulerTest {
         val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = old),
-            scheduleFailuresRemaining = 1
+            scheduleFailuresAfterArmRemaining = 1
         )
 
         assertFailsWith<IllegalStateException> {
@@ -210,11 +213,13 @@ class MorningReviewSchedulerTest {
                 Cancel(legacyIdentity),
                 Cancel(old.identity()),
                 Schedule(desired.asAlarm()),
-                Cancel(desired.identity())
+                Cancel(desired.identity()),
+                Schedule(old.asAlarm())
             ),
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = old), fixture.store.read())
+        assertEquals(setOf(old.identity()), fixture.alarmScheduler.activeIdentities)
 
         fixture.alarmScheduler.events.clear()
         fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
@@ -224,10 +229,31 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
     @Test
-    fun transientStorageFailureAfterWriteCleansUpAndRetryRearmsTheSameDesiredIdentity() {
+    fun equalIdentityScheduleFailureKeepsThePreviouslyArmedIdentityConsistent() {
+        val desired = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = desired),
+            scheduleFailuresAfterArmRemaining = 1
+        )
+
+        assertFailsWith<IllegalStateException> {
+            fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+        }
+
+        assertEquals(
+            listOf(Cancel(legacyIdentity), Schedule(desired.asAlarm())),
+            fixture.alarmScheduler.events
+        )
+        assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
+    }
+
+    @Test
+    fun transientStorageFailureAfterWriteKeepsDesiredArmedAndRetryRearmsIt() {
         val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = old),
@@ -243,12 +269,12 @@ class MorningReviewSchedulerTest {
             listOf(
                 Cancel(legacyIdentity),
                 Cancel(old.identity()),
-                Schedule(desired.asAlarm()),
-                Cancel(desired.identity())
+                Schedule(desired.asAlarm())
             ),
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
 
         fixture.alarmScheduler.events.clear()
         fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
@@ -258,16 +284,81 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
+    }
+
+    @Test
+    fun storageFailureBeforeWriteRestoresTheObservedPreviousIdentity() {
+        val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = old),
+            storageFailuresBeforeWriteRemaining = 1
+        )
+
+        assertFailsWith<IllegalStateException> {
+            fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+        }
+
+        val desired = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        assertEquals(
+            listOf(
+                Cancel(legacyIdentity),
+                Cancel(old.identity()),
+                Schedule(desired.asAlarm()),
+                Cancel(desired.identity()),
+                Schedule(old.asAlarm())
+            ),
+            fixture.alarmScheduler.events
+        )
+        assertEquals(MorningReviewLocalState(scheduledAlarm = old), fixture.store.read())
+        assertEquals(setOf(old.identity()), fixture.alarmScheduler.activeIdentities)
+    }
+
+    @Test
+    fun cleanupCancellationFailureIsSuppressedAndDoesNotClaimCleanRollback() {
+        val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
+        val desired = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = old),
+            scheduleFailuresAfterArmRemaining = 1
+        )
+        fixture.alarmScheduler.cancellationFailureIdentity = desired.identity()
+        fixture.alarmScheduler.cancellationFailuresRemaining = 1
+
+        val failure = assertFailsWith<IllegalStateException> {
+            fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+        }
+
+        assertEquals("alarm manager unavailable", failure.message)
+        assertEquals(listOf("unable to cancel alarm"), failure.suppressed.map(Throwable::message))
+        assertEquals(MorningReviewLocalState(scheduledAlarm = old), fixture.store.read())
+        assertEquals(
+            setOf(old.identity(), desired.identity()),
+            fixture.alarmScheduler.activeIdentities
+        )
+
+        fixture.alarmScheduler.events.clear()
+        fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
     private fun fixture(
         initialState: MorningReviewLocalState = MorningReviewLocalState(),
-        scheduleFailuresRemaining: Int = 0,
+        scheduleFailuresAfterArmRemaining: Int = 0,
+        storageFailuresBeforeWriteRemaining: Int = 0,
         storageFailuresAfterWriteRemaining: Int = 0
     ): Fixture {
-        val storage = TestStorage(initialState, storageFailuresAfterWriteRemaining)
+        val storage = TestStorage(
+            initialState = initialState,
+            failuresBeforeWriteRemaining = storageFailuresBeforeWriteRemaining,
+            failuresAfterWriteRemaining = storageFailuresAfterWriteRemaining
+        )
         val store = MorningReviewLocalStateStore(storage)
-        val alarmScheduler = RecordingAlarmScheduler(scheduleFailuresRemaining)
+        val alarmScheduler = RecordingAlarmScheduler(
+            initiallyActive = initialState.scheduledAlarm?.let { setOf(it.identity()) }.orEmpty(),
+            scheduleFailuresAfterArmRemaining = scheduleFailuresAfterArmRemaining
+        )
         return Fixture(
             store = store,
             alarmScheduler = alarmScheduler,
@@ -292,25 +383,36 @@ class MorningReviewSchedulerTest {
     private data class Cancel(val identity: ScheduledAlarmIdentity) : AlarmEvent
 
     private class RecordingAlarmScheduler(
-        private var scheduleFailuresRemaining: Int
+        initiallyActive: Set<ScheduledAlarmIdentity>,
+        private var scheduleFailuresAfterArmRemaining: Int
     ) : AlarmScheduler {
         val events = mutableListOf<AlarmEvent>()
+        val activeIdentities = initiallyActive.toMutableSet()
+        var cancellationFailureIdentity: ScheduledAlarmIdentity? = null
+        var cancellationFailuresRemaining: Int = 0
 
         override fun schedule(alarm: ScheduledAlarm) {
             events += Schedule(alarm)
-            if (scheduleFailuresRemaining > 0) {
-                scheduleFailuresRemaining -= 1
+            activeIdentities += alarm.identity
+            if (scheduleFailuresAfterArmRemaining > 0) {
+                scheduleFailuresAfterArmRemaining -= 1
                 error("alarm manager unavailable")
             }
         }
 
         override fun cancel(identity: ScheduledAlarmIdentity) {
             events += Cancel(identity)
+            if (identity == cancellationFailureIdentity && cancellationFailuresRemaining > 0) {
+                cancellationFailuresRemaining -= 1
+                error("unable to cancel alarm")
+            }
+            activeIdentities -= identity
         }
     }
 
     private inner class TestStorage(
         initialState: MorningReviewLocalState,
+        private var failuresBeforeWriteRemaining: Int,
         private var failuresAfterWriteRemaining: Int
     ) : MorningReviewStateStorage {
         private var values = encode(initialState)
@@ -318,6 +420,10 @@ class MorningReviewSchedulerTest {
         override fun read(): Map<String, String?> = values.toMap()
 
         override fun replace(values: Map<String, String?>) {
+            if (failuresBeforeWriteRemaining > 0) {
+                failuresBeforeWriteRemaining -= 1
+                error("storage unavailable before write")
+            }
             this.values = values.toMap()
             if (failuresAfterWriteRemaining > 0) {
                 failuresAfterWriteRemaining -= 1

@@ -211,3 +211,55 @@ Verification:
 - Command: `git diff --check`
 - Result: PASS
 - Evidence: no whitespace errors before commit.
+
+---
+
+## Task 2 persistence-consistency amendment (2026-08-05)
+
+Review found a second recovery defect in the previous re-arm correction: it cancelled
+the desired AlarmManager identity after every persistence exception. Android
+preferences can expose updated in-memory values even when durable `commit()` reports
+failure, so that cleanup could leave local state pointing at an alarm the scheduler
+had just cancelled.
+
+### Refined recovery invariant
+
+- Schedule failure and persistence failure now recover separately. A failed schedule
+  for a *different* identity cleans up the attempted desired identity and re-arms the
+  prior stored identity; an equal-identity re-arm failure leaves its possibly valid
+  existing identity untouched.
+- After persistence failure, the scheduler best-effort reads the observable local
+  state. If it reports desired, the successfully armed desired alarm remains in
+  place. If it reports a different/previous alarm (or none), desired is cancelled
+  and the observed alarm is re-armed when present. If observation itself fails, the
+  already-successful desired schedule is retained and the read failure is attached to
+  the original exception.
+- Recovery cleanup/re-arm failures are never silently swallowed: the operation still
+  throws its primary failure with each recovery failure added as a suppressed
+  exception. The next reconcile remains capable of restoring the one-alarm state.
+- The scheduler fake now records active identities as well as calls. Tests lock one
+  active identity in ordinary cases; after intentionally failed cleanup they assert
+  the inconsistent active set is visible through suppressed error evidence and that a
+  subsequent reconcile converges it back to desired.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest'`
+- Result: FAIL (expected RED; controller-run)
+- Evidence: exactly five intended recovery failures before production changes:
+  equal-identity schedule failure, cleanup cancellation failure, write-then-throw
+  persistence failure, transient schedule failure, and before-write persistence
+  failure.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest' --tests '*Alarm*Test'`
+- Result: PASS (controller-run)
+- Evidence: `BUILD SUCCESSFUL in 1s`; 38 actionable tasks, 6 executed and 32
+  up-to-date. This was the authoritative run from `client/`; the env-prefixed form
+  was sandbox-denied before Gradle because of the shared `~/.gradle` lock.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors before follow-up commit.
