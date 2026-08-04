@@ -334,15 +334,16 @@ class BlockerActivityFakeBackendTest {
         ActivityScenario.launch(MainActivity::class.java)
 
         waitForAnyText("Incomplete checklist task")
+        val (weekdayLabel, dateLabel) = displayedHomeDateLabels()
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Next year task"))
         repeat(6) {
             composeRule.onNode(hasScrollAction()).performTouchInput { swipeUp() }
         }
         waitForContentDescription("Back to top")
         composeRule.onNodeWithContentDescription("Back to top").performClick()
-        waitForText("Sunday")
-        composeRule.onNodeWithText("Sunday").assertIsDisplayed()
-        composeRule.onNodeWithText("August 2").assertIsDisplayed()
+        waitForExactText(weekdayLabel)
+        composeRule.onNodeWithText(weekdayLabel).assertIsDisplayed()
+        composeRule.onNodeWithText(dateLabel).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Back to top").assertDoesNotExist()
     }
 
@@ -697,6 +698,22 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
+    private fun displayedHomeDateLabels(): Pair<String, String> {
+        val visibleTexts = composeRule
+            .onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text))
+            .fetchSemanticsNodes()
+            .flatMap { node ->
+                node.config.getOrNull(SemanticsProperties.Text)
+                    .orEmpty()
+                    .map { it.text }
+            }
+        val weekday = visibleTexts.firstOrNull(WEEKDAY_LABELS::contains)
+            ?: throw AssertionError("Expected a displayed Home weekday label, found $visibleTexts")
+        val date = visibleTexts.firstOrNull(HOME_DATE_LABEL::matches)
+            ?: throw AssertionError("Expected a displayed Home date label, found $visibleTexts")
+        return weekday to date
+    }
+
     private fun waitForComputedRescheduleLabel(): String {
         val matcher = Regex("""Reschedule \d{2}:\d{2}–\d{2}:\d{2}""")
         var match = ""
@@ -929,5 +946,17 @@ class BlockerActivityFakeBackendTest {
 
     private companion object {
         const val CORRELATION_TAG = "BuzerE2ECorrelation"
+        val WEEKDAY_LABELS = setOf(
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+        )
+        val HOME_DATE_LABEL = Regex(
+            "^(January|February|March|April|May|June|July|August|September|October|November|December) \\d{1,2}$"
+        )
     }
 }
