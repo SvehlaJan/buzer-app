@@ -18,9 +18,9 @@ object MorningReviewDependencies {
         priorityRetryDuration = Duration.ofMinutes(1)
     )
 
-    fun alarmHandler(context: Context): MorningReviewAlarmHandler = MorningReviewAlarmHandler(
+    internal fun alarmHandler(context: Context): MorningReviewAlarmHandler = MorningReviewAlarmHandler(
         stateStore = MorningReviewLocalStateStore.fromContext(context),
-        scheduler = scheduler(context),
+        actions = MorningReviewSchedulerActions(scheduler(context)),
         cachedSnapshotLoader = { SnapshotStore(context.applicationContext).load()?.let(SnapshotReducer::reduce) },
         nowProvider = Instant::now,
         zoneProvider = ZoneId::systemDefault

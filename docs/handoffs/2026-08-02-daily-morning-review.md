@@ -335,3 +335,64 @@ Manual verification: the real-backend instrumentation harness was attempted with
 Assumption: occurrence keys remain opaque; delivery identity is validated by matching the current persisted typed alarm's key rather than parsing delivery text. `dueDatetime` remains the start and `due + duration` the deadline per `docs/decisions/2026-07-05-todoist-native-due-semantics.md`.
 
 Next recommended step: controller review/commit this Task 3 slice, then Task 4 can extract shared owner-agenda classification without changing this local delivery authority.
+
+---
+
+## Task 3 identity/dispatch correction (2026-08-05)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Scope: narrowly correct the Task 3 delivery review findings; plan checkboxes remain unchanged for controller review.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandler.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewDependencies.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduleCalculator.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduler.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandlerTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/BlockerPriorityResolverTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/AlarmReceiverDispatchTest.kt`
+- this handoff
+
+### Correction notes
+
+- Morning Review delivery now passes a full `ScheduledAlarmIdentity` from the receiver. The handler requires `taskId == "morning-review"`, `AlarmKind.MORNING_REVIEW`, and the exact persisted occurrence key before any scheduler action.
+- `morningReviewOccurrenceKey` is the shared deterministic builder used by calculation, priority-retry scheduling, and handler integrity checking. The handler never parses arbitrary occurrence text; it recomputes the opaque key from persisted typed reason/date/instant and reconciles if that state is inconsistent.
+- The handler's `MorningReviewAlarmActions` seam records one intentional action per non-stale branch: stale/wrong identity does nothing; corrupt/acknowledged/wrong-date reconciles; valid/no-cache consumes; Start or Deadline defers. Production delegates that seam to `MorningReviewScheduler`.
+- Priority resolution now treats `SnapshotViewState.invalidTasks` as authoritative exclusion in addition to defensive raw-field checks.
+- `dispatchAlarmDelivery` is Android-free production dispatch used by `AlarmReceiver`; tests verify handler-before-open for Launch, no open for Deferred/Ignore, and unchanged pre-start/start/deadline paths. Reconcile receiver and manifest remain unchanged.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest' --tests '*AlarmReceiver*Test'`
+- Result: FAIL (expected RED)
+- Evidence: tests initially failed to compile because the old handler accepted only a string key and neither the scheduler-action nor receiver-dispatch seam existed.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest' --tests '*AlarmReceiver*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; handler identity/action, authoritative-invalid, and dispatch-path tests all passed.
+
+Verification:
+- Command: `./gradlew :androidApp:processDebugMainManifest :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL` after the receiver continues to use the unchanged manifest registration.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*Alarm*Test' --tests '*Enforcement*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; matching existing alarm and enforcement JVM suites remained green.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors before follow-up commit.
+
+### Assumptions and next step
+
+The original real-backend instrumentation limitation remains unchanged: the sandboxed harness could not create the `tsx` IPC socket and escalation was rejected by the environment usage-limit gate; no workaround was attempted. Next: controller review/commit this correction, then continue the plan from Task 4.
+
+An initial attempt to run focused, manifest, and broad Gradle commands concurrently raced on the worktree's Kotlin output directory. The broad suite completed successfully, while the other two reported missing generated classes; both focused and manifest commands were rerun serially and passed as recorded above.

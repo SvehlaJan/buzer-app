@@ -62,15 +62,32 @@ class BlockerPriorityResolverTest {
         assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
     }
 
-    private fun snapshot(vararg tasks: TaskSnapshotItem): SnapshotViewState = SnapshotViewState(
+    @Test
+    fun authoritativeInvalidProjectionNeverSuppressesReview() {
+        val task = task()
+        val snapshot = snapshot(tasks = listOf(task), invalidTasks = listOf(task))
+
+        assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
+    }
+
+    private fun snapshot(
+        vararg taskItems: TaskSnapshotItem,
+        tasks: List<TaskSnapshotItem> = taskItems.toList(),
+        invalidTasks: List<TaskSnapshotItem>? = null
+    ): SnapshotViewState = SnapshotViewState(
         scheduleVersion = 1,
         serverTime = now.toString(),
-        invalidTasks = emptyList(),
+        invalidTasks = invalidTasks ?: tasks.filter {
+            it.state == CommitmentState.invalid ||
+                it.validationErrors.isNotEmpty() ||
+                it.hierarchyStatus != HierarchyStatus.valid ||
+                it.reconciliationStatus == ReconciliationStatus.pending
+        },
         activeBlockers = emptyList(),
         inProgressTasks = emptyList(),
         startingToday = emptyList(),
         healthWarnings = emptyList(),
-        tasks = tasks.toList()
+        tasks = tasks
     )
 
     private fun task(

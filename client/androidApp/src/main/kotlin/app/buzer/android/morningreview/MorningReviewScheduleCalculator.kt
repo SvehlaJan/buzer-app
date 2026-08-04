@@ -4,7 +4,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
-import java.util.Locale
 
 data class MorningReviewAvailability(
     val today: LocalDate,
@@ -99,7 +98,7 @@ class MorningReviewScheduleCalculator(
         reviewDate = reviewDate,
         reason = reason,
         triggerAt = triggerAt,
-        occurrenceKey = "morning-review:${reason.name.lowercase(Locale.ROOT)}:$reviewDate:${triggerAt.toEpochMilli()}"
+        occurrenceKey = morningReviewOccurrenceKey(reason, reviewDate, triggerAt)
     )
 
     private fun reviewInstant(date: LocalDate, zoneId: ZoneId): Instant =

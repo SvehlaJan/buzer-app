@@ -28,18 +28,17 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        when (kind) {
-            AlarmKind.PRE_START_WARNING -> showPreStartNotification(context, taskId, occurrenceKey)
-            AlarmKind.MORNING_REVIEW -> {
-                if (MorningReviewDependencies.alarmHandler(context.applicationContext).handle(occurrenceKey) ==
-                    MorningReviewAlarmDecision.Launch
-                ) {
-                    openBlocker(context, taskId, occurrenceKey, kind)
-                }
-            }
-            AlarmKind.START_BLOCKER,
-            AlarmKind.DEADLINE_BLOCKER -> openBlocker(context, taskId, occurrenceKey, kind)
-        }
+        dispatchAlarmDelivery(
+            kind = kind,
+            handleMorningReview = {
+                val identity = taskId?.let {
+                    ScheduledAlarmIdentity(it, occurrenceKey, AlarmKind.MORNING_REVIEW)
+                } ?: return@dispatchAlarmDelivery MorningReviewAlarmDecision.Ignore
+                MorningReviewDependencies.alarmHandler(context.applicationContext).handle(identity)
+            },
+            showPreStart = { showPreStartNotification(context, taskId, occurrenceKey) },
+            openBlocker = { blockerKind -> openBlocker(context, taskId, occurrenceKey, blockerKind) }
+        )
     }
 
     private fun openBlocker(context: Context, taskId: String?, occurrenceKey: String, kind: AlarmKind) {
@@ -129,5 +128,21 @@ class AlarmReceiver : BroadcastReceiver() {
 
     private fun notificationId(taskId: String, occurrenceKey: String, kind: AlarmKind): Int {
         return AlarmIntentFactory.requestCode(taskId, occurrenceKey, kind)
+    }
+}
+
+internal fun dispatchAlarmDelivery(
+    kind: AlarmKind,
+    handleMorningReview: () -> MorningReviewAlarmDecision,
+    showPreStart: () -> Unit,
+    openBlocker: (AlarmKind) -> Unit
+) {
+    when (kind) {
+        AlarmKind.PRE_START_WARNING -> showPreStart()
+        AlarmKind.MORNING_REVIEW -> {
+            if (handleMorningReview() == MorningReviewAlarmDecision.Launch) openBlocker(kind)
+        }
+        AlarmKind.START_BLOCKER,
+        AlarmKind.DEADLINE_BLOCKER -> openBlocker(kind)
     }
 }

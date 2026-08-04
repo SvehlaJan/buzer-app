@@ -7,7 +7,6 @@ import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Locale
 
 /** Maintains the one durable AlarmManager identity owned by Morning Review. */
 class MorningReviewScheduler(
@@ -62,7 +61,7 @@ class MorningReviewScheduler(
             reviewDate = fired.reviewDate,
             reason = MorningReviewAlarmReason.PriorityRetry,
             triggerAt = now.plus(priorityRetryDuration),
-            occurrenceKey = occurrenceKey(
+            occurrenceKey = morningReviewOccurrenceKey(
                 reason = MorningReviewAlarmReason.PriorityRetry,
                 reviewDate = fired.reviewDate,
                 triggerAt = now.plus(priorityRetryDuration)
@@ -161,14 +160,7 @@ class MorningReviewScheduler(
 
     private fun MorningReviewScheduledAlarm.identity(): ScheduledAlarmIdentity = asScheduledAlarm().identity
 
-    private fun occurrenceKey(
-        reason: MorningReviewAlarmReason,
-        reviewDate: java.time.LocalDate,
-        triggerAt: Instant
-    ): String = "morning-review:${reason.name.lowercase(Locale.ROOT)}:$reviewDate:${triggerAt.toEpochMilli()}"
-
     private companion object {
-        const val MORNING_REVIEW_TASK_ID = "morning-review"
         val legacyIdentity = ScheduledAlarmIdentity(
             taskId = MORNING_REVIEW_TASK_ID,
             occurrenceKey = MORNING_REVIEW_TASK_ID,
