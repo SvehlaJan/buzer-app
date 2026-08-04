@@ -321,6 +321,27 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun test10d_stateDeletedUnassignedTaskIsAbsent() {
+        val deletedUnassigned = createTaskFixture(
+            "deleted-unassigned",
+            isAssignedToUser = false,
+            assigneeId = null,
+            state = CommitmentState.deleted,
+            isDeleted = false
+        )
+
+        val state = buildHomeScreenState(
+            snapshot(listOf(deletedUnassigned)),
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            unassignedExpanded = true
+        )
+
+        assertEquals(0, state.unassigned.totalCount)
+        assertTrue(state.unassigned.rows.isEmpty())
+    }
+
+    @Test
     fun test11_completedDeletedAndUnsupportedHierarchyAbsent() {
         val tasks = listOf(
             createTaskFixture("completed-1", dueDatetime = "2026-08-02T14:00:00Z", durationMinutes = 30, isCompleted = true),

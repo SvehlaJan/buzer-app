@@ -112,7 +112,13 @@ fun buildHomeScreenState(
 
     val activeTasks = snapshot.tasks
         .distinctBy { it.id }
-        .filterNot { it.isDeleted || it.isCompleted || it.state == CommitmentState.completed || it.hierarchyStatus == HierarchyStatus.unsupported }
+        .filterNot {
+            it.isDeleted ||
+                it.isCompleted ||
+                it.state == CommitmentState.completed ||
+                it.state == CommitmentState.deleted ||
+                it.hierarchyStatus == HierarchyStatus.unsupported
+        }
 
     val ownerAgenda = selectOwnerAgenda(snapshot, now, zoneId)
     // Home omits unsupported hierarchy roots; Morning Review still exposes their

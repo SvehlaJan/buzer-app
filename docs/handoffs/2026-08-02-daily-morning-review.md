@@ -494,6 +494,9 @@ Verification:
 - The expanded matrix also locks cached `loading=true`, global action disabling while
   retaining Blocking/NoData content, direct ID tie-breaking, and Repair-card problem
   and trimmed-description presentation.
+- Home's separate Unassigned projection now also excludes
+  `CommitmentState.deleted` records when `isDeleted` is false, matching the selector's
+  terminal semantics.
 
 Verification:
 - Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
@@ -507,6 +510,23 @@ Verification:
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL`; 7 selector, 17 Home, and 14 Morning Review tests
   passed (38 total, zero failures).
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*HomeScreenStateTest'`
+- Result: FAIL (expected RED)
+- Evidence: the added state-deleted/unassigned regression rendered one Unassigned row
+  before Home's active-task terminal filter was corrected.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; 7 selector, 18 Home, and 14 Morning Review tests
+  passed (39 total, zero failures).
 
 Verification:
 - Command: `git diff --check`
