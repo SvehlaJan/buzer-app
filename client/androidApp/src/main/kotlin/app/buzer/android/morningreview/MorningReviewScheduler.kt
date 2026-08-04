@@ -86,10 +86,10 @@ class MorningReviewScheduler(
             // This legacy identity predates occurrence-keyed Morning Review alarms.
             alarmScheduler.cancel(legacyIdentity)
             if (replacementRequired) previousAlarm?.let { alarmScheduler.cancel(it.identity()) }
-            if (replacementRequired) {
-                desiredWasAttempted = true
-                alarmScheduler.schedule(desiredScheduledAlarm)
-            }
+            // AlarmManager is cleared on reboot/package replacement while the persisted
+            // identity remains. Re-scheduling the same PendingIntent replaces/re-arms it.
+            desiredWasAttempted = true
+            alarmScheduler.schedule(desiredScheduledAlarm)
             stateStore.replace(persisted)
         } catch (error: Throwable) {
             if (desiredWasAttempted) runCatching { alarmScheduler.cancel(desiredScheduledAlarm.identity) }

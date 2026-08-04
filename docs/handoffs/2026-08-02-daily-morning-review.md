@@ -165,3 +165,49 @@ Manual verification:
 - The Task 3 alarm handler validates current occurrence/date/acknowledgement before calling `consume` or `deferForPriority`; both scheduler methods additionally reject a stale persisted occurrence defensively.
 - Full real-backend instrumentation is deferred because this task does not alter the client UI; Task 9 owns the required Morning Review alarm instrumentation.
 - Next recommended step: Task 3 can build delivery validation, priority resolution, and reconciliation broadcasts using `MorningReviewDependencies.scheduler(context)`.
+
+---
+
+## Task 2 recovery-review amendment (2026-08-05)
+
+Review found that an equal persisted identity was incorrectly treated as evidence
+that the matching AlarmManager alarm remained armed. That is false after reboot or
+package replacement: durable preferences survive while the OS alarm table does not.
+
+### Correction
+
+- `replaceAlarm` now always calls `schedule(desired)` after the legacy/different-
+  identity cancels and before persistence. The old identity is still cancelled only
+  when it differs, so scheduling the same PendingIntent is a replace/re-arm rather
+  than an additional Morning Review identity.
+- The equal-identity test now proves the re-arm call. Transient scheduler failure
+  proves immediate desired-identity cleanup then a successful retry. The storage
+  case intentionally writes the desired state and then throws (the dangerous
+  SharedPreferences-style outcome); its retry proves that an equal stored identity
+  is nevertheless armed again.
+- Dispatch coverage now explicitly locks AlarmClock classification for Start,
+  Deadline, and Morning Review, with pre-start warning remaining exact/idle.
+- Context7 lookup against `/websites/developer_android` reconfirmed that a matching
+  `PendingIntent` represents the same operation and `FLAG_UPDATE_CURRENT` retains
+  that instance while replacing extras. This supports reusing the same identity for
+  the required re-arm path.
+
+### Verification
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest' --tests '*AndroidAlarmSchedulerTest'`
+- Result: FAIL (expected RED)
+- Evidence: before the fix, equal-identity reconciliation emitted only the legacy
+  cancel; three tests failed, including the equal-identity re-arm and the
+  write-then-throw storage retry recovery case.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest' --tests '*Alarm*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; the scheduler recovery matrix and all alarm tests
+  passed after the unconditional re-arm correction.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors before commit.

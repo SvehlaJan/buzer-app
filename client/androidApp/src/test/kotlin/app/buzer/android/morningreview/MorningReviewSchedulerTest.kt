@@ -36,13 +36,16 @@ class MorningReviewSchedulerTest {
     }
 
     @Test
-    fun identicalReconcileDoesNotStackOrChangeTheStoredIdentity() {
+    fun identicalReconcileRearmsTheSameIdentityWithoutStackingOrChangingIt() {
         val desired = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
         val fixture = fixture(MorningReviewLocalState(scheduledAlarm = desired))
 
         fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
 
-        assertEquals(listOf<AlarmEvent>(Cancel(legacyIdentity)), fixture.alarmScheduler.events)
+        assertEquals(
+            listOf(Cancel(legacyIdentity), Schedule(desired.asAlarm())),
+            fixture.alarmScheduler.events
+        )
         assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
     }
 
@@ -73,7 +76,11 @@ class MorningReviewSchedulerTest {
         fixture.alarmScheduler.events.clear()
         fixture.scheduler.reconcile(instant("2026-08-03T07:01:00Z"), utc)
 
-        assertEquals(listOf<AlarmEvent>(Cancel(legacyIdentity)), fixture.alarmScheduler.events)
+        val desired = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        assertEquals(
+            listOf(Cancel(legacyIdentity), Schedule(desired.asAlarm())),
+            fixture.alarmScheduler.events
+        )
     }
 
     @Test
@@ -186,11 +193,11 @@ class MorningReviewSchedulerTest {
     }
 
     @Test
-    fun scheduleFailureDoesNotRecordAnUnarmedAlarmAndLeavesPreviousStateForRecovery() {
+    fun transientScheduleFailureCleansUpAndRetryArmsTheDesiredAlarm() {
         val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = old),
-            failSchedule = true
+            scheduleFailuresRemaining = 1
         )
 
         assertFailsWith<IllegalStateException> {
@@ -208,14 +215,23 @@ class MorningReviewSchedulerTest {
             fixture.alarmScheduler.events
         )
         assertEquals(MorningReviewLocalState(scheduledAlarm = old), fixture.store.read())
+
+        fixture.alarmScheduler.events.clear()
+        fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(
+            listOf(Cancel(legacyIdentity), Cancel(old.identity()), Schedule(desired.asAlarm())),
+            fixture.alarmScheduler.events
+        )
+        assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
     }
 
     @Test
-    fun storageFailureCancelsNewAlarmAndLeavesPreviousStateForRecovery() {
+    fun transientStorageFailureAfterWriteCleansUpAndRetryRearmsTheSameDesiredIdentity() {
         val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = old),
-            failStorageOnReplace = true
+            storageFailuresAfterWriteRemaining = 1
         )
 
         assertFailsWith<IllegalStateException> {
@@ -232,17 +248,26 @@ class MorningReviewSchedulerTest {
             ),
             fixture.alarmScheduler.events
         )
-        assertEquals(MorningReviewLocalState(scheduledAlarm = old), fixture.store.read())
+        assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
+
+        fixture.alarmScheduler.events.clear()
+        fixture.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(
+            listOf(Cancel(legacyIdentity), Schedule(desired.asAlarm())),
+            fixture.alarmScheduler.events
+        )
+        assertEquals(MorningReviewLocalState(scheduledAlarm = desired), fixture.store.read())
     }
 
     private fun fixture(
         initialState: MorningReviewLocalState = MorningReviewLocalState(),
-        failSchedule: Boolean = false,
-        failStorageOnReplace: Boolean = false
+        scheduleFailuresRemaining: Int = 0,
+        storageFailuresAfterWriteRemaining: Int = 0
     ): Fixture {
-        val storage = TestStorage(initialState, failStorageOnReplace)
+        val storage = TestStorage(initialState, storageFailuresAfterWriteRemaining)
         val store = MorningReviewLocalStateStore(storage)
-        val alarmScheduler = RecordingAlarmScheduler(failSchedule)
+        val alarmScheduler = RecordingAlarmScheduler(scheduleFailuresRemaining)
         return Fixture(
             store = store,
             alarmScheduler = alarmScheduler,
@@ -267,13 +292,16 @@ class MorningReviewSchedulerTest {
     private data class Cancel(val identity: ScheduledAlarmIdentity) : AlarmEvent
 
     private class RecordingAlarmScheduler(
-        private val failSchedule: Boolean
+        private var scheduleFailuresRemaining: Int
     ) : AlarmScheduler {
         val events = mutableListOf<AlarmEvent>()
 
         override fun schedule(alarm: ScheduledAlarm) {
             events += Schedule(alarm)
-            if (failSchedule) error("alarm manager unavailable")
+            if (scheduleFailuresRemaining > 0) {
+                scheduleFailuresRemaining -= 1
+                error("alarm manager unavailable")
+            }
         }
 
         override fun cancel(identity: ScheduledAlarmIdentity) {
@@ -283,15 +311,18 @@ class MorningReviewSchedulerTest {
 
     private inner class TestStorage(
         initialState: MorningReviewLocalState,
-        private val failOnReplace: Boolean
+        private var failuresAfterWriteRemaining: Int
     ) : MorningReviewStateStorage {
         private var values = encode(initialState)
 
         override fun read(): Map<String, String?> = values.toMap()
 
         override fun replace(values: Map<String, String?>) {
-            if (failOnReplace) error("storage unavailable")
             this.values = values.toMap()
+            if (failuresAfterWriteRemaining > 0) {
+                failuresAfterWriteRemaining -= 1
+                error("storage unavailable after write")
+            }
         }
     }
 
