@@ -25,6 +25,7 @@ class MorningReviewScheduleCalculator(
         val normalizedState = normalize(state, now, zoneId)
         val nowZoned = now.atZone(zoneId)
         val today = nowZoned.toLocalDate()
+        val todayAtReviewTime = reviewInstant(today, zoneId)
         val snoozeAt = normalizedState.pendingSnoozeAt
 
         if (normalizedState.pendingSnoozeDate == today && snoozeAt?.isAfter(now) == true) {
@@ -32,7 +33,7 @@ class MorningReviewScheduleCalculator(
         }
 
         var reviewDate = if (
-            normalizedState.lastAcknowledgedDate != today && nowZoned.toLocalTime().isBefore(reviewTime)
+            normalizedState.lastAcknowledgedDate != today && now.isBefore(todayAtReviewTime)
         ) {
             today
         } else {
@@ -45,7 +46,7 @@ class MorningReviewScheduleCalculator(
         return alarmFor(
             reviewDate,
             MorningReviewAlarmReason.Daily,
-            reviewDate.atTime(reviewTime).atZone(zoneId).toInstant()
+            reviewInstant(reviewDate, zoneId)
         )
     }
 
@@ -58,7 +59,7 @@ class MorningReviewScheduleCalculator(
         val normalizedState = normalize(state, now, zoneId)
         val nowZoned = now.atZone(zoneId)
         val today = nowZoned.toLocalDate()
-        val todayAtReviewTime = today.atTime(reviewTime).atZone(zoneId).toInstant()
+        val todayAtReviewTime = reviewInstant(today, zoneId)
         val snoozeAt = normalizedState.pendingSnoozeAt
         val snoozedNow = normalizedState.pendingSnoozeDate == today && snoozeAt?.isAfter(now) == true
         val reevaluations = buildList {
@@ -74,7 +75,7 @@ class MorningReviewScheduleCalculator(
             ),
             catchUpRequired = !snoozedNow &&
                 normalizedState.lastAcknowledgedDate != today &&
-                !nowZoned.toLocalTime().isBefore(reviewTime),
+                !now.isBefore(todayAtReviewTime),
             snoozedNow = snoozedNow,
             nextReevaluationAt = reevaluations.minOrNull()!!
         )
@@ -100,4 +101,7 @@ class MorningReviewScheduleCalculator(
         triggerAt = triggerAt,
         occurrenceKey = "morning-review:${reason.name.lowercase(Locale.ROOT)}:$reviewDate:${triggerAt.toEpochMilli()}"
     )
+
+    private fun reviewInstant(date: LocalDate, zoneId: ZoneId): Instant =
+        date.atTime(reviewTime).atZone(zoneId).toInstant()
 }

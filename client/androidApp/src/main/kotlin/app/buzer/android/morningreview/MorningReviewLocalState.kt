@@ -103,8 +103,9 @@ class InMemoryMorningReviewStateStorage(
 private class SharedPreferencesMorningReviewStateStorage(
     private val preferences: SharedPreferences
 ) : MorningReviewStateStorage {
-    override fun read(): Map<String, String?> = KEYS.associateWith { key ->
-        preferences.getString(key, null)
+    override fun read(): Map<String, String?> {
+        val values = preferences.all
+        return KEYS.associateWith { key -> morningReviewRawStringOrNull(values[key]) }
     }
 
     override fun replace(values: Map<String, String?>) {
@@ -115,6 +116,8 @@ private class SharedPreferencesMorningReviewStateStorage(
         check(editor.commit()) { "Unable to persist morning review state" }
     }
 }
+
+internal fun morningReviewRawStringOrNull(value: Any?): String? = value as? String
 
 private fun String?.parseDate(): LocalDate? = runCatching {
     this?.let(LocalDate::parse)

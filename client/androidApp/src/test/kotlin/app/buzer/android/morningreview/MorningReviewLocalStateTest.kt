@@ -89,4 +89,12 @@ class MorningReviewLocalStateTest {
             store.replace(MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 3)))
         }
     }
+
+    @Test
+    fun nonStringLegacyPreferenceValuesAreIgnoredSafely() {
+        assertEquals("2026-08-03", morningReviewRawStringOrNull("2026-08-03"))
+        assertNull(morningReviewRawStringOrNull(42))
+        assertNull(morningReviewRawStringOrNull(true))
+        assertNull(morningReviewRawStringOrNull(null))
+    }
 }

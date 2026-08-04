@@ -173,6 +173,53 @@ class MorningReviewScheduleCalculatorTest {
     }
 
     @Test
+    fun gapReviewTimeUsesItsResolvedInstantInsteadOfNominalLocalTime() {
+        val bratislava = ZoneId.of("Europe/Bratislava")
+        val gapCalculator = MorningReviewScheduleCalculator(reviewTime = LocalTime.of(2, 30))
+        val now = instant("2026-03-29T01:00:00Z") // 03:00 local; 02:30 resolves to 03:30.
+
+        assertAlarm(
+            gapCalculator.desiredAlarm(MorningReviewLocalState(), now, bratislava),
+            "2026-03-29",
+            MorningReviewAlarmReason.Daily,
+            "2026-03-29T01:30:00Z"
+        )
+        gapCalculator.availability(MorningReviewLocalState(), 0, now, bratislava).also {
+            assertFalse(it.catchUpRequired)
+            assertEquals(instant("2026-03-29T01:30:00Z"), it.nextReevaluationAt)
+        }
+        val atResolvedReviewTime = instant("2026-03-29T01:30:00Z")
+        assertAlarm(
+            gapCalculator.desiredAlarm(MorningReviewLocalState(), atResolvedReviewTime, bratislava),
+            "2026-03-30",
+            MorningReviewAlarmReason.Daily,
+            "2026-03-30T00:30:00Z"
+        )
+        assertTrue(
+            gapCalculator.availability(MorningReviewLocalState(), 0, atResolvedReviewTime, bratislava)
+                .catchUpRequired
+        )
+    }
+
+    @Test
+    fun overlapReviewTimeTreatsTheSecondRepeatedWallTimeAsAfterTheResolvedInstant() {
+        val bratislava = ZoneId.of("Europe/Bratislava")
+        val overlapCalculator = MorningReviewScheduleCalculator(reviewTime = LocalTime.of(2, 30))
+        val now = instant("2026-10-25T01:15:00Z") // 02:15 local after the earlier 02:30 occurrence.
+
+        assertAlarm(
+            overlapCalculator.desiredAlarm(MorningReviewLocalState(), now, bratislava),
+            "2026-10-26",
+            MorningReviewAlarmReason.Daily,
+            "2026-10-26T01:30:00Z"
+        )
+        overlapCalculator.availability(MorningReviewLocalState(), 0, now, bratislava).also {
+            assertTrue(it.catchUpRequired)
+            assertEquals(instant("2026-10-25T23:00:00Z"), it.nextReevaluationAt)
+        }
+    }
+
+    @Test
     fun productionOccurrenceKeysAreStableAndNonblank() {
         val now = instant("2026-08-03T07:59:00Z")
         val first = calculator.desiredAlarm(MorningReviewLocalState(), now, utc)

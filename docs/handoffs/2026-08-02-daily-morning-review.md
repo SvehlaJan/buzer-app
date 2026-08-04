@@ -43,6 +43,10 @@ Branch/worktree: `feature/daily-morning-review` /
 - Follow-up review coverage locks stale/yesterday acknowledgement as unacknowledged
   for today, and locks `today`, banner, and reevaluation changes on both sides of
   local midnight in a fixed UTC zone.
+- Calculator comparisons now use the resolved zoned review `Instant` for both
+  scheduling and availability, so injected review times inside a DST gap or overlap
+  cannot disagree with the alarm trigger. SharedPreferences reads use raw values
+  from `all` and discard non-string legacy types before ISO parsing.
 
 ## Verification
 
@@ -63,6 +67,13 @@ Verification:
 - Result: PASS
 - Evidence: follow-up coverage run after adding stale-acknowledgement and
   local-midnight assertions; all 18 focused state/schedule JVM tests passed.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewLocalStateTest' --tests '*MorningReviewScheduleCalculatorTest'`
+- Result: PASS
+- Evidence: review-fix run after direct Europe/Bratislava injected gap/overlap
+  tests and non-string raw-preference sanitizer test; all 21 focused JVM tests
+  passed.
 
 Verification:
 - Command: `git diff --check`
