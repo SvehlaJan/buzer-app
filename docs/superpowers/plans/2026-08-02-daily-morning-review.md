@@ -342,21 +342,21 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
 - Modify: `client/androidApp/src/main/AndroidManifest.xml`
 
-- [ ] **Step 1: Write RED priority tests.**
+- [x] **Step 1: Write RED priority tests.**
 
   Build complete `SnapshotViewState` fixtures. Assert Deadline beats Start, Start beats Morning Review, interval end is Deadline, started tasks do not produce Start, and invalid/pending/unassigned/completed/deleted tasks never suppress review.
 
-- [ ] **Step 2: Write RED alarm-handler decision tests.**
+- [x] **Step 2: Write RED alarm-handler decision tests.**
 
   Cover matching valid daily/Snooze -> `Launch`; stale identity -> `Ignore`; acknowledged daily -> `Ignore` and reconcile; wrong local date after timezone change -> `Ignore` and reconcile; matching Snooze clears pending metadata; Start/Deadline presence -> `Deferred` with one-minute replacement; and no cached snapshot -> `Launch`.
 
-- [ ] **Step 3: Confirm RED.**
+- [x] **Step 3: Confirm RED.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest'
   ```
 
-- [ ] **Step 4: Implement handler and resolver.**
+- [x] **Step 4: Implement handler and resolver.**
 
   Define:
 
@@ -367,11 +367,11 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Inject store/scheduler, cached snapshot loader, clock, and zone provider. Keep all Android context construction in `MorningReviewDependencies`.
 
-- [ ] **Step 5: Delegate from `AlarmReceiver`.**
+- [x] **Step 5: Delegate from `AlarmReceiver`.**
 
   For `AlarmKind.MORNING_REVIEW`, call the handler before `openBlocker`. Return without notification/overlay for `Deferred` or `Ignore`. For `Launch`, continue through the existing full-screen notification and overlay logic. Do not alter pre-start/start/deadline dispatch.
 
-- [ ] **Step 6: Register reconciliation broadcasts.**
+- [x] **Step 6: Register reconciliation broadcasts.**
 
   Add one non-exported `MorningReviewReconcileReceiver` with filters for:
 
@@ -384,14 +384,14 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Its synchronous work is only SharedPreferences + AlarmManager reconciliation. Keep existing `BootReceiver` and boot snapshot reconciliation unchanged; both receivers intentionally handle boot for different authorities.
 
-- [ ] **Step 7: Run focused tests and manifest compilation GREEN.**
+- [x] **Step 7: Run focused tests and manifest compilation GREEN.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest'
   ./gradlew :androidApp:processDebugMainManifest :androidApp:compileDebugKotlin
   ```
 
-- [ ] **Step 8: Commit delivery/reconciliation.**
+- [x] **Step 8: Commit delivery/reconciliation.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview client/androidApp/src/test/kotlin/app/buzer/android/morningreview client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt client/androidApp/src/main/AndroidManifest.xml
