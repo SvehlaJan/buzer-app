@@ -40,6 +40,9 @@ Branch/worktree: `feature/daily-morning-review` /
 - Expired/wrong-date Snooze state is normalized away. Availability reevaluates at
   the earliest upcoming local midnight, local review boundary, or active Snooze
   expiry.
+- Follow-up review coverage locks stale/yesterday acknowledgement as unacknowledged
+  for today, and locks `today`, banner, and reevaluation changes on both sides of
+  local midnight in a fixed UTC zone.
 
 ## Verification
 
@@ -53,7 +56,13 @@ Verification:
 Verification:
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewLocalStateTest' --tests '*MorningReviewScheduleCalculatorTest'`
 - Result: PASS
-- Evidence: `BUILD SUCCESSFUL`; all 16 focused state/schedule JVM tests passed.
+- Evidence: `BUILD SUCCESSFUL`; all 16 original focused state/schedule JVM tests passed.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewLocalStateTest' --tests '*MorningReviewScheduleCalculatorTest'`
+- Result: PASS
+- Evidence: follow-up coverage run after adding stale-acknowledgement and
+  local-midnight assertions; all 18 focused state/schedule JVM tests passed.
 
 Verification:
 - Command: `git diff --check`

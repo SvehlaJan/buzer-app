@@ -49,6 +49,44 @@ class MorningReviewScheduleCalculatorTest {
     }
 
     @Test
+    fun yesterdaysAcknowledgementDoesNotSuppressTodaysReview() {
+        val now = instant("2026-08-03T07:59:00Z")
+        val state = MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 2))
+
+        assertAlarm(calculator.desiredAlarm(state, now, utc), "2026-08-03", MorningReviewAlarmReason.Daily, "2026-08-03T08:00:00Z")
+        calculator.availability(state, ownerBlockingCount = 0, now = now, zoneId = utc).also {
+            assertEquals(LocalDate.of(2026, 8, 3), it.today)
+            assertTrue(it.bannerVisible)
+            assertFalse(it.catchUpRequired)
+            assertEquals(instant("2026-08-03T08:00:00Z"), it.nextReevaluationAt)
+        }
+    }
+
+    @Test
+    fun availabilityRecomputesTodayAndBoundaryAcrossLocalMidnight() {
+        val state = MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 3))
+        val beforeMidnight = calculator.availability(
+            state,
+            ownerBlockingCount = 0,
+            now = instant("2026-08-03T23:59:59Z"),
+            zoneId = utc
+        )
+        val afterMidnight = calculator.availability(
+            state,
+            ownerBlockingCount = 0,
+            now = instant("2026-08-04T00:00:00Z"),
+            zoneId = utc
+        )
+
+        assertEquals(LocalDate.of(2026, 8, 3), beforeMidnight.today)
+        assertFalse(beforeMidnight.bannerVisible)
+        assertEquals(instant("2026-08-04T00:00:00Z"), beforeMidnight.nextReevaluationAt)
+        assertEquals(LocalDate.of(2026, 8, 4), afterMidnight.today)
+        assertTrue(afterMidnight.bannerVisible)
+        assertEquals(instant("2026-08-04T08:00:00Z"), afterMidnight.nextReevaluationAt)
+    }
+
+    @Test
     fun activeCurrentDateSnoozeWinsAndSuppressesBannerAndCatchUp() {
         val now = instant("2026-08-03T09:00:00Z")
         val state = MorningReviewLocalState(
