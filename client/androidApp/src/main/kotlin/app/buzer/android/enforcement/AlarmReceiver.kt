@@ -12,6 +12,8 @@ import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.blockers.StartBlockerActivity
 import app.buzer.android.enforcement.overlay.OverlayBlockerRequest
 import app.buzer.android.enforcement.overlay.OverlayBlockerServiceStarter
+import app.buzer.android.morningreview.MorningReviewAlarmDecision
+import app.buzer.android.morningreview.MorningReviewDependencies
 import app.buzer.shared.diagnostics.AppLog
 
 class AlarmReceiver : BroadcastReceiver() {
@@ -28,7 +30,13 @@ class AlarmReceiver : BroadcastReceiver() {
 
         when (kind) {
             AlarmKind.PRE_START_WARNING -> showPreStartNotification(context, taskId, occurrenceKey)
-            AlarmKind.MORNING_REVIEW,
+            AlarmKind.MORNING_REVIEW -> {
+                if (MorningReviewDependencies.alarmHandler(context.applicationContext).handle(occurrenceKey) ==
+                    MorningReviewAlarmDecision.Launch
+                ) {
+                    openBlocker(context, taskId, occurrenceKey, kind)
+                }
+            }
             AlarmKind.START_BLOCKER,
             AlarmKind.DEADLINE_BLOCKER -> openBlocker(context, taskId, occurrenceKey, kind)
         }

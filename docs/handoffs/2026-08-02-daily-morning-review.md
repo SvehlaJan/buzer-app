@@ -263,3 +263,75 @@ Verification:
 - Command: `git diff --check`
 - Result: PASS
 - Evidence: no whitespace errors before follow-up commit.
+
+---
+
+## Task 3 delivery/reconciliation handoff (2026-08-05)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Task 3: Reconcile system changes and enforce blocker priority at alarm delivery.
+
+Status: implementation and focused verification complete; plan checkboxes were intentionally not edited for controller review.
+
+Branch/worktree: `feature/daily-morning-review` /
+`/Users/svehla/playground/buzer-app/.worktrees/daily-morning-review`
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandler.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewReconcileReceiver.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewDependencies.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
+- `client/androidApp/src/main/AndroidManifest.xml`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandlerTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/BlockerPriorityResolverTest.kt`
+- this handoff
+
+### Implementation notes
+
+- `MorningReviewAlarmHandler` validates the opaque delivered occurrence against the persisted typed alarm before mutation, rejects changed local dates and acknowledged Daily occurrences with a local reconcile, defers one minute for an active Deadline/Start, and otherwise consumes the matching occurrence before launch. Cache absence deliberately launches.
+- `BlockerPriorityResolver` uses cached `SnapshotViewState` and Todoist-native block semantics (`dueDatetime` is start, deadline is start plus duration). It excludes invalid, pending, unassigned, completed, deleted, unsupported, and started work; deadline beats start.
+- `AlarmReceiver` gates only `MORNING_REVIEW`; `Deferred`/`Ignore` return before overlay/notification delivery. Other alarm kinds retain their existing paths.
+- The non-exported reconciliation receiver synchronously re-arms only Morning Review local state/alarm scheduling for boot, package replacement, manual clock, and timezone broadcasts. The existing boot receiver remains unchanged.
+- Required Context7 lookup: `npx ctx7@latest library "Android BroadcastReceiver" "manifest-declared receiver BOOT_COMPLETED MY_PACKAGE_REPLACED TIME_SET TIMEZONE_CHANGED registration and onReceive synchronous work goAsync constraints"` resolved to official `/websites/developer_android`. Its follow-up official docs confirmed static manifest receivers receive broadcasts while the app is inactive; `goAsync()` creates a pending result specifically for post-`onReceive` asynchronous work. This receiver does only synchronous SharedPreferences and AlarmManager work, so it does not use `goAsync()`.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest'`
+- Result: FAIL (expected RED)
+- Evidence: before production code, `compileDebugUnitTestKotlin` reported unresolved handler/decision/resolver/priority types.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*BlockerPriorityResolverTest'`
+- Result: FAIL (expected RED)
+- Evidence: added state-only started-task coverage failed because the initial resolver treated a `started` task with absent `startedAt` as an active Start blocker.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; all seven handler decisions and five priority cases passed.
+
+Verification:
+- Command: `./gradlew :androidApp:processDebugMainManifest :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: manifest receiver declaration and Kotlin production sources compiled successfully.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*Alarm*Test' --tests '*Enforcement*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; existing matching alarm/enforcement JVM tests remained green.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual verification, known failures, assumptions, next step
+
+Manual verification: the real-backend instrumentation harness was attempted with `scripts/e2e-real-backend.sh`. The sandboxed attempt failed when `tsx` could not create its temporary IPC socket; the required escalated rerun was rejected by the environment's usage-limit approval gate. No workaround was attempted.
+
+Assumption: occurrence keys remain opaque; delivery identity is validated by matching the current persisted typed alarm's key rather than parsing delivery text. `dueDatetime` remains the start and `due + duration` the deadline per `docs/decisions/2026-07-05-todoist-native-due-semantics.md`.
+
+Next recommended step: controller review/commit this Task 3 slice, then Task 4 can extract shared owner-agenda classification without changing this local delivery authority.
