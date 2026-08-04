@@ -221,11 +221,11 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewLocalStateTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewScheduleCalculatorTest.kt`
 
-- [ ] **Step 1: Write RED store round-trip tests.**
+- [x] **Step 1: Write RED store round-trip tests.**
 
   Cover empty defaults; a complete state round trip; malformed persisted date/instant/reason falling back safely; whole-state replacement clearing Snooze; and a failing storage commit propagating rather than pretending acknowledgement succeeded.
 
-- [ ] **Step 2: Write the RED pure schedule matrix.**
+- [x] **Step 2: Write the RED pure schedule matrix.**
 
   Use fixed `Instant`, `ZoneId`, and injected review time. Cover:
 
@@ -242,7 +242,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - Europe/Bratislava spring/fall transitions use calendar dates and yield the expected 23/25-hour UTC separation;
   - production occurrence keys are stable and nonblank for the same spec.
 
-- [ ] **Step 3: Confirm the focused tests are RED.**
+- [x] **Step 3: Confirm the focused tests are RED.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewLocalStateTest' --tests '*MorningReviewScheduleCalculatorTest'
@@ -250,11 +250,11 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: compilation failure because the new package/types do not exist.
 
-- [ ] **Step 4: Implement the minimal typed store.**
+- [x] **Step 4: Implement the minimal typed store.**
 
   Follow the Local state contract above. Keep Android `SharedPreferences` behind `MorningReviewStateStorage`; pure tests use `InMemoryMorningReviewStateStorage`. Parse persisted values with `runCatching` per field and return null for malformed optional values. `replace()` must use synchronous `commit()` and `check` its result.
 
-- [ ] **Step 5: Implement pure calculations.**
+- [x] **Step 5: Implement pure calculations.**
 
   Add these pure functions:
 
@@ -266,13 +266,13 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   `MorningReviewAvailability` contains `today`, `bannerVisible`, `catchUpRequired`, `snoozedNow`, and `nextReevaluationAt`. Do not call system clock/zone inside these functions.
 
-- [ ] **Step 6: Run focused tests GREEN.**
+- [x] **Step 6: Run focused tests GREEN.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewLocalStateTest' --tests '*MorningReviewScheduleCalculatorTest'
   ```
 
-- [ ] **Step 7: Commit the local identity slice.**
+- [x] **Step 7: Commit the local identity slice.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewLocalState.kt client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduleCalculator.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewLocalStateTest.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewScheduleCalculatorTest.kt
