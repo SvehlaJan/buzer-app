@@ -288,7 +288,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidAlarmScheduler.kt`
 - Create/Modify: focused scheduler dispatch test beside existing enforcement unit tests if Change 1 introduced one.
 
-- [ ] **Step 1: Write RED scheduler tests with a fake `AlarmScheduler`.**
+- [x] **Step 1: Write RED scheduler tests with a fake `AlarmScheduler`.**
 
   Assert:
 
@@ -303,29 +303,29 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - `deferForPriority` replaces the fired alarm with a one-minute `PriorityRetry`;
   - schedule/storage failure never records an alarm that was not successfully armed.
 
-- [ ] **Step 2: Confirm scheduler tests RED.**
+- [x] **Step 2: Confirm scheduler tests RED.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest'
   ```
 
-- [ ] **Step 3: Implement the focused scheduler.**
+- [x] **Step 3: Implement the focused scheduler.**
 
   Inject `MorningReviewStateStore`, `AlarmScheduler`, review time, Snooze duration (five minutes), and priority retry duration (one minute). Production defaults live only in `MorningReviewDependencies`; tests pass fixed values. Use task ID `morning-review`, `AlarmKind.MORNING_REVIEW`, and the occurrence key from `MorningReviewScheduledAlarm`.
 
   Reconcile transaction order is: normalize/read previous -> cancel legacy -> if identity differs cancel previous -> schedule desired -> persist desired. On failure, cancel a newly scheduled desired identity and retain enough previous state for the next reconciliation to recover.
 
-- [ ] **Step 4: Make Morning Review an alarm clock.**
+- [x] **Step 4: Make Morning Review an alarm clock.**
 
   In `AndroidAlarmScheduler.schedule`, group `MORNING_REVIEW` with `START_BLOCKER` and `DEADLINE_BLOCKER` under `setAlarmClock`. Leave `PRE_START_WARNING` alone. Do not introduce repeating alarms; every review alarm remains one-shot.
 
-- [ ] **Step 5: Run scheduler/enforcement tests GREEN.**
+- [x] **Step 5: Run scheduler/enforcement tests GREEN.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest' --tests '*Alarm*Test'
   ```
 
-- [ ] **Step 6: Commit scheduling.**
+- [x] **Step 6: Commit scheduling.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview client/androidApp/src/test/kotlin/app/buzer/android/morningreview client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidAlarmScheduler.kt
