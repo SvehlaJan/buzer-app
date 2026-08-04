@@ -133,22 +133,83 @@ class MorningReviewAlarmHandlerTest {
         assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
     }
 
+    @Test
+    fun corruptCacheIsReportedAndTreatedAsUnavailable() {
+        val daily = alarm(MorningReviewAlarmReason.Daily, now)
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = daily),
+            loader = { error("cache decode failed") }
+        )
+
+        assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
+        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(listOf(Error("priority", "cache decode failed")), fixture.errors)
+    }
+
+    @Test
+    fun failedReconcileIsReportedAndStillIgnoresAcknowledgedReview() {
+        val daily = alarm(MorningReviewAlarmReason.Daily, now)
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(
+                lastAcknowledgedDate = LocalDate.of(2026, 8, 3),
+                scheduledAlarm = daily
+            ),
+            failingAction = Action.Reconcile
+        )
+
+        assertEquals(MorningReviewAlarmDecision.Ignore, fixture.handler.handle(identity(daily)))
+        assertEquals(listOf<Call>(Reconcile), fixture.actions.calls)
+        assertEquals(listOf(Error("reconcile", "reconcile failed")), fixture.errors)
+    }
+
+    @Test
+    fun failedPriorityDeferIsReportedAndStillDefersReview() {
+        val daily = alarm(MorningReviewAlarmReason.Daily, now)
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = daily),
+            snapshot = snapshot(task(start = "2026-08-03T07:00:00Z", durationMinutes = 120)),
+            failingAction = Action.Defer
+        )
+
+        assertEquals(MorningReviewAlarmDecision.Deferred, fixture.handler.handle(identity(daily)))
+        assertEquals(listOf<Call>(Defer(daily)), fixture.actions.calls)
+        assertEquals(listOf(Error("defer", "defer failed")), fixture.errors)
+    }
+
+    @Test
+    fun failedConsumeIsReportedAndStillLaunchesDueReview() {
+        val daily = alarm(MorningReviewAlarmReason.Daily, now)
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = daily),
+            failingAction = Action.Consume
+        )
+
+        assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
+        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(listOf(Error("consume", "consume failed")), fixture.errors)
+    }
+
     private fun fixture(
         initialState: MorningReviewLocalState,
         snapshot: SnapshotViewState? = snapshot(),
-        zone: ZoneId = this.zone
+        zone: ZoneId = this.zone,
+        loader: (() -> SnapshotViewState?)? = null,
+        failingAction: Action? = null
     ): Fixture {
         val store = MorningReviewLocalStateStore(InMemoryMorningReviewStateStorage())
         store.replace(initialState)
-        val actions = RecordingActions()
+        val actions = RecordingActions(failingAction)
+        val errors = mutableListOf<Error>()
         return Fixture(
             actions = actions,
+            errors = errors,
             handler = MorningReviewAlarmHandler(
                 stateStore = store,
                 actions = actions,
-                cachedSnapshotLoader = { snapshot },
+                cachedSnapshotLoader = loader ?: { snapshot },
                 nowProvider = { now },
-                zoneProvider = { zone }
+                zoneProvider = { zone },
+                errorReporter = { operation, _, error -> errors += Error(operation, error.message.orEmpty()) }
             )
         )
     }
@@ -211,27 +272,35 @@ class MorningReviewAlarmHandlerTest {
 
     private data class Fixture(
         val actions: RecordingActions,
+        val errors: List<Error>,
         val handler: MorningReviewAlarmHandler
     )
 
+    private enum class Action { Reconcile, Consume, Defer }
     private sealed interface Call
     private data object Reconcile : Call
     private data class Consume(val alarm: MorningReviewScheduledAlarm) : Call
     private data class Defer(val alarm: MorningReviewScheduledAlarm) : Call
+    private data class Error(val operation: String, val message: String)
 
-    private class RecordingActions : MorningReviewAlarmActions {
+    private class RecordingActions(
+        private val failingAction: Action?
+    ) : MorningReviewAlarmActions {
         val calls = mutableListOf<Call>()
 
         override fun reconcile(now: Instant, zoneId: ZoneId) {
             calls += Reconcile
+            if (failingAction == Action.Reconcile) error("reconcile failed")
         }
 
         override fun consume(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
             calls += Consume(fired)
+            if (failingAction == Action.Consume) error("consume failed")
         }
 
         override fun deferForPriority(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
             calls += Defer(fired)
+            if (failingAction == Action.Defer) error("defer failed")
         }
     }
 }

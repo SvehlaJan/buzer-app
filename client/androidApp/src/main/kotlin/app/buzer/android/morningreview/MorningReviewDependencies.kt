@@ -3,6 +3,7 @@ package app.buzer.android.morningreview
 import android.content.Context
 import app.buzer.android.enforcement.AndroidAlarmScheduler
 import app.buzer.android.sync.SnapshotStore
+import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.state.SnapshotReducer
 import java.time.Instant
 import java.time.Duration
@@ -23,6 +24,9 @@ object MorningReviewDependencies {
         actions = MorningReviewSchedulerActions(scheduler(context)),
         cachedSnapshotLoader = { SnapshotStore(context.applicationContext).load()?.let(SnapshotReducer::reduce) },
         nowProvider = Instant::now,
-        zoneProvider = ZoneId::systemDefault
+        zoneProvider = ZoneId::systemDefault,
+        errorReporter = { operation, failureContext, error ->
+            AppLog.warn("morning_review_alarm $operation $failureContext", error)
+        }
     )
 }

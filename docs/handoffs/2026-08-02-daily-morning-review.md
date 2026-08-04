@@ -396,3 +396,56 @@ Verification:
 The original real-backend instrumentation limitation remains unchanged: the sandboxed harness could not create the `tsx` IPC socket and escalation was rejected by the environment usage-limit gate; no workaround was attempted. Next: controller review/commit this correction, then continue the plan from Task 4.
 
 An initial attempt to run focused, manifest, and broad Gradle commands concurrently raced on the worktree's Kotlin output directory. The broad suite completed successfully, while the other two reported missing generated classes; both focused and manifest commands were rerun serially and passed as recorded above.
+
+---
+
+## Task 3 runtime-hardening correction (2026-08-05)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Scope: narrowly correct Task 3 runtime failure handling; plan checkboxes remain unchanged for controller review.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandler.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewDependencies.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandlerTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/BlockerPriorityResolverTest.kt`
+- this handoff
+
+### Correction notes
+
+- Priority now excludes blank task occurrence keys, matching `AlarmPlanCalculator`; a legacy/unkeyed cache task cannot suppress the review in favor of an undeliverable blocker.
+- Cache load/reduction is caught narrowly at the priority boundary. A corrupt snapshot logs a `priority` report and is treated as unavailable, allowing the valid due review to consume and launch.
+- Scheduler action failures are caught per branch and reported with operation plus occurrence/reason/review-date context through `AppLog.warn`: failed reconcile remains Ignore, failed defer remains Deferred, and failed consume remains Launch. Stale identity still makes no call and no report.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest' --tests '*AlarmReceiver*Test'`
+- Result: FAIL (expected RED)
+- Evidence: before production hardening, the new throwing-loader/action reporter tests failed to compile because `MorningReviewAlarmHandler` did not yet accept the injected error reporter.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewAlarmHandlerTest' --tests '*BlockerPriorityResolverTest' --tests '*AlarmReceiver*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; focused tests cover blank-key eligibility, corrupt cache, and reconcile/defer/consume fallback decisions with recorded reports.
+
+Verification:
+- Command: `./gradlew :androidApp:processDebugMainManifest :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*Alarm*Test' --tests '*Enforcement*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; matching alarm/enforcement tests remained green.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors before follow-up commit.
+
+### Assumptions and next step
+
+The original real-backend instrumentation limitation remains unchanged: the sandboxed harness could not create the `tsx` IPC socket and escalation was rejected by the environment usage-limit gate; no workaround was attempted. Next: controller review/commit this correction, then continue the plan from Task 4.

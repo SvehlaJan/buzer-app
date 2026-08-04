@@ -70,6 +70,13 @@ class BlockerPriorityResolverTest {
         assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
     }
 
+    @Test
+    fun blankOccurrenceKeyNeverSuppressesReview() {
+        val snapshot = snapshot(task(occurrenceKey = ""))
+
+        assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
+    }
+
     private fun snapshot(
         vararg taskItems: TaskSnapshotItem,
         tasks: List<TaskSnapshotItem> = taskItems.toList(),
@@ -100,7 +107,8 @@ class BlockerPriorityResolverTest {
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         validationErrors: List<String> = emptyList(),
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
+        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
+        occurrenceKey: String = "occurrence-$id"
     ): TaskSnapshotItem = TaskSnapshotItem(
         id = id,
         todoistTaskId = "todoist-$id",
@@ -122,7 +130,7 @@ class BlockerPriorityResolverTest {
         deadlineExtensionCount = 0,
         escalationSentAt = null,
         updatedAt = now.toString(),
-        occurrenceKey = "occurrence-$id",
+        occurrenceKey = occurrenceKey,
         hierarchyStatus = HierarchyStatus.valid,
         reconciliationStatus = reconciliationStatus
     )

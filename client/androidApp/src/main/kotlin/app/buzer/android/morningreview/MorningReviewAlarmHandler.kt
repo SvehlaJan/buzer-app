@@ -45,6 +45,7 @@ object BlockerPriorityResolver {
     private fun TaskSnapshotItem.activeIntervalOrNull(): ActiveInterval? {
         if (
             !isAssignedToUser ||
+            occurrenceKey.isBlank() ||
             isCompleted ||
             isDeleted ||
             state == CommitmentState.completed ||
@@ -88,7 +89,8 @@ internal class MorningReviewAlarmHandler(
     private val actions: MorningReviewAlarmActions,
     private val cachedSnapshotLoader: () -> SnapshotViewState?,
     private val nowProvider: () -> Instant,
-    private val zoneProvider: () -> ZoneId
+    private val zoneProvider: () -> ZoneId,
+    private val errorReporter: (operation: String, context: String, error: Exception) -> Unit
 ) {
     fun handle(delivered: app.buzer.android.enforcement.ScheduledAlarmIdentity): MorningReviewAlarmDecision {
         val now = nowProvider()
@@ -103,28 +105,57 @@ internal class MorningReviewAlarmHandler(
         )
         if (delivered != persistedIdentity) return MorningReviewAlarmDecision.Ignore
         if (fired.occurrenceKey != morningReviewOccurrenceKey(fired.reason, fired.reviewDate, fired.triggerAt)) {
-            actions.reconcile(now, zoneId)
+            reconcile(fired, now, zoneId)
             return MorningReviewAlarmDecision.Ignore
         }
 
         val today = now.atZone(zoneId).toLocalDate()
         if (fired.reviewDate != today) {
-            actions.reconcile(now, zoneId)
+            reconcile(fired, now, zoneId)
             return MorningReviewAlarmDecision.Ignore
         }
         if (fired.reason == MorningReviewAlarmReason.Daily && state.lastAcknowledgedDate == today) {
-            actions.reconcile(now, zoneId)
+            reconcile(fired, now, zoneId)
             return MorningReviewAlarmDecision.Ignore
         }
 
-        val priority = cachedSnapshotLoader()?.let { BlockerPriorityResolver.resolve(it, now) }
-            ?: ActiveBlockerPriority.None
+        val priority = try {
+            cachedSnapshotLoader()?.let { BlockerPriorityResolver.resolve(it, now) }
+                ?: ActiveBlockerPriority.None
+        } catch (error: Exception) {
+            report("priority", fired, error)
+            ActiveBlockerPriority.None
+        }
         if (priority != ActiveBlockerPriority.None) {
-            actions.deferForPriority(fired, now, zoneId)
+            try {
+                actions.deferForPriority(fired, now, zoneId)
+            } catch (error: Exception) {
+                report("defer", fired, error)
+            }
             return MorningReviewAlarmDecision.Deferred
         }
 
-        actions.consume(fired, now, zoneId)
+        try {
+            actions.consume(fired, now, zoneId)
+        } catch (error: Exception) {
+            report("consume", fired, error)
+        }
         return MorningReviewAlarmDecision.Launch
+    }
+
+    private fun reconcile(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
+        try {
+            actions.reconcile(now, zoneId)
+        } catch (error: Exception) {
+            report("reconcile", fired, error)
+        }
+    }
+
+    private fun report(operation: String, fired: MorningReviewScheduledAlarm, error: Exception) {
+        errorReporter(
+            operation,
+            "occurrence=${fired.occurrenceKey} reason=${fired.reason} reviewDate=${fired.reviewDate}",
+            error
+        )
     }
 }
