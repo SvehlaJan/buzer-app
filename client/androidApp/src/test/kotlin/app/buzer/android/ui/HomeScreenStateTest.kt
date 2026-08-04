@@ -259,6 +259,43 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun test10b_ownerRepairAttentionKeepsUnassignedSectionIndependent() {
+        val invalidOwner = createTaskFixture(
+            "invalid-owner",
+            dueDatetime = "2026-08-02T14:00:00Z",
+            durationMinutes = 30,
+            state = CommitmentState.invalid
+        )
+        val unassigned = createTaskFixture(
+            "unassigned",
+            isAssignedToUser = false,
+            assigneeId = null,
+            updatedAt = "2026-08-02T09:30:00Z"
+        )
+        val snapshot = SnapshotViewState(
+            scheduleVersion = 1,
+            serverTime = "2026-08-02T10:00:00Z",
+            invalidTasks = listOf(invalidOwner),
+            activeBlockers = emptyList(),
+            inProgressTasks = emptyList(),
+            startingToday = emptyList(),
+            healthWarnings = emptyList(),
+            tasks = listOf(invalidOwner, unassigned)
+        )
+
+        val state = buildHomeScreenState(
+            snapshot,
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            unassignedExpanded = true
+        )
+
+        assertNotNull(state.reviewAttention)
+        assertEquals(1, state.unassigned.totalCount)
+        assertEquals(listOf("unassigned"), state.unassigned.rows.map { it.taskId })
+    }
+
+    @Test
     fun test11_completedDeletedAndUnsupportedHierarchyAbsent() {
         val tasks = listOf(
             createTaskFixture("completed-1", dueDatetime = "2026-08-02T14:00:00Z", durationMinutes = 30, isCompleted = true),

@@ -2,9 +2,9 @@ package app.buzer.android.ui.screens
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
+import app.buzer.android.ui.agenda.selectOwnerAgenda
 import app.buzer.shared.ui.home.HomeAgendaRow
 import app.buzer.shared.ui.home.HomeAgendaRowState
 import app.buzer.shared.ui.home.HomeAttention
@@ -114,15 +114,8 @@ fun buildHomeScreenState(
         .distinctBy { it.id }
         .filterNot { it.isDeleted || it.isCompleted || it.state == CommitmentState.completed || it.hierarchyStatus == HierarchyStatus.unsupported }
 
-    val invalidIdsFromSnapshot = snapshot.invalidTasks.map { it.id }.toSet()
-    val reviewTasks = activeTasks.filter { task ->
-        val isOwner = task.isAssignedToUser
-        isOwner && (
-            task.state == CommitmentState.invalid ||
-                task.reconciliationStatus == ReconciliationStatus.pending ||
-                invalidIdsFromSnapshot.contains(task.id)
-            )
-    }
+    val ownerAgenda = selectOwnerAgenda(snapshot, now, zoneId)
+    val reviewTasks = ownerAgenda.blocking
     val reviewIds = reviewTasks.map { it.id }.toSet()
     val reviewAttention = if (reviewTasks.isNotEmpty()) {
         val count = reviewTasks.size
@@ -169,35 +162,11 @@ fun buildHomeScreenState(
         expanded = unassignedExpanded
     )
 
-    val ownerTasks = activeTasks
-        .filter { it.isAssignedToUser }
-        .filterNot { reviewIds.contains(it.id) }
-
-    data class TimedOwnerTask(
-        val task: TaskSnapshotItem,
-        val startInstant: Instant,
-        val endInstant: Instant
-    )
-
-    val timedOwnerTasks = ownerTasks.mapNotNull { task ->
-        val due = task.dueDatetime ?: return@mapNotNull null
-        val start = parseInstant(due, zoneId) ?: return@mapNotNull null
-        val dur = task.durationMinutes ?: return@mapNotNull null
-        if (dur <= 0) return@mapNotNull null
-        val end = start.plusSeconds(dur * 60L)
-        TimedOwnerTask(task, start, end)
-    }
-
-    val overdueTasks = timedOwnerTasks
-        .filter { it.endInstant <= now }
-        .sortedWith(
-            compareByDescending<TimedOwnerTask> { it.endInstant }
-                .thenBy { it.task.id }
-        )
+    val overdueTasks = ownerAgenda.overdue
     val overdueRows = overdueTasks.map { item ->
         val progress = homeTaskProgress(item.task)
-        val timeLabel = formatTimeWindow(item.startInstant, item.endInstant, zoneId)
-        val endedAgo = formatDuration(Duration.between(item.endInstant, now))
+        val timeLabel = formatTimeWindow(item.start, item.end, zoneId)
+        val endedAgo = formatDuration(Duration.between(item.end, now))
         HomeAgendaRow(
             taskId = item.task.id,
             timeLabel = timeLabel,
@@ -219,17 +188,16 @@ fun buildHomeScreenState(
         expanded = overdueExpanded
     )
 
-    val currentTasks = timedOwnerTasks
-        .filter { it.startInstant <= now && now < it.endInstant }
+    val currentTasks = ownerAgenda.current
 
     val heroItem = currentTasks.minWithOrNull(
-        compareBy<TimedOwnerTask> { it.endInstant }
+        compareBy<app.buzer.android.ui.agenda.OwnerAgendaEntry> { it.end }
             .thenBy { it.task.id }
     )
     val heroBlock = heroItem?.let { item ->
         val progress = homeTaskProgress(item.task)
-        val windowStr = formatTimeWindow(item.startInstant, item.endInstant, zoneId)
-        val remainingStr = "${formatDuration(Duration.between(now, item.endInstant))} remaining"
+        val windowStr = formatTimeWindow(item.start, item.end, zoneId)
+        val remainingStr = "${formatDuration(Duration.between(now, item.end))} remaining"
         HomeCurrentBlock(
             taskId = item.task.id,
             title = item.task.title,
@@ -249,11 +217,11 @@ fun buildHomeScreenState(
     val overlappingCurrentRows = if (heroItem != null) {
         currentTasks
             .filterNot { it.task.id == heroItem.task.id }
-            .sortedWith(compareBy<TimedOwnerTask> { it.endInstant }.thenBy { it.task.id })
+            .sortedWith(compareBy<app.buzer.android.ui.agenda.OwnerAgendaEntry> { it.end }.thenBy { it.task.id })
             .map { item ->
                 val progress = homeTaskProgress(item.task)
-                val windowStr = formatTimeWindow(item.startInstant, item.endInstant, zoneId)
-                val remainingStr = "${formatDuration(Duration.between(now, item.endInstant))} remaining"
+                val windowStr = formatTimeWindow(item.start, item.end, zoneId)
+                val remainingStr = "${formatDuration(Duration.between(now, item.end))} remaining"
                 HomeAgendaRow(
                     taskId = item.task.id,
                     timeLabel = windowStr,
@@ -273,15 +241,9 @@ fun buildHomeScreenState(
         emptyList()
     }
 
-    val futureTasks = timedOwnerTasks
-        .filter { it.startInstant > now }
-        .sortedWith(
-            compareBy<TimedOwnerTask> { it.startInstant }
-                .thenBy { it.endInstant }
-                .thenBy { it.task.id }
-        )
+    val futureTasks = ownerAgenda.future
     val groupedByDate = futureTasks.groupBy { item ->
-        item.startInstant.atZone(zoneId).toLocalDate()
+        item.start.atZone(zoneId).toLocalDate()
     }
     val futureGroups = groupedByDate.entries
         .sortedBy { it.key }
@@ -289,8 +251,8 @@ fun buildHomeScreenState(
             val heading = formatGroupHeading(date, nowDate)
             val rows = items.map { item ->
                 val progress = homeTaskProgress(item.task)
-                val windowStr = formatTimeWindow(item.startInstant, item.endInstant, zoneId)
-                val startsInStr = formatDuration(Duration.between(now, item.startInstant))
+                val windowStr = formatTimeWindow(item.start, item.end, zoneId)
+                val startsInStr = formatDuration(Duration.between(now, item.start))
                 HomeAgendaRow(
                     taskId = item.task.id,
                     timeLabel = windowStr,

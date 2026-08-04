@@ -399,6 +399,92 @@ An initial attempt to run focused, manifest, and broad Gradle commands concurren
 
 ---
 
+## Task 4 shared owner-agenda classification and pure review state (2026-08-05)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Task 4: Share owner agenda classification and build the pure review model.
+
+Plan checkboxes were intentionally not edited; controller review owns that update.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelector.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelectorTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreenState.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreenState.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
+- this handoff
+
+### Implementation notes
+
+- `selectOwnerAgenda` owns terminal/unsupported exclusion, owner-only filtering,
+  authoritative invalid projection, pending/invalid blocking precedence, safe time and
+  duration handling, half-open current intervals, and deterministic bucket ordering.
+  Genuinely unassigned roots and assigned-other roots are excluded from this selector.
+- Home delegates owner blocking/overdue/current/future classification to that selector.
+  Its labels, hero choice, overlap ordering, expansion behavior, row models, and
+  separate unassigned projection are retained; the added parity case locks that an
+  owner repair attention item cannot suppress an expanded Unassigned section.
+- `MorningReviewScreenState` is a pure, injected-time/zone model with explicit
+  Loading, Blocking, Summary, and NoData phases. Blocking cards hide summary rows;
+  clear summaries include all overdue owner rows plus current/today-start entries.
+  Start-day and Snooze eligibility are derived without actions, clock reads, or
+  navigation mutations.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*HomeScreenStateTest'`
+- Result: PASS
+- Evidence: the required command was run from `client/`, which is the only location
+  containing the Gradle wrapper; 15 baseline Home state tests passed before extraction.
+  The same command from the worktree root was not a test failure: it reported
+  `zsh: no such file or directory: ./gradlew`.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest'`
+- Result: FAIL (expected RED)
+- Evidence: compilation reported unresolved `selectOwnerAgenda` before the selector
+  production file was created.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewScreenStateTest'`
+- Result: FAIL (expected RED)
+- Evidence: compilation reported unresolved Morning Review phase/card/state symbols
+  before the pure state production file was created.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; 5 selector tests, 16 Home state tests, and 10 Morning
+  Review state tests passed (31 total, zero failures).
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual verification and skipped checks
+
+- Manual UI verification: SKIPPED. This task introduces pure classification and state
+  models only; it does not yet wire the new Morning Review model into Compose or an
+  activity.
+- `scripts/e2e-real-backend.sh`: DEFERRED to Tasks 9/10, where the rendered Morning
+  Review and alarm delivery flows exist. This task has no relevant scoped rendered
+  class yet.
+
+### Assumptions and next step
+
+- Snapshot `dueDatetime` remains the existing Change 1 agenda start instant, preserving
+  accepted Home presentation behavior; no scheduling semantics were reinterpreted.
+- Task 5 should orchestrate cached/forced authority updates and actions around
+  `buildMorningReviewScreenState`; Task 6 should replace the legacy raw-task Compose
+  branching with this explicit state model.
+
+---
+
 ## Task 3 runtime-hardening correction (2026-08-05)
 
 Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
