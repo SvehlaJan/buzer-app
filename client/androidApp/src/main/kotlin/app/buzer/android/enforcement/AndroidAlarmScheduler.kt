@@ -10,16 +10,17 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
 
     override fun schedule(alarm: ScheduledAlarm) {
-        when (alarm.kind) {
+        when (alarm.kind.schedulingPath()) {
             // Blocker alarms must fire on time on a locked, dozing device. setAlarmClock is
             // exempt from allow-while-idle throttling (observed 9+ min deferral on a real
-            // Pixel, 2026-07-05); the status-bar alarm icon is an accepted tradeoff.
-            AlarmKind.START_BLOCKER, AlarmKind.DEADLINE_BLOCKER -> alarmManager.setAlarmClock(
+            // Pixel, 2026-07-05); the status-bar alarm icon is an accepted tradeoff. Morning
+            // Review is an equally user-facing, one-shot commitment and takes this same path.
+            AlarmSchedulingPath.AlarmClock -> alarmManager.setAlarmClock(
                 AlarmManager.AlarmClockInfo(alarm.triggerAtEpochMillis, showIntent()),
                 pendingIntent(alarm)
             )
 
-            AlarmKind.PRE_START_WARNING, AlarmKind.MORNING_REVIEW ->
+            AlarmSchedulingPath.ExactAndAllowWhileIdle ->
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     alarm.triggerAtEpochMillis,
@@ -49,4 +50,13 @@ class AndroidAlarmScheduler(private val context: Context) : AlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
+}
+
+internal enum class AlarmSchedulingPath { AlarmClock, ExactAndAllowWhileIdle }
+
+internal fun AlarmKind.schedulingPath(): AlarmSchedulingPath = when (this) {
+    AlarmKind.MORNING_REVIEW, AlarmKind.START_BLOCKER, AlarmKind.DEADLINE_BLOCKER ->
+        AlarmSchedulingPath.AlarmClock
+
+    AlarmKind.PRE_START_WARNING -> AlarmSchedulingPath.ExactAndAllowWhileIdle
 }

@@ -98,3 +98,70 @@ Manual verification:
   selects or consumes an alarm; the calculator deliberately remains pure.
 - Next: Task 2 should build `MorningReviewScheduler` on the typed store and the
   calculator while preserving its one-alarm invariant.
+
+---
+
+## Task 2 scheduler handoff (2026-08-04)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Task 2: Maintain exactly one reliable Morning Review alarm.
+
+Status: implementation and focused JVM verification completed; plan checkboxes were intentionally not edited for controller review.
+
+Branch/worktree: `feature/daily-morning-review` /
+`/Users/svehla/playground/buzer-app/.worktrees/daily-morning-review`
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduler.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewDependencies.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AndroidAlarmScheduler.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewSchedulerTest.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/AndroidAlarmSchedulerTest.kt`
+- this handoff
+
+### Implementation notes
+
+- `MorningReviewScheduler` injects the Task 1 `MorningReviewLocalStateStore`,
+  `AlarmScheduler`, pure calculator, five-minute Snooze duration, and one-minute
+  priority-retry duration. `MorningReviewDependencies` is the sole production
+  constructor and supplies the 08:00 review time/default durations.
+- Every non-stale mutation cancels the fixed legacy `morning-review` identity,
+  cancels a different persisted occurrence before arming its replacement, then
+  persists the new whole state. A schedule or persistence failure cancels the
+  newly attempted desired identity and retains the previous state for the next
+  reconciliation.
+- Acknowledgement clears Snooze and moves to tomorrow; Snooze creates one global
+  local retry; valid Snooze consumption clears its metadata; stale delivery is a
+  no-op; priority deferral creates a one-minute `PriorityRetry` occurrence.
+- `AndroidAlarmScheduler` now routes `MORNING_REVIEW`, Start, and Deadline through
+  `setAlarmClock`; only pre-start warnings use `setExactAndAllowWhileIdle`. The
+  pure dispatch seam is covered by a host-JVM test.
+- Required Context7 lookup: `npx ctx7@latest library "Android AlarmManager" "setAlarmClock one-shot alarm exact alarm behavior and PendingIntent identity"` initially returned HTTP 500, then resolved to `/websites/developer_android`. The follow-up docs lookup confirmed AlarmManager's exact-alarm guidance and that PendingIntent identity includes its relevant flags; occurrence-keyed request codes/data continue to provide the intended distinct one-shot identities.
+
+### Verification
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest'`
+- Result: FAIL (expected RED)
+- Evidence: `:androidApp:compileDebugUnitTestKotlin` reported unresolved `MorningReviewScheduler` methods/types and the new alarm dispatch seam before Task 2 production code existed.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSchedulerTest' --tests '*Alarm*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; the 11-case scheduler transaction matrix plus all matching existing alarm tests and the new dispatch classification test passed.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+Manual verification:
+- SKIPPED: Task 2 changes scheduling plumbing but not a receiver/UI surface. Alarm delivery and app-scoped device evidence are assigned to Task 3/Task 9.
+
+### Assumptions, skipped checks, next step
+
+- The Task 3 alarm handler validates current occurrence/date/acknowledgement before calling `consume` or `deferForPriority`; both scheduler methods additionally reject a stale persisted occurrence defensively.
+- Full real-backend instrumentation is deferred because this task does not alter the client UI; Task 9 owns the required Morning Review alarm instrumentation.
+- Next recommended step: Task 3 can build delivery validation, priority resolution, and reconciliation broadcasts using `MorningReviewDependencies.scheduler(context)`.
