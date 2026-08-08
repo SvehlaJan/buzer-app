@@ -110,7 +110,7 @@ class MorningReviewRepairHostTest {
         setScreen(summaryState(), onOverdueDone = { done += it }, onOverdueEdit = { edited += it })
 
         composeRule.onNodeWithTag("morning-overdue-overdue").assertIsDisplayed()
-        composeRule.onNodeWithText("Today").assertIsDisplayed()
+        composeRule.onNodeWithTag("morning-today-heading").assertIsDisplayed()
         assertVerticallyBefore("morning-overdue-overdue", "morning-today-today-1")
         assertVerticallyBefore("morning-overdue-overdue", "morning-today-heading")
         assertVerticallyBefore("morning-start-day", "morning-snooze")
@@ -136,8 +136,8 @@ class MorningReviewRepairHostTest {
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Late task"))
         composeRule.onNodeWithContentDescription("Edit Late task").performClick()
         composeRule.onNodeWithText("Edit overdue task").assertIsDisplayed()
-        composeRule.onNodeWithText("Late task").performTextClearance()
-        composeRule.onNodeWithText("Late task").performTextInput("Changed draft")
+        composeRule.onNodeWithContentDescription("Task title").performTextClearance()
+        composeRule.onNodeWithContentDescription("Task title").performTextInput("Changed draft")
         currentTask.value = currentTask.value.copy(description = "Authoritative refresh")
         composeRule.onNodeWithText("Changed draft").assertIsDisplayed()
 
@@ -172,12 +172,18 @@ class MorningReviewRepairHostTest {
 
     @Test
     fun largeFontCanScrollToBothGlobalActions() {
-        composeRule.activity.resources.configuration.fontScale = 2f
-        setScreen(summaryState(todayCount = 24))
+        val configuration = composeRule.activity.resources.configuration
+        val originalFontScale = configuration.fontScale
+        try {
+            configuration.fontScale = 2f
+            setScreen(summaryState(todayCount = 24))
 
-        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Start day"))
-        composeRule.onNodeWithText("Start day").assertIsDisplayed()
-        composeRule.onNodeWithText("Snooze 5 min").performScrollTo().assertIsDisplayed()
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Start day"))
+            composeRule.onNodeWithText("Start day").assertIsDisplayed()
+            composeRule.onNodeWithText("Snooze 5 min").performScrollTo().assertIsDisplayed()
+        } finally {
+            configuration.fontScale = originalFontScale
+        }
     }
 
     private fun setScreen(

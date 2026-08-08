@@ -221,14 +221,13 @@ class TaskEditorScaffoldLayoutTest {
             }
         }
 
+        composeRule.onNodeWithText("This task needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("Activity log").performScrollTo().assertIsDisplayed()
         val checklist = composeRule
             .onNodeWithContentDescription("Checklist: Checklist · 0/0 done")
             .fetchSemanticsNode()
         val footer = composeRule.onNodeWithText("Activity log").fetchSemanticsNode()
-
-        composeRule.onNodeWithText("This task needs attention").assertIsDisplayed()
         assertEquals(true, checklist.boundsInRoot.top < footer.boundsInRoot.top)
-        composeRule.onNodeWithText("Activity log").performScrollTo().assertIsDisplayed()
     }
 
     private fun currentUser() = ProjectCollaborator(
