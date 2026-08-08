@@ -746,6 +746,38 @@ class BlockerActivityFakeBackendTest {
         try { composeRule.onNodeWithText("Review").assertDoesNotExist() } finally { home.close() }
     }
 
+    @Test
+    fun morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T05:00:00Z")
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForText("Review")
+            composeRule.onNodeWithText("Review").performClick()
+            waitForText("Start day")
+            composeRule.onNodeWithTag("morning-start-day").performClick()
+            waitForText("Buzer")
+            composeRule.onNodeWithText("Review").assertDoesNotExist()
+            setMorningReviewClock("2026-08-08T07:00:00Z")
+            home.recreate()
+            composeRule.onNodeWithText("Review").assertDoesNotExist()
+        } finally { home.close() }
+    }
+
+    @Test
+    fun morningReview_post08AppOpenLaunchesOnceThenReturnsHomeWithoutRelaunch() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T07:00:00Z")
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForText("Start day")
+            composeRule.onNodeWithTag("morning-start-day").performClick()
+            waitForText("Buzer")
+            home.recreate()
+            composeRule.onNodeWithText("Start day").assertDoesNotExist()
+        } finally { home.close() }
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
