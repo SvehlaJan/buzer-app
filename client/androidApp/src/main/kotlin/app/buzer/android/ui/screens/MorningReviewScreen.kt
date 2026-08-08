@@ -193,7 +193,7 @@ fun MorningReviewScreen(
         }
         if (screenState.phase == MorningReviewPhase.Loading) item("loading") { Text("Loading morning review…") }
         items(screenState.blockingCards, key = { "blocking-${it.taskId}" }) { card ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth().testTag("morning-blocking-${card.taskId}")) {
                 Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(card.title, style = MaterialTheme.typography.titleMedium)
                     when (card) {
@@ -218,21 +218,18 @@ fun MorningReviewScreen(
             }
         }
         if (screenState.overdueRows.isNotEmpty()) {
-            item("overdue-heading") { Text("Overdue", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
-            items(screenState.overdueRows, key = { "overdue-${it.taskId}" }) { row -> AgendaRow(row, !screenState.actionInFlight, onOverdueDone, onOverdueEdit) {
+            item("overdue-heading") { Text("Overdue", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.testTag("morning-overdue-heading")) }
+            items(screenState.overdueRows, key = { "overdue-${it.taskId}" }) { row -> AgendaRow(row, !screenState.actionInFlight, onOverdueDone, onOverdueEdit, Modifier.testTag("morning-overdue-${row.taskId}")) {
                 repairingTask = taskLookup(row.taskId)
                 editorPresentation = morningReviewOverduePresentation
             } }
         }
         if (screenState.todayRows.isNotEmpty()) {
-            item("today-heading") { Text("Today", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
-            items(screenState.todayRows, key = { "today-${it.taskId}" }) { row -> AgendaRow(row, !screenState.actionInFlight, onOverdueDone, onOverdueEdit) {
-                repairingTask = taskLookup(row.taskId)
-                editorPresentation = morningReviewOverduePresentation
-            } }
+            item("today-heading") { Text("Today", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }.testTag("morning-today-heading")) }
+            items(screenState.todayRows, key = { "today-${it.taskId}" }) { row -> InformationalAgendaRow(row, Modifier.testTag("morning-today-${row.taskId}")) }
         }
-        item("start-day") { Button(onClick = onStart, enabled = screenState.startDayEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text(screenState.startDayLabel) } }
-        item("snooze") { TextButton(onClick = onSnooze, enabled = screenState.snoozeEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text("Snooze 5 min") } }
+        item("start-day") { Button(onClick = onStart, enabled = screenState.startDayEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth().testTag("morning-start-day")) { Text(screenState.startDayLabel) } }
+        item("snooze") { TextButton(onClick = onSnooze, enabled = screenState.snoozeEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth().testTag("morning-snooze")) { Text("Snooze 5 min") } }
         if (screenState.showBack) item("back") { TextButton(onClick = onBack, enabled = !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text("Back") } }
     }
 }
@@ -243,9 +240,10 @@ private fun AgendaRow(
     actionsEnabled: Boolean,
     onDone: (String) -> Unit,
     onEdit: (String) -> Unit,
+    modifier: Modifier,
     openEditor: () -> Unit
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Column(Modifier.weight(1f)) {
             Text(row.title, style = MaterialTheme.typography.titleMedium)
             Text(row.timeLabel, style = MaterialTheme.typography.bodyMedium)
@@ -253,6 +251,15 @@ private fun AgendaRow(
         }
         TextButton(onClick = { onDone(row.taskId) }, enabled = row.doneEnabled && actionsEnabled) { Text("Done") }
         TextButton(onClick = { onEdit(row.taskId); openEditor() }, enabled = actionsEnabled) { Text("Edit") }
+    }
+}
+
+@Composable
+private fun InformationalAgendaRow(row: MorningReviewAgendaRow, modifier: Modifier) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Text(row.title, style = MaterialTheme.typography.titleMedium)
+        Text(row.timeLabel, style = MaterialTheme.typography.bodyMedium)
+        Text(row.subline, style = MaterialTheme.typography.bodySmall)
     }
 }
 

@@ -50,3 +50,22 @@ Verification:
 
 - `MorningReviewScreenState` remains the authority for all rendered content/action availability; `MorningReviewActivity` only supplies callbacks.
 - Controller should review the Task 6 commit, update the plan boxes, then proceed with Task 7/Task 9 integration and runtime execution.
+
+---
+
+## Follow-up specification correction
+
+- Today agenda rows are informational only; Done/Edit remain exclusive to overdue rows.
+- Added stable tags and bounds-based host assertions for blocking, summary, and global-action order, plus the actual legacy per-task Snooze tag absence.
+- The phase transition assertion now requires focused Summary heading.
+- Added overdue editor coverage for its presentation, draft survival across an ordinary authoritative refresh, and closure when its occurrence/revision authority changes.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin :androidApp:testDebugUnitTest --tests '*MorningReview*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; updated Android host-test sources compile and matching JVM tests pass.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.

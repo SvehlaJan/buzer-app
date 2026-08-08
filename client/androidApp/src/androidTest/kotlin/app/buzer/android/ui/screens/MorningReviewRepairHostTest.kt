@@ -3,11 +3,13 @@ package app.buzer.android.ui.screens
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -17,6 +19,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.theme.BuzerTheme
 import app.buzer.shared.model.CommitmentState
@@ -42,7 +46,10 @@ class MorningReviewRepairHostTest {
         composeRule.onNodeWithText("Waiting for sync").assertIsDisplayed()
         composeRule.onNodeWithText("Start day").assertIsNotEnabled()
         composeRule.onAllNodesWithText("Snooze 5 min").assertCountEquals(1)
-        composeRule.onNodeWithTag("morning-repair-snooze", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("morning-snooze-repair", useUnmergedTree = true).assertDoesNotExist()
+        assertVerticallyBefore("morning-blocking-repair", "morning-start-day")
+        assertVerticallyBefore("morning-blocking-pending", "morning-start-day")
+        assertVerticallyBefore("morning-start-day", "morning-snooze")
     }
 
     @Test
@@ -58,18 +65,24 @@ class MorningReviewRepairHostTest {
         composeRule.onNodeWithText("Repair").performClick()
         composeRule.onNodeWithText("Repair 09:00–09:30").performClick()
         composeRule.waitUntil(5_000) { repaired == listOf("repair") }
-        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        composeRule.onNodeWithText("Morning review").assertIsDisplayed().assertIsFocused()
         composeRule.onNodeWithText("Start day").assertIsDisplayed()
     }
 
     @Test
-    fun summaryOrdersOverdueBeforeTodayAndTargetsTheCorrectTaskIds() {
+    fun summaryOrdersOverdueBeforeTodayAndOnlyOverdueRowsHaveActions() {
         val done = mutableListOf<String>()
         val edited = mutableListOf<String>()
         setScreen(summaryState(), onOverdueDone = { done += it }, onOverdueEdit = { edited += it })
 
         composeRule.onNodeWithText("Overdue").assertIsDisplayed()
         composeRule.onNodeWithText("Today").assertIsDisplayed()
+        assertVerticallyBefore("morning-overdue-overdue", "morning-today-today-1")
+        assertVerticallyBefore("morning-overdue-overdue", "morning-today-heading")
+        assertVerticallyBefore("morning-start-day", "morning-snooze")
+        composeRule.onNodeWithTag("morning-today-today-1").assertNoActionText()
+        composeRule.onAllNodesWithText("Done").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Edit").assertCountEquals(1)
         composeRule.onNodeWithText("Done").performClick()
         composeRule.onNodeWithText("Edit").performClick()
         assertEquals(listOf("overdue"), done)
@@ -77,6 +90,25 @@ class MorningReviewRepairHostTest {
         composeRule.onNodeWithText("Start day").assertIsEnabled()
         composeRule.onNodeWithText("09:00–09:30").assertIsDisplayed()
         composeRule.onNodeWithText("Overdue").assertIsDisplayed()
+    }
+
+    @Test
+    fun overdueEditorPreservesDraftOnOrdinaryRefreshAndClosesOnAuthorityInvalidation() {
+        val overdue = task("overdue", "Late task")
+        val currentTask = mutableStateOf(overdue)
+        val state = mutableStateOf(summaryState())
+        setScreenState({ state.value }, taskLookup = { id -> currentTask.value.takeIf { it.id == id } })
+
+        composeRule.onNodeWithText("Edit").performClick()
+        composeRule.onNodeWithText("Edit overdue task").assertIsDisplayed()
+        composeRule.onNodeWithText("Late task").performTextClearance()
+        composeRule.onNodeWithText("Late task").performTextInput("Changed draft")
+        currentTask.value = currentTask.value.copy(description = "Authoritative refresh")
+        composeRule.onNodeWithText("Changed draft").assertIsDisplayed()
+
+        currentTask.value = currentTask.value.copy(taskRevision = "revision-replaced")
+        composeRule.onNodeWithText("Morning review").assertIsDisplayed()
+        composeRule.onNodeWithText("Edit overdue task").assertDoesNotExist()
     }
 
     @Test
@@ -182,6 +214,16 @@ class MorningReviewRepairHostTest {
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertHeading() = assert(
         SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
     )
+
+    private fun assertVerticallyBefore(firstTag: String, secondTag: String) {
+        val first = composeRule.onNodeWithTag(firstTag).fetchSemanticsNode().boundsInRoot.top
+        val second = composeRule.onNodeWithTag(secondTag).fetchSemanticsNode().boundsInRoot.top
+        assertTrue("Expected $firstTag before $secondTag", first < second)
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertNoActionText() {
+        assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+    }
 
     private fun task(id: String, title: String) = TaskSnapshotItem(
         id = id, todoistTaskId = "todoist-$id", title = title, description = "Repair this commitment", projectId = project.id,
