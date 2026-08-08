@@ -39,9 +39,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.MainActivity
 import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.enforcement.AlarmKind
+import app.buzer.android.enforcement.AndroidAlarmScheduler
+import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import app.buzer.android.morningreview.MorningReviewAlarmReason
 import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
+import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -657,13 +661,26 @@ class BlockerActivityFakeBackendTest {
         // first so monotonic snapshot protection cannot intentionally retain the prior test's
         // snapshot after a fake-backend restart.
         File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "latest_snapshot.json").delete()
-        MorningReviewLocalStateStore
-            .fromContext(ApplicationProvider.getApplicationContext())
-            .replace(MorningReviewLocalState())
+        clearMorningReviewLocalState()
         fakeBackend.setFailActions(false)
         fakeBackend.setFailSnapshot(false)
         fakeBackend.resetCalls()
         blockerErrorLog().delete()
+    }
+
+    private fun clearMorningReviewLocalState() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = MorningReviewLocalStateStore.fromContext(context)
+        store.read().scheduledAlarm?.let { alarm ->
+            AndroidAlarmScheduler(context).cancel(
+                ScheduledAlarmIdentity(
+                    taskId = MORNING_REVIEW_TASK_ID,
+                    occurrenceKey = alarm.occurrenceKey,
+                    kind = AlarmKind.MORNING_REVIEW
+                )
+            )
+        }
+        store.replace(MorningReviewLocalState())
     }
 
     private fun runHomeSwipeRefreshPrecondition() {
