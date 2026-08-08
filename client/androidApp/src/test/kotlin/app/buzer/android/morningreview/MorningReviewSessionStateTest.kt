@@ -62,8 +62,33 @@ class MorningReviewSessionStateTest {
         )
         controller.retryAction()
 
-        assertEquals(2, reloads)
+        assertEquals(1, reloads)
         assertEquals(1, retries)
+    }
+
+    @Test
+    fun overdueReturnedAuthorityReplacesSessionForPendingStaleAndLocalFailure() = runBlocking {
+        val controller = MorningReviewSessionController(publish = { })
+        val authority = app.buzer.shared.model.TasksSnapshotResponse(7, "now", emptyList(), emptyList(), 1)
+
+        controller.handleOverdueResult(CoordinatorActionResult.Pending(response(authority)), {})
+        assertEquals(7, controller.state.snapshot?.scheduleVersion)
+        controller.handleOverdueResult(CoordinatorActionResult.Stale(authority.copy(scheduleVersion = 8), "stale"), {})
+        assertEquals(8, controller.state.snapshot?.scheduleVersion)
+        controller.handleOverdueResult(CoordinatorActionResult.LocalReconciliationFailed(authority.copy(scheduleVersion = 9), "disk"), {})
+        assertEquals(9, controller.state.snapshot?.scheduleVersion)
+    }
+
+    @Test
+    fun terminalActionsFinishDistinctResultsAndRetryFailureWithoutFinishing() = runBlocking {
+        val controller = MorningReviewSessionController(publish = { })
+        val finished = mutableListOf<MorningReviewResult>()
+        controller.runTerminalAction(MorningReviewResult.Acknowledged, {}, finished::add) {}
+        controller.runTerminalAction(MorningReviewResult.Snoozed, {}, finished::add) {}
+        controller.runTerminalAction(MorningReviewResult.Snoozed, { error("storage") }, finished::add) {}
+        assertEquals(listOf(MorningReviewResult.Acknowledged, MorningReviewResult.Snoozed), finished)
+        assertTrue(controller.hasRetryAction)
+        assertFalse(controller.state.actionInFlight)
     }
 
     @Test
@@ -79,10 +104,10 @@ class MorningReviewSessionStateTest {
         assertTrue(controller.hasRetryAction)
     }
 
-    private fun response() = app.buzer.shared.model.MutationResponse(
+    private fun response(snapshot: app.buzer.shared.model.TasksSnapshotResponse = app.buzer.shared.model.TasksSnapshotResponse(1, "2026-08-02T10:00:00Z", emptyList(), emptyList(), 1)) = app.buzer.shared.model.MutationResponse(
         actionId = "action",
         outcome = app.buzer.shared.model.MutationOutcome.reconciliation_pending,
-        snapshot = app.buzer.shared.model.TasksSnapshotResponse(1, "2026-08-02T10:00:00Z", emptyList(), emptyList(), 1)
+        snapshot = snapshot
     )
 
     private fun snapshot(scheduleVersion: Long = 1) = SnapshotViewState(

@@ -483,6 +483,16 @@ Verification:
 
 E2E remains deferred to Tasks 9/10.
 
+### Final Task 5 correction (2026-08-08)
+
+- The used session controller now owns forced-sync and terminal acknowledgement/Snooze execution, including retry closures and open-on-failure behavior.
+- Pending, Stale, and local-reconciliation-failed overdue results reduce their returned authority directly; only ordinary Success reloads the cache. RetryAfter preserves and recursively uses its supplied retry closure.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReview*Test'`, `./gradlew :androidApp:compileDebugKotlin`, `./gradlew :androidApp:compileDebugAndroidTestKotlin`, `git diff --check`
+- Result: PASS
+- Evidence: focused JVM tests plus production and instrumentation-source compilation succeeded; no whitespace errors. E2E deferred to Tasks 9/10.
+
 ---
 
 ## Task 4 quality correction (2026-08-08)

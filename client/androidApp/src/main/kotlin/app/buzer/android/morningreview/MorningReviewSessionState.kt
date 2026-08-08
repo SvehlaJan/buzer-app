@@ -1,6 +1,7 @@
 package app.buzer.android.morningreview
 
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
 
 /** Small activity-owned state machine: cache is always retained across failed forced sync. */
@@ -39,6 +40,18 @@ class MorningReviewSessionController(
     }
     fun forceSyncSucceeded(snapshot: SnapshotViewState) = update(state.forceSyncSucceeded(snapshot))
     fun forceSyncFailed(message: String) = update(state.forceSyncFailed(message))
+    suspend fun forceSync(operation: suspend () -> SnapshotViewState): Exception? {
+        if (!beginForcedSync()) return null
+        return try {
+            forceSyncSucceeded(operation())
+            null
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            forceSyncFailed(error.message ?: "snapshot refresh failed")
+            error
+        }
+    }
     fun beginAction(): Boolean = state.beginAction()?.let { update(it); true } ?: false
     fun finishAction() = update(state.finishAction())
     fun localActionFailed(message: String, retryAction: () -> Unit) {
@@ -48,19 +61,39 @@ class MorningReviewSessionController(
 
     suspend fun retryAction() = retry?.invoke()
 
+    suspend fun runTerminalAction(
+        result: MorningReviewResult,
+        operation: () -> Unit,
+        onFinish: (MorningReviewResult) -> Unit,
+        retryAction: () -> Unit
+    ): Exception? {
+        if (!beginAction()) return null
+        return try {
+            operation()
+            finishAction()
+            onFinish(result)
+            null
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            localActionFailed(error.message ?: "action failed", retryAction)
+            error
+        }
+    }
+
     suspend fun handleOverdueResult(
         result: CoordinatorActionResult,
         reloadCached: () -> Unit
     ) {
         when (result) {
-            CoordinatorActionResult.Success,
-            is CoordinatorActionResult.Pending,
-            is CoordinatorActionResult.Stale,
-            is CoordinatorActionResult.LocalReconciliationFailed -> {
+            CoordinatorActionResult.Success -> {
                 reloadCached()
                 retry = null
                 finishAction()
             }
+            is CoordinatorActionResult.Pending -> applyAuthority(SnapshotReducer.reduce(result.response.snapshot))
+            is CoordinatorActionResult.Stale -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
             is CoordinatorActionResult.RetryAfter -> {
                 retry = { handleOverdueResult(result.retry(), reloadCached) }
                 update(state.actionFailed(result.message))
@@ -68,6 +101,12 @@ class MorningReviewSessionController(
             is CoordinatorActionResult.FailedAndHidden -> update(state.actionFailed(result.message))
             CoordinatorActionResult.ChildActionInFlight -> update(state.actionFailed("Another action is in progress"))
         }
+    }
+
+    private fun applyAuthority(snapshot: SnapshotViewState) {
+        cache(snapshot)
+        retry = null
+        finishAction()
     }
 
     private fun update(next: MorningReviewSessionState) {

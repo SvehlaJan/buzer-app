@@ -87,15 +87,9 @@ class MorningReviewActivity : ComponentActivity() {
 
         fun runForcedRefresh() {
             val currentCoordinator = coordinator ?: return
-            if (!session.beginForcedSync()) return
             lifecycleScope.launch {
-                try {
-                    session.forceSyncSucceeded(SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()))
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
+                session.forceSync { SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()) }?.let { error ->
                     val message = error.message ?: "snapshot refresh failed"
-                    session.forceSyncFailed(message)
                     AppLog.error("morning_review forced sync failed", error)
                     errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
                 }
@@ -114,17 +108,16 @@ class MorningReviewActivity : ComponentActivity() {
         }
 
         fun runLocalAction(label: String, operation: () -> Unit, result: MorningReviewResult) {
-            if (!session.beginAction()) return
-            retryAction = { runLocalAction(label, operation, result) }
             lifecycleScope.launch {
-                try {
-                    operation()
+                session.runTerminalAction(
+                    result = result,
+                    operation = operation,
+                    onFinish = {
                     clearCurrentNotification()
                     finishWith(result)
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
-                    session.localActionFailed(error.message ?: "$label failed") { runLocalAction(label, operation, result) }
+                    },
+                    retryAction = { runLocalAction(label, operation, result) }
+                )?.let { error ->
                     AppLog.error("morning_review $label failed", error)
                 }
             }
