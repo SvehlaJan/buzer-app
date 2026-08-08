@@ -4,6 +4,7 @@ Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`, Task 8.
 
 Completed:
 - Replaced the obsolete snooze instrumentation expectation with a local-state assertion: Snooze closes the review, writes a `Snooze` alarm, and records no obsolete server-dismiss route.
+- Added the parallel production-path Start expectation: after repairing the owner task, Start closes the review, writes local acknowledgement state, and records no obsolete server-dismiss route.
 - Removed the Android/shared client dismissal API, coordinator path, error enum value, constants, and fake/test coverage. The backend compatibility route was not changed.
 
 Files changed:
@@ -19,6 +20,9 @@ Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --tests '*EnforcementCoordinatorTest' --tests '*MorningReview*Test' :androidApp:compileDebugAndroidTestKotlin`
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL in 13s`.
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReview*Test' :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 2s` after adding the Start instrumentation expectation.
 - Command: `rg -n "dismissMorningReview|/review/dismiss" client --glob '!**/build/**'`
 - Result: PASS
 - Evidence: no client matches (exit 1 as expected).

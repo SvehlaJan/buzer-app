@@ -625,6 +625,33 @@ class BlockerActivityFakeBackendTest {
         check(!fakeBackend.calls().contains("\"path\":\"$obsoleteDismissPath\""))
     }
 
+    @Test
+    fun morningReview_startAcknowledgesLocallyAndHides() {
+        resetTestState()
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Invalid assigned fixture")
+            repairInvalidTask()
+            selectDefaultRepairSchedule()
+            composeRule.onNodeWithText(waitForComputedRepairLabel()).performClick()
+            waitForRecordedCall("/tasks/task-invalid/update")
+            waitForTextAbsent("Invalid assigned fixture")
+
+            composeRule.onNodeWithTag("morning-start-day").performScrollTo().performClick()
+
+            waitForActivityDestroyed(scenario)
+            val state = MorningReviewLocalStateStore
+                .fromContext(ApplicationProvider.getApplicationContext())
+                .read()
+            check(state.lastAcknowledgedDate != null)
+            check(state.pendingSnoozeAt == null)
+            val obsoleteDismissPath = "/review/" + "dismiss"
+            check(!fakeBackend.calls().contains("\"path\":\"$obsoleteDismissPath\""))
+        } finally {
+            scenario.close()
+        }
+    }
+
     private fun resetTestState() {
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
         // first so monotonic snapshot protection cannot intentionally retain the prior test's
