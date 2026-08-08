@@ -101,6 +101,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 ## C2 priority correction
 
 - Priority scenarios now use an unpinned active current task for Start and an unpinned past-end task for Deadline, so resolver branches cannot be skipped by occurrence pins.
+- Draft tests now drive MainActivity from pre-08 to post-08 lifecycle resume, exercising its production automated launch and ActivityResult restoration path rather than launching MorningReviewActivity directly.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

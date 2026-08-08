@@ -765,8 +765,11 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp() {
-        resetTestState("clean")
+        resetTestState()
         setMorningReviewClock("2026-08-08T05:00:00Z")
+        MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).replace(
+            MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 8))
+        )
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {
             waitForText("Review")
@@ -845,25 +848,26 @@ class BlockerActivityFakeBackendTest {
         resetTestState("clean")
         setMorningReviewClock("2026-08-08T05:00:00Z")
         val state = MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext())
-        state.replace(MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 8)))
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {
             waitForContentDescription("Add task")
             composeRule.onNodeWithContentDescription("Add task").performClick()
             waitForText("Add task")
             composeRule.onNodeWithContentDescription("Task title").performTextInput("Draft survives review")
-            val review = ActivityScenario.launch<MorningReviewActivity>(
-                MorningReviewContract.automatedIntent(Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java))
-            )
+            setMorningReviewClock("2026-08-08T07:00:00Z")
+            home.moveToState(Lifecycle.State.STARTED)
+            home.moveToState(Lifecycle.State.RESUMED)
+            waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").performClick()
-            waitForActivityDestroyed(review)
+            waitForText("Add task")
             composeRule.onNodeWithContentDescription("Task title").assertTextContains("Draft survives review")
         } finally { home.close() }
     }
 
     @Test
     fun automatedReviewSnoozePreservesDirtyEditDraft() {
-        resetTestState()
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T05:00:00Z")
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {
             waitForAnyText("Incomplete checklist task")
@@ -873,12 +877,12 @@ class BlockerActivityFakeBackendTest {
             val draft = "Edited draft survives snooze"
             composeRule.onNodeWithContentDescription("Task title").performTextClearance()
             composeRule.onNodeWithContentDescription("Task title").performTextInput(draft)
-
-            val review = ActivityScenario.launch<MorningReviewActivity>(
-                MorningReviewContract.automatedIntent(Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java))
-            )
+            setMorningReviewClock("2026-08-08T07:00:00Z")
+            home.moveToState(Lifecycle.State.STARTED)
+            home.moveToState(Lifecycle.State.RESUMED)
+            waitForText("Start day")
             composeRule.onNodeWithTag("morning-snooze").performClick()
-            waitForActivityDestroyed(review)
+            waitForText("Edit task")
             composeRule.onNodeWithContentDescription("Task title").assertTextContains(draft)
         } finally { home.close() }
     }
