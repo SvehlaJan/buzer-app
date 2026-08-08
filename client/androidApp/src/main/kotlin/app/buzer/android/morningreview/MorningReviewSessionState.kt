@@ -111,6 +111,8 @@ class MorningReviewSessionController(
             if (beginAction()) {
                 try {
                     handleOverdueResult(execute(), reloadCached, execute)
+                } catch (error: kotlinx.coroutines.CancellationException) {
+                    throw error
                 } catch (error: Exception) {
                     retryOverdue(error.message ?: "Task completion failed", reloadCached, execute)
                 }

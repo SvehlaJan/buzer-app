@@ -4,6 +4,7 @@ import app.buzer.android.ui.screens.MorningReviewBlockingCard
 import app.buzer.android.ui.screens.MorningReviewPhase
 import app.buzer.android.ui.screens.MorningReviewRetryTarget
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
+import app.buzer.android.ui.screens.shouldCloseMorningReviewEditor
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
@@ -19,6 +20,15 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class MorningReviewScreenStateTest {
+    @Test
+    fun editorSelectionClosesOnlyWhenAuthorityRemovesOrChangesIdentity() {
+        val opened = task("edit").copy(occurrenceKey = "one", taskRevision = "r1")
+        assertFalse(shouldCloseMorningReviewEditor(opened, opened.copy()))
+        assertTrue(shouldCloseMorningReviewEditor(opened, null))
+        assertTrue(shouldCloseMorningReviewEditor(opened, opened.copy(occurrenceKey = "two")))
+        assertTrue(shouldCloseMorningReviewEditor(opened, opened.copy(taskRevision = "r2")))
+    }
+
     @Test
     fun cachedSnapshotRemainsVisibleDuringLoadingAndRefreshFailure() {
         val cached = snapshot(task("today", due = "2026-08-02T12:00:00Z", duration = 30))

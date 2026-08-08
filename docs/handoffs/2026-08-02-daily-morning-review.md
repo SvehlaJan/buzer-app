@@ -503,6 +503,10 @@ Verification:
 - Overdue completion retains one request/execute closure across failures and retry; repair mutation authority is applied directly for returned pending/stale/local-reconciliation snapshots.
 - Legacy screen bridge again short-circuits Loading/Error before delegating Ready state.
 
+### Task 5 final quality correction (2026-08-08)
+
+- Guarded overdue retries preserve cancellation, editor selection closes on authoritative identity/revision change, and legacy Ready warnings remain verbatim.
+
 ---
 
 ## Task 4 quality correction (2026-08-08)

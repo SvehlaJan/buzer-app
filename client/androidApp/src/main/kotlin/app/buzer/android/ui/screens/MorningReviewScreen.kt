@@ -240,8 +240,9 @@ fun MorningReviewScreen(
 
     // A successful repair updates the authoritative invalid-task list in the hosting activity.
     // Do not leave an editor open for a task that no longer requires repair.
-    LaunchedEffect(screenState, repairingTask?.id) {
-        if (repairingTask != null && taskLookup(repairingTask?.id.orEmpty()) == null) {
+    val currentEditingTask = repairingTask?.let { taskLookup(it.id) }
+    LaunchedEffect(repairingTask?.id, currentEditingTask?.occurrenceKey, currentEditingTask?.taskRevision) {
+        if (shouldCloseMorningReviewEditor(repairingTask, currentEditingTask)) {
             repairingTask = null
         }
     }
@@ -314,6 +315,9 @@ fun MorningReviewScreen(
 
 internal fun completeMorningReviewEditorSelection(): TaskSnapshotItem? = null
 
+internal fun shouldCloseMorningReviewEditor(opened: TaskSnapshotItem?, current: TaskSnapshotItem?): Boolean =
+    opened != null && (current == null || opened.occurrenceKey != current.occurrenceKey || opened.taskRevision != current.taskRevision)
+
 /** Compatibility bridge for pre-Task-5 hosts; Task 6 migrates them to the explicit state input. */
 @Composable
 fun MorningReviewScreen(
@@ -347,8 +351,10 @@ fun MorningReviewScreen(
         is MorningReviewContentState.Ready -> Unit
     }
     val snapshot = SnapshotViewState(0, "", invalidTasks, emptyList(), emptyList(), emptyList(), emptyList(), invalidTasks)
+    val readyState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState.refreshing, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack)
+        .copy(warning = contentState.warning, refreshing = contentState.refreshing)
     MorningReviewScreen(
-        screenState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState.refreshing, refreshError = contentState.warning, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack),
+        screenState = readyState,
         taskLookup = { id -> invalidTasks.firstOrNull { it.id == id } }, onBack = onBack, onRepair = onRepair,
         onRepairSuccess = onRepairSuccess, onStart = onStart, onSnooze = onSnooze, onOverdueDone = onOverdueDone,
         showBack = showBack, onRetryAction = onRetryAction, onRetryRefresh = onRetryRefresh,
