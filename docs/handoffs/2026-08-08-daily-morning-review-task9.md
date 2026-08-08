@@ -89,6 +89,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `cachedStartPriorityDefersReviewThenClearedCacheAllowsRetryDelivery`: real coordinator SnapshotStore priority defer/retry notification path.
 - `cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery`: both Start and Deadline fixture authorities.
 - `automatedReviewStartPreservesDirtyAddDraft`: automated terminal Start over a typed Add draft.
+- `automatedReviewSnoozePreservesDirtyEditDraft`: automated Snooze over a typed Edit draft.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

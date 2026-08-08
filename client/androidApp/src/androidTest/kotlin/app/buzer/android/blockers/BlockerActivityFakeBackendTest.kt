@@ -33,6 +33,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeUp
@@ -827,6 +828,28 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithTag("morning-start-day").performClick()
             waitForActivityDestroyed(review)
             composeRule.onNodeWithContentDescription("Task title").assertTextContains("Draft survives review")
+        } finally { home.close() }
+    }
+
+    @Test
+    fun automatedReviewSnoozePreservesDirtyEditDraft() {
+        resetTestState()
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForAnyText("Incomplete checklist task")
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
+            composeRule.onNodeWithText("Tomorrow task").performClick()
+            waitForText("Edit task")
+            val draft = "Edited draft survives snooze"
+            composeRule.onNodeWithContentDescription("Task title").performTextClearance()
+            composeRule.onNodeWithContentDescription("Task title").performTextInput(draft)
+
+            val review = ActivityScenario.launch<MorningReviewActivity>(
+                MorningReviewContract.automatedIntent(Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java))
+            )
+            composeRule.onNodeWithTag("morning-snooze").performClick()
+            waitForActivityDestroyed(review)
+            composeRule.onNodeWithContentDescription("Task title").assertTextContains(draft)
         } finally { home.close() }
     }
 
