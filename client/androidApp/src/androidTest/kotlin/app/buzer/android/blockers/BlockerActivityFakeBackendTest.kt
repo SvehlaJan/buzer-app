@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
+import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -250,7 +251,7 @@ class BlockerActivityFakeBackendTest {
 
         launchMorningReview()
 
-        composeRule.onNodeWithText("tasks need attention", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("1 task needs attention").assertIsDisplayed()
         composeRule.onNodeWithText("unresolved", substring = true).assertIsDisplayed()
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
@@ -584,17 +585,15 @@ class BlockerActivityFakeBackendTest {
             "\"deviceId\":",
             "\"expectedOccurrenceKey\":"
         )
-        waitForTextAbsent("Invalid assigned fixture")
-        composeRule.onAllNodesWithText("Invalid assigned fixture").assertCountEquals(0)
         waitForText("Morning review")
         composeRule.onNodeWithText("Start day").assertIsDisplayed()
+        waitForTextAbsent("1 task needs attention")
         assertActivityNotDestroyed(scenario)
     }
 
     @Test
     fun morningReview_repairBackendFailureShowsErrorAndStaysOpen() {
         resetTestState("invalid")
-        fakeBackend.setFailActions(true)
         try {
             val scenario = launchMorningReview()
 
@@ -602,6 +601,7 @@ class BlockerActivityFakeBackendTest {
             repairInvalidTask()
             selectDefaultRepairSchedule()
             val repairLabel = waitForComputedRepairLabel()
+            fakeBackend.setFailActions(true)
             composeRule.onNodeWithText(repairLabel).performClick()
 
             waitForRecordedCall("/tasks/task-invalid/update")
@@ -646,7 +646,8 @@ class BlockerActivityFakeBackendTest {
             selectDefaultRepairSchedule()
             composeRule.onNodeWithText(waitForComputedRepairLabel()).performClick()
             waitForRecordedCall("/tasks/task-invalid/update")
-            waitForTextAbsent("Invalid assigned fixture")
+            waitForText("Start day")
+            waitForTextAbsent("1 task needs attention")
 
             composeRule.onNodeWithTag("morning-start-day").performScrollTo().performClick()
 
@@ -965,7 +966,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Retry").assertIsDisplayed()
         composeRule.onAllNodesWithText("Dismiss").assertCountEquals(0)
 
-        pressBack()
+        scenario.onActivity { (it as OnBackPressedDispatcherOwner).onBackPressedDispatcher.onBackPressed() }
 
         composeRule.onNodeWithText(title).assertIsDisplayed()
         composeRule.onNodeWithText("Retry").assertIsDisplayed()

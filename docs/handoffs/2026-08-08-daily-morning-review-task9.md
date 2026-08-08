@@ -67,6 +67,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Android reset clears Morning Review state/snapshot/notifications and API-34 app alarms before choosing a named scenario.
 - Alarm instrumentation checks manifest registration with flags `0`, stale/current notification behavior, and stable `nextAlarmClock` replacement.
 - Ordinary blocker-test reset acknowledges the current local date after clearing state, so post-08:00 catch-up cannot obscure unrelated Home/direct-blocker tests. Named Morning Review scenarios remain deliberately unacknowledged.
+- GMD follow-up migrated repaired-task assertions from title disappearance to absent attention + visible `Start day`; failure-action injection now starts after initial Review load; failure-dialog Back uses the activity dispatcher.
 
 Verification:
 - Command: `npm test -- e2eServer.test.ts e2eFixtures.test.ts` and `npm run typecheck`
