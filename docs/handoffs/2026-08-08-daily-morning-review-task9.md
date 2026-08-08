@@ -87,6 +87,8 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `morningReview_ownerBlockingMixDisablesStartButUnassignedRefreshEnablesIt`: test-only owner invalid/pending versus unassigned scenario projection.
 - `acknowledgedDayNewInvalidSyncRestoresHomeBannerWithoutAutomatedLaunch`: same-day local acknowledgement with post-sync invalid banner reopening.
 - `cachedStartPriorityDefersReviewThenClearedCacheAllowsRetryDelivery`: real coordinator SnapshotStore priority defer/retry notification path.
+- `cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery`: both Start and Deadline fixture authorities.
+- `automatedReviewStartPreservesDirtyAddDraft`: automated terminal Start over a typed Add draft.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

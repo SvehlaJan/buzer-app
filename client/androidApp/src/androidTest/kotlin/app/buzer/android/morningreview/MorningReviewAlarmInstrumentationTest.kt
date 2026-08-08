@@ -128,8 +128,10 @@ class MorningReviewAlarmInstrumentationTest {
     }
 
     @Test
-    fun cachedStartPriorityDefersReviewThenClearedCacheAllowsRetryDelivery() {
-        fakeBackend.reset("today")
+    fun cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery() {
+        listOf("today", "priorityDeadline").forEach { scenario ->
+        clearMorningReviewState()
+        fakeBackend.reset(scenario)
         runBlocking { EnforcementDependencies.coordinator(context).forceSyncAndReconcile() }
         grantNotifications()
         val scheduler = MorningReviewDependencies.scheduler(context)
@@ -150,6 +152,8 @@ class MorningReviewAlarmInstrumentationTest {
         receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW))
         val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW)
         assertEquals(1, waitForNotification(notifications, notificationId).size)
+        notifications.cancel(notificationId)
+        }
     }
 
     private fun grantNotifications() {

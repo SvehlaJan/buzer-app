@@ -809,6 +809,27 @@ class BlockerActivityFakeBackendTest {
         } finally { home.close() }
     }
 
+    @Test
+    fun automatedReviewStartPreservesDirtyAddDraft() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T05:00:00Z")
+        val state = MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext())
+        state.replace(MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 8)))
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForContentDescription("Add task")
+            composeRule.onNodeWithContentDescription("Add task").performClick()
+            waitForText("Add task")
+            composeRule.onNodeWithContentDescription("Task title").performTextInput("Draft survives review")
+            val review = ActivityScenario.launch<MorningReviewActivity>(
+                MorningReviewContract.automatedIntent(Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java))
+            )
+            composeRule.onNodeWithTag("morning-start-day").performClick()
+            waitForActivityDestroyed(review)
+            composeRule.onNodeWithContentDescription("Task title").assertTextContains("Draft survives review")
+        } finally { home.close() }
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
