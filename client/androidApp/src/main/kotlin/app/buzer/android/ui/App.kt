@@ -1,6 +1,5 @@
 package app.buzer.android.ui
 
-import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -12,8 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.EditTaskScreen
@@ -50,21 +47,18 @@ fun BuzerApp(
     onUpdateTask: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
         CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
     },
+    morningReviewBannerVisible: Boolean = false,
+    morningReviewBlockingCount: Int? = null,
+    onOpenMorningReview: () -> Unit = {},
     nowProvider: () -> Instant = { Instant.now() },
     zoneIdProvider: () -> ZoneId = { ZoneId.systemDefault() }
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
-        val context = LocalContext.current
         val initialSection = if (openAddTask) AppSection.Add else AppSection.Home
         var section by remember { mutableStateOf(initialSection) }
         var editingTaskId by remember { mutableStateOf<String?>(null) }
         var overdueExpanded by rememberSaveable { mutableStateOf(false) }
         var unassignedExpanded by rememberSaveable { mutableStateOf(false) }
-
-        fun openMorningReview() {
-            AppLog.info("ui navigate section=Review source=home mode=activity")
-            context.startActivity(Intent(context, MorningReviewActivity::class.java))
-        }
 
         val homeState = buildBuzerHomeState(
             snapshot = snapshot,
@@ -74,7 +68,9 @@ fun BuzerApp(
             now = nowProvider(),
             zoneId = zoneIdProvider(),
             overdueExpanded = overdueExpanded,
-            unassignedExpanded = unassignedExpanded
+            unassignedExpanded = unassignedExpanded,
+            morningReviewBannerVisible = morningReviewBannerVisible,
+            ownerBlockingCount = morningReviewBlockingCount
         )
         Column(modifier = Modifier.fillMaxSize()) {
             when (section) {
@@ -98,7 +94,8 @@ fun BuzerApp(
                         }
                     },
                     onOpenMorningReview = {
-                        openMorningReview()
+                        AppLog.info("ui navigate section=Review source=home mode=activity")
+                        onOpenMorningReview()
                     },
                     onToggleOverdueExpanded = { overdueExpanded = !overdueExpanded },
                     onToggleUnassignedExpanded = { unassignedExpanded = !unassignedExpanded }
@@ -135,6 +132,8 @@ internal fun buildBuzerHomeState(
     homeRefreshInFlight: Boolean,
     homeRefreshError: String?,
     homeActionStatusMessage: String? = null,
+    morningReviewBannerVisible: Boolean = false,
+    ownerBlockingCount: Int? = null,
     now: Instant,
     zoneId: ZoneId,
     overdueExpanded: Boolean = false,
@@ -145,6 +144,8 @@ internal fun buildBuzerHomeState(
         refreshInFlight = homeRefreshInFlight,
         refreshError = homeRefreshError,
         actionStatusMessage = homeActionStatusMessage,
+        morningReviewBannerVisible = morningReviewBannerVisible,
+        ownerBlockingCount = ownerBlockingCount,
         now = now,
         zoneId = zoneId,
         overdueExpanded = overdueExpanded,

@@ -69,6 +69,8 @@ fun buildHomeScreenState(
     refreshInFlight: Boolean = false,
     refreshError: String? = null,
     actionStatusMessage: String? = null,
+    morningReviewBannerVisible: Boolean = false,
+    ownerBlockingCount: Int? = null,
     now: Instant,
     zoneId: ZoneId,
     overdueExpanded: Boolean = false,
@@ -92,7 +94,11 @@ fun buildHomeScreenState(
             contentState = content,
             refreshInFlight = refreshInFlight,
             actionStatusMessage = actionStatusMessage,
-            reviewAttention = null,
+            reviewAttention = if (morningReviewBannerVisible) {
+                HomeAttention("Morning review ready", HomeAttentionAction.OpenMorningReview)
+            } else {
+                null
+            },
             refreshAttention = null,
             currentBlock = null,
             overlappingCurrentRows = emptyList(),
@@ -125,10 +131,13 @@ fun buildHomeScreenState(
     // authoritative invalid projection through the shared selector for repair.
     val reviewTasks = ownerAgenda.blocking.filter { it.hierarchyStatus != HierarchyStatus.unsupported }
     val reviewIds = reviewTasks.map { it.id }.toSet()
-    val reviewAttention = if (reviewTasks.isNotEmpty()) {
-        val count = reviewTasks.size
+    val blockingCount = ownerBlockingCount ?: reviewTasks.size
+    val reviewAttention = if (blockingCount > 0) {
+        val count = blockingCount
         val msg = if (count == 1) "1 invalid task needs review" else "$count invalid tasks need review"
         HomeAttention(msg, HomeAttentionAction.OpenMorningReview)
+    } else if (morningReviewBannerVisible) {
+        HomeAttention("Morning review ready", HomeAttentionAction.OpenMorningReview)
     } else {
         null
     }

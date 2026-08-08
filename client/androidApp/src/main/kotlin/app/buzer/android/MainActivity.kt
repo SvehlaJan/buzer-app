@@ -1,7 +1,9 @@
 package app.buzer.android
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,8 +14,16 @@ import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
+import app.buzer.android.blockers.MorningReviewActivity
+import app.buzer.android.morningreview.MorningReviewAvailability
+import app.buzer.android.morningreview.MorningReviewContract
+import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewEntryDecider
+import app.buzer.android.morningreview.MorningReviewLocalStateStore
+import app.buzer.android.morningreview.MorningReviewScheduleCalculator
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.ui.HomeDoneActionHandler
+import app.buzer.android.ui.agenda.selectOwnerAgenda
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
@@ -22,7 +32,12 @@ import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +46,18 @@ class MainActivity : ComponentActivity() {
     private var homeRefreshInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
     private var homeActionStatusMessage by mutableStateOf<String?>(null)
+    private var morningReviewAvailability by mutableStateOf<MorningReviewAvailability?>(null)
+    private var morningReviewLaunchInFlight = false
+    private var morningReviewReevaluationJob: Job? = null
+    private val morningReviewStateStore by lazy { MorningReviewLocalStateStore.fromContext(applicationContext) }
+    private val morningReviewCalculator = MorningReviewScheduleCalculator()
+    private val morningReviewScheduler by lazy { MorningReviewDependencies.scheduler(applicationContext) }
+    private val morningReviewLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        morningReviewLaunchInFlight = false
+        refreshMorningReviewAvailability()
+    }
     private val homeActionHandler: HomeDoneActionHandler by lazy {
         HomeDoneActionHandler(
             refreshSnapshot = { forceTodoist ->
@@ -50,7 +77,10 @@ class MainActivity : ComponentActivity() {
             latestSnapshot = {
                 coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)
             },
-            applySnapshot = { snapshotViewState = it },
+            applySnapshot = {
+                snapshotViewState = it
+                refreshMorningReviewAvailability()
+            },
             setStatusMessage = { homeActionStatusMessage = it },
             setRefreshInFlight = { homeRefreshInFlight = it },
             clearRefreshFailure = { homeRefreshError = null },
@@ -72,6 +102,7 @@ class MainActivity : ComponentActivity() {
             }
             .getOrNull()
         refreshEnforcement(forceTodoist = false)
+        refreshMorningReviewAvailability()
         val openAddTask = intent.getBooleanExtra(AddTaskWidgetProvider.EXTRA_OPEN_ADD_TASK, false)
         setBuzerContent {
             BuzerApp(
@@ -87,10 +118,14 @@ class MainActivity : ComponentActivity() {
                 onTaskCreated = { returnedSnapshot ->
                     val applied = coordinator?.applyReturnedSnapshot(returnedSnapshot) ?: returnedSnapshot
                     snapshotViewState = SnapshotReducer.reduce(applied)
+                    refreshMorningReviewAvailability()
                 },
                 onToggleCurrentChild = ::toggleCurrentChild,
                 deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
-                onUpdateTask = ::updateTask
+                onUpdateTask = ::updateTask,
+                morningReviewBannerVisible = morningReviewAvailability?.bannerVisible ?: false,
+                morningReviewBlockingCount = morningReviewBlockingCount(),
+                onOpenMorningReview = ::openHomeMorningReview
             )
         }
     }
@@ -98,6 +133,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshEnforcement(forceTodoist = false)
+        refreshMorningReviewAvailability()
+    }
+
+    override fun onPause() {
+        morningReviewReevaluationJob?.cancel()
+        morningReviewReevaluationJob = null
+        super.onPause()
     }
 
     private fun refreshEnforcement(forceTodoist: Boolean = false) {
@@ -114,6 +156,49 @@ class MainActivity : ComponentActivity() {
     private fun forceRefreshEnforcement() {
         refreshEnforcement(forceTodoist = true)
     }
+
+    private fun openHomeMorningReview() {
+        if (morningReviewLaunchInFlight) return
+        morningReviewLaunchInFlight = true
+        morningReviewLauncher.launch(
+            MorningReviewContract.homeIntent(Intent(this, MorningReviewActivity::class.java))
+        )
+    }
+
+    private fun refreshMorningReviewAvailability() {
+        val now = Instant.now()
+        val zoneId = ZoneId.systemDefault()
+        morningReviewScheduler.reconcile(now, zoneId)
+        val availability = morningReviewCalculator.availability(
+            state = morningReviewStateStore.read(),
+            ownerBlockingCount = morningReviewBlockingCount(),
+            now = now,
+            zoneId = zoneId
+        )
+        morningReviewAvailability = availability
+        val decision = MorningReviewEntryDecider.decide(availability, morningReviewLaunchInFlight)
+        armMorningReviewReevaluation(availability)
+        if (decision.launchAutomated) {
+            morningReviewLaunchInFlight = true
+            morningReviewLauncher.launch(
+                MorningReviewContract.automatedIntent(Intent(this, MorningReviewActivity::class.java))
+            )
+        }
+    }
+
+    private fun armMorningReviewReevaluation(availability: MorningReviewAvailability) {
+        morningReviewReevaluationJob?.cancel()
+        val delayMillis = Duration.between(Instant.now(), availability.nextReevaluationAt).toMillis()
+        if (delayMillis <= 0L) return
+        morningReviewReevaluationJob = lifecycleScope.launch {
+            delay(delayMillis)
+            refreshMorningReviewAvailability()
+        }
+    }
+
+    private fun morningReviewBlockingCount(): Int = snapshotViewState
+        ?.let { selectOwnerAgenda(it, Instant.now(), ZoneId.systemDefault()).blocking.size }
+        ?: 0
 
     private fun reportRefreshFailure(error: Throwable) {
         AppLog.error("main refresh failed", error)
@@ -150,7 +235,10 @@ class MainActivity : ComponentActivity() {
         val activeCoordinator = coordinator
             ?: return CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
         val result = activeCoordinator.updateTask(taskId, request)
-        activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let { snapshotViewState = it }
+        activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let {
+            snapshotViewState = it
+            refreshMorningReviewAvailability()
+        }
         return result
     }
 
@@ -167,7 +255,10 @@ class MainActivity : ComponentActivity() {
             val activeCoordinator = coordinator ?: return@launch
             if (checked) activeCoordinator.checkChild(taskId, childId, request)
             else activeCoordinator.uncheckChild(taskId, childId, request)
-            activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let { snapshotViewState = it }
+            activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let {
+                snapshotViewState = it
+                refreshMorningReviewAvailability()
+            }
         }
     }
 

@@ -25,6 +25,61 @@ import kotlin.test.assertTrue
 class HomeScreenStateTest {
 
     @Test
+    fun morningReviewBannerShowsCleanReadyMessageWhenLocalAvailabilityIsVisible() {
+        val state = buildHomeScreenState(
+            snapshot(emptyList()),
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true,
+            ownerBlockingCount = 0
+        )
+
+        val attention = assertNotNull(state.reviewAttention)
+        assertEquals("Morning review ready", attention.message)
+        assertEquals(HomeAttentionAction.OpenMorningReview, attention.action)
+    }
+
+    @Test
+    fun blockingRepairCountWinsOverCleanMorningReviewBanner() {
+        val state = buildHomeScreenState(
+            snapshot(emptyList()),
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true,
+            ownerBlockingCount = 2
+        )
+
+        assertEquals("2 invalid tasks need review", assertNotNull(state.reviewAttention).message)
+    }
+
+    @Test
+    fun refreshRetryAttentionRemainsSeparateFromMorningReviewBanner() {
+        val state = buildHomeScreenState(
+            snapshot(emptyList()),
+            refreshError = "offline",
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true,
+            ownerBlockingCount = 0
+        )
+
+        assertEquals("Morning review ready", assertNotNull(state.reviewAttention).message)
+        assertEquals(HomeAttentionAction.RetryRefresh, assertNotNull(state.refreshAttention).action)
+    }
+
+    @Test
+    fun morningReviewBannerIsNotSuppressedWhileTheSnapshotLoads() {
+        val state = buildHomeScreenState(
+            snapshot = null,
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true
+        )
+
+        assertEquals("Morning review ready", assertNotNull(state.reviewAttention).message)
+    }
+
+    @Test
     fun test1_ownerFutureTasksGroupAndSortDeterministically() {
         val tasks = listOf(
             // Today (2026-08-02), start 14:00
