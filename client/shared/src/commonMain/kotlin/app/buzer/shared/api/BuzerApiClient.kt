@@ -121,13 +121,6 @@ class BuzerApiClient(
         request: FocusedChecklistMutationRequest
     ): MutationResponse = mutationPost("$baseUrl/tasks/$id/checklist/$childId/uncheck", request)
 
-    suspend fun dismissMorningReview() {
-        httpClient.post("$baseUrl/review/dismiss") {
-            contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { })
-        }.ensureSuccess()
-    }
-
     private suspend fun mutationPost(url: String, body: Any): MutationResponse =
         httpClient.post(url) {
             contentType(ContentType.Application.Json)

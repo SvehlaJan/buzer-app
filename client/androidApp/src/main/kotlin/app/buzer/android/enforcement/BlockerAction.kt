@@ -8,6 +8,5 @@ enum class BlockerAction {
     UPDATE_TASK,
     CHECK_CHILD,
     UNCHECK_CHILD,
-    MORNING_REVIEW_DISMISS,
     REFRESH_SNAPSHOT
 }

@@ -188,20 +188,6 @@ class EnforcementCoordinator(
         api.uncheckChecklistItem(taskId, childId, request)
     }
 
-    suspend fun dismissMorningReview(occurrenceKey: String): CoordinatorActionResult =
-        try {
-            api.dismissMorningReview()
-            blockerNotificationCleaner.cancelForTask(MORNING_REVIEW_TASK_ID, occurrenceKey)
-            refreshAndReconcile()
-            CoordinatorActionResult.Success
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            val message = error.message ?: error::class.simpleName ?: "unknown error"
-            errorReporter.report(BlockerAction.MORNING_REVIEW_DISMISS, MORNING_REVIEW_TASK_ID, message)
-            CoordinatorActionResult.FailedAndHidden(message)
-        }
-
     private fun reconcile(snapshot: TasksSnapshotResponse) {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowProvider())
         val scheduledAlarms = plan.alarms
@@ -456,9 +442,6 @@ class EnforcementCoordinator(
         )
 
     companion object {
-        const val MORNING_REVIEW_TASK_ID = "morning-review"
-        const val MORNING_REVIEW_OCCURRENCE_KEY = "morning-review"
-
         private const val RETRY_DELAY_SECONDS = 5L * 60L
     }
 }

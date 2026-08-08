@@ -39,6 +39,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.MainActivity
 import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.morningreview.MorningReviewAlarmReason
+import app.buzer.android.morningreview.MorningReviewLocalState
+import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import java.io.File
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -605,16 +608,21 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun morningReview_snoozeCallsFakeBackendAndHides() {
+    fun morningReview_snoozeStaysLocalAndHides() {
         resetTestState()
         val scenario = launchMorningReview()
 
         waitForText("Invalid assigned fixture")
-        composeRule.onNodeWithTag("morning-snooze-task-invalid").performClick()
+        composeRule.onNodeWithTag("morning-snooze").performClick()
 
         waitForActivityDestroyed(scenario)
-        waitForRecordedCall("/review/dismiss")
-        fakeBackend.assertRecorded("/review/dismiss")
+        val state = MorningReviewLocalStateStore
+            .fromContext(ApplicationProvider.getApplicationContext())
+            .read()
+        check(state.pendingSnoozeAt != null)
+        check(state.scheduledAlarm?.reason == MorningReviewAlarmReason.Snooze)
+        val obsoleteDismissPath = "/review/" + "dismiss"
+        check(!fakeBackend.calls().contains("\"path\":\"$obsoleteDismissPath\""))
     }
 
     private fun resetTestState() {
@@ -622,6 +630,9 @@ class BlockerActivityFakeBackendTest {
         // first so monotonic snapshot protection cannot intentionally retain the prior test's
         // snapshot after a fake-backend restart.
         File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "latest_snapshot.json").delete()
+        MorningReviewLocalStateStore
+            .fromContext(ApplicationProvider.getApplicationContext())
+            .replace(MorningReviewLocalState())
         fakeBackend.setFailActions(false)
         fakeBackend.setFailSnapshot(false)
         fakeBackend.resetCalls()

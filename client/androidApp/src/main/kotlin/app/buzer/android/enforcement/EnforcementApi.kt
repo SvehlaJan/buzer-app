@@ -26,7 +26,6 @@ interface EnforcementApi {
         childId: String,
         request: FocusedChecklistMutationRequest
     ): MutationResponse
-    suspend fun dismissMorningReview()
 }
 
 class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
@@ -61,7 +60,4 @@ class BuzerEnforcementApi(private val client: BuzerApiClient) : EnforcementApi {
         request: FocusedChecklistMutationRequest
     ): MutationResponse = client.uncheckChecklistItem(taskId, childId, request)
 
-    override suspend fun dismissMorningReview() {
-        client.dismissMorningReview()
-    }
 }
