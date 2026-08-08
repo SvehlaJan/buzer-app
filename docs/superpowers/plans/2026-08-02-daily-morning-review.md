@@ -700,15 +700,15 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt`
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientContractTest.kt`
 
-- [ ] **Step 1: Prove production Morning Review no longer calls backend dismiss.**
+- [x] **Step 1: Prove production Morning Review no longer calls backend dismiss.**
 
   Add/adjust focused activity/E2E call-recording expectations so Start and Snooze do not record `/review/dismiss`; Snooze instead creates local scheduled-state evidence. Run the affected test RED before deleting the old API path.
 
-- [ ] **Step 2: Delete client-only dismiss methods.**
+- [x] **Step 2: Delete client-only dismiss methods.**
 
   Remove `BuzerApiClient.dismissMorningReview`, `EnforcementApi.dismissMorningReview`, `BuzerEnforcementApi` override, `EnforcementCoordinator.dismissMorningReview`, its fixed Morning Review constants if no longer used, and their fakes/tests. Do not change backend `routes.ts` or backend route tests; the compatibility endpoint remains deployed but unused.
 
-- [ ] **Step 3: Verify no client references and run shared/coordinator tests.**
+- [x] **Step 3: Verify no client references and run shared/coordinator tests.**
 
   ```bash
   rg -n "dismissMorningReview|/review/dismiss" client --glob '!**/build/**'
@@ -717,7 +717,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: `rg` exits 1 with no matches; Gradle passes.
 
-- [ ] **Step 4: Commit cleanup.**
+- [x] **Step 4: Commit cleanup.**
 
   ```bash
   git add client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt client/shared/src/commonTest client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementApi.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt client/androidApp/src/test
