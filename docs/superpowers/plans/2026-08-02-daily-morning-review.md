@@ -803,7 +803,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Create: `docs/handoffs/2026-08-02-daily-morning-review.md`
 - Modify: this plan's checkboxes as tasks complete
 
-- [ ] **Step 1: Run complete client verification.**
+- [x] **Step 1: Run complete client verification.**
 
   From `client/`:
 
@@ -813,7 +813,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: PASS.
 
-- [ ] **Step 2: Run backend verification even though no backend product code changed.**
+- [x] **Step 2: Run backend verification even though no backend product code changed.**
 
   From `backend/`:
 
@@ -825,7 +825,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: PASS. This protects the E2E authority and Change 1 sync endpoint used by review.
 
-- [ ] **Step 3: Run the full unfiltered real-backend suite.**
+- [x] **Step 3: Run the full unfiltered real-backend suite.**
 
   From repository root:
 
@@ -835,7 +835,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: PASS. Scoped Morning Review runs are not sufficient completion evidence.
 
-- [ ] **Step 4: Audit scope and repository hygiene.**
+- [x] **Step 4: Audit scope and repository hygiene.**
 
   ```bash
   git diff --check
@@ -846,7 +846,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: no whitespace errors; only intentional files; no client backend-dismiss reference. Inspect the diff for accidental Change 3 readiness gating, same-day critical invalid notifications, first-unlock catch-up, repeating alarms, server review state, completed history, or fake-backend resurrection.
 
-- [ ] **Step 5: Write the required handoff.**
+- [x] **Step 5: Write the required handoff.**
 
   Create `docs/handoffs/2026-08-02-daily-morning-review.md` with plan/task checkbox status, branch/worktree, files changed, decisions, assumptions, exact commands/results, manual alarm evidence, known failures/skips, and next step. Include:
 
@@ -859,20 +859,22 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Explicitly confirm: one alarm invariant; early acknowledgement; 08:00/catch-up behavior; invalid blocking; overdue non-blocking; no-data acknowledgement; Snooze; system-event reconciliation; priority; preserved editor draft; no client `/review/dismiss`; and no Change 3 implementation.
 
-- [ ] **Step 6: Commit documentation/progress.**
+- [x] **Step 6: Commit documentation/progress.**
 
   ```bash
   git add docs/superpowers/plans/2026-08-02-daily-morning-review.md docs/handoffs/2026-08-02-daily-morning-review.md
   git commit -m "docs: hand off daily morning review"
   ```
 
-- [ ] **Step 7: If pushed, check push-triggered CI.**
+- [x] **Step 7: If pushed, check push-triggered CI.**
 
   ```bash
   gh run list --workflow=ci.yml --limit 1
   ```
 
   Do not report completion over a red run. If not pushed, record CI as not triggered.
+
+  Not pushed during implementation; CI was not triggered.
 
 ## Completion criteria
 
