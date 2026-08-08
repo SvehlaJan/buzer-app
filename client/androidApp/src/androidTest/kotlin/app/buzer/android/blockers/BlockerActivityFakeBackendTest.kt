@@ -581,6 +581,8 @@ class BlockerActivityFakeBackendTest {
         )
         waitForTextAbsent("Invalid assigned fixture")
         composeRule.onAllNodesWithText("Invalid assigned fixture").assertCountEquals(0)
+        waitForText("Morning review")
+        composeRule.onNodeWithText("Start day").assertIsDisplayed()
         assertActivityNotDestroyed(scenario)
     }
 

@@ -30,6 +30,16 @@ export interface E2EFixtureSeed {
   occurrencePins: E2EOccurrencePin[];
 }
 
+/** Stable, small projections of the Change 1 fixture model for Morning Review E2E cases. */
+export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today";
+
+const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonly string[]> = {
+  clean: [],
+  invalid: ["task-invalid"],
+  overdue: ["task-overdue-1", "task-overdue-2", "task-overdue-3", "task-overdue-4"],
+  today: ["task-current-overlapping", "task-future-tomorrow"]
+};
+
 const TIME_ZONE = "Europe/Bratislava";
 
 interface LocalDate {
@@ -478,4 +488,25 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     .map((task) => ({ id: task.id, occurrenceKey: `occurrence-${task.id}-1` }));
 
   return { tasks, projects, collaborators, collaboratorStates, nudges, occurrencePins };
+}
+
+export function e2eMorningReviewScenarioSeed(
+  now: Date,
+  scenario: E2EMorningReviewScenario
+): E2EFixtureSeed {
+  const seed = e2eFixtureSeed(now);
+  const rootIds = new Set(MORNING_REVIEW_SCENARIO_ROOT_IDS[scenario]);
+  const selectedTodoistIds = new Set(
+    [...rootIds].map((id) => `todoist-${id}`)
+  );
+  const tasks = seed.tasks.filter((task) =>
+    rootIds.has(task.id) || (task.mirror.parentId !== null && selectedTodoistIds.has(task.mirror.parentId))
+  );
+
+  return {
+    ...seed,
+    tasks,
+    nudges: seed.nudges.filter((nudge) => rootIds.has(nudge.id)),
+    occurrencePins: seed.occurrencePins.filter((pin) => rootIds.has(pin.id))
+  };
 }

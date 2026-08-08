@@ -1,0 +1,62 @@
+# Daily Morning Review Task 9 handoff
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`, Task 9. Plan checkboxes intentionally unchanged (controller-owned).
+
+Branch/worktree: `feature/daily-morning-review` / `/Users/svehla/playground/buzer-app/.worktrees/daily-morning-review`.
+
+## Attempted scope
+
+- Step 1: migrated the real-backend repair assertion so repairing the final invalid task proves the Review stays open and reaches Summary with `Start day`.
+- Step 2: existing host instrumentation already covers global Snooze, no-data Start, summary transition, overdue controls, and Home-versus-Automated Back affordance. Added deterministic fixture projections for clean, invalid, overdue, and today Review scenarios.
+- Step 3: added `MorningReviewAlarmInstrumentationTest` covering manifest action registration, repeated reconciliation's persisted identity, stale-delivery ignore/current-consume behavior, and locally persisted snooze alarm state.
+
+## Files changed
+
+- `backend/test/fakes/e2eFixtures.ts`
+- `backend/test/fakes/e2eFixtures.test.ts`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+- `client/androidApp/src/androidTest/kotlin/app/buzer/android/morningreview/MorningReviewAlarmInstrumentationTest.kt`
+- this handoff
+
+## Coverage mapping
+
+- `e2eMorningReviewScenarioSeed`: named clean/task-free, invalid owner, overdue, and today fixture projections derived from the Change 1 seed.
+- `BlockerActivityFakeBackendTest.morningReview_repairCallsFakeBackend`: last Repair transitions to Summary without destroying the Review host.
+- `MorningReviewRepairHostTest` (pre-existing Task 6 coverage): global Snooze, no-data Start, overdue actionability/Start enabled, Home versus Automated Back, and repair-to-Summary.
+- `MorningReviewAlarmInstrumentationTest`: manifest reconciliation broadcasts; repeated reconcile identity; stale/current occurrence path; persisted Morning Review Snooze scheduling.
+
+## Verification
+
+Verification:
+- Command: `npm test -- e2eFixtures.test.ts`
+- Result: PASS
+- Evidence: 14 tests passed, including the new named scenario projection test.
+
+Verification:
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: backend TypeScript typecheck completed with no errors.
+
+Verification:
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: Android instrumentation sources, including the new alarm class, compile successfully.
+
+Verification:
+- Command: `ANDROID_SERIAL=emulator-5554 ANDROID_TEST_CLASS=app.buzer.android.morningreview.MorningReviewAlarmInstrumentationTest scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: Gradle reached `:androidApp:connectedDebugAndroidTest`, then reported failing tests without writing individual result XML/report pages. The attached emulator had residual app alarms from prior broad test runs.
+
+Verification:
+- Command: `ANDROID_SERIAL=emulator-5554 ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: same connected-test infrastructure failure mode; Gradle reported test failures but did not preserve per-test detail in this worktree's connected results directory.
+
+Verification:
+- Command: `BUZER_DEVICE_SERIAL=emulator-5554 scripts/adb-verify.sh alarms`
+- Result: FAIL
+- Evidence: concise app-scoped output showed many stale `app.buzer.android` alarm entries, so it cannot prove the one-Morning-Review-alarm invariant for this run.
+
+## Known blockers / next step
+
+The scoped device runner needs a clean emulator/app state and usable connected-test result output before Task 9 can be considered complete. In particular, the remaining full-flow cases (early acknowledgement/catch-up, priority deferral, new-invalid banner reopening, and draft preservation) require deterministic server scenario selection at `backend/test/e2eServer.ts` or an equivalent test-only configuration seam; that file is outside this task's ownership, so no production/server change was made. Re-run the two mandated scoped commands after clearing the emulator's test package/data and expose selected named fixture scenarios through the E2E server, then extend the real-backend class accordingly.

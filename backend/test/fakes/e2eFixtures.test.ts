@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { describeRecurrence } from "../../src/domain/taskRecurrence.js";
-import { e2eFixtureSeed } from "./e2eFixtures.js";
+import {
+  e2eFixtureSeed,
+  e2eMorningReviewScenarioSeed,
+  type E2EMorningReviewScenario
+} from "./e2eFixtures.js";
 
 const now = new Date("2026-07-18T10:00:00.000Z");
 const seed = e2eFixtureSeed(now);
@@ -28,6 +32,26 @@ function localDateTimeParts(value: string, timeZone = "Europe/Bratislava") {
 }
 
 describe("e2eFixtureSeed", () => {
+  it("exposes named deterministic clean, invalid, overdue, and today Morning Review scenarios", () => {
+    const roots = (scenario: E2EMorningReviewScenario) => e2eMorningReviewScenarioSeed(now, scenario)
+      .tasks
+      .filter((task) => task.mirror.parentId === null)
+      .map((task) => task.id);
+
+    expect(roots("clean")).toEqual([]);
+    expect(roots("invalid")).toEqual(["task-invalid"]);
+    expect(roots("overdue")).toEqual([
+      "task-overdue-1",
+      "task-overdue-2",
+      "task-overdue-3",
+      "task-overdue-4"
+    ]);
+    expect(roots("today")).toEqual([
+      "task-current-overlapping",
+      "task-future-tomorrow"
+    ]);
+  });
+
   it("defines the 28 fixture roots plus 8 checklist children with pinned Todoist ids", () => {
     const roots = seed.tasks.filter((task) => task.mirror.parentId === null);
     const children = seed.tasks.filter((task) => task.mirror.parentId !== null);
