@@ -50,6 +50,8 @@ import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -675,6 +677,11 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.setFailActions(false)
         fakeBackend.setFailSnapshot(false)
         fakeBackend.reset(morningReviewScenario)
+        if (morningReviewScenario == null) {
+            MorningReviewLocalStateStore.fromContext(context).replace(
+                MorningReviewLocalState(lastAcknowledgedDate = LocalDate.now(ZoneId.systemDefault()))
+            )
+        }
         blockerErrorLog().delete()
     }
 
