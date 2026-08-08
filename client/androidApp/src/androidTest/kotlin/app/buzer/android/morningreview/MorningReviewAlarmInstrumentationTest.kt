@@ -1,5 +1,6 @@
 package app.buzer.android.morningreview
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -38,6 +39,7 @@ class MorningReviewAlarmInstrumentationTest {
     @After
     fun clearMorningReviewState() {
         MorningReviewRuntimeClock.setForTests(null)
+        grantNotifications()
         File(context.filesDir, "latest_snapshot.json").delete()
         context.getSystemService(NotificationManager::class.java).cancelAll()
         stateStore.read().scheduledAlarm?.let { alarm ->
@@ -162,9 +164,13 @@ class MorningReviewAlarmInstrumentationTest {
     }
 
     private fun grantNotifications() {
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
-            .close()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
+                context.packageName,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }
+        assertTrue(context.getSystemService(NotificationManager::class.java).areNotificationsEnabled())
     }
 
     private fun waitForNotification(
