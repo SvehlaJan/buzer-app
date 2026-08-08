@@ -98,6 +98,10 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Refresh retry now switches to clean authority and asserts retry clearing/enabled Start; overdue Done asserts exact mutation and retained Start; early acknowledgement/Snooze assert Home remains visible and no same-day Review state.
 - Repeated-reconcile alarm instrumentation now parses only API34 active alarm output before Stats/history and fails explicitly unless it finds exactly one Morning Review URI identity.
 
+## C2 priority correction
+
+- Priority scenarios now use an unpinned active current task for Start and an unpinned past-end task for Deadline, so resolver branches cannot be skipped by occurrence pins.
+
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
 - Result: PASS

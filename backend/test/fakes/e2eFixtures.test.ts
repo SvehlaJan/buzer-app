@@ -53,7 +53,8 @@ describe("e2eFixtureSeed", () => {
     expect(roots("blockingMix")).toEqual(["task-invalid", "task-reconciliation-pending", "task-unassigned-root"]);
     expect(roots("pendingOnly")).toEqual(["task-reconciliation-pending"]);
     expect(roots("unassigned")).toEqual(["task-unassigned-root"]);
-    expect(roots("priorityDeadline")).toEqual(["task-deadline"]);
+    expect(roots("priorityStart")).toEqual(["task-current-overlapping"]);
+    expect(roots("priorityDeadline")).toEqual(["task-overdue-1"]);
   });
 
   it("defines the 28 fixture roots plus 8 checklist children with pinned Todoist ids", () => {

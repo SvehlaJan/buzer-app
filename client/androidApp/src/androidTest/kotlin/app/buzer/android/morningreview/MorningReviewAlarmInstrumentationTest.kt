@@ -134,7 +134,7 @@ class MorningReviewAlarmInstrumentationTest {
 
     @Test
     fun cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery() {
-        listOf("today", "priorityDeadline").forEach { scenario ->
+        listOf("priorityStart", "priorityDeadline").forEach { scenario ->
         clearMorningReviewState()
         fakeBackend.reset(scenario)
         runBlocking { EnforcementDependencies.coordinator(context).forceSyncAndReconcile() }
