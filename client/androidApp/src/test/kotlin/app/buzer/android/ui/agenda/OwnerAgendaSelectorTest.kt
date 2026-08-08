@@ -137,6 +137,19 @@ class OwnerAgendaSelectorTest {
         assertEquals(listOf("future-a", "future-b"), buckets.future.map { it.task.id })
     }
 
+    @Test
+    fun excludesTimedTaskWhoseEndWouldOverflowInstantRange() {
+        val buckets = selectOwnerAgenda(
+            snapshot(task("extreme", due = Instant.MAX.toString(), duration = 1)),
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertTrue(buckets.overdue.isEmpty())
+        assertTrue(buckets.current.isEmpty())
+        assertTrue(buckets.future.isEmpty())
+    }
+
     private fun snapshot(
         vararg items: TaskSnapshotItem,
         tasks: List<TaskSnapshotItem> = items.toList(),

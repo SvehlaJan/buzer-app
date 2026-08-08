@@ -2,6 +2,7 @@ package app.buzer.android.ui
 
 import app.buzer.android.ui.screens.MorningReviewBlockingCard
 import app.buzer.android.ui.screens.MorningReviewPhase
+import app.buzer.android.ui.screens.MorningReviewRetryTarget
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
@@ -28,7 +29,8 @@ class MorningReviewScreenStateTest {
         assertEquals(MorningReviewPhase.Summary, loading.phase)
         assertTrue(loading.refreshing)
         assertEquals(listOf("today"), loading.todayRows.map { it.taskId })
-        assertEquals("Refresh failed. Showing last known tasks.", failed.warning)
+        assertEquals("Refresh failed. Showing last known tasks: Offline", failed.warning)
+        assertEquals(listOf(MorningReviewRetryTarget.Refresh), failed.retryNotices.map { it.target })
         assertEquals(listOf("today"), failed.todayRows.map { it.taskId })
     }
 
@@ -56,7 +58,8 @@ class MorningReviewScreenStateTest {
         )
 
         assertEquals(MorningReviewPhase.NoData, state.phase)
-        assertEquals("Backend unavailable", state.warning)
+        assertEquals("Refresh failed. Task data is unavailable: Backend unavailable", state.warning)
+        assertEquals(listOf(MorningReviewRetryTarget.Refresh), state.retryNotices.map { it.target })
         assertEquals("Start day without data", state.startDayLabel)
         assertTrue(state.startDayEnabled)
         assertTrue(state.snoozeEnabled)
@@ -215,6 +218,7 @@ class MorningReviewScreenStateTest {
         assertFalse(state.startDayEnabled)
         assertFalse(state.snoozeEnabled)
         assertEquals(listOf("today"), state.todayRows.map { it.taskId })
+        assertTrue(state.todayRows.all { !it.doneEnabled })
     }
 
     @Test
@@ -237,9 +241,78 @@ class MorningReviewScreenStateTest {
         assertEquals(listOf("invalid"), blocking.blockingCards.map { it.taskId })
         assertFalse(blocking.snoozeEnabled)
         assertEquals(MorningReviewPhase.NoData, noData.phase)
-        assertEquals("Offline", noData.warning)
+        assertEquals("Refresh failed. Task data is unavailable: Offline", noData.warning)
         assertFalse(noData.startDayEnabled)
         assertFalse(noData.snoozeEnabled)
+    }
+
+    @Test
+    fun retryNoticesPreserveRefreshAndActionTargetsWithoutCachedSnapshot() {
+        val refresh = buildMorningReviewScreenState(
+            snapshot = null,
+            refreshError = "Offline",
+            now = NOW,
+            zoneId = ZONE
+        )
+        val action = buildMorningReviewScreenState(
+            snapshot = null,
+            actionError = "Could not start day",
+            now = NOW,
+            zoneId = ZONE
+        )
+        val both = buildMorningReviewScreenState(
+            snapshot = null,
+            refreshError = "Offline",
+            actionError = "Could not start day",
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(listOf(MorningReviewRetryTarget.Refresh), refresh.retryNotices.map { it.target })
+        assertEquals("Refresh failed. Task data is unavailable: Offline", refresh.retryNotices.single().message)
+        assertEquals(listOf(MorningReviewRetryTarget.Action), action.retryNotices.map { it.target })
+        assertEquals("Action failed: Could not start day", action.retryNotices.single().message)
+        assertEquals(listOf(MorningReviewRetryTarget.Refresh, MorningReviewRetryTarget.Action), both.retryNotices.map { it.target })
+        assertEquals(
+            "Refresh failed. Task data is unavailable: Offline Action failed: Could not start day",
+            both.warning
+        )
+    }
+
+    @Test
+    fun retryNoticesUseCachedDataWording() {
+        val state = buildMorningReviewScreenState(
+            snapshot(task("today", due = "2026-08-02T12:00:00Z", duration = 30)),
+            refreshError = "Offline",
+            actionError = "Could not start day",
+            now = NOW,
+            zoneId = ZONE
+        )
+
+        assertEquals(
+            listOf(
+                "Refresh failed. Showing last known tasks: Offline",
+                "Action failed: Could not start day"
+            ),
+            state.retryNotices.map { it.message }
+        )
+    }
+
+    @Test
+    fun reviewRowsClarifyCrossMidnightAndDstOffsetChanges() {
+        val crossMidnight = buildMorningReviewScreenState(
+            snapshot(task("overnight", due = "2026-08-02T20:30:00Z", duration = 240)),
+            now = NOW,
+            zoneId = ZONE
+        )
+        val fallback = buildMorningReviewScreenState(
+            snapshot(task("fallback", due = "2026-10-25T00:30:00Z", duration = 120)),
+            now = Instant.parse("2026-10-25T00:00:00Z"),
+            zoneId = ZONE
+        )
+
+        assertEquals("22:30-02:30 (+1d)", crossMidnight.todayRows.single().timeLabel)
+        assertEquals("02:30 (UTC+02:00)-03:30 (UTC+01:00)", fallback.todayRows.single().timeLabel)
     }
 
     private fun snapshot(vararg items: TaskSnapshotItem) = SnapshotViewState(

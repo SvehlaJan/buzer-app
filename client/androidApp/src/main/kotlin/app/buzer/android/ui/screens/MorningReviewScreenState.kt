@@ -7,6 +7,7 @@ import app.buzer.shared.state.SnapshotViewState
 import app.buzer.shared.ui.home.homeTaskProgress
 import java.time.Instant
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -43,11 +44,19 @@ data class MorningReviewAgendaRow(
     val doneEnabled: Boolean
 )
 
+enum class MorningReviewRetryTarget { Refresh, Action }
+
+data class MorningReviewRetryNotice(
+    val target: MorningReviewRetryTarget,
+    val message: String
+)
+
 data class MorningReviewScreenState(
     val phase: MorningReviewPhase,
     val headerText: String,
     val absoluteDateLabel: String,
     val warning: String?,
+    val retryNotices: List<MorningReviewRetryNotice>,
     val refreshing: Boolean,
     val blockingCards: List<MorningReviewBlockingCard>,
     val overdueRows: List<MorningReviewAgendaRow>,
@@ -72,7 +81,24 @@ fun buildMorningReviewScreenState(
 ): MorningReviewScreenState {
     val dateLabel = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy", Locale.US)
         .format(now.atZone(zoneId))
-    val warning = actionError ?: refreshError?.let { "Refresh failed. Showing last known tasks." }
+    val retryNotices = buildList {
+        refreshError?.let {
+            add(
+                MorningReviewRetryNotice(
+                    target = MorningReviewRetryTarget.Refresh,
+                    message = if (snapshot == null) {
+                        "Refresh failed. Task data is unavailable: $it"
+                    } else {
+                        "Refresh failed. Showing last known tasks: $it"
+                    }
+                )
+            )
+        }
+        actionError?.let {
+            add(MorningReviewRetryNotice(MorningReviewRetryTarget.Action, "Action failed: $it"))
+        }
+    }
+    val warning = retryNotices.joinToString(" ") { it.message }.ifEmpty { null }
 
     if (snapshot == null) {
         if (loading || refreshInFlight) {
@@ -80,7 +106,8 @@ fun buildMorningReviewScreenState(
                 phase = MorningReviewPhase.Loading,
                 headerText = "Loading morning review",
                 absoluteDateLabel = dateLabel,
-                warning = null,
+                warning = warning,
+                retryNotices = retryNotices,
                 refreshing = refreshInFlight,
                 showBack = showBack,
                 actionInFlight = actionInFlight
@@ -90,7 +117,8 @@ fun buildMorningReviewScreenState(
             phase = MorningReviewPhase.NoData,
             headerText = "Task data unavailable",
             absoluteDateLabel = dateLabel,
-            warning = actionError ?: refreshError,
+            warning = warning,
+            retryNotices = retryNotices,
             refreshing = false,
             startDayLabel = "Start day without data",
             startDayEnabled = !actionInFlight,
@@ -108,6 +136,7 @@ fun buildMorningReviewScreenState(
             headerText = "${blockingCards.size} ${if (blockingCards.size == 1) "task needs" else "tasks need"} attention",
             absoluteDateLabel = dateLabel,
             warning = warning,
+            retryNotices = retryNotices,
             refreshing = refreshInFlight,
             blockingCards = blockingCards,
             startDayEnabled = false,
@@ -130,9 +159,10 @@ fun buildMorningReviewScreenState(
         headerText = "Morning review",
         absoluteDateLabel = dateLabel,
         warning = warning,
+        retryNotices = retryNotices,
         refreshing = refreshInFlight,
-        overdueRows = agenda.overdue.map { it.toReviewRow(zoneId, "Overdue") },
-        todayRows = todayEntries.map { it.toReviewRow(zoneId, "Today") },
+        overdueRows = agenda.overdue.map { it.toReviewRow(zoneId, "Overdue", actionInFlight) },
+        todayRows = todayEntries.map { it.toReviewRow(zoneId, "Today", actionInFlight) },
         startDayEnabled = !actionInFlight,
         snoozeEnabled = !actionInFlight,
         showBack = showBack,
@@ -145,6 +175,7 @@ private fun screenState(
     headerText: String,
     absoluteDateLabel: String,
     warning: String?,
+    retryNotices: List<MorningReviewRetryNotice>,
     refreshing: Boolean,
     blockingCards: List<MorningReviewBlockingCard> = emptyList(),
     overdueRows: List<MorningReviewAgendaRow> = emptyList(),
@@ -159,6 +190,7 @@ private fun screenState(
     headerText = headerText,
     absoluteDateLabel = absoluteDateLabel,
     warning = warning,
+    retryNotices = retryNotices,
     refreshing = refreshing,
     blockingCards = blockingCards,
     overdueRows = overdueRows,
@@ -195,14 +227,33 @@ private fun reviewProblemText(validationErrors: List<String>): String {
     }
 }
 
-private fun OwnerAgendaEntry.toReviewRow(zoneId: ZoneId, subline: String): MorningReviewAgendaRow {
+private fun OwnerAgendaEntry.toReviewRow(
+    zoneId: ZoneId,
+    subline: String,
+    actionInFlight: Boolean
+): MorningReviewAgendaRow {
     val time = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
     val progress = homeTaskProgress(task)
+    val localStart = start.atZone(zoneId)
+    val localEnd = end.atZone(zoneId)
+    val offsetsChanged = localStart.offset != localEnd.offset
+    val startLabel = if (offsetsChanged) {
+        "${time.format(localStart)} (UTC${localStart.offset})"
+    } else {
+        time.format(localStart)
+    }
+    val endLabel = if (offsetsChanged) {
+        "${time.format(localEnd)} (UTC${localEnd.offset})"
+    } else {
+        time.format(localEnd)
+    }
+    val dayDelta = ChronoUnit.DAYS.between(localStart.toLocalDate(), localEnd.toLocalDate())
+    val dateSuffix = if (dayDelta != 0L) " (+${dayDelta}d)" else ""
     return MorningReviewAgendaRow(
         taskId = task.id,
         title = task.title,
-        timeLabel = "${time.format(start.atZone(zoneId))}-${time.format(end.atZone(zoneId))}",
+        timeLabel = "$startLabel-$endLabel$dateSuffix",
         subline = subline,
-        doneEnabled = progress.doneEnabled
+        doneEnabled = progress.doneEnabled && !actionInFlight
     )
 }

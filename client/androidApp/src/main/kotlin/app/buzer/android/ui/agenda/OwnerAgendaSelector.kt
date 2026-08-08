@@ -76,7 +76,8 @@ private fun isTerminal(task: TaskSnapshotItem): Boolean =
 private fun TaskSnapshotItem.toAgendaEntry(zoneId: ZoneId): OwnerAgendaEntry? {
     val due = dueDatetime?.let { parseAgendaInstant(it, zoneId) } ?: return null
     val duration = durationMinutes?.takeIf { it > 0 } ?: return null
-    return OwnerAgendaEntry(task = this, start = due, end = due.plusSeconds(duration * 60L))
+    val end = runCatching { due.plusSeconds(duration * 60L) }.getOrNull() ?: return null
+    return OwnerAgendaEntry(task = this, start = due, end = end)
 }
 
 private fun parseAgendaInstant(value: String, zoneId: ZoneId): Instant? {

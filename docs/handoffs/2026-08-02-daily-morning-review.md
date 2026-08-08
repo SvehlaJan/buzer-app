@@ -395,6 +395,59 @@ Verification:
 
 The original real-backend instrumentation limitation remains unchanged: the sandboxed harness could not create the `tsx` IPC socket and escalation was rejected by the environment usage-limit gate; no workaround was attempted. Next: controller review/commit this correction, then continue the plan from Task 4.
 
+---
+
+## Task 4 quality correction (2026-08-08)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Scope: Task 4 pure owner-agenda and Morning Review state only. Plan checkboxes were intentionally not edited; Task 5+ files were untouched.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelector.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelectorTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreenState.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
+- this handoff
+
+### Implementation notes
+
+- Selector end-time construction now excludes an otherwise valid task when adding its duration would overflow `Instant`.
+- Summary rows retain content during an action but disable every row-level Done action. Blocking and NoData continue to contain no agenda rows.
+- `MorningReviewRetryTarget` and `MorningReviewRetryNotice` preserve independent Refresh and Action retry intent. `retryNotices` maintains Refresh-then-Action order and `warning` remains a deterministic compatibility string. Refresh wording distinguishes cached data from unavailable data.
+- Row labels retain `HH:mm-HH:mm`, add a local-date suffix such as `(+1d)`, and include both UTC offsets when they change over the interval.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*MorningReviewScreenStateTest'`
+- Result: FAIL (expected RED)
+- Evidence: `compileDebugUnitTestKotlin` failed on unresolved `MorningReviewRetryTarget` and `retryNotices` before the additive retry model was implemented.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*MorningReviewScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 4s`; the focused selector and Morning Review suites passed after the implementation.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 1s`; 8 selector, 18 Home state, and 17 Morning Review state tests passed (43 total, zero failures).
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+### Manual verification, assumptions, next step
+
+Manual/UI and E2E verification: intentionally not run. This correction changes pure state and selector behavior only; no rendered client behavior was changed in this task.
+
+Assumption: a positive-duration task can only move forward in local-date order, so the date suffix is positive for valid entries. Task 5/6 can use each retry notice's explicit target for its callback without parsing the compatibility warning.
+
+Next recommended step: merge this focused correction before continuing Morning Review orchestration/rendering work.
+
 An initial attempt to run focused, manifest, and broad Gradle commands concurrently raced on the worktree's Kotlin output directory. The broad suite completed successfully, while the other two reported missing generated classes; both focused and manifest commands were rerun serially and passed as recorded above.
 
 ---
