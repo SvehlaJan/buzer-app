@@ -76,10 +76,20 @@ class BlockerActivityFakeBackendTest {
     val composeRule = createEmptyComposeRule()
 
     private val fakeBackend = FakeBackendClient()
+    private val trackedScenarios = mutableListOf<ActivityScenario<out android.app.Activity>>()
 
     @After
     fun tearDownMorningReviewState() {
+        trackedScenarios.toList().forEach { it.close() }
+        trackedScenarios.clear()
         resetTestState()
+    }
+
+    private fun launchMain(): ActivityScenario<MainActivity> = track(ActivityScenario.launch(MainActivity::class.java))
+
+    private fun <T : android.app.Activity> track(scenario: ActivityScenario<T>): ActivityScenario<T> {
+        trackedScenarios += scenario
+        return scenario
     }
 
     @Test
@@ -292,7 +302,7 @@ class BlockerActivityFakeBackendTest {
     fun homeScreenShowsTimelineAgendaAndFabStack() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         waitForAnyText("remaining")
@@ -314,7 +324,7 @@ class BlockerActivityFakeBackendTest {
     fun homeCurrentBlockDoneCallsFakeBackend() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Deadline blocker fixture"))
@@ -328,7 +338,7 @@ class BlockerActivityFakeBackendTest {
     fun homeScreenShowsRefreshFailureBanner() {
         resetTestState()
         try {
-            ActivityScenario.launch(MainActivity::class.java)
+            launchMain()
 
             waitForAnyText("Incomplete checklist task")
             fakeBackend.setFailSnapshot(true)
@@ -348,7 +358,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeStickyDateHeaders_scrollsToNextYearContent() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Next year task"))
@@ -358,7 +368,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeBackToTopPill_appearsAfterDeepScrolling_scrollsToIndexZero() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         val (weekdayLabel, dateLabel) = displayedHomeDateLabels()
@@ -377,7 +387,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeHero_notDuplicated_overlappingCurrentRowsVisible() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
@@ -392,7 +402,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeOverdueSection_showsThree_expandsAll_collapses() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue (5)"))
@@ -410,7 +420,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeUnassignedSection_initiallyCollapsed_expands_tappingAssignOpensEdit() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Unassigned (1)"))
@@ -428,7 +438,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeAssignedOtherTask_neverAppears() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onAllNodesWithText("Wife task assigned to other").assertCountEquals(0)
@@ -437,7 +447,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeHeroChecklist_togglesInvokeChildAction_parentDoneDisabledUntilComplete() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNodeWithContentDescription("Finish current task").assertIsNotEnabled()
@@ -452,7 +462,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeFutureRow_editOpensTask() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
@@ -494,7 +504,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeSwipeToRefresh_recordsSync() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
@@ -536,7 +546,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homePullContainerSemantics_refreshTasksAction_recordsSync() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         invokeRefreshTasksAccessibilityAction()
@@ -548,7 +558,7 @@ class BlockerActivityFakeBackendTest {
     @Test
     fun homeAbsentControls_calendarSearchOverflowSecondaryFabAbsent() {
         resetTestState()
-        ActivityScenario.launch(MainActivity::class.java)
+        launchMain()
 
         waitForAnyText("Incomplete checklist task")
         composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
@@ -1217,26 +1227,26 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun launchStartBlocker(taskId: String): ActivityScenario<StartBlockerActivity> =
+    private fun launchStartBlocker(taskId: String): ActivityScenario<StartBlockerActivity> = track(
         ActivityScenario.launch(
             Intent(ApplicationProvider.getApplicationContext(), StartBlockerActivity::class.java).apply {
                 putExtra(AlarmIntentFactory.EXTRA_TASK_ID, taskId)
                 putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, "occurrence-$taskId-1")
             }
-        )
+        ))
 
-    private fun launchDeadlineBlocker(taskId: String): ActivityScenario<DeadlineBlockerActivity> =
+    private fun launchDeadlineBlocker(taskId: String): ActivityScenario<DeadlineBlockerActivity> = track(
         ActivityScenario.launch(
             Intent(ApplicationProvider.getApplicationContext(), DeadlineBlockerActivity::class.java).apply {
                 putExtra(AlarmIntentFactory.EXTRA_TASK_ID, taskId)
                 putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, "occurrence-$taskId-1")
             }
-        )
+        ))
 
-    private fun launchMorningReview(): ActivityScenario<MorningReviewActivity> =
+    private fun launchMorningReview(): ActivityScenario<MorningReviewActivity> = track(
         ActivityScenario.launch(
             Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java)
-        )
+        ))
 
     private fun blockerErrorLog(): File =
         File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "blocker_action_errors.log")
