@@ -52,6 +52,28 @@ Verification:
 - Result: PASS
 - Evidence: no whitespace errors.
 
+---
+
+## Follow-up correction: crossed boundary reevaluation
+
+- `MorningReviewBoundaryTiming` now maps positive durations to a normal delay and zero/negative durations to an immediate reevaluation path.
+- The one foreground-guarded lifecycle Job is now always created for a foreground availability update. For a crossed boundary or millisecond truncation it calls `yield()` before the one recomputation, avoiding synchronous recursion; calendar availability then supplies the following future boundary.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewEntryDeciderTest'`
+- Result: RED then PASS
+- Evidence: RED reported the missing boundary timing helper. The pure test covers positive, zero, and negative delay behavior.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewEntryDeciderTest' --tests '*HomeScreenStateTest'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
 ## Lifecycle self-review and deferred runtime check
 
 - The launcher is registered before lifecycle use. All launches originate in Main; App/Home contain no `LocalContext.startActivity` path.

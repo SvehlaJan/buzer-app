@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class MorningReviewEntryDeciderTest {
@@ -99,6 +100,13 @@ class MorningReviewEntryDeciderTest {
         snoozedController.onResume()
         assertFalse(snoozedController.evaluate(availability(banner = false, catchUp = false, snoozed = true)).showHomeBanner)
         assertTrue(snoozedController.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+    }
+
+    @Test
+    fun `boundary timing delays only positive durations and immediately reevaluates zero or negative`() {
+        assertEquals(MorningReviewBoundaryTiming.Delay(1), MorningReviewBoundaryTiming.from(1))
+        assertEquals(MorningReviewBoundaryTiming.ReevaluateImmediately, MorningReviewBoundaryTiming.from(0))
+        assertEquals(MorningReviewBoundaryTiming.ReevaluateImmediately, MorningReviewBoundaryTiming.from(-1))
     }
 
     private fun availability(

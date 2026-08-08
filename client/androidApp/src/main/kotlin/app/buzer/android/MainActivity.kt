@@ -16,6 +16,7 @@ import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.morningreview.MorningReviewAvailability
+import app.buzer.android.morningreview.MorningReviewBoundaryTiming
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewDependencies
 import app.buzer.android.morningreview.MorningReviewEntryController
@@ -39,6 +40,7 @@ import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
@@ -189,9 +191,11 @@ class MainActivity : ComponentActivity() {
         morningReviewReevaluationJob?.cancel()
         if (!morningReviewEntryController.isForeground) return
         val delayMillis = Duration.between(Instant.now(), availability.nextReevaluationAt).toMillis()
-        if (delayMillis <= 0L) return
         morningReviewReevaluationJob = lifecycleScope.launch {
-            delay(delayMillis)
+            when (val timing = MorningReviewBoundaryTiming.from(delayMillis)) {
+                is MorningReviewBoundaryTiming.Delay -> delay(timing.milliseconds)
+                MorningReviewBoundaryTiming.ReevaluateImmediately -> yield()
+            }
             refreshMorningReviewAvailability()
         }
     }

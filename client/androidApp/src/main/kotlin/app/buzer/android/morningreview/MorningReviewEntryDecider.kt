@@ -16,6 +16,16 @@ object MorningReviewEntryDecider {
     )
 }
 
+sealed interface MorningReviewBoundaryTiming {
+    data class Delay(val milliseconds: Long) : MorningReviewBoundaryTiming
+    data object ReevaluateImmediately : MorningReviewBoundaryTiming
+
+    companion object {
+        fun from(delayMilliseconds: Long): MorningReviewBoundaryTiming =
+            if (delayMilliseconds > 0L) Delay(delayMilliseconds) else ReevaluateImmediately
+    }
+}
+
 /** Lifecycle gate for MainActivity's single launch authority and reevaluation job. */
 class MorningReviewEntryController {
     var isForeground: Boolean = false
