@@ -2,220 +2,227 @@ package app.buzer.android.blockers
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import app.buzer.android.enforcement.AlarmKind
-import app.buzer.android.enforcement.AndroidAlarmScheduler
+import app.buzer.android.enforcement.AndroidBlockerNotificationCleaner
 import app.buzer.android.enforcement.BlockerAction
 import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.EnforcementCoordinator
-import app.buzer.android.enforcement.ScheduledAlarm
+import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
+import app.buzer.android.morningreview.MorningReviewContract
+import app.buzer.android.morningreview.MorningReviewEntrySource
+import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewResult
+import app.buzer.android.ui.screens.MorningReviewContentState
 import app.buzer.android.ui.screens.MorningReviewScreen
-import app.buzer.android.ui.screens.buildMorningReviewContentState
-import app.buzer.android.ui.screens.completeMorningReviewRepair
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.model.TaskSnapshotItem
-import app.buzer.shared.state.SnapshotDiagnostics
+import app.buzer.shared.model.TaskActionRequest
+import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotReducer
+import app.buzer.shared.state.SnapshotViewState
+import java.time.Instant
+import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class MorningReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureBlockerWindow()
-        var invalidTasks by mutableStateOf(emptyList<TaskSnapshotItem>())
+        val source = MorningReviewContract.entrySource(intent)
+        if (source == MorningReviewEntrySource.Automated) {
+            configureBlockerWindow()
+            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() = Unit
+            })
+        }
+
         val errorReporter = BlockerErrorReporter(applicationContext)
-        val scheduler = AndroidAlarmScheduler(applicationContext)
-        var initialRefreshError: String? = null
+        val scheduler = MorningReviewDependencies.scheduler(applicationContext)
+        val notificationCleaner = AndroidBlockerNotificationCleaner(applicationContext)
+        val zone = ZoneId.systemDefault()
+        var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
+        var refreshing by mutableStateOf(false)
+        var refreshError by mutableStateOf<String?>(null)
+        var actionError by mutableStateOf<String?>(null)
+        var actionInFlight by mutableStateOf(false)
+        var retryAction by mutableStateOf<(() -> Unit)?>(null)
+
         val coordinator = try {
             EnforcementDependencies.coordinator(applicationContext)
         } catch (error: Exception) {
-            AppLog.error("morning_review coordinator create failed", error)
             val message = error.message ?: "enforcement configuration failed"
-            initialRefreshError = message
-            errorReporter.report(
-                action = BlockerAction.REFRESH_SNAPSHOT,
-                taskId = null,
-                message = message
-            )
+            refreshError = message
+            AppLog.error("morning_review coordinator create failed", error)
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
             null
         }
-        var refreshing by mutableStateOf(coordinator != null)
-        var hasLoadedOnce by mutableStateOf(false)
-        var refreshError by mutableStateOf<String?>(initialRefreshError)
-        var snoozing by mutableStateOf(false)
-        var actionErrorMessage by mutableStateOf<String?>(null)
-        var retryAction by mutableStateOf<(() -> Unit)?>(null)
+
+        fun reloadCached(currentCoordinator: EnforcementCoordinator) {
+            currentCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let { snapshotViewState = it }
+        }
 
         try {
-            coordinator?.loadLatestSnapshot()
-                ?.let(SnapshotReducer::reduce)
-                ?.invalidTasks
-                ?.let {
-                    invalidTasks = it
-                    hasLoadedOnce = true
-                    AppLog.debug("morning_review cached invalid=${it.size}")
-                }
+            coordinator?.let(::reloadCached)
         } catch (error: Exception) {
+            val message = error.message ?: "local snapshot load failed"
+            refreshError = message
             AppLog.error("morning_review cached snapshot load failed", error)
-            refreshError = error.message ?: "local snapshot load failed"
-            errorReporter.report(
-                action = BlockerAction.REFRESH_SNAPSHOT,
-                taskId = null,
-                message = refreshError ?: "local snapshot load failed"
-            )
-        }
-        if (coordinator == null) {
-            refreshing = false
-            AppLog.debug("morning_review opened without coordinator")
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
         }
 
-        fun runRefresh(currentCoordinator: EnforcementCoordinator?) {
-            if (currentCoordinator == null) {
-                refreshError = refreshError ?: "enforcement configuration failed"
-                refreshing = false
-                return
-            }
+        fun runForcedRefresh() {
+            val currentCoordinator = coordinator ?: return
+            if (refreshing || actionInFlight) return
             refreshing = true
             refreshError = null
             lifecycleScope.launch {
                 try {
-                    val snapshot = currentCoordinator.refreshAndReconcile()
-                    invalidTasks = SnapshotReducer.reduce(snapshot).invalidTasks
-                    hasLoadedOnce = true
-                    refreshError = null
-                    AppLog.debug(
-                        "morning_review refreshed invalid=${invalidTasks.size} ${SnapshotDiagnostics.describe(snapshot)}"
-                    )
+                    snapshotViewState = SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile())
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
                     val message = error.message ?: "snapshot refresh failed"
                     refreshError = message
-                    AppLog.error("morning_review refresh failed", error)
-                    errorReporter.report(
-                        action = BlockerAction.REFRESH_SNAPSHOT,
-                        taskId = null,
-                        message = message
-                    )
+                    AppLog.error("morning_review forced sync failed", error)
+                    errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
                 } finally {
                     refreshing = false
                 }
             }
         }
 
-        fun runSnooze(currentCoordinator: EnforcementCoordinator?) {
-            snoozing = true
-            actionErrorMessage = null
-            retryAction = { runSnooze(currentCoordinator) }
+        fun finishWith(result: MorningReviewResult) {
+            setResult(RESULT_OK, MorningReviewContract.resultIntent(result))
+            finish()
+        }
+
+        fun clearCurrentNotification() {
+            intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { notificationCleaner.cancelForTask(MORNING_REVIEW_TASK_ID, it) }
+        }
+
+        fun runLocalAction(label: String, operation: () -> Unit, result: MorningReviewResult) {
+            if (actionInFlight) return
+            actionInFlight = true
+            actionError = null
+            retryAction = { runLocalAction(label, operation, result) }
             lifecycleScope.launch {
                 try {
-                    AppLog.info("morning_review snooze requested")
-                    scheduler.schedule(
-                        ScheduledAlarm(
-                            taskId = EnforcementCoordinator.MORNING_REVIEW_TASK_ID,
-                            occurrenceKey = EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY,
-                            kind = AlarmKind.MORNING_REVIEW,
-                            triggerAtEpochMillis = System.currentTimeMillis() + FIVE_MINUTES_MILLIS
-                        )
-                    )
-                    if (currentCoordinator == null) {
-                        AppLog.debug("morning_review snooze finish reason=no_coordinator")
-                        finish()
-                    } else {
-                        when (
-                            val result = currentCoordinator.dismissMorningReview(
-                                EnforcementCoordinator.MORNING_REVIEW_OCCURRENCE_KEY
-                            )
-                        ) {
-                            CoordinatorActionResult.Success -> {
-                                AppLog.info("morning_review snooze dismissed_on_backend")
-                                finish()
-                            }
-                            is CoordinatorActionResult.FailedAndHidden -> {
-                                AppLog.warn("morning_review snooze failed_hidden")
-                                actionErrorMessage = result.message
-                            }
-                            is CoordinatorActionResult.Pending -> actionErrorMessage = "Saved; waiting for Todoist confirmation"
-                            is CoordinatorActionResult.Stale -> actionErrorMessage = result.message
-                            is CoordinatorActionResult.LocalReconciliationFailed -> {
-                                actionErrorMessage = "Saved; local reconciliation failed: ${result.message}"
-                            }
-                            is CoordinatorActionResult.RetryAfter -> {
-                                actionErrorMessage = "Retry in ${result.retryAfterSeconds} seconds"
-                            }
-                            CoordinatorActionResult.ChildActionInFlight -> {
-                                actionErrorMessage = "Checklist update is already in progress"
-                            }
-                        }
-                    }
+                    operation()
+                    clearCurrentNotification()
+                    finishWith(result)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    actionErrorMessage = error.message ?: "Snooze failed"
+                    actionError = error.message ?: "$label failed"
+                    AppLog.error("morning_review $label failed", error)
                 } finally {
-                    snoozing = false
+                    actionInFlight = false
                 }
             }
         }
 
-        if (coordinator != null) {
-            runRefresh(coordinator)
+        fun acknowledge() = runLocalAction(
+            label = "acknowledge",
+            operation = { scheduler.acknowledge(Instant.now(), zone) },
+            result = MorningReviewResult.Acknowledged
+        )
+
+        fun snooze() = runLocalAction(
+            label = "snooze",
+            operation = { scheduler.snooze(Instant.now(), zone) },
+            result = MorningReviewResult.Snoozed
+        )
+
+        fun runOverdueDone(taskId: String) {
+            val currentCoordinator = coordinator ?: run {
+                actionError = "Task completion is unavailable"
+                return
+            }
+            if (actionInFlight) return
+            val task = snapshotViewState?.tasks?.firstOrNull { it.id == taskId }
+            val occurrenceKey = task?.occurrenceKey?.takeIf { it.isNotBlank() } ?: run {
+                actionError = "Task occurrence is no longer current"
+                return
+            }
+            actionInFlight = true
+            actionError = null
+            retryAction = { runOverdueDone(taskId) }
+            lifecycleScope.launch {
+                try {
+                    when (val result = currentCoordinator.completeTask(
+                        taskId,
+                        TaskActionRequest(UUID.randomUUID().toString(), EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(), occurrenceKey)
+                    )) {
+                        CoordinatorActionResult.Success -> reloadCached(currentCoordinator)
+                        else -> actionError = result.messageOrNull() ?: "Task completion did not finish"
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    actionError = error.message ?: "Task completion failed"
+                } finally {
+                    actionInFlight = false
+                }
+            }
         }
 
+        runForcedRefresh()
         setBuzerContent {
             MorningReviewScreen(
-                invalidTasks = invalidTasks,
-                onRepair = { taskId, request ->
+                invalidTasks = snapshotViewState?.invalidTasks.orEmpty(),
+                onBack = {
+                    setResult(RESULT_CANCELED, MorningReviewContract.resultIntent(MorningReviewResult.Cancelled))
+                    finish()
+                },
+                onRepair = { taskId: String, request: UpdateTaskRequest ->
                     val currentCoordinator = coordinator
-                    if (currentCoordinator == null) {
-                        CoordinatorActionResult.FailedAndHidden("Enforcement configuration is unavailable")
-                    } else {
-                        val task = invalidTasks
-                            .firstOrNull { it.id == taskId }
-                        if (task?.occurrenceKey.isNullOrBlank()) {
-                            CoordinatorActionResult.FailedAndHidden("Task occurrence is no longer current")
-                        } else {
-                            currentCoordinator.updateTask(taskId, request)
+                        ?: return@MorningReviewScreen CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
+                    if (actionInFlight) return@MorningReviewScreen CoordinatorActionResult.FailedAndHidden("Another action is in progress")
+                    actionInFlight = true
+                    try {
+                        currentCoordinator.updateTask(taskId, request).also { result ->
+                            if (result == CoordinatorActionResult.Success) reloadCached(currentCoordinator)
                         }
+                    } finally {
+                        actionInFlight = false
                     }
                 },
-                onRepairSuccess = { taskId ->
-                    val completion = completeMorningReviewRepair(invalidTasks, taskId)
-                    invalidTasks = completion.remainingInvalidTasks
-                    AppLog.info(
-                        "morning_review repair success taskId=$taskId remainingInvalid=${invalidTasks.size}"
-                    )
-                    if (completion.shouldFinish) finish()
+                onRepairSuccess = { _ -> coordinator?.let(::reloadCached) },
+                onStart = ::acknowledge,
+                onSnooze = ::snooze,
+                onOverdueDone = ::runOverdueDone,
+                showBack = source == MorningReviewEntrySource.Home,
+                contentState = when {
+                    snapshotViewState == null && refreshing -> MorningReviewContentState.Loading
+                    snapshotViewState == null && refreshError != null -> MorningReviewContentState.Error(refreshError!!)
+                    else -> MorningReviewContentState.Ready(refreshing = refreshing)
                 },
-                onSnooze = { runSnooze(coordinator) },
-                onBack = { finish() },
-                showBack = false,
-                contentState = buildMorningReviewContentState(
-                    invalidTaskCount = invalidTasks.size,
-                    refreshing = refreshing,
-                    refreshError = refreshError,
-                    hasLoadedOnce = hasLoadedOnce
-                ),
-                snoozing = snoozing,
-                actionErrorMessage = actionErrorMessage,
-                onDismissActionError = { actionErrorMessage = null },
-                onRetryAction = {
-                    actionErrorMessage = null
-                    retryAction?.invoke()
-                },
-                onRetryRefresh = { runRefresh(coordinator) }
+                snoozing = actionInFlight,
+                actionErrorMessage = actionError,
+                onDismissActionError = { actionError = null },
+                onRetryAction = { actionError = null; retryAction?.invoke() },
+                onRetryRefresh = ::runForcedRefresh
             )
         }
     }
+}
 
-    private companion object {
-        const val FIVE_MINUTES_MILLIS = 5 * 60 * 1000L
-    }
+private fun CoordinatorActionResult.messageOrNull(): String? = when (this) {
+    is CoordinatorActionResult.FailedAndHidden -> message
+    is CoordinatorActionResult.Stale -> message
+    is CoordinatorActionResult.LocalReconciliationFailed -> message
+    is CoordinatorActionResult.RetryAfter -> message
+    is CoordinatorActionResult.Pending -> "Saved; waiting for Todoist confirmation"
+    CoordinatorActionResult.ChildActionInFlight -> "Another action is in progress"
+    CoordinatorActionResult.Success -> null
 }

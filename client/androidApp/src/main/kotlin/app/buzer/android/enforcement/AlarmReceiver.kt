@@ -14,6 +14,7 @@ import app.buzer.android.enforcement.overlay.OverlayBlockerRequest
 import app.buzer.android.enforcement.overlay.OverlayBlockerServiceStarter
 import app.buzer.android.morningreview.MorningReviewAlarmDecision
 import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.shared.diagnostics.AppLog
 
 class AlarmReceiver : BroadcastReceiver() {
@@ -77,6 +78,9 @@ class AlarmReceiver : BroadcastReceiver() {
             data = AlarmIntentFactory.identityUri(identityTaskId, occurrenceKey, kind)
             putExtra(AlarmIntentFactory.EXTRA_TASK_ID, identityTaskId)
             putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, occurrenceKey)
+            if (kind == AlarmKind.MORNING_REVIEW) {
+                MorningReviewContract.automatedIntent(this)
+            }
         }
     }
 

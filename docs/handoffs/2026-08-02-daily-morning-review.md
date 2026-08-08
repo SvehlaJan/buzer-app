@@ -397,6 +397,65 @@ The original real-backend instrumentation limitation remains unchanged: the sand
 
 ---
 
+## Task 5 daily Morning Review orchestration (2026-08-08)
+
+Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`
+
+Scope: Task 5 only. Plan checkboxes were intentionally not edited.
+
+### Files changed
+
+- `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewContract.kt`
+- `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewContractTest.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/AlarmReceiver.kt`
+- `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt`
+- this handoff
+
+### Implementation notes
+
+- `MorningReviewContract` has explicit Home/Automated factories, treats missing or unknown source as Automated, and round-trips Acknowledged/Snoozed/Cancelled result extras.
+- The activity parses entry source once. Only Automated configures the blocker window and consumes system Back; Home exposes Back and returns Cancelled.
+- The activity synchronously reduces the complete cached `SnapshotViewState` before Compose, then immediately uses `forceSyncAndReconcile()`. A force-sync failure retains cache and is retryable; it never uses ordinary refresh in this flow.
+- Start/Snooze go solely through `MorningReviewDependencies.scheduler`, cancel the exact current occurrence notification when present, set distinct results, and remain open with action Retry on failure. No activity path calls the backend review-dismiss API.
+- Repair reloads the coordinator cache after its authoritative success instead of deleting a local invalid ID. The prepared overdue completion path creates a UUID action request from the current occurrence key, reloads cache after success, and shares one action-in-flight guard. Task 6 owns rendering these callbacks/state.
+
+### Verification
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewContractTest'`
+- Result: FAIL (expected RED)
+- Evidence: new test compilation reported unresolved contract/source/result symbols before implementation.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewContractTest'`
+- Result: PASS
+- Evidence: all three source/result contract tests passed.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReview*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL` after activity/receiver/screen integration.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `rg -n "dismissMorningReview|refreshAndReconcile\\(" client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt`
+- Result: PASS
+- Evidence: no matches; the activity uses neither obsolete dismissal nor ordinary GET refresh.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
+
+Manual verification and E2E: DEFERRED to Tasks 9/10, when the Task 6 rendered flow and alarm integration host tests exist.
+
+---
+
 ## Task 4 quality correction (2026-08-08)
 
 Plan: `docs/superpowers/plans/2026-08-02-daily-morning-review.md`

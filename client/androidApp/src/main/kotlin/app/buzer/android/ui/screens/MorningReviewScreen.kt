@@ -171,7 +171,9 @@ fun MorningReviewScreen(
         CoordinatorActionResult.FailedAndHidden("Repair is unavailable")
     },
     onRepairSuccess: (String) -> Unit = {},
+    onStart: () -> Unit = {},
     onSnooze: () -> Unit = {},
+    onOverdueDone: (String) -> Unit = {},
     showBack: Boolean = true,
     contentState: MorningReviewContentState = MorningReviewContentState.Ready(),
     snoozing: Boolean = false,
@@ -282,6 +284,7 @@ fun MorningReviewScreen(
         MorningReviewTaskList(
             invalidTasks = invalidTasks,
             onRepair = { repairingTask = it },
+            onStart = onStart,
             onSnooze = onSnooze,
             onBack = onBack,
             showBack = showBack,
@@ -479,6 +482,7 @@ private fun MorningReviewHeader(
 private fun MorningReviewTaskList(
     invalidTasks: List<TaskSnapshotItem>,
     onRepair: (TaskSnapshotItem) -> Unit,
+    onStart: () -> Unit,
     onSnooze: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean,
@@ -495,7 +499,7 @@ private fun MorningReviewTaskList(
 
     if (readyState.cards.isEmpty()) {
         Button(
-            onClick = onBack,
+            onClick = onStart,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Done")
