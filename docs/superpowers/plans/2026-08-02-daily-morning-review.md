@@ -538,38 +538,38 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt` only for obsolete dismiss removal in Task 8, not activity behavior.
 
-- [ ] **Step 1: Add RED pure/session assertions for transitions.**
+- [x] **Step 1: Add RED pure/session assertions for transitions.**
 
   Extend state/helper tests to prove: cached snapshot appears before refresh; force-sync success replaces it; force-sync failure retains it; repair success reloads the coordinator's complete authoritative cached snapshot and transitions to Summary rather than finishing; pending Retry calls force sync; overdue Done applies authority and remains optional; Start is allowed with cached clear data during refresh; no-data Start is allowed only after data is unavailable; and acknowledgement/Snooze result codes are distinct.
 
-- [ ] **Step 2: Define the explicit activity contract.**
+- [x] **Step 2: Define the explicit activity contract.**
 
   `MorningReviewContract` must provide Home and Automated intent factories, parse a missing/unknown source as Automated for alarm safety, and define result extras for `Acknowledged`, `Snoozed`, and `Cancelled`. AlarmReceiver uses Automated; MainActivity uses Home or Automated catch-up.
 
-- [ ] **Step 3: Replace invalid-list activity state with complete snapshot state.**
+- [x] **Step 3: Replace invalid-list activity state with complete snapshot state.**
 
   In `MorningReviewActivity`, load `coordinator.loadLatestSnapshot()` synchronously and reduce it before first composition. Then launch `coordinator.forceSyncAndReconcile()` (from integrated Change 1), reduce/apply success, and preserve cached state on failure. Do not call ordinary GET for the review's requested fresh sync.
 
-- [ ] **Step 4: Implement local Start/Snooze.**
+- [x] **Step 4: Implement local Start/Snooze.**
 
   Start calls `MorningReviewScheduler.acknowledge(now, zone)`, cancels the current Morning Review notification if an alarm occurrence is present, sets Acknowledged result, and finishes. Snooze calls `scheduler.snooze(now, zone)`, cancels the notification, sets Snoozed result, and finishes. If scheduling/persistence throws, keep the activity open with Retry; do not call the backend.
 
-- [ ] **Step 5: Preserve authoritative task mutation paths.**
+- [x] **Step 5: Preserve authoritative task mutation paths.**
 
   Repair continues through `EnforcementCoordinator.updateTask`. After success, reload the coordinator's stored snapshot rather than deleting one local ID. Overdue Done builds one `TaskActionRequest` with the current occurrence key and calls `completeTask`; Edit reuses the unified Update editor with an overdue-specific presentation. Disable duplicate row actions while one mutation is active. `Start day` remains enabled when overdue exists and no blocking owner task exists.
 
-- [ ] **Step 6: Apply source-specific Back/window behavior.**
+- [x] **Step 6: Apply source-specific Back/window behavior.**
 
   Call `configureBlockerWindow()` and add an enabled no-op `OnBackPressedCallback` only for Automated. Home entry exposes/carries Cancelled result on Back. Do not finish automatically after the last repair; transition to Summary.
 
-- [ ] **Step 7: Run focused JVM/compile verification.**
+- [x] **Step 7: Run focused JVM/compile verification.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReview*Test'
   ./gradlew :androidApp:compileDebugKotlin
   ```
 
-- [ ] **Step 8: Commit orchestration.**
+- [x] **Step 8: Commit orchestration.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewContract.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt
