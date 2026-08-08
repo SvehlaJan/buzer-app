@@ -645,7 +645,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewEntryDecider.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewEntryDeciderTest.kt`
 
-- [ ] **Step 1: Add RED availability/navigation tests.**
+- [x] **Step 1: Add RED availability/navigation tests.**
 
   Prove:
 
@@ -660,30 +660,30 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - `onCreate` plus `onResume` does not double-launch.
   - keeping Home foreground across midnight reveals the banner, and crossing 08:00 or Snooze expiry reevaluates catch-up once.
 
-- [ ] **Step 2: Confirm RED.**
+- [x] **Step 2: Confirm RED.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewEntryDeciderTest' --tests '*HomeScreenStateTest'
   ```
 
-- [ ] **Step 3: Move launch authority into MainActivity.**
+- [x] **Step 3: Move launch authority into MainActivity.**
 
   Add a pure `MorningReviewEntryDecider.decide(availability, launchInFlight)` returning `showHomeBanner` and `launchAutomated`. `launchAutomated` is true only when catch-up is required and no review launch is already in flight. Register `StartActivityForResult` before lifecycle use. Pass `onOpenMorningReview` into `BuzerApp`; remove `LocalContext.startActivity` from App. Maintain Compose-observable `MorningReviewAvailability`, recomputed whenever snapshot or local result changes.
 
   On every MainActivity foreground/resume, call scheduler reconciliation, then evaluate catch-up. Use one in-flight guard cleared by the Activity Result callback; since automated review cannot Cancel, acknowledgement/Snooze always clears the condition before returning. Maintain one cancellable lifecycle coroutine until `MorningReviewAvailability.nextReevaluationAt`; at that boundary recompute availability, reconcile, evaluate catch-up, and arm the following boundary. Cancel/replace this job on pause or any state change so midnight/08:00/Snooze expiry cannot create duplicate launch loops.
 
-- [ ] **Step 4: Extend Home's pure input.**
+- [x] **Step 4: Extend Home's pure input.**
 
   Pass local `bannerVisible` and blocking count into the Home state builder. Show `Morning review ready`/`Review` on a clean unacknowledged day and the existing repair count when owner blocking tasks exist. Keep the Change 1 refresh Retry strip separately visible. Do not restore the removed FAB/menu action.
 
-- [ ] **Step 5: Run focused state/navigation compilation GREEN.**
+- [x] **Step 5: Run focused state/navigation compilation GREEN.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewEntryDeciderTest' --tests '*HomeScreenStateTest'
   ./gradlew :androidApp:compileDebugKotlin
   ```
 
-- [ ] **Step 6: Commit entry integration.**
+- [x] **Step 6: Commit entry integration.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/MainActivity.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/App.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreenState.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreen.kt client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewEntryDecider.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewEntryDeciderTest.kt
