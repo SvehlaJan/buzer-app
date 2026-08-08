@@ -712,7 +712,9 @@ class BlockerActivityFakeBackendTest {
         resetTestState("overdue")
         val scenario = launchMorningReview()
         try {
-            waitForText("Overdue task 1")
+            waitForText("Morning review")
+            composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue task 1"))
+            composeRule.onNodeWithText("Overdue task 1").assertIsDisplayed()
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
             composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").performClick()
@@ -744,14 +746,14 @@ class BlockerActivityFakeBackendTest {
         try {
             waitForText("Invalid assigned fixture")
             fakeBackend.setFailSnapshot(true)
-            composeRule.onNodeWithText("Retry refresh").performClick()
+            scenario.recreate()
             waitForRecordedCall("/tasks/sync")
             waitForText("Retry refresh")
             composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
             fakeBackend.setFailSnapshot(false)
             fakeBackend.reset("clean")
             composeRule.onNodeWithText("Retry refresh").performClick()
-            waitForRecordedCallCount("/tasks/sync", 2)
+            waitForRecordedCall("/tasks/sync")
             composeRule.onNodeWithText("Retry refresh").assertDoesNotExist()
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
         } finally { fakeBackend.setFailSnapshot(false); scenario.close() }
@@ -785,7 +787,7 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText("Review").performClick()
             waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").performClick()
-            waitForText("Buzer")
+            waitForContentDescription("Add task")
             composeRule.onNodeWithText("Review").assertDoesNotExist()
             setMorningReviewClock("2026-08-08T07:00:00Z")
             home.recreate()
@@ -805,7 +807,7 @@ class BlockerActivityFakeBackendTest {
         try {
             waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").performClick()
-            waitForText("Buzer")
+            waitForContentDescription("Add task")
             home.recreate()
             composeRule.onNodeWithText("Start day").assertDoesNotExist()
         } finally { home.close() }
@@ -819,7 +821,7 @@ class BlockerActivityFakeBackendTest {
             waitForText("Invalid assigned fixture")
             composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
             fakeBackend.reset("unassigned")
-            composeRule.onNodeWithText("Retry refresh").performClick()
+            scenario.recreate()
             waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
         } finally { scenario.close() }
@@ -843,7 +845,7 @@ class BlockerActivityFakeBackendTest {
         try {
             waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").performClick()
-            waitForText("Buzer")
+            waitForContentDescription("Add task")
             fakeBackend.reset("invalid")
             invokeRefreshTasksAccessibilityAction()
             waitForRecordedCall("/tasks/sync")

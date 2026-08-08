@@ -106,6 +106,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Mechanical isolation pass now retains and closes the previously discarded Morning Review/Home scenarios in the directly affected tests.
 - Full-class audit routes all direct MainActivity launches and blocker/Morning Review helper launches through tracked scenarios, closed unconditionally by teardown.
 - API34 one-alarm parser now counts the exact Morning Review receiver action only inside `Pending alarm batches`, excluding idle/history/stats sections.
+- Latest full-class follow-up: Home terminal assertions use the stable Add-task affordance; refresh/authority changes use activity recreation; overdue row scrolls its LazyColumn before interaction.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
