@@ -732,7 +732,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Create: `client/androidApp/src/androidTest/kotlin/app/buzer/android/morningreview/MorningReviewAlarmInstrumentationTest.kt`
 - Modify: `backend/test/fakes/e2eFixtures.ts` and `backend/test/fakes/e2eFixtures.test.ts` to expose named deterministic clean, invalid, overdue, and today-review scenarios using the Change 1 fixture model.
 
-- [ ] **Step 1: Replace contradictory old instrumentation expectations.**
+- [x] **Step 1: Replace contradictory old instrumentation expectations.**
 
   Migrate existing tests rather than leaving old names/behavior:
 
@@ -745,7 +745,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - overdue rows are visible/actionable while Start remains enabled;
   - no-data Start without data closes/acknowledges.
 
-- [ ] **Step 2: Add full user-flow instrumentation.**
+- [x] **Step 2: Add full user-flow instrumentation.**
 
   Cover:
 
@@ -759,7 +759,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - launching automated review over a dirty Add/Edit draft, then Start/Snooze, returns to the exact typed draft;
   - Task-free weekends use the same review flow.
 
-- [ ] **Step 3: Add system/alarm instrumentation.**
+- [x] **Step 3: Add system/alarm instrumentation.**
 
   `MorningReviewAlarmInstrumentationTest` must verify:
 
@@ -771,7 +771,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Prefer `scripts/adb-verify.sh alarms` for manual evidence; do not parse unrestricted dumpsys/logcat in the handoff.
 
-- [ ] **Step 4: Run scoped real-backend E2E classes.**
+- [x] **Step 4: Run scoped real-backend E2E classes.**
 
   From repository root, run the relevant classes separately while iterating:
 
@@ -782,7 +782,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: both PASS. If the script supports only one class expression, run each command separately as shown.
 
-- [ ] **Step 5: Capture concise manual alarm evidence if a device is used.**
+- [x] **Step 5: Capture concise manual alarm evidence if a device is used.**
 
   ```bash
   scripts/adb-verify.sh alarms
@@ -790,7 +790,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Record the selected device serial, Morning Review alarm-clock trigger, and one-alarm identity in the handoff.
 
-- [ ] **Step 6: Commit migrated instrumentation.**
+- [x] **Step 6: Commit migrated instrumentation.**
 
   ```bash
   git add client/androidApp/src/androidTest backend/test/fakes/e2eFixtures.ts backend/test/fakes/e2eFixtures.test.ts
