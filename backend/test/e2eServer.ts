@@ -175,7 +175,8 @@ const ACTION_METADATA_KEYS = [
 ] as const;
 
 function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScenario {
-  return value === "clean" || value === "invalid" || value === "overdue" || value === "today";
+  return value === "clean" || value === "invalid" || value === "overdue" || value === "today" ||
+    value === "blockingMix" || value === "unassigned" || value === "priorityDeadline";
 }
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {

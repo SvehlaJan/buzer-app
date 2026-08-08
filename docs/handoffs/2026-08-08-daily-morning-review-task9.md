@@ -84,6 +84,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `morningReview_snoozeIsFiveMinutesAndSuppressesCatchUpBeforeExpiry`: fixed-clock Snooze duration and pre-expiry Home suppression.
 - `morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp`: early Home entry acknowledgement and post-08 suppression.
 - `morningReview_post08AppOpenLaunchesOnceThenReturnsHomeWithoutRelaunch`: automated catch-up one-shot and terminal return.
+- `morningReview_ownerBlockingMixDisablesStartButUnassignedRefreshEnablesIt`: test-only owner invalid/pending versus unassigned scenario projection.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

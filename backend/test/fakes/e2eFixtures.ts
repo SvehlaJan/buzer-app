@@ -31,13 +31,16 @@ export interface E2EFixtureSeed {
 }
 
 /** Stable, small projections of the Change 1 fixture model for Morning Review E2E cases. */
-export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today";
+export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today" | "blockingMix" | "unassigned" | "priorityDeadline";
 
 const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonly string[]> = {
   clean: [],
   invalid: ["task-invalid"],
   overdue: ["task-overdue-1", "task-overdue-2", "task-overdue-3", "task-overdue-4"],
-  today: ["task-current-overlapping", "task-future-tomorrow"]
+  today: ["task-current-overlapping", "task-future-tomorrow"],
+  blockingMix: ["task-invalid", "task-reconciliation-pending", "task-unassigned-root"],
+  unassigned: ["task-unassigned-root"],
+  priorityDeadline: ["task-deadline"]
 };
 
 const TIME_ZONE = "Europe/Bratislava";

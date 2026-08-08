@@ -778,6 +778,20 @@ class BlockerActivityFakeBackendTest {
         } finally { home.close() }
     }
 
+    @Test
+    fun morningReview_ownerBlockingMixDisablesStartButUnassignedRefreshEnablesIt() {
+        resetTestState("blockingMix")
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Invalid assigned fixture")
+            composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
+            fakeBackend.reset("unassigned")
+            composeRule.onNodeWithText("Retry refresh").performClick()
+            waitForText("Start day")
+            composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
+        } finally { scenario.close() }
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
