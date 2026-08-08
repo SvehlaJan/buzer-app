@@ -20,6 +20,7 @@ import app.buzer.android.morningreview.MorningReviewBoundaryTiming
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewDependencies
 import app.buzer.android.morningreview.MorningReviewRuntimeClock
+import app.buzer.android.morningreview.MorningReviewReconcileGuard
 import app.buzer.android.morningreview.MorningReviewEntryController
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewScheduleCalculator
@@ -169,9 +170,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshMorningReviewAvailability() {
-        val now = MorningReviewRuntimeClock.now()
-        val zoneId = MorningReviewRuntimeClock.zoneId()
-        morningReviewScheduler.reconcile(now, zoneId)
+        val clock = MorningReviewRuntimeClock.snapshot()
+        val now = clock.instant
+        val zoneId = clock.zoneId
+        MorningReviewReconcileGuard.reconcile(applicationContext) { morningReviewScheduler.reconcile(now, zoneId) }
         val availability = morningReviewCalculator.availability(
             state = morningReviewStateStore.read(),
             ownerBlockingCount = morningReviewBlockingCount(),

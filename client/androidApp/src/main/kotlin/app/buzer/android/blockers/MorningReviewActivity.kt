@@ -59,7 +59,6 @@ class MorningReviewActivity : ComponentActivity() {
         val errorReporter = BlockerErrorReporter(applicationContext)
         val scheduler = MorningReviewDependencies.scheduler(applicationContext)
         val notificationCleaner = AndroidBlockerNotificationCleaner(applicationContext)
-        val zone = MorningReviewRuntimeClock.zoneId()
         var sessionState by mutableStateOf(MorningReviewSessionState())
         val session = MorningReviewSessionController({ sessionState = it }, sessionState)
 
@@ -126,13 +125,13 @@ class MorningReviewActivity : ComponentActivity() {
 
         fun acknowledge() = runLocalAction(
             label = "acknowledge",
-            operation = { scheduler.acknowledge(MorningReviewRuntimeClock.now(), zone) },
+            operation = { MorningReviewRuntimeClock.snapshot().let { scheduler.acknowledge(it.instant, it.zoneId) } },
             result = MorningReviewResult.Acknowledged
         )
 
         fun snooze() = runLocalAction(
             label = "snooze",
-            operation = { scheduler.snooze(MorningReviewRuntimeClock.now(), zone) },
+            operation = { MorningReviewRuntimeClock.snapshot().let { scheduler.snooze(it.instant, it.zoneId) } },
             result = MorningReviewResult.Snoozed
         )
 
@@ -175,7 +174,7 @@ class MorningReviewActivity : ComponentActivity() {
                     refreshError = sessionState.refreshError,
                     actionInFlight = sessionState.actionInFlight,
                     actionError = sessionState.actionError,
-                    now = MorningReviewRuntimeClock.now(), zoneId = zone, showBack = source == MorningReviewEntrySource.Home
+                    now = MorningReviewRuntimeClock.snapshot().instant, zoneId = MorningReviewRuntimeClock.snapshot().zoneId, showBack = source == MorningReviewEntrySource.Home
                 ),
                 taskLookup = { taskId -> sessionState.snapshot?.tasks?.firstOrNull { it.id == taskId } },
                 onBack = {

@@ -7,8 +7,12 @@ import java.time.ZoneId
 internal object MorningReviewRuntimeClock {
     @Volatile private var override: (() -> Pair<Instant, ZoneId>)? = null
 
-    fun now(): Instant = (override?.invoke() ?: (Instant.now() to ZoneId.systemDefault())).first
-    fun zoneId(): ZoneId = (override?.invoke() ?: (Instant.now() to ZoneId.systemDefault())).second
+    data class Snapshot(val instant: Instant, val zoneId: ZoneId)
+
+    fun snapshot(): Snapshot = (override?.invoke() ?: (Instant.now() to ZoneId.systemDefault()))
+        .let { Snapshot(it.first, it.second) }
+    fun now(): Instant = snapshot().instant
+    fun zoneId(): ZoneId = snapshot().zoneId
 
     fun setForTests(clock: (() -> Pair<Instant, ZoneId>)?) {
         override = clock

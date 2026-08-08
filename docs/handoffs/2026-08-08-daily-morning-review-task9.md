@@ -70,4 +70,6 @@ Verification:
 
 Task 10 editor isolation: Add/Edit E2E resets clear snapshot authority, restore the runtime clock, and acknowledge today before MainActivity launch.
 
+Final review guard: Morning Review reconciliation now degrades safely when exact alarms are denied/race-revoked; runtime terminal actions read one fresh atomic clock snapshot.
+
 MorningReviewRepairHostTest isolation: consolidated each dynamic test to one Compose content tree, scrolls LazyColumn targets, and uses row tags/descriptions rather than ambiguous text.

@@ -13,8 +13,11 @@ class MorningReviewReconcileReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED -> MorningReviewDependencies.scheduler(context.applicationContext)
-                .reconcile(MorningReviewRuntimeClock.now(), MorningReviewRuntimeClock.zoneId())
+            Intent.ACTION_TIMEZONE_CHANGED -> MorningReviewReconcileGuard.reconcile(context.applicationContext) {
+                val clock = MorningReviewRuntimeClock.snapshot()
+                MorningReviewDependencies.scheduler(context.applicationContext)
+                    .reconcile(clock.instant, clock.zoneId)
+            }
         }
     }
 }
