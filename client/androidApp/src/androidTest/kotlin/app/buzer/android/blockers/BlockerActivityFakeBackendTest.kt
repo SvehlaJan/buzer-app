@@ -15,6 +15,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasAnySibling
@@ -252,11 +253,11 @@ class BlockerActivityFakeBackendTest {
         launchMorningReview()
 
         composeRule.onNodeWithText("1 task needs attention").assertIsDisplayed()
-        composeRule.onNodeWithText("unresolved", substring = true).assertIsDisplayed()
         waitForText("Invalid assigned fixture")
         composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
         composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
         composeRule.onNodeWithText("Clarify the missing commitment fields.").assertIsDisplayed()
+        composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
         composeRule.onAllNodesWithText("left after this task", substring = true).assertCountEquals(0)
     }
 
