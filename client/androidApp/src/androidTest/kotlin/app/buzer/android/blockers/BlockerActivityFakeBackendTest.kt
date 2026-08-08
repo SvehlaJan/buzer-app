@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
@@ -51,10 +52,12 @@ import app.buzer.android.morningreview.MorningReviewAlarmReason
 import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewRuntimeClock
+import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -666,6 +669,51 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
+    @Test
+    fun morningReview_cleanAndNoDataStartAcknowledgeAndClose() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T06:00:00Z")
+        val clean = launchMorningReview()
+        composeRule.onNodeWithTag("morning-start-day").performClick()
+        waitForActivityDestroyed(clean)
+        check(MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).read().lastAcknowledgedDate != null)
+
+        resetTestState("clean")
+        fakeBackend.setFailSnapshot(true)
+        val noData = launchMorningReview()
+        waitForText("Start day without data")
+        composeRule.onNodeWithText("Start day without data").performClick()
+        waitForActivityDestroyed(noData)
+        check(MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).read().lastAcknowledgedDate != null)
+        fakeBackend.setFailSnapshot(false)
+    }
+
+    @Test
+    fun morningReview_overdueRowsAreActionableWhileStartIsEnabled() {
+        resetTestState("overdue")
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Overdue task 1")
+            composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
+            composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").assertIsDisplayed()
+        } finally { scenario.close() }
+    }
+
+    @Test
+    fun morningReview_automatedBackStaysWhileHomeBackCloses() {
+        resetTestState("clean")
+        val automated = launchMorningReview()
+        automated.onActivity { (it as OnBackPressedDispatcherOwner).onBackPressedDispatcher.onBackPressed() }
+        assertActivityNotDestroyed(automated)
+        automated.close()
+
+        val home = ActivityScenario.launch<MorningReviewActivity>(
+            MorningReviewContract.homeIntent(Intent(ApplicationProvider.getApplicationContext(), MorningReviewActivity::class.java))
+        )
+        home.onActivity { (it as OnBackPressedDispatcherOwner).onBackPressedDispatcher.onBackPressed() }
+        waitForActivityDestroyed(home)
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
@@ -687,6 +735,11 @@ class BlockerActivityFakeBackendTest {
             )
         }
         blockerErrorLog().delete()
+    }
+
+    private fun setMorningReviewClock(instant: String, zone: ZoneId = ZoneId.of("Europe/Bratislava")) {
+        val fixed = Instant.parse(instant)
+        MorningReviewRuntimeClock.setForTests { fixed to zone }
     }
 
     private fun clearMorningReviewLocalState() {

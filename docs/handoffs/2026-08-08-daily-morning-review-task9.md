@@ -75,6 +75,12 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Added internal `MorningReviewRuntimeClock`, defaulting to `Instant.now()` and `ZoneId.systemDefault()`; it is used by MainActivity, Morning Review activity/receiver, and alarm handler dependencies.
 - Both owned Android instrumentation fixtures clear the override as part of reset/cleanup.
 
+## Phase B1 coverage
+
+- `morningReview_cleanAndNoDataStartAcknowledgeAndClose`: clean Saturday and no-data Start acknowledgement.
+- `morningReview_overdueRowsAreActionableWhileStartIsEnabled`: overdue summary action + enabled Start.
+- `morningReview_automatedBackStaysWhileHomeBackCloses`: explicit source-sensitive Back behavior.
+
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
 - Result: PASS
