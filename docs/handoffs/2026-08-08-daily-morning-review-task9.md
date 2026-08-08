@@ -105,6 +105,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Final fixture correction omits both pins and started nudges from priority scenarios; early acknowledgement begins clean/unacknowledged and Edit draft uses the `today` scenario.
 - Mechanical isolation pass now retains and closes the previously discarded Morning Review/Home scenarios in the directly affected tests.
 - Full-class audit routes all direct MainActivity launches and blocker/Morning Review helper launches through tracked scenarios, closed unconditionally by teardown.
+- API34 one-alarm parser now counts the exact Morning Review receiver action only inside `Pending alarm batches`, excluding idle/history/stats sections.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

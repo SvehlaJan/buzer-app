@@ -183,16 +183,19 @@ class MorningReviewAlarmInstrumentationTest {
         val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("dumpsys alarm")
         val dump = FileInputStream(descriptor.fileDescriptor).bufferedReader().use { it.readText() }
-        // API 34 lists currently scheduled alarms before its historical sections. Do not count
-        // history, Alarm Stats, or delivered batches: they can legitimately retain old identities.
-        val active = dump.substringBefore("Alarm Stats:").substringBefore("Historical")
-        val marker = "buzer://alarm/morning-review"
-        val count = active.lineSequence().count { line ->
-            line.contains(marker) && line.contains("MORNING_REVIEW")
-        }
+        // API 34's live alarm schedule is the Pending alarm batches section. Recent problems,
+        // cancellation history, and Alarm Stats can all retain old identities and are excluded.
+        val pendingHeader = "Pending alarm batches:"
+        val pendingStart = dump.indexOf(pendingHeader)
+        check(pendingStart >= 0) { "API34 alarm dump missing '$pendingHeader': ${dump.take(4_000)}" }
+        val afterPending = dump.substring(pendingStart + pendingHeader.length)
+        val pending = afterPending.substringBefore("Idle mode state:")
+            .substringBefore("Past-due non-wakeup alarms:")
+        val marker = "app.buzer.action.ALARM_RECEIVER.MORNING_REVIEW"
+        val count = pending.lineSequence().count { it.contains(marker) }
         assertEquals(
-            "Expected exactly one active Morning Review PendingIntent in API34 alarm dump; " +
-                "marker=$marker activeTail=${active.takeLast(4_000)}",
+            "Expected exactly one active Morning Review PendingIntent in API34 pending batches; " +
+                "marker=$marker pending=${pending.take(4_000)}",
             1,
             count
         )
