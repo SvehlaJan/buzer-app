@@ -408,7 +408,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreenState.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt`
 
-- [ ] **Step 1: Lock Change 1 Home behavior before refactoring.**
+- [x] **Step 1: Lock Change 1 Home behavior before refactoring.**
 
   Run the integrated Home state suite and record its count/result in the implementation handoff:
 
@@ -418,7 +418,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: PASS before extraction. Stop if it is red; do not build Morning Review on an unaccepted Home classifier.
 
-- [ ] **Step 2: Write RED selector tests.**
+- [x] **Step 2: Write RED selector tests.**
 
   Extract only time/ownership classification, not Home labels or expansion state. Define these models:
 
@@ -434,7 +434,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Re-run Change 1's owner/unassigned, half-open boundary, invalid/pending, completed/deleted, and deterministic-order cases against the selector.
 
-- [ ] **Step 3: Refactor Home GREEN with no presentation changes.**
+- [x] **Step 3: Refactor Home GREEN with no presentation changes.**
 
   Make `buildHomeScreenState` delegate classification to `OwnerAgendaSelector`. Keep Home grouping, hero selection, expansion, labels, and rendering in Home files. Run:
 
@@ -444,7 +444,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: both PASS with unchanged Home assertions.
 
-- [ ] **Step 4: Replace Morning Review's invalid-only state tests with the accepted flow matrix.**
+- [x] **Step 4: Replace Morning Review's invalid-only state tests with the accepted flow matrix.**
 
   Add RED cases for:
 
@@ -460,7 +460,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - Snooze is one global action in every actionable phase, never per task;
   - action in flight prevents duplicate mutations while retaining cached content.
 
-- [ ] **Step 5: Implement the pure screen state.**
+- [x] **Step 5: Implement the pure screen state.**
 
   Use these explicit phases/models rather than branching over raw tasks in composables:
 
@@ -517,13 +517,13 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   The builder receives `SnapshotViewState?`, load/refresh/action flags, errors, injected `Instant`, and `ZoneId`. It must not read system time/zone or mutate navigation.
 
-- [ ] **Step 6: Run Home and Morning state tests GREEN.**
+- [x] **Step 6: Run Home and Morning state tests GREEN.**
 
   ```bash
   ./gradlew :androidApp:testDebugUnitTest --tests '*OwnerAgendaSelectorTest' --tests '*HomeScreenStateTest' --tests '*MorningReviewScreenStateTest'
   ```
 
-- [ ] **Step 7: Commit shared classification and review state.**
+- [x] **Step 7: Commit shared classification and review state.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/ui/agenda client/androidApp/src/test/kotlin/app/buzer/android/ui/agenda client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreenState.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/HomeScreenStateTest.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreenState.kt client/androidApp/src/test/kotlin/app/buzer/android/ui/MorningReviewScreenStateTest.kt
