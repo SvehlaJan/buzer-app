@@ -83,7 +83,8 @@ class MorningReviewSessionController(
 
     suspend fun handleOverdueResult(
         result: CoordinatorActionResult,
-        reloadCached: () -> Unit
+        reloadCached: () -> Unit,
+        execute: suspend () -> CoordinatorActionResult = { CoordinatorActionResult.FailedAndHidden("Retry unavailable") }
     ) {
         when (result) {
             CoordinatorActionResult.Success -> {
@@ -96,12 +97,35 @@ class MorningReviewSessionController(
             is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
             is CoordinatorActionResult.RetryAfter -> {
                 retry = {
-                    if (beginAction()) handleOverdueResult(result.retry(), reloadCached)
+                    if (beginAction()) handleOverdueResult(result.retry(), reloadCached, execute)
                 }
                 update(state.actionFailed(result.message))
             }
-            is CoordinatorActionResult.FailedAndHidden -> update(state.actionFailed(result.message))
-            CoordinatorActionResult.ChildActionInFlight -> update(state.actionFailed("Another action is in progress"))
+            is CoordinatorActionResult.FailedAndHidden -> retryOverdue(result.message, reloadCached, execute)
+            CoordinatorActionResult.ChildActionInFlight -> retryOverdue("Another action is in progress", reloadCached, execute)
+        }
+    }
+
+    fun retryOverdue(message: String, reloadCached: () -> Unit, execute: suspend () -> CoordinatorActionResult) {
+        retry = {
+            if (beginAction()) {
+                try {
+                    handleOverdueResult(execute(), reloadCached, execute)
+                } catch (error: Exception) {
+                    retryOverdue(error.message ?: "Task completion failed", reloadCached, execute)
+                }
+            }
+        }
+        update(state.actionFailed(message))
+    }
+
+    fun handleRepairResult(result: CoordinatorActionResult, reloadCached: () -> Unit) {
+        when (result) {
+            CoordinatorActionResult.Success -> reloadCached()
+            is CoordinatorActionResult.Pending -> cache(SnapshotReducer.reduce(result.response.snapshot))
+            is CoordinatorActionResult.Stale -> cache(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.LocalReconciliationFailed -> cache(SnapshotReducer.reduce(result.snapshot))
+            else -> Unit
         }
     }
 

@@ -335,9 +335,20 @@ fun MorningReviewScreen(
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
+    when (contentState) {
+        MorningReviewContentState.Loading -> {
+            BlockingLoadingState("Loading morning review...")
+            return
+        }
+        is MorningReviewContentState.Error -> {
+            BlockingErrorState(message = contentState.message, onRetry = onRetryRefresh)
+            return
+        }
+        is MorningReviewContentState.Ready -> Unit
+    }
     val snapshot = SnapshotViewState(0, "", invalidTasks, emptyList(), emptyList(), emptyList(), emptyList(), invalidTasks)
     MorningReviewScreen(
-        screenState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState is MorningReviewContentState.Ready && contentState.refreshing, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack),
+        screenState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState.refreshing, refreshError = contentState.warning, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack),
         taskLookup = { id -> invalidTasks.firstOrNull { it.id == id } }, onBack = onBack, onRepair = onRepair,
         onRepairSuccess = onRepairSuccess, onStart = onStart, onSnooze = onSnooze, onOverdueDone = onOverdueDone,
         showBack = showBack, onRetryAction = onRetryAction, onRetryRefresh = onRetryRefresh,

@@ -498,6 +498,11 @@ Verification:
 - Editor save explicitly clears selection before authoritative reload; RetryAfter reacquires the action guard before invoking its retained closure.
 - Focused JVM tests lock both behaviors; production and instrumentation source compilation remain green.
 
+### Task 5 retry/authority quality correction (2026-08-08)
+
+- Overdue completion retains one request/execute closure across failures and retry; repair mutation authority is applied directly for returned pending/stale/local-reconciliation snapshots.
+- Legacy screen bridge again short-circuits Loading/Error before delegating Ready state.
+
 ---
 
 ## Task 4 quality correction (2026-08-08)

@@ -146,16 +146,20 @@ class MorningReviewActivity : ComponentActivity() {
                 session.localActionFailed("Task occurrence is no longer current") { runOverdueDone(taskId) }
                 return
             }
+            val request = TaskActionRequest(
+                UUID.randomUUID().toString(),
+                EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
+                occurrenceKey
+            )
             lifecycleScope.launch {
                 try {
-                    session.handleOverdueResult(currentCoordinator.completeTask(
-                        taskId,
-                        TaskActionRequest(UUID.randomUUID().toString(), EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(), occurrenceKey)
-                    ), { reloadCached(currentCoordinator) })
+                    val execute: suspend () -> CoordinatorActionResult = { currentCoordinator.completeTask(taskId, request) }
+                    session.handleOverdueResult(execute(), { reloadCached(currentCoordinator) }, execute)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    session.localActionFailed(error.message ?: "Task completion failed") { runOverdueDone(taskId) }
+                    val execute: suspend () -> CoordinatorActionResult = { currentCoordinator.completeTask(taskId, request) }
+                    session.retryOverdue(error.message ?: "Task completion failed", { reloadCached(currentCoordinator) }, execute)
                 }
             }
         }
@@ -182,7 +186,7 @@ class MorningReviewActivity : ComponentActivity() {
                     if (!session.beginAction()) return@MorningReviewScreen CoordinatorActionResult.FailedAndHidden("Another action is in progress")
                     try {
                         currentCoordinator.updateTask(taskId, request).also { result ->
-                            if (result == CoordinatorActionResult.Success) reloadCached(currentCoordinator)
+                            session.handleRepairResult(result) { reloadCached(currentCoordinator) }
                         }
                     } finally {
                         session.finishAction()
