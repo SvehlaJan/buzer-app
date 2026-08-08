@@ -14,6 +14,8 @@ import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.AlarmReceiver
 import app.buzer.android.enforcement.AndroidAlarmScheduler
 import app.buzer.android.enforcement.ScheduledAlarmIdentity
+import app.buzer.android.enforcement.EnforcementDependencies
+import app.buzer.android.blockers.FakeBackendClient
 import java.time.Instant
 import java.time.ZoneId
 import java.io.File
@@ -23,11 +25,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.runBlocking
 
 @RunWith(AndroidJUnit4::class)
 class MorningReviewAlarmInstrumentationTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val stateStore = MorningReviewLocalStateStore.fromContext(context)
+    private val fakeBackend = FakeBackendClient()
 
     @Before
     @After
@@ -121,6 +125,31 @@ class MorningReviewAlarmInstrumentationTest {
         assertEquals(MorningReviewAlarmReason.Snooze, scheduled.reason)
         assertEquals(scheduled.triggerAt.toEpochMilli(), firstTrigger)
         assertEquals(firstTrigger, secondTrigger)
+    }
+
+    @Test
+    fun cachedStartPriorityDefersReviewThenClearedCacheAllowsRetryDelivery() {
+        fakeBackend.reset("today")
+        runBlocking { EnforcementDependencies.coordinator(context).forceSyncAndReconcile() }
+        grantNotifications()
+        val scheduler = MorningReviewDependencies.scheduler(context)
+        val now = Instant.now()
+        val zone = ZoneId.systemDefault()
+        scheduler.snooze(now, zone)
+        val fired = requireNotNull(stateStore.read().scheduledAlarm)
+        val receiver = AlarmReceiver()
+        val notifications = context.getSystemService(NotificationManager::class.java)
+        val initialNotification = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
+
+        receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW))
+        val retry = requireNotNull(stateStore.read().scheduledAlarm)
+        assertEquals(MorningReviewAlarmReason.PriorityRetry, retry.reason)
+        assertTrue(notifications.activeNotifications.none { it.id == initialNotification })
+
+        File(context.filesDir, "latest_snapshot.json").delete()
+        receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW))
+        val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW)
+        assertEquals(1, waitForNotification(notifications, notificationId).size)
     }
 
     private fun grantNotifications() {

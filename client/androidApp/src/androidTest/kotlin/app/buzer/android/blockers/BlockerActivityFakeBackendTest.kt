@@ -792,6 +792,23 @@ class BlockerActivityFakeBackendTest {
         } finally { scenario.close() }
     }
 
+    @Test
+    fun acknowledgedDayNewInvalidSyncRestoresHomeBannerWithoutAutomatedLaunch() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T07:00:00Z")
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForText("Start day")
+            composeRule.onNodeWithTag("morning-start-day").performClick()
+            waitForText("Buzer")
+            fakeBackend.reset("invalid")
+            invokeRefreshTasksAccessibilityAction()
+            waitForRecordedCall("/tasks/sync")
+            waitForText("Review")
+            composeRule.onNodeWithText("Start day").assertDoesNotExist()
+        } finally { home.close() }
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority

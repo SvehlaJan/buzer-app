@@ -85,6 +85,8 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp`: early Home entry acknowledgement and post-08 suppression.
 - `morningReview_post08AppOpenLaunchesOnceThenReturnsHomeWithoutRelaunch`: automated catch-up one-shot and terminal return.
 - `morningReview_ownerBlockingMixDisablesStartButUnassignedRefreshEnablesIt`: test-only owner invalid/pending versus unassigned scenario projection.
+- `acknowledgedDayNewInvalidSyncRestoresHomeBannerWithoutAutomatedLaunch`: same-day local acknowledgement with post-sync invalid banner reopening.
+- `cachedStartPriorityDefersReviewThenClearedCacheAllowsRetryDelivery`: real coordinator SnapshotStore priority defer/retry notification path.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
