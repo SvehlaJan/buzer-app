@@ -703,6 +703,10 @@ class BlockerActivityFakeBackendTest {
             waitForText("Overdue task 1")
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
             composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").performClick()
+            waitForRecordedCall("/tasks/task-overdue-1/done")
+            waitForTextAbsent("Overdue task 1")
+            composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
         } finally { scenario.close() }
     }
 
@@ -733,9 +737,11 @@ class BlockerActivityFakeBackendTest {
             waitForText("Retry refresh")
             composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
             fakeBackend.setFailSnapshot(false)
+            fakeBackend.reset("clean")
             composeRule.onNodeWithText("Retry refresh").performClick()
             waitForRecordedCallCount("/tasks/sync", 2)
-            composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
+            composeRule.onNodeWithText("Retry refresh").assertDoesNotExist()
+            composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
         } finally { fakeBackend.setFailSnapshot(false); scenario.close() }
     }
 
@@ -750,7 +756,11 @@ class BlockerActivityFakeBackendTest {
         check(state.pendingSnoozeAt?.toEpochMilli() in Instant.parse("2026-08-08T07:04:59Z").toEpochMilli()..Instant.parse("2026-08-08T07:05:01Z").toEpochMilli())
         setMorningReviewClock("2026-08-08T07:03:00Z")
         val home = ActivityScenario.launch(MainActivity::class.java)
-        try { composeRule.onNodeWithText("Review").assertDoesNotExist() } finally { home.close() }
+        try {
+            composeRule.onNodeWithText("Review").assertDoesNotExist()
+            composeRule.onNodeWithText("Start day").assertDoesNotExist()
+            assertActivityNotDestroyed(home)
+        } finally { home.close() }
     }
 
     @Test
@@ -768,6 +778,10 @@ class BlockerActivityFakeBackendTest {
             setMorningReviewClock("2026-08-08T07:00:00Z")
             home.recreate()
             composeRule.onNodeWithText("Review").assertDoesNotExist()
+            composeRule.onNodeWithText("Start day").assertDoesNotExist()
+            assertActivityNotDestroyed(home)
+            val next = requireNotNull(MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).read().scheduledAlarm)
+            check(next.reviewDate == LocalDate.of(2026, 8, 9))
         } finally { home.close() }
     }
 

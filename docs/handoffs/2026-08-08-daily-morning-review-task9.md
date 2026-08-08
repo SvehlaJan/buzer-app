@@ -95,6 +95,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 
 - Unconditional blocker-test teardown now resets clock, backend controls, local cache/state, notifications, and app alarms.
 - Added `pendingOnly` fixture and owner-pending Start-disabled coverage; stale delivery now asserts no Morning Review notification by ID or title.
+- Refresh retry now switches to clean authority and asserts retry clearing/enabled Start; overdue Done asserts exact mutation and retained Start; early acknowledgement/Snooze assert Home remains visible and no same-day Review state.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
