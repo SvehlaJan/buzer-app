@@ -493,6 +493,11 @@ Verification:
 - Result: PASS
 - Evidence: focused JVM tests plus production and instrumentation-source compilation succeeded; no whitespace errors. E2E deferred to Tasks 9/10.
 
+### Task 5 editor/retry correction (2026-08-08)
+
+- Editor save explicitly clears selection before authoritative reload; RetryAfter reacquires the action guard before invoking its retained closure.
+- Focused JVM tests lock both behaviors; production and instrumentation source compilation remain green.
+
 ---
 
 ## Task 4 quality correction (2026-08-08)

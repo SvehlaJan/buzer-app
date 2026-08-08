@@ -95,7 +95,9 @@ class MorningReviewSessionController(
             is CoordinatorActionResult.Stale -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
             is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
             is CoordinatorActionResult.RetryAfter -> {
-                retry = { handleOverdueResult(result.retry(), reloadCached) }
+                retry = {
+                    if (beginAction()) handleOverdueResult(result.retry(), reloadCached)
+                }
                 update(state.actionFailed(result.message))
             }
             is CoordinatorActionResult.FailedAndHidden -> update(state.actionFailed(result.message))

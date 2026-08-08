@@ -254,7 +254,10 @@ fun MorningReviewScreen(
             onRetryChoices = ::retryProjects,
             onRepair = onRepair,
             presentation = editorPresentation,
-            onSuccess = { onRepairSuccess(task.id) },
+            onSuccess = {
+                repairingTask = completeMorningReviewEditorSelection()
+                onRepairSuccess(task.id)
+            },
             onCancel = { repairingTask = null },
             nowProvider = nowProvider
         )
@@ -308,6 +311,8 @@ fun MorningReviewScreen(
         }
     }
 }
+
+internal fun completeMorningReviewEditorSelection(): TaskSnapshotItem? = null
 
 /** Compatibility bridge for pre-Task-5 hosts; Task 6 migrates them to the explicit state input. */
 @Composable

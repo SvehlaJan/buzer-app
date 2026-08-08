@@ -3,6 +3,7 @@ package app.buzer.android.morningreview
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.screens.MorningReviewPhase
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
+import app.buzer.android.ui.screens.completeMorningReviewEditorSelection
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
 import java.time.ZoneId
@@ -89,6 +90,28 @@ class MorningReviewSessionStateTest {
         assertEquals(listOf(MorningReviewResult.Acknowledged, MorningReviewResult.Snoozed), finished)
         assertTrue(controller.hasRetryAction)
         assertFalse(controller.state.actionInFlight)
+    }
+
+    @Test
+    fun retryAfterReentersActionGuardBeforeExecutingItsClosure() = runBlocking {
+        val controller = MorningReviewSessionController(publish = { })
+        var observedInFlight = false
+        var duplicateRejected = false
+        controller.handleOverdueResult(CoordinatorActionResult.RetryAfter(1, "wait") {
+            observedInFlight = controller.state.actionInFlight
+            duplicateRejected = !controller.beginAction()
+            CoordinatorActionResult.Success
+        }, {})
+        controller.retryAction()
+        assertTrue(observedInFlight)
+        assertTrue(duplicateRejected)
+        assertFalse(controller.state.actionInFlight)
+    }
+
+    @Test
+    fun editorCompletionClearsSelectionBeforeAuthoritativeSummary() {
+        assertEquals(null, completeMorningReviewEditorSelection())
+        assertEquals(MorningReviewPhase.Summary, buildMorningReviewScreenState(snapshot(), now = NOW, zoneId = ZONE).phase)
     }
 
     @Test
