@@ -132,7 +132,9 @@ fun buildHomeScreenState(
     val reviewTasks = ownerAgenda.blocking.filter { it.hierarchyStatus != HierarchyStatus.unsupported }
     val reviewIds = reviewTasks.map { it.id }.toSet()
     val blockingCount = ownerBlockingCount ?: reviewTasks.size
-    val reviewAttention = if (blockingCount > 0) {
+    val reviewAttention = if (!morningReviewBannerVisible) {
+        null
+    } else if (blockingCount > 0) {
         val count = blockingCount
         val msg = if (count == 1) "1 invalid task needs review" else "$count invalid tasks need review"
         HomeAttention(msg, HomeAttentionAction.OpenMorningReview)

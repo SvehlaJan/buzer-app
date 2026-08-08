@@ -53,6 +53,19 @@ class HomeScreenStateTest {
     }
 
     @Test
+    fun activeSnoozeHidesBlockingMorningReviewAttention() {
+        val state = buildHomeScreenState(
+            snapshot(emptyList()),
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = false,
+            ownerBlockingCount = 2
+        )
+
+        assertNull(state.reviewAttention)
+    }
+
+    @Test
     fun refreshRetryAttentionRemainsSeparateFromMorningReviewBanner() {
         val state = buildHomeScreenState(
             snapshot(emptyList()),
@@ -302,7 +315,12 @@ class HomeScreenStateTest {
             tasks = listOf(invalidTask, pendingTask, validTask)
         )
 
-        val state = buildHomeScreenState(snapshot, now = FIXED_NOW, zoneId = FIXED_ZONE)
+        val state = buildHomeScreenState(
+            snapshot,
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true
+        )
 
         val attention = assertNotNull(state.reviewAttention)
         assertEquals("2 invalid tasks need review", attention.message)
@@ -342,7 +360,8 @@ class HomeScreenStateTest {
             snapshot,
             now = FIXED_NOW,
             zoneId = FIXED_ZONE,
-            unassignedExpanded = true
+            unassignedExpanded = true,
+            morningReviewBannerVisible = true
         )
 
         assertNotNull(state.reviewAttention)

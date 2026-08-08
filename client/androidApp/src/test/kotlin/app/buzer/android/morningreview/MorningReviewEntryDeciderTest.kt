@@ -39,6 +39,68 @@ class MorningReviewEntryDeciderTest {
         assertFalse(decision.launchAutomated)
     }
 
+    @Test
+    fun `default on create does not launch until resume`() {
+        val controller = MorningReviewEntryController()
+
+        assertFalse(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+    }
+
+    @Test
+    fun `resume catch up launches once and second evaluation is guarded`() {
+        val controller = MorningReviewEntryController()
+        controller.onResume()
+
+        assertTrue(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+        assertFalse(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+    }
+
+    @Test
+    fun `pause prevents async evaluation and home launch`() {
+        val controller = MorningReviewEntryController()
+        controller.onResume()
+        controller.onPause()
+
+        assertFalse(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+        assertFalse(controller.openHome())
+    }
+
+    @Test
+    fun `result clears in flight and requests recomputation`() {
+        val controller = MorningReviewEntryController()
+        controller.onResume()
+        controller.evaluate(availability(banner = true, catchUp = true))
+
+        assertTrue(controller.onResult())
+        assertTrue(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+    }
+
+    @Test
+    fun `home cancelled before eight preserves its visible banner`() {
+        val controller = MorningReviewEntryController()
+        controller.onResume()
+        assertTrue(controller.openHome())
+
+        assertTrue(controller.onResult())
+        val decision = controller.evaluate(availability(banner = true, catchUp = false))
+        assertTrue(decision.showHomeBanner)
+        assertFalse(decision.launchAutomated)
+    }
+
+    @Test
+    fun `foreground transitions honor midnight eight and snooze boundaries`() {
+        val controller = MorningReviewEntryController()
+        controller.onResume()
+
+        assertTrue(controller.evaluate(availability(banner = true, catchUp = false)).showHomeBanner)
+        assertTrue(controller.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+
+        val snoozedController = MorningReviewEntryController()
+        snoozedController.onResume()
+        assertFalse(snoozedController.evaluate(availability(banner = false, catchUp = false, snoozed = true)).showHomeBanner)
+        assertTrue(snoozedController.evaluate(availability(banner = true, catchUp = true)).launchAutomated)
+    }
+
     private fun availability(
         banner: Boolean,
         catchUp: Boolean,

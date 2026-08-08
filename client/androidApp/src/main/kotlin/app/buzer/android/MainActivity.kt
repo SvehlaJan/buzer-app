@@ -18,7 +18,7 @@ import app.buzer.android.blockers.MorningReviewActivity
 import app.buzer.android.morningreview.MorningReviewAvailability
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewDependencies
-import app.buzer.android.morningreview.MorningReviewEntryDecider
+import app.buzer.android.morningreview.MorningReviewEntryController
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewScheduleCalculator
 import app.buzer.android.ui.BuzerApp
@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private var homeRefreshError by mutableStateOf<String?>(null)
     private var homeActionStatusMessage by mutableStateOf<String?>(null)
     private var morningReviewAvailability by mutableStateOf<MorningReviewAvailability?>(null)
-    private var morningReviewLaunchInFlight = false
+    private val morningReviewEntryController = MorningReviewEntryController()
     private var morningReviewReevaluationJob: Job? = null
     private val morningReviewStateStore by lazy { MorningReviewLocalStateStore.fromContext(applicationContext) }
     private val morningReviewCalculator = MorningReviewScheduleCalculator()
@@ -55,8 +55,7 @@ class MainActivity : ComponentActivity() {
     private val morningReviewLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        morningReviewLaunchInFlight = false
-        refreshMorningReviewAvailability()
+        if (morningReviewEntryController.onResult()) refreshMorningReviewAvailability()
     }
     private val homeActionHandler: HomeDoneActionHandler by lazy {
         HomeDoneActionHandler(
@@ -132,11 +131,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        morningReviewEntryController.onResume()
         refreshEnforcement(forceTodoist = false)
         refreshMorningReviewAvailability()
     }
 
     override fun onPause() {
+        morningReviewEntryController.onPause()
         morningReviewReevaluationJob?.cancel()
         morningReviewReevaluationJob = null
         super.onPause()
@@ -158,8 +159,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openHomeMorningReview() {
-        if (morningReviewLaunchInFlight) return
-        morningReviewLaunchInFlight = true
+        if (!morningReviewEntryController.openHome()) return
         morningReviewLauncher.launch(
             MorningReviewContract.homeIntent(Intent(this, MorningReviewActivity::class.java))
         )
@@ -176,10 +176,9 @@ class MainActivity : ComponentActivity() {
             zoneId = zoneId
         )
         morningReviewAvailability = availability
-        val decision = MorningReviewEntryDecider.decide(availability, morningReviewLaunchInFlight)
+        val decision = morningReviewEntryController.evaluate(availability)
         armMorningReviewReevaluation(availability)
         if (decision.launchAutomated) {
-            morningReviewLaunchInFlight = true
             morningReviewLauncher.launch(
                 MorningReviewContract.automatedIntent(Intent(this, MorningReviewActivity::class.java))
             )
@@ -188,6 +187,7 @@ class MainActivity : ComponentActivity() {
 
     private fun armMorningReviewReevaluation(availability: MorningReviewAvailability) {
         morningReviewReevaluationJob?.cancel()
+        if (!morningReviewEntryController.isForeground) return
         val delayMillis = Duration.between(Instant.now(), availability.nextReevaluationAt).toMillis()
         if (delayMillis <= 0L) return
         morningReviewReevaluationJob = lifecycleScope.launch {

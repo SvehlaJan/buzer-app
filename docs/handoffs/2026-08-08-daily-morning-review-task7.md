@@ -63,3 +63,27 @@ Verification:
 
 - Owner blocking count is derived from the existing `selectOwnerAgenda(...).blocking` authority, so Home remains independent from unassigned roots.
 - Task 8 API cleanup was not touched. The controller should review this Task 7 commit, update plan checkboxes, and continue with the planned E2E migration/verification tasks.
+
+---
+
+## Follow-up correction: foreground gate and Snooze banner suppression
+
+- Home review attention is now entirely gated by `morningReviewBannerVisible`. During an active Snooze, even a nonzero blocking count produces no Morning Review banner. When visibility is true, the blocking count still wins over the clean-ready message.
+- Added a pure `MorningReviewEntryController` used by MainActivity. It owns foreground and in-flight state: creation begins background-safe, resume permits evaluation/launch, pause disarms, and result return clears in-flight and requests recomputation.
+- Snapshot/action recomputation may still refresh the Compose availability while paused, but the controller prevents catch-up launch and Main prevents re-arming the calendar-boundary Job until foreground resumes.
+- Expanded pure coverage for no create launch, resume-once catch-up, in-flight duplicate prevention, pause behavior, result recomputation, Home cancellation, midnight/08:00/Snooze transitions, and active-Snooze blocking suppression. Existing Task 5 contract tests continue to cover Home/Automated source and terminal result extras; no contract behavior changed.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewEntryDeciderTest' --tests '*HomeScreenStateTest'`
+- Result: RED then PASS
+- Evidence: RED reported missing `MorningReviewEntryController`; after implementation and migration of preexisting direct-attention tests to explicitly provide local banner availability, 10 EntryDecider/controller tests and 23 HomeScreenState tests passed.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `git diff --check`
+- Result: PASS
+- Evidence: no whitespace errors.
