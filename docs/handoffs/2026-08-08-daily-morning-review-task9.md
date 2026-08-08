@@ -69,3 +69,5 @@ Verification:
 - Task 10 still requires complete client/backend verification, the full unfiltered real-backend suite, repository hygiene audit, and the final feature handoff.
 
 Task 10 editor isolation: Add/Edit E2E resets clear snapshot authority, restore the runtime clock, and acknowledge today before MainActivity launch.
+
+MorningReviewRepairHostTest isolation: consolidated each dynamic test to one Compose content tree, scrolls LazyColumn targets, and uses row tags/descriptions rather than ambiguous text.

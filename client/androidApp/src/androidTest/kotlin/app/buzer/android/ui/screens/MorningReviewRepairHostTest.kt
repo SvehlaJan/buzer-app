@@ -12,6 +12,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import app.buzer.android.enforcement.CoordinatorActionResult
@@ -56,13 +59,17 @@ class MorningReviewRepairHostTest {
     fun repeatedActionDescriptionsSelectTheCorrectTaskCallbacks() {
         var syncRetries = 0
         val first = task("first", "First repair")
-        setScreen(
-            blockingState(cards = listOf(
-                repairCard(first),
-                MorningReviewBlockingCard.SyncPending("pending", "Waiting for sync")
-            )),
+        val showingSummary = mutableStateOf(false)
+        val done = mutableListOf<String>()
+        val edited = mutableListOf<String>()
+        setScreenState(
+            state = { if (showingSummary.value) multiOverdueState() else blockingState(cards = listOf(
+                repairCard(first), MorningReviewBlockingCard.SyncPending("pending", "Waiting for sync")
+            )) },
             taskLookup = { taskId -> first.takeIf { taskId == first.id } },
-            onPendingRetry = { syncRetries++ }
+            onPendingRetry = { syncRetries++ },
+            onOverdueDone = { done += it },
+            onOverdueEdit = { edited += it }
         )
 
         composeRule.onNodeWithContentDescription("Repair First repair").performClick()
@@ -71,9 +78,8 @@ class MorningReviewRepairHostTest {
         composeRule.onNodeWithContentDescription("Retry sync for Waiting for sync").performClick()
         assertEquals(1, syncRetries)
 
-        val done = mutableListOf<String>()
-        val edited = mutableListOf<String>()
-        setScreen(multiOverdueState(), onOverdueDone = { done += it }, onOverdueEdit = { edited += it })
+        showingSummary.value = true
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("First late task"))
         composeRule.onNodeWithContentDescription("Mark First late task done").performClick()
         composeRule.onNodeWithContentDescription("Edit Second late task").performClick()
         assertEquals(listOf("overdue-first"), done)
@@ -103,7 +109,7 @@ class MorningReviewRepairHostTest {
         val edited = mutableListOf<String>()
         setScreen(summaryState(), onOverdueDone = { done += it }, onOverdueEdit = { edited += it })
 
-        composeRule.onNodeWithText("Overdue").assertIsDisplayed()
+        composeRule.onNodeWithTag("morning-overdue-overdue").assertIsDisplayed()
         composeRule.onNodeWithText("Today").assertIsDisplayed()
         assertVerticallyBefore("morning-overdue-overdue", "morning-today-today-1")
         assertVerticallyBefore("morning-overdue-overdue", "morning-today-heading")
@@ -117,7 +123,7 @@ class MorningReviewRepairHostTest {
         assertEquals(listOf("overdue"), edited)
         composeRule.onNodeWithText("Start day").assertIsEnabled()
         composeRule.onNodeWithText("09:00–09:30").assertIsDisplayed()
-        composeRule.onNodeWithText("Overdue").assertIsDisplayed()
+        composeRule.onNodeWithTag("morning-overdue-overdue").assertIsDisplayed()
     }
 
     @Test
@@ -127,7 +133,8 @@ class MorningReviewRepairHostTest {
         val state = mutableStateOf(summaryState())
         setScreenState({ state.value }, taskLookup = { id -> currentTask.value.takeIf { it.id == id } })
 
-        composeRule.onNodeWithText("Edit").performClick()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Late task"))
+        composeRule.onNodeWithContentDescription("Edit Late task").performClick()
         composeRule.onNodeWithText("Edit overdue task").assertIsDisplayed()
         composeRule.onNodeWithText("Late task").performTextClearance()
         composeRule.onNodeWithText("Late task").performTextInput("Changed draft")
@@ -156,10 +163,10 @@ class MorningReviewRepairHostTest {
 
     @Test
     fun homeShowsBackWhileAutomatedEntryDoesNot() {
-        setScreen(summaryState(showBack = true))
+        val showBack = mutableStateOf(true)
+        setScreenState({ summaryState(showBack = showBack.value) })
         composeRule.onNodeWithText("Back").assertIsDisplayed()
-
-        setScreen(summaryState(showBack = false))
+        showBack.value = false
         composeRule.onNodeWithText("Back").assertDoesNotExist()
     }
 
@@ -168,7 +175,8 @@ class MorningReviewRepairHostTest {
         composeRule.activity.resources.configuration.fontScale = 2f
         setScreen(summaryState(todayCount = 24))
 
-        composeRule.onNodeWithText("Start day").performScrollTo().assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Start day"))
+        composeRule.onNodeWithText("Start day").assertIsDisplayed()
         composeRule.onNodeWithText("Snooze 5 min").performScrollTo().assertIsDisplayed()
     }
 
