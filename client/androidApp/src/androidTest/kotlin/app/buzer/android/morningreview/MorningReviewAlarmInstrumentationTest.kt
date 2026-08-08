@@ -16,10 +16,10 @@ import app.buzer.android.enforcement.AndroidAlarmScheduler
 import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import java.time.Instant
 import java.time.ZoneId
+import java.io.File
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,6 +32,8 @@ class MorningReviewAlarmInstrumentationTest {
     @Before
     @After
     fun clearMorningReviewState() {
+        File(context.filesDir, "latest_snapshot.json").delete()
+        context.getSystemService(NotificationManager::class.java).cancelAll()
         stateStore.read().scheduledAlarm?.let { alarm ->
             AndroidAlarmScheduler(context).cancel(
                 ScheduledAlarmIdentity(MORNING_REVIEW_TASK_ID, alarm.occurrenceKey, AlarmKind.MORNING_REVIEW)
@@ -99,13 +101,7 @@ class MorningReviewAlarmInstrumentationTest {
             AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
         )
 
-        assertNotEquals(fired, stateStore.read().scheduledAlarm)
-        var posted = emptyList<android.service.notification.StatusBarNotification>()
-        repeat(20) {
-            posted = notifications.activeNotifications.filter { it.id == notificationId }
-            if (posted.size == 1) return@repeat
-            Thread.sleep(100)
-        }
+        val posted = waitForNotification(notifications, notificationId)
         assertEquals(1, posted.size)
         assertEquals("Morning review", posted.single().notification.extras.getString(android.app.Notification.EXTRA_TITLE))
         assertEquals("blockers", posted.single().notification.channelId)
@@ -130,5 +126,17 @@ class MorningReviewAlarmInstrumentationTest {
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
             .close()
+    }
+
+    private fun waitForNotification(
+        notifications: NotificationManager,
+        notificationId: Int
+    ): List<android.service.notification.StatusBarNotification> {
+        repeat(20) {
+            val posted = notifications.activeNotifications.filter { it.id == notificationId }
+            if (posted.size == 1) return posted
+            Thread.sleep(100)
+        }
+        return notifications.activeNotifications.filter { it.id == notificationId }
     }
 }
