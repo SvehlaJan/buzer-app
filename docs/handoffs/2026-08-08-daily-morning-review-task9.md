@@ -91,6 +91,11 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `automatedReviewStartPreservesDirtyAddDraft`: automated terminal Start over a typed Add draft.
 - `automatedReviewSnoozePreservesDirtyEditDraft`: automated Snooze over a typed Edit draft.
 
+## C1 corrections
+
+- Unconditional blocker-test teardown now resets clock, backend controls, local cache/state, notifications, and app alarms.
+- Added `pendingOnly` fixture and owner-pending Start-disabled coverage; stale delivery now asserts no Morning Review notification by ID or title.
+
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
 - Result: PASS

@@ -31,7 +31,7 @@ export interface E2EFixtureSeed {
 }
 
 /** Stable, small projections of the Change 1 fixture model for Morning Review E2E cases. */
-export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today" | "blockingMix" | "unassigned" | "priorityDeadline";
+export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today" | "blockingMix" | "pendingOnly" | "unassigned" | "priorityDeadline";
 
 const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonly string[]> = {
   clean: [],
@@ -39,6 +39,7 @@ const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonl
   overdue: ["task-overdue-1", "task-overdue-2", "task-overdue-3", "task-overdue-4"],
   today: ["task-current-overlapping", "task-future-tomorrow"],
   blockingMix: ["task-invalid", "task-reconciliation-pending", "task-unassigned-root"],
+  pendingOnly: ["task-reconciliation-pending"],
   unassigned: ["task-unassigned-root"],
   priorityDeadline: ["task-deadline"]
 };

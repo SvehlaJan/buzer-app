@@ -65,6 +65,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.junit.Assert.fail
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -75,6 +76,11 @@ class BlockerActivityFakeBackendTest {
     val composeRule = createEmptyComposeRule()
 
     private val fakeBackend = FakeBackendClient()
+
+    @After
+    fun tearDownMorningReviewState() {
+        resetTestState()
+    }
 
     @Test
     fun startBlocker_startingCallsFakeBackend() {
@@ -790,6 +796,16 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText("Retry refresh").performClick()
             waitForText("Start day")
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
+        } finally { scenario.close() }
+    }
+
+    @Test
+    fun morningReview_pendingOwnerAloneDisablesStart() {
+        resetTestState("pendingOnly")
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Pending reconciliation")
+            composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
         } finally { scenario.close() }
     }
 

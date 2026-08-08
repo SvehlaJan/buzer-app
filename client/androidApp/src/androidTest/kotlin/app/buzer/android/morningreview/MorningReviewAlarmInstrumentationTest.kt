@@ -100,6 +100,9 @@ class MorningReviewAlarmInstrumentationTest {
         receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, stale.taskId, stale.occurrenceKey, stale.kind))
         assertEquals(fired, stateStore.read().scheduledAlarm)
         assertTrue(notifications.activeNotifications.none { it.id == notificationId })
+        assertTrue(notifications.activeNotifications.none {
+            it.notification.extras.getString(android.app.Notification.EXTRA_TITLE) == "Morning review"
+        })
 
         receiver.onReceive(
             context,

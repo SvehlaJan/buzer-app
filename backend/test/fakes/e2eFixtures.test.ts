@@ -51,6 +51,7 @@ describe("e2eFixtureSeed", () => {
       "task-future-tomorrow"
     ]);
     expect(roots("blockingMix")).toEqual(["task-invalid", "task-reconciliation-pending", "task-unassigned-root"]);
+    expect(roots("pendingOnly")).toEqual(["task-reconciliation-pending"]);
     expect(roots("unassigned")).toEqual(["task-unassigned-root"]);
     expect(roots("priorityDeadline")).toEqual(["task-deadline"]);
   });
