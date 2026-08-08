@@ -778,6 +778,25 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
+    fun morningReview_startUsesCurrentZoneAfterTimezoneChangesWhileOpen() {
+        resetTestState("clean")
+        val instant = "2026-08-08T21:30:00Z"
+        setMorningReviewClock(instant, ZoneId.of("Europe/Bratislava"))
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Start day")
+            setMorningReviewClock(instant, ZoneId.of("Pacific/Kiritimati"))
+            composeRule.onNodeWithTag("morning-start-day").performClick()
+            waitForActivityDestroyed(scenario)
+
+            val state = MorningReviewLocalStateStore
+                .fromContext(ApplicationProvider.getApplicationContext())
+                .read()
+            check(state.lastAcknowledgedDate == LocalDate.of(2026, 8, 9))
+        } finally { scenario.close() }
+    }
+
+    @Test
     fun morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp() {
         resetTestState("clean")
         setMorningReviewClock("2026-08-08T05:00:00Z")

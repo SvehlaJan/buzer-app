@@ -166,6 +166,7 @@ class MorningReviewActivity : ComponentActivity() {
 
         runForcedRefresh()
         setBuzerContent {
+            val screenClock = MorningReviewRuntimeClock.snapshot()
             MorningReviewScreen(
                 screenState = buildMorningReviewScreenState(
                     snapshot = sessionState.snapshot,
@@ -174,7 +175,7 @@ class MorningReviewActivity : ComponentActivity() {
                     refreshError = sessionState.refreshError,
                     actionInFlight = sessionState.actionInFlight,
                     actionError = sessionState.actionError,
-                    now = MorningReviewRuntimeClock.snapshot().instant, zoneId = MorningReviewRuntimeClock.snapshot().zoneId, showBack = source == MorningReviewEntrySource.Home
+                    now = screenClock.instant, zoneId = screenClock.zoneId, showBack = source == MorningReviewEntrySource.Home
                 ),
                 taskLookup = { taskId -> sessionState.snapshot?.tasks?.firstOrNull { it.id == taskId } },
                 onBack = {
