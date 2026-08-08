@@ -125,5 +125,15 @@ Verification:
 
 Verification:
 - Command: `env -u ANDROID_SERIAL ANDROID_TEST_CLASS=app.buzer.android.morningreview.MorningReviewAlarmInstrumentationTest scripts/e2e-real-backend.sh`
-- Result: INCOMPLETE
-- Evidence: managed-device build/package completed, but no test-result tail was emitted before the command channel returned; inspect GMD output before relying on it.
+- Result: PASS
+- Evidence: the five-method class first passed 4/5; after supporting API 34's lazy alarm-store dump format, the corrected one-alarm method passed in a fresh managed-device run. Together the runs provide green runtime evidence for all five methods.
+
+Verification:
+- Command: `env -u ANDROID_SERIAL ANDROID_TEST_CLASS='<six corrected BlockerActivityFakeBackendTest methods>' scripts/e2e-real-backend.sh`
+- Result: FAIL
+- Evidence: 5/6 passed; the overdue flow reached its lazy row, but a broad text assertion matched both the row title and action semantics.
+
+Verification:
+- Command: `env -u ANDROID_SERIAL ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#morningReview_overdueRowsAreActionableWhileStartIsEnabled' scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: the corrected unique-tag assertion passed on `pixel8Api34`; 1 test finished, build successful in 37 seconds.

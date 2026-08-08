@@ -714,7 +714,7 @@ class BlockerActivityFakeBackendTest {
         try {
             waitForText("Morning review")
             composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Overdue task 1"))
-            composeRule.onNodeWithText("Overdue task 1").assertIsDisplayed()
+            composeRule.onNodeWithTag("morning-overdue-task-overdue-1").assertIsDisplayed()
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
             composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Mark Overdue task 1 done").performClick()
