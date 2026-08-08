@@ -3,8 +3,12 @@ package app.buzer.android.morningreview
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.AlarmManager
+import android.app.NotificationManager
+import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import app.buzer.android.enforcement.AlarmIntentFactory
 import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.AlarmReceiver
@@ -33,6 +37,9 @@ class MorningReviewAlarmInstrumentationTest {
                 ScheduledAlarmIdentity(MORNING_REVIEW_TASK_ID, alarm.occurrenceKey, AlarmKind.MORNING_REVIEW)
             )
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.getSystemService(AlarmManager::class.java).cancelAll()
+        }
         stateStore.replace(MorningReviewLocalState())
     }
 
@@ -49,7 +56,7 @@ class MorningReviewAlarmInstrumentationTest {
         actions.forEach { action ->
             val receivers = context.packageManager.queryBroadcastReceivers(
                 Intent(action).setPackage(context.packageName),
-                PackageManager.MATCH_DEFAULT_ONLY
+                0
             )
             assertTrue("Expected $receiver to handle $action", receivers.any { it.activityInfo.name == receiver })
         }
@@ -79,9 +86,13 @@ class MorningReviewAlarmInstrumentationTest {
         val fired = requireNotNull(stateStore.read().scheduledAlarm)
         val stale = ScheduledAlarmIdentity(MORNING_REVIEW_TASK_ID, "stale-${fired.occurrenceKey}", AlarmKind.MORNING_REVIEW)
         val receiver = AlarmReceiver()
+        grantNotifications()
+        val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
+        val notifications = context.getSystemService(NotificationManager::class.java)
 
         receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, stale.taskId, stale.occurrenceKey, stale.kind))
         assertEquals(fired, stateStore.read().scheduledAlarm)
+        assertTrue(notifications.activeNotifications.none { it.id == notificationId })
 
         receiver.onReceive(
             context,
@@ -89,14 +100,35 @@ class MorningReviewAlarmInstrumentationTest {
         )
 
         assertNotEquals(fired, stateStore.read().scheduledAlarm)
+        var posted = emptyList<android.service.notification.StatusBarNotification>()
+        repeat(20) {
+            posted = notifications.activeNotifications.filter { it.id == notificationId }
+            if (posted.size == 1) return@repeat
+            Thread.sleep(100)
+        }
+        assertEquals(1, posted.size)
+        assertEquals("Morning review", posted.single().notification.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertEquals("blockers", posted.single().notification.channelId)
+        assertTrue(posted.single().notification.fullScreenIntent != null)
     }
 
     @Test
     fun morningReviewUsesAlarmClockSchedulingPath() {
-        MorningReviewDependencies.scheduler(context).snooze(Instant.now(), ZoneId.systemDefault())
+        val scheduler = MorningReviewDependencies.scheduler(context)
+        scheduler.snooze(Instant.now(), ZoneId.systemDefault())
         val scheduled = requireNotNull(stateStore.read().scheduledAlarm)
+        val firstTrigger = requireNotNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock).triggerTime
+        scheduler.reconcile(Instant.now(), ZoneId.systemDefault())
+        val secondTrigger = requireNotNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock).triggerTime
 
         assertEquals(MorningReviewAlarmReason.Snooze, scheduled.reason)
-        assertTrue(scheduled.triggerAt.isAfter(Instant.now().minusSeconds(1)))
+        assertEquals(scheduled.triggerAt.toEpochMilli(), firstTrigger)
+        assertEquals(firstTrigger, secondTrigger)
+    }
+
+    private fun grantNotifications() {
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+            .close()
     }
 }

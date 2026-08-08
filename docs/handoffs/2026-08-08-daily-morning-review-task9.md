@@ -60,3 +60,24 @@ Verification:
 ## Known blockers / next step
 
 The scoped device runner needs a clean emulator/app state and usable connected-test result output before Task 9 can be considered complete. In particular, the remaining full-flow cases (early acknowledgement/catch-up, priority deferral, new-invalid banner reopening, and draft preservation) require deterministic server scenario selection at `backend/test/e2eServer.ts` or an equivalent test-only configuration seam; that file is outside this task's ownership, so no production/server change was made. Re-run the two mandated scoped commands after clearing the emulator's test package/data and expose selected named fixture scenarios through the E2E server, then extend the real-backend class accordingly.
+
+## Phase A correction
+
+- `POST /__reset` now accepts validated `clean`, `invalid`, `overdue`, and `today` Morning Review fixture projections.
+- Android reset clears Morning Review state/snapshot/notifications and API-34 app alarms before choosing a named scenario.
+- Alarm instrumentation checks manifest registration with flags `0`, stale/current notification behavior, and stable `nextAlarmClock` replacement.
+
+Verification:
+- Command: `npm test -- e2eServer.test.ts e2eFixtures.test.ts` and `npm run typecheck`
+- Result: PASS
+- Evidence: 40 focused backend tests and TypeScript typecheck passed.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: Android instrumentation sources compiled.
+
+Verification:
+- Command: `env -u ANDROID_SERIAL ANDROID_TEST_CLASS=app.buzer.android.morningreview.MorningReviewAlarmInstrumentationTest scripts/e2e-real-backend.sh`
+- Result: INCOMPLETE
+- Evidence: managed-device build/package completed, but no test-result tail was emitted before the command channel returned; inspect GMD output before relying on it.

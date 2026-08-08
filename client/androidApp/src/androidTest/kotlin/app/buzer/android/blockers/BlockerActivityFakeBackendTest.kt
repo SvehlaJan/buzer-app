@@ -1,6 +1,9 @@
 package app.buzer.android.blockers
 
 import android.content.Intent
+import android.app.AlarmManager
+import android.app.NotificationManager
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
@@ -241,7 +244,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_showsInvalidTaskFromSnapshot() {
-        resetTestState()
+        resetTestState("invalid")
 
         launchMorningReview()
 
@@ -540,7 +543,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_repairShowsValidationErrorForMissingDeadline() {
-        resetTestState()
+        resetTestState("invalid")
 
         launchMorningReview()
 
@@ -556,7 +559,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_repairCallsFakeBackend() {
-        resetTestState()
+        resetTestState("invalid")
         val scenario = launchMorningReview()
 
         waitForText("Invalid assigned fixture")
@@ -588,7 +591,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_repairBackendFailureShowsErrorAndStaysOpen() {
-        resetTestState()
+        resetTestState("invalid")
         fakeBackend.setFailActions(true)
         try {
             val scenario = launchMorningReview()
@@ -615,7 +618,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_snoozeStaysLocalAndHides() {
-        resetTestState()
+        resetTestState("invalid")
         val scenario = launchMorningReview()
 
         waitForText("Invalid assigned fixture")
@@ -633,7 +636,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_startAcknowledgesLocallyAndHides() {
-        resetTestState()
+        resetTestState("invalid")
         val scenario = launchMorningReview()
         try {
             waitForText("Invalid assigned fixture")
@@ -658,15 +661,20 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun resetTestState() {
+    private fun resetTestState(morningReviewScenario: String? = null) {
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
         // first so monotonic snapshot protection cannot intentionally retain the prior test's
         // snapshot after a fake-backend restart.
         File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "latest_snapshot.json").delete()
         clearMorningReviewLocalState()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        context.getSystemService(NotificationManager::class.java).cancelAll()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.getSystemService(AlarmManager::class.java).cancelAll()
+        }
         fakeBackend.setFailActions(false)
         fakeBackend.setFailSnapshot(false)
-        fakeBackend.resetCalls()
+        fakeBackend.reset(morningReviewScenario)
         blockerErrorLog().delete()
     }
 

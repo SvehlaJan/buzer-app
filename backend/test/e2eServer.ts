@@ -7,7 +7,11 @@ import { buildServer } from "../src/server.js";
 import { EscalationService } from "../src/services/escalationService.js";
 import { TaskSnapshotService } from "../src/services/taskSnapshotService.js";
 import { TodoistSyncService } from "../src/services/todoistSyncService.js";
-import { e2eFixtureSeed } from "./fakes/e2eFixtures.js";
+import {
+  e2eFixtureSeed,
+  e2eMorningReviewScenarioSeed,
+  type E2EMorningReviewScenario
+} from "./fakes/e2eFixtures.js";
 import { E2E_SCENARIOS, E2ETodoistAdapter, type E2EScenario } from "./fakes/e2eTodoistAdapter.js";
 
 const CURRENT_USER_ID = "user-me";
@@ -36,7 +40,7 @@ export interface E2EServer {
   app: ReturnType<typeof buildServer>;
   adapter: E2ETodoistAdapter;
   db: Database.Database;
-  reset: () => Promise<void>;
+  reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
 type SyncHoldState = "armed" | "waiting" | "released";
@@ -76,8 +80,10 @@ export async function buildE2EServer(): Promise<E2EServer> {
     syncHold: null as SyncHold | null
   };
 
-  const seed = async (): Promise<void> => {
-    const fixture = e2eFixtureSeed(new Date());
+  const seed = async (morningReviewScenario?: E2EMorningReviewScenario): Promise<void> => {
+    const fixture = morningReviewScenario === undefined
+      ? e2eFixtureSeed(new Date())
+      : e2eMorningReviewScenarioSeed(new Date(), morningReviewScenario);
     adapter.world.load({
       tasks: fixture.tasks.map((task) => task.mirror),
       projects: fixture.projects,
@@ -110,7 +116,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
     }
   };
 
-  const reset = async (): Promise<void> => {
+  const reset = async (morningReviewScenario?: E2EMorningReviewScenario): Promise<void> => {
     controls.syncHold?.release();
     controls.syncHold = null;
     db.transaction(() => {
@@ -137,7 +143,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
     controls.failNextChildAdd = false;
     adapter.setScenario("none");
     adapter.setFailNextChildAdd(false);
-    await seed();
+    await seed(morningReviewScenario);
   };
 
   registerDebugSurface(app, { adapter, calls, fullCalls, controls, snapshots, reset });
@@ -157,7 +163,7 @@ interface DebugSurfaceOptions {
     syncHold: SyncHold | null;
   };
   snapshots: TaskSnapshotService;
-  reset: () => Promise<void>;
+  reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
 const ACTION_METADATA_KEYS = [
@@ -167,6 +173,10 @@ const ACTION_METADATA_KEYS = [
   "expectedTaskRevision",
   "expectedChildRevision"
 ] as const;
+
+function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScenario {
+  return value === "clean" || value === "invalid" || value === "overdue" || value === "today";
+}
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
   const { adapter, calls, fullCalls, controls, snapshots, reset } = options;
@@ -246,9 +256,13 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     adapter.setScenario(name as E2EScenario);
     return { scenario: name };
   });
-  app.post("/__reset", async () => {
-    await reset();
-    return { ok: true };
+  app.post("/__reset", async (request, reply) => {
+    const morningReviewScenario = (request.body as { morningReviewScenario?: unknown } | null)?.morningReviewScenario;
+    if (morningReviewScenario !== undefined && !isMorningReviewScenario(morningReviewScenario)) {
+      return reply.code(400).send({ error: "unknown_morning_review_scenario" });
+    }
+    await reset(morningReviewScenario);
+    return { ok: true, morningReviewScenario: morningReviewScenario ?? null };
   });
   app.get("/__calls", async () => ({ calls }));
   app.get("/__calls/full", async () => ({ calls: fullCalls }));

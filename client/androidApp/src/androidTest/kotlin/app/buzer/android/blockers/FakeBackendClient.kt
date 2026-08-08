@@ -19,9 +19,12 @@ class FakeBackendClient(
     private val baseUrl: String = InstrumentationRegistry.getArguments()
         .getString("FAKE_BACKEND_BASE_URL", "http://10.0.2.2:18433")
 ) {
-    fun resetCalls() {
-        request("POST", "/__reset")
+    fun reset(morningReviewScenario: String? = null) {
+        val body = morningReviewScenario?.let { """{"morningReviewScenario":"$it"}""" } ?: "{}"
+        request("POST", "/__reset", body)
     }
+
+    fun resetCalls() = reset()
 
     fun setFailActions(enabled: Boolean) {
         request("POST", "/__fail-actions", """{"enabled":$enabled}""")

@@ -741,4 +741,24 @@ describe("debug surface parity", () => {
       )).outcome).toBe("completed");
     });
   });
+
+  it("validates and applies an optional named Morning Review reset scenario", async () => {
+    await withServer(async (server) => {
+      const invalid = await server.app.inject({
+        method: "POST",
+        url: "/__reset",
+        payload: { morningReviewScenario: "invalid" }
+      });
+      expect(invalid.statusCode).toBe(200);
+      expect((await snapshot(server)).tasks.map((task: { id: string }) => task.id)).toEqual(["task-invalid"]);
+
+      const rejected = await server.app.inject({
+        method: "POST",
+        url: "/__reset",
+        payload: { morningReviewScenario: "unknown" }
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json()).toMatchObject({ error: "unknown_morning_review_scenario" });
+    });
+  });
 });
