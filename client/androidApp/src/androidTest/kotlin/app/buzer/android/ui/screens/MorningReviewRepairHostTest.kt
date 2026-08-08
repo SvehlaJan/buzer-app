@@ -53,6 +53,34 @@ class MorningReviewRepairHostTest {
     }
 
     @Test
+    fun repeatedActionDescriptionsSelectTheCorrectTaskCallbacks() {
+        var syncRetries = 0
+        val first = task("first", "First repair")
+        setScreen(
+            blockingState(cards = listOf(
+                repairCard(first),
+                MorningReviewBlockingCard.SyncPending("pending", "Waiting for sync")
+            )),
+            taskLookup = { taskId -> first.takeIf { taskId == first.id } },
+            onPendingRetry = { syncRetries++ }
+        )
+
+        composeRule.onNodeWithContentDescription("Repair First repair").performClick()
+        composeRule.onNodeWithText("Repair task").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Back").performClick()
+        composeRule.onNodeWithContentDescription("Retry sync for Waiting for sync").performClick()
+        assertEquals(1, syncRetries)
+
+        val done = mutableListOf<String>()
+        val edited = mutableListOf<String>()
+        setScreen(multiOverdueState(), onOverdueDone = { done += it }, onOverdueEdit = { edited += it })
+        composeRule.onNodeWithContentDescription("Mark First late task done").performClick()
+        composeRule.onNodeWithContentDescription("Edit Second late task").performClick()
+        assertEquals(listOf("overdue-first"), done)
+        assertEquals(listOf("overdue-second"), edited)
+    }
+
+    @Test
     fun repairingLastBlockerReturnsToSummaryAndMovesFocusWithoutClosingHost() {
         val repair = task("repair", "Repair me")
         val state = mutableStateOf(blockingState(cards = listOf(repairCard(repair))))
@@ -152,8 +180,9 @@ class MorningReviewRepairHostTest {
         onSnooze: () -> Unit = {},
         onOverdueDone: (String) -> Unit = {},
         onOverdueEdit: (String) -> Unit = {},
+        onPendingRetry: () -> Unit = {},
         onRetryRefresh: () -> Unit = {}
-    ) = setScreenState({ state }, taskLookup, onRepairSuccess, onStart, onSnooze, onOverdueDone, onOverdueEdit, onRetryRefresh)
+    ) = setScreenState({ state }, taskLookup, onRepairSuccess, onStart, onSnooze, onOverdueDone, onOverdueEdit, onPendingRetry, onRetryRefresh)
 
     private fun setScreenState(
         state: () -> MorningReviewScreenState,
@@ -163,6 +192,7 @@ class MorningReviewRepairHostTest {
         onSnooze: () -> Unit = {},
         onOverdueDone: (String) -> Unit = {},
         onOverdueEdit: (String) -> Unit = {},
+        onPendingRetry: () -> Unit = {},
         onRetryRefresh: () -> Unit = {}
     ) = composeRule.setContent {
         BuzerTheme {
@@ -176,6 +206,7 @@ class MorningReviewRepairHostTest {
                 onSnooze = onSnooze,
                 onOverdueDone = onOverdueDone,
                 onOverdueEdit = onOverdueEdit,
+                onPendingRetry = onPendingRetry,
                 onRetryRefresh = onRetryRefresh,
                 loadProjects = { listOf(project) },
                 refreshProjects = { listOf(project) },
@@ -201,6 +232,13 @@ class MorningReviewRepairHostTest {
     private fun noDataState() = baseState(MorningReviewPhase.NoData, "Task data unavailable").copy(
         retryNotices = listOf(MorningReviewRetryNotice(MorningReviewRetryTarget.Refresh, "Refresh failed")),
         startDayLabel = "Start day without data"
+    )
+
+    private fun multiOverdueState() = summaryState().copy(
+        overdueRows = listOf(
+            MorningReviewAgendaRow("overdue-first", "First late task", "09:00–09:30", "Overdue", true),
+            MorningReviewAgendaRow("overdue-second", "Second late task", "10:00–10:30", "Overdue", true)
+        )
     )
 
     private fun baseState(phase: MorningReviewPhase, header: String) = MorningReviewScreenState(

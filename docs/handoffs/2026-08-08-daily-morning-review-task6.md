@@ -37,6 +37,23 @@ Verification:
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL`.
 
+---
+
+## Accessibility follow-up
+
+- Repeated Repair, Sync Retry, overdue Done, and overdue Edit controls now expose task-specific content descriptions while retaining their visible labels.
+- Added a multi-item host test that uses those descriptions and verifies Sync Retry plus overdue Done/Edit dispatch the intended callback IDs.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin :androidApp:testDebugUnitTest --tests '*MorningReview*Test'`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`.
+
 Verification:
 - Command: `git diff --check`
 - Result: PASS

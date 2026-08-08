@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.tasks.AddTaskDependencies
@@ -206,12 +207,18 @@ fun MorningReviewScreen(
                                     editorPresentation = morningReviewRepairPresentation
                                 },
                                 enabled = !screenState.actionInFlight,
-                                modifier = Modifier.testTag("morning-repair-${card.taskId}")
+                                modifier = Modifier
+                                    .testTag("morning-repair-${card.taskId}")
+                                    .semantics { contentDescription = "Repair ${card.title}" }
                             ) { Text("Repair") }
                         }
                         is MorningReviewBlockingCard.SyncPending -> {
                             Text(card.statusText)
-                            TextButton(onClick = onPendingRetry, enabled = !screenState.actionInFlight) { Text("Retry") }
+                            TextButton(
+                                onClick = onPendingRetry,
+                                enabled = !screenState.actionInFlight,
+                                modifier = Modifier.semantics { contentDescription = "Retry sync for ${card.title}" }
+                            ) { Text("Retry") }
                         }
                     }
                 }
@@ -249,8 +256,16 @@ private fun AgendaRow(
             Text(row.timeLabel, style = MaterialTheme.typography.bodyMedium)
             Text(row.subline, style = MaterialTheme.typography.bodySmall)
         }
-        TextButton(onClick = { onDone(row.taskId) }, enabled = row.doneEnabled && actionsEnabled) { Text("Done") }
-        TextButton(onClick = { onEdit(row.taskId); openEditor() }, enabled = actionsEnabled) { Text("Edit") }
+        TextButton(
+            onClick = { onDone(row.taskId) },
+            enabled = row.doneEnabled && actionsEnabled,
+            modifier = Modifier.semantics { contentDescription = "Mark ${row.title} done" }
+        ) { Text("Done") }
+        TextButton(
+            onClick = { onEdit(row.taskId); openEditor() },
+            enabled = actionsEnabled,
+            modifier = Modifier.semantics { contentDescription = "Edit ${row.title}" }
+        ) { Text("Edit") }
     }
 }
 
