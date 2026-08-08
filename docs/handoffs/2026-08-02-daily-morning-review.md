@@ -8,7 +8,7 @@ Branch/worktree: `feature/daily-morning-review` / `/Users/svehla/playground/buze
 
 ## Status
 
-Tasks 1–10 and every plan step are complete. The branch is locally committed and clean. It has not been pushed or merged.
+Tasks 1–10 and every plan step are complete. The feature was fast-forward merged into local `master` on 2026-08-08 after fresh client and backend verification. The feature worktree and branch were removed. Local `master` has not been pushed.
 
 ## Delivered behavior
 
@@ -166,4 +166,5 @@ Verification:
 - Manual persistent-device alarm inspection was skipped; managed-device instrumentation is the recorded alarm evidence.
 - CI was not triggered because the branch was not pushed.
 - No Change 3 behavior was implemented: no readiness gating, first-unlock catch-up, same-day critical-invalid notification, repeating alarm, server review state, or completed-history feature.
-- Recommended next step: review the final branch diff, then merge `feature/daily-morning-review` into `master`; push and confirm `ci.yml` before release installation.
+- Integration verification: local `master` was updated with `git pull --ff-only`, fast-forwarded to the feature tip, and passed the complete shared/Android JVM checks, debug APK assembly, and all 406 backend tests.
+- Recommended next step: push `master`, confirm `ci.yml`, then redeploy the backend so production exposes the `/tasks/sync` endpoint used by Morning Review.
