@@ -103,6 +103,7 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - Priority scenarios now use an unpinned active current task for Start and an unpinned past-end task for Deadline, so resolver branches cannot be skipped by occurrence pins.
 - Draft tests now drive MainActivity from pre-08 to post-08 lifecycle resume, exercising its production automated launch and ActivityResult restoration path rather than launching MorningReviewActivity directly.
 - Final fixture correction omits both pins and started nudges from priority scenarios; early acknowledgement begins clean/unacknowledged and Edit draft uses the `today` scenario.
+- Mechanical isolation pass now retains and closes the previously discarded Morning Review/Home scenarios in the directly affected tests.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

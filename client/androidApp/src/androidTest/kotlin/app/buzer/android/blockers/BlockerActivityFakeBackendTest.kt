@@ -261,29 +261,31 @@ class BlockerActivityFakeBackendTest {
     fun morningReview_showsInvalidTaskFromSnapshot() {
         resetTestState("invalid")
 
-        launchMorningReview()
-
-        composeRule.onNodeWithText("1 task needs attention").assertIsDisplayed()
-        waitForText("Invalid assigned fixture")
-        composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
-        composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
-        composeRule.onNodeWithText("Clarify the missing commitment fields.").assertIsDisplayed()
-        composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
-        composeRule.onAllNodesWithText("left after this task", substring = true).assertCountEquals(0)
+        val scenario = launchMorningReview()
+        try {
+            composeRule.onNodeWithText("1 task needs attention").assertIsDisplayed()
+            waitForText("Invalid assigned fixture")
+            composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
+            composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
+            composeRule.onNodeWithText("Clarify the missing commitment fields.").assertIsDisplayed()
+            composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
+            composeRule.onAllNodesWithText("left after this task", substring = true).assertCountEquals(0)
+        } finally { scenario.close() }
     }
 
     @Test
     fun homeMorningReviewButtonOpensLiveMorningReview() {
         resetTestState()
 
-        ActivityScenario.launch(MainActivity::class.java)
-
-        waitForText("Review")
-        composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
-        composeRule.onNodeWithText("Review").performClick()
-
-        waitForText("Invalid assigned fixture")
-        composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            waitForText("Review")
+            composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
+            composeRule.onNodeWithText("Review").performClick()
+            waitForText("Invalid assigned fixture")
+            composeRule.onNodeWithText("No start time or duration set").assertIsDisplayed()
+            pressBack()
+        } finally { home.close() }
     }
 
     @Test
@@ -560,16 +562,16 @@ class BlockerActivityFakeBackendTest {
     fun morningReview_repairShowsValidationErrorForMissingDeadline() {
         resetTestState("invalid")
 
-        launchMorningReview()
-
-        waitForText("Invalid assigned fixture")
-        repairInvalidTask()
-        waitForContentDescription("Schedule: Set date, time & duration")
-        composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration").assertIsDisplayed()
-        composeRule.onNodeWithText("Repair").assertIsDisplayed()
-
-        waitForAnyText("Start time is required")
-        composeRule.onNodeWithText("Start time is required").performScrollTo().assertIsDisplayed()
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Invalid assigned fixture")
+            repairInvalidTask()
+            waitForContentDescription("Schedule: Set date, time & duration")
+            composeRule.onNodeWithContentDescription("Schedule: Set date, time & duration").assertIsDisplayed()
+            composeRule.onNodeWithText("Repair").assertIsDisplayed()
+            waitForAnyText("Start time is required")
+            composeRule.onNodeWithText("Start time is required").performScrollTo().assertIsDisplayed()
+        } finally { scenario.close() }
     }
 
     @Test
@@ -867,7 +869,6 @@ class BlockerActivityFakeBackendTest {
         setMorningReviewClock("2026-08-08T05:00:00Z")
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {
-            waitForAnyText("Incomplete checklist task")
             composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Tomorrow task"))
             composeRule.onNodeWithText("Tomorrow task").performClick()
             waitForText("Edit task")
