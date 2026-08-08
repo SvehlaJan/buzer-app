@@ -765,11 +765,8 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun morningReview_pre08HomeAcknowledgementRemovesBannerAndPreventsPost08CatchUp() {
-        resetTestState()
+        resetTestState("clean")
         setMorningReviewClock("2026-08-08T05:00:00Z")
-        MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).replace(
-            MorningReviewLocalState(lastAcknowledgedDate = LocalDate.of(2026, 8, 8))
-        )
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {
             waitForText("Review")
@@ -866,7 +863,7 @@ class BlockerActivityFakeBackendTest {
 
     @Test
     fun automatedReviewSnoozePreservesDirtyEditDraft() {
-        resetTestState("clean")
+        resetTestState("today")
         setMorningReviewClock("2026-08-08T05:00:00Z")
         val home = ActivityScenario.launch(MainActivity::class.java)
         try {

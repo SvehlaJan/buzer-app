@@ -508,11 +508,11 @@ export function e2eMorningReviewScenarioSeed(
     rootIds.has(task.id) || (task.mirror.parentId !== null && selectedTodoistIds.has(task.mirror.parentId))
   );
 
-  const omitOccurrencePin = scenario === "priorityStart" || scenario === "priorityDeadline";
+  const omitPriorityAuthority = scenario === "priorityStart" || scenario === "priorityDeadline";
   return {
     ...seed,
     tasks,
-    nudges: seed.nudges.filter((nudge) => rootIds.has(nudge.id)),
-    occurrencePins: seed.occurrencePins.filter((pin) => rootIds.has(pin.id) && !omitOccurrencePin)
+    nudges: seed.nudges.filter((nudge) => rootIds.has(nudge.id) && !omitPriorityAuthority),
+    occurrencePins: seed.occurrencePins.filter((pin) => rootIds.has(pin.id) && !omitPriorityAuthority)
   };
 }

@@ -55,6 +55,8 @@ describe("e2eFixtureSeed", () => {
     expect(roots("unassigned")).toEqual(["task-unassigned-root"]);
     expect(roots("priorityStart")).toEqual(["task-current-overlapping"]);
     expect(roots("priorityDeadline")).toEqual(["task-overdue-1"]);
+    expect(e2eMorningReviewScenarioSeed(now, "priorityStart").nudges).toEqual([]);
+    expect(e2eMorningReviewScenarioSeed(now, "priorityDeadline").occurrencePins).toEqual([]);
   });
 
   it("defines the 28 fixture roots plus 8 checklist children with pinned Todoist ids", () => {
