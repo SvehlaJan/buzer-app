@@ -80,6 +80,8 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - `morningReview_cleanAndNoDataStartAcknowledgeAndClose`: clean Saturday and no-data Start acknowledgement.
 - `morningReview_overdueRowsAreActionableWhileStartIsEnabled`: overdue summary action + enabled Start.
 - `morningReview_automatedBackStaysWhileHomeBackCloses`: explicit source-sensitive Back behavior.
+- `morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSync`: cached invalid/forced-sync Retry authority.
+- `morningReview_snoozeIsFiveMinutesAndSuppressesCatchUpBeforeExpiry`: fixed-clock Snooze duration and pre-expiry Home suppression.
 
 Verification:
 - Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`

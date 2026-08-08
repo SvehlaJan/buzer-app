@@ -714,6 +714,38 @@ class BlockerActivityFakeBackendTest {
         waitForActivityDestroyed(home)
     }
 
+    @Test
+    fun morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSync() {
+        resetTestState("invalid")
+        val scenario = launchMorningReview()
+        try {
+            waitForText("Invalid assigned fixture")
+            fakeBackend.setFailSnapshot(true)
+            composeRule.onNodeWithText("Retry refresh").performClick()
+            waitForRecordedCall("/tasks/sync")
+            waitForText("Retry refresh")
+            composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
+            fakeBackend.setFailSnapshot(false)
+            composeRule.onNodeWithText("Retry refresh").performClick()
+            waitForRecordedCallCount("/tasks/sync", 2)
+            composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
+        } finally { fakeBackend.setFailSnapshot(false); scenario.close() }
+    }
+
+    @Test
+    fun morningReview_snoozeIsFiveMinutesAndSuppressesCatchUpBeforeExpiry() {
+        resetTestState("clean")
+        setMorningReviewClock("2026-08-08T07:00:00Z")
+        val scenario = launchMorningReview()
+        composeRule.onNodeWithTag("morning-snooze").performClick()
+        waitForActivityDestroyed(scenario)
+        val state = MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).read()
+        check(state.pendingSnoozeAt?.toEpochMilli() in Instant.parse("2026-08-08T07:04:59Z").toEpochMilli()..Instant.parse("2026-08-08T07:05:01Z").toEpochMilli())
+        setMorningReviewClock("2026-08-08T07:03:00Z")
+        val home = ActivityScenario.launch(MainActivity::class.java)
+        try { composeRule.onNodeWithText("Review").assertDoesNotExist() } finally { home.close() }
+    }
+
     private fun resetTestState(morningReviewScenario: String? = null) {
         MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
