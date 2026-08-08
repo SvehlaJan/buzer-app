@@ -19,6 +19,7 @@ import app.buzer.android.blockers.FakeBackendClient
 import java.time.Instant
 import java.time.ZoneId
 import java.io.File
+import java.io.FileInputStream
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
@@ -84,6 +85,7 @@ class MorningReviewAlarmInstrumentationTest {
         // The scheduler's persisted identity is the app-owned AlarmManager identity; manual
         // device evidence is captured with scripts/adb-verify.sh alarms in the E2E handoff.
         assertEquals(second.reviewDate, second.triggerAt.atZone(zone).toLocalDate())
+        assertExactlyOneActiveMorningReviewAlarm()
     }
 
     @Test
@@ -175,5 +177,24 @@ class MorningReviewAlarmInstrumentationTest {
             Thread.sleep(100)
         }
         return notifications.activeNotifications.filter { it.id == notificationId }
+    }
+
+    private fun assertExactlyOneActiveMorningReviewAlarm() {
+        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("dumpsys alarm")
+        val dump = FileInputStream(descriptor.fileDescriptor).bufferedReader().use { it.readText() }
+        // API 34 lists currently scheduled alarms before its historical sections. Do not count
+        // history, Alarm Stats, or delivered batches: they can legitimately retain old identities.
+        val active = dump.substringBefore("Alarm Stats:").substringBefore("Historical")
+        val marker = "buzer://alarm/morning-review"
+        val count = active.lineSequence().count { line ->
+            line.contains(marker) && line.contains("MORNING_REVIEW")
+        }
+        assertEquals(
+            "Expected exactly one active Morning Review PendingIntent in API34 alarm dump; " +
+                "marker=$marker activeTail=${active.takeLast(4_000)}",
+            1,
+            count
+        )
     }
 }
