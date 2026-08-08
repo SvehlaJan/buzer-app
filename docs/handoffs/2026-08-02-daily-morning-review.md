@@ -454,6 +454,35 @@ Verification:
 
 Manual verification and E2E: DEFERRED to Tasks 9/10, when the Task 6 rendered flow and alarm integration host tests exist.
 
+### Task 5 review correction (2026-08-08)
+
+- Added `MorningReviewSessionState`/controller, used by the activity for cached authority, forced-sync success/failure retention, action guarding, retry storage, and overdue result handling.
+- The activity now constructs Task 4's `buildMorningReviewScreenState` on every composition and passes its complete state plus a task lookup to the transitional screen. Blocking/pending/no-data/global actions therefore use the owner-only state authority.
+- Pending Retry calls forced sync. Overdue completion reuses `RetryAfter.retry` rather than allocating another request, and reloads cache for all authority-bearing outcomes.
+- Home system and visible Back share the Cancelled-result close path; the compatibility Screen bridge keeps existing host sources compiling until Task 6 migrates them.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSessionStateTest'`
+- Result: FAIL (expected RED)
+- Evidence: unresolved session state/controller before implementation.
+
+Verification:
+- Command: `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReview*Test'`
+- Result: PASS
+- Evidence: session, state, scheduler, handler, and contract focused JVM tests passed.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin` and `./gradlew :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: production and existing instrumentation test sources compile.
+
+Verification:
+- Command: `git diff --check` and activity search for `dismissMorningReview(`/`refreshAndReconcile(`
+- Result: PASS
+- Evidence: no whitespace errors and no obsolete activity calls.
+
+E2E remains deferred to Tasks 9/10.
+
 ---
 
 ## Task 4 quality correction (2026-08-08)

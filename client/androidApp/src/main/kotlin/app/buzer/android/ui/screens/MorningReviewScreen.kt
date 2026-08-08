@@ -52,10 +52,13 @@ import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.state.SnapshotViewState
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
+import java.time.Instant
+import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.launch
 
@@ -105,6 +108,11 @@ data class MorningReviewTaskCardState(
 internal val morningReviewRepairPresentation = TaskEditorPresentation(
     screenTitle = "Repair task",
     primaryVerb = "Repair"
+)
+
+internal val morningReviewOverduePresentation = TaskEditorPresentation(
+    screenTitle = "Edit overdue task",
+    primaryVerb = "Save"
 )
 
 internal data class MorningReviewRepairCompletion(
@@ -165,7 +173,8 @@ private fun plainLanguageProblem(validationErrors: List<String>): String {
 
 @Composable
 fun MorningReviewScreen(
-    invalidTasks: List<TaskSnapshotItem> = emptyList(),
+    screenState: MorningReviewScreenState,
+    taskLookup: (String) -> TaskSnapshotItem?,
     onBack: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
         CoordinatorActionResult.FailedAndHidden("Repair is unavailable")
@@ -173,12 +182,10 @@ fun MorningReviewScreen(
     onRepairSuccess: (String) -> Unit = {},
     onStart: () -> Unit = {},
     onSnooze: () -> Unit = {},
+    onPendingRetry: () -> Unit = {},
     onOverdueDone: (String) -> Unit = {},
+    onOverdueEdit: (String) -> Unit = {},
     showBack: Boolean = true,
-    contentState: MorningReviewContentState = MorningReviewContentState.Ready(),
-    snoozing: Boolean = false,
-    actionErrorMessage: String? = null,
-    onDismissActionError: () -> Unit = {},
     onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -201,6 +208,7 @@ fun MorningReviewScreen(
     val refreshProjectList = refreshProjects ?: projectRepository!!::refreshProjects
     var choices by remember { mutableStateOf(TaskEditorUpdateChoices(loading = true)) }
     var repairingTask by remember { mutableStateOf<TaskSnapshotItem?>(null) }
+    var editorPresentation by remember { mutableStateOf(morningReviewRepairPresentation) }
 
     fun retryProjects() {
         scope.launch {
@@ -232,8 +240,8 @@ fun MorningReviewScreen(
 
     // A successful repair updates the authoritative invalid-task list in the hosting activity.
     // Do not leave an editor open for a task that no longer requires repair.
-    LaunchedEffect(invalidTasks) {
-        if (repairingTask != null && invalidTasks.none { it.id == repairingTask?.id }) {
+    LaunchedEffect(screenState, repairingTask?.id) {
+        if (repairingTask != null && taskLookup(repairingTask?.id.orEmpty()) == null) {
             repairingTask = null
         }
     }
@@ -245,6 +253,7 @@ fun MorningReviewScreen(
             choices = choices,
             onRetryChoices = ::retryProjects,
             onRepair = onRepair,
+            presentation = editorPresentation,
             onSuccess = { onRepairSuccess(task.id) },
             onCancel = { repairingTask = null },
             nowProvider = nowProvider
@@ -259,49 +268,76 @@ fun MorningReviewScreen(
             .padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        when (val state = contentState) {
-            MorningReviewContentState.Loading -> {
+        when (screenState.phase) {
+            MorningReviewPhase.Loading -> {
                 BlockingLoadingState("Loading morning review...")
                 return@Column
             }
-            is MorningReviewContentState.Error -> {
-                BlockingErrorState(message = state.message, onRetry = onRetryRefresh)
-                return@Column
-            }
-            is MorningReviewContentState.Ready -> {
-                val readyState = buildMorningReviewReadyState(
-                    invalidTasks = invalidTasks,
-                    warning = state.warning,
-                    refreshing = state.refreshing
-                )
-                MorningReviewHeader(
-                    state = readyState,
-                    onRetryRefresh = onRetryRefresh
-                )
+            else -> Unit
+        }
+        Text(screenState.headerText, style = MaterialTheme.typography.headlineSmall)
+        Text(screenState.absoluteDateLabel)
+        screenState.warning?.let { WarningStatus(it, onRetry = onRetryRefresh) }
+        screenState.blockingCards.forEach { card ->
+            Row(Modifier.fillMaxWidth()) {
+                Text(card.title, Modifier.weight(1f))
+                if (card is MorningReviewBlockingCard.Repair) TextButton(onClick = {
+                    repairingTask = taskLookup(card.taskId)
+                    editorPresentation = morningReviewRepairPresentation
+                }) { Text("Repair") }
+                if (card is MorningReviewBlockingCard.SyncPending) TextButton(onClick = onPendingRetry) { Text("Retry") }
             }
         }
-
-        MorningReviewTaskList(
-            invalidTasks = invalidTasks,
-            onRepair = { repairingTask = it },
-            onStart = onStart,
-            onSnooze = onSnooze,
-            onBack = onBack,
-            showBack = showBack,
-            snoozing = snoozing,
-            contentState = contentState
-        )
+        screenState.overdueRows.forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                Text(row.title, Modifier.weight(1f))
+                TextButton(onClick = { onOverdueDone(row.taskId) }, enabled = row.doneEnabled) { Text("Done") }
+                TextButton(onClick = {
+                    onOverdueEdit(row.taskId)
+                    repairingTask = taskLookup(row.taskId)
+                    editorPresentation = morningReviewOverduePresentation
+                }) { Text("Edit") }
+            }
+        }
+        screenState.todayRows.forEach { Text("${it.timeLabel} ${it.title}") }
+        Button(onClick = onStart, enabled = screenState.startDayEnabled, modifier = Modifier.fillMaxWidth()) { Text(screenState.startDayLabel) }
+        TextButton(onClick = onSnooze, enabled = screenState.snoozeEnabled, modifier = Modifier.fillMaxWidth()) { Text("Snooze 5 min") }
+        if (showBack) TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+        screenState.retryNotices.filter { it.target == MorningReviewRetryTarget.Action }.forEach {
+            TextButton(onClick = onRetryAction) { Text("Retry action") }
+        }
     }
+}
 
-    actionErrorMessage?.let { message ->
-        ErrorAlertDialog(
-            title = "Action failed",
-            message = message,
-            onDismiss = onDismissActionError,
-            retryLabel = "Retry",
-            onRetry = onRetryAction
-        )
-    }
+/** Compatibility bridge for pre-Task-5 hosts; Task 6 migrates them to the explicit state input. */
+@Composable
+fun MorningReviewScreen(
+    invalidTasks: List<TaskSnapshotItem> = emptyList(),
+    onBack: () -> Unit,
+    onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ -> CoordinatorActionResult.FailedAndHidden("Repair is unavailable") },
+    onRepairSuccess: (String) -> Unit = {},
+    onStart: () -> Unit = {},
+    onSnooze: () -> Unit = {},
+    onOverdueDone: (String) -> Unit = {},
+    showBack: Boolean = true,
+    contentState: MorningReviewContentState = MorningReviewContentState.Ready(),
+    snoozing: Boolean = false,
+    actionErrorMessage: String? = null,
+    onDismissActionError: () -> Unit = {},
+    onRetryAction: () -> Unit = {},
+    onRetryRefresh: () -> Unit = {},
+    loadProjects: (suspend () -> List<ProjectItem>)? = null,
+    refreshProjects: (suspend () -> List<ProjectItem>)? = null,
+    nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
+) {
+    val snapshot = SnapshotViewState(0, "", invalidTasks, emptyList(), emptyList(), emptyList(), emptyList(), invalidTasks)
+    MorningReviewScreen(
+        screenState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState is MorningReviewContentState.Ready && contentState.refreshing, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack),
+        taskLookup = { id -> invalidTasks.firstOrNull { it.id == id } }, onBack = onBack, onRepair = onRepair,
+        onRepairSuccess = onRepairSuccess, onStart = onStart, onSnooze = onSnooze, onOverdueDone = onOverdueDone,
+        showBack = showBack, onRetryAction = onRetryAction, onRetryRefresh = onRetryRefresh,
+        loadProjects = loadProjects, refreshProjects = refreshProjects, nowProvider = nowProvider
+    )
 }
 
 @Composable
@@ -322,6 +358,7 @@ private fun MorningReviewRepairEditor(
     choices: TaskEditorUpdateChoices,
     onRetryChoices: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
+    presentation: TaskEditorPresentation,
     onSuccess: () -> Unit,
     onCancel: () -> Unit,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
@@ -379,7 +416,7 @@ private fun MorningReviewRepairEditor(
         TaskEditorUpdateScreen(
             task = task,
             choices = choices,
-            presentation = morningReviewRepairPresentation,
+            presentation = presentation,
             now = now,
             checklistDoneCount = existingDrafts.count { it.checked && it.id !in deletedChildren },
             checklistTotalCount = existingDrafts.count { it.id !in deletedChildren } + addedDrafts.size,
