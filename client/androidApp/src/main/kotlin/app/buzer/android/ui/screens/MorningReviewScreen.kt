@@ -1,5 +1,8 @@
 package app.buzer.android.ui.screens
 
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,8 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,19 +25,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.tasks.AddTaskDependencies
-import app.buzer.android.ui.components.BuzerPanel
 import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
-import app.buzer.android.ui.status.BlockingErrorState
-import app.buzer.android.ui.status.BlockingLoadingState
-import app.buzer.android.ui.status.ErrorAlertDialog
-import app.buzer.android.ui.status.InlineLoadingStatus
-import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
@@ -52,58 +51,13 @@ import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
-import app.buzer.shared.state.SnapshotViewState
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
-import java.time.Instant
-import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.launch
 
-sealed interface MorningReviewContentState {
-    data object Loading : MorningReviewContentState
-    data class Ready(val warning: String? = null, val refreshing: Boolean = false) : MorningReviewContentState
-    data class Error(val message: String) : MorningReviewContentState
-}
-
-fun buildMorningReviewContentState(
-    invalidTaskCount: Int,
-    refreshing: Boolean,
-    refreshError: String?,
-    hasLoadedOnce: Boolean
-): MorningReviewContentState =
-    when {
-        refreshError != null && !hasLoadedOnce -> MorningReviewContentState.Error(refreshError)
-        refreshError != null -> MorningReviewContentState.Ready(warning = "Refresh failed. Showing last known tasks.")
-        refreshing && !hasLoadedOnce && invalidTaskCount == 0 -> MorningReviewContentState.Loading
-        refreshing -> MorningReviewContentState.Ready(refreshing = true)
-        else -> MorningReviewContentState.Ready()
-    }
-
-data class MorningReviewReadyState(
-    val headerText: String,
-    val headerProgressText: String?,
-    val warning: String?,
-    val refreshing: Boolean,
-    val cards: List<MorningReviewTaskCardState>,
-    val actionLabels: List<String>
-)
-
-data class MorningReviewTaskCardState(
-    val task: TaskSnapshotItem,
-    val title: String,
-    val problemText: String,
-    val description: String?,
-    val repairActionLabel: String = "Repair",
-    val snoozeActionLabel: String = "Snooze",
-    val progressText: String? = null
-) {
-    fun allText(): String =
-        listOfNotNull(title, problemText, description, repairActionLabel, snoozeActionLabel, progressText)
-            .joinToString(" ")
-}
 
 internal val morningReviewRepairPresentation = TaskEditorPresentation(
     screenTitle = "Repair task",
@@ -115,61 +69,6 @@ internal val morningReviewOverduePresentation = TaskEditorPresentation(
     primaryVerb = "Save"
 )
 
-internal data class MorningReviewRepairCompletion(
-    val remainingInvalidTasks: List<TaskSnapshotItem>,
-    val shouldFinish: Boolean
-)
-
-internal fun completeMorningReviewRepair(
-    invalidTasks: List<TaskSnapshotItem>,
-    repairedTaskId: String
-): MorningReviewRepairCompletion {
-    val remainingInvalidTasks = invalidTasks.filterNot { it.id == repairedTaskId }
-    return MorningReviewRepairCompletion(
-        remainingInvalidTasks = remainingInvalidTasks,
-        shouldFinish = remainingInvalidTasks.isEmpty()
-    )
-}
-
-fun buildMorningReviewReadyState(
-    invalidTasks: List<TaskSnapshotItem>,
-    warning: String?,
-    refreshing: Boolean
-): MorningReviewReadyState {
-    val count = invalidTasks.size
-    return MorningReviewReadyState(
-        headerText = if (count == 0) {
-            "All commitments are valid"
-        } else {
-            "$count ${if (count == 1) "task needs" else "tasks need"} attention"
-        },
-        headerProgressText = count.takeIf { it > 0 }?.let { "$it unresolved" },
-        warning = warning,
-        refreshing = refreshing,
-        cards = invalidTasks.map { task ->
-            MorningReviewTaskCardState(
-                task = task,
-                title = task.title,
-                problemText = plainLanguageProblem(task.validationErrors),
-                description = task.description?.trim()?.takeIf { it.isNotEmpty() }
-            )
-        },
-        actionLabels = if (count == 0) listOf("Done") else emptyList()
-    )
-}
-
-private fun plainLanguageProblem(validationErrors: List<String>): String {
-    val errors = validationErrors.toSet()
-    val missingDueDatetime = "missing_due_datetime" in errors || "due_datetime_required" in errors
-    val missingDuration = "missing_duration" in errors || "duration_required" in errors
-    return when {
-        missingDueDatetime && missingDuration -> "No start time or duration set"
-        missingDueDatetime -> "No start time set"
-        missingDuration -> "No duration set"
-        validationErrors.isEmpty() -> "Commitment details need repair"
-        else -> validationErrors.joinToString(", ") { it.replace('_', ' ') }
-    }
-}
 
 @Composable
 fun MorningReviewScreen(
@@ -185,7 +84,6 @@ fun MorningReviewScreen(
     onPendingRetry: () -> Unit = {},
     onOverdueDone: (String) -> Unit = {},
     onOverdueEdit: (String) -> Unit = {},
-    showBack: Boolean = true,
     onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -265,51 +163,96 @@ fun MorningReviewScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(Spacing.lg),
+    val headingFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(screenState.phase) {
+        if (screenState.phase == MorningReviewPhase.Blocking || screenState.phase == MorningReviewPhase.Summary) {
+            headingFocusRequester.requestFocus()
+        }
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.lg),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        when (screenState.phase) {
-            MorningReviewPhase.Loading -> {
-                BlockingLoadingState("Loading morning review...")
-                return@Column
+        item("heading") {
+            Text(
+                screenState.headerText,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.semantics { heading() }.focusRequester(headingFocusRequester).focusable()
+            )
+        }
+        item("date") { Text(screenState.absoluteDateLabel, modifier = Modifier.semantics { heading() }) }
+        if (screenState.refreshing) item("refreshing") { Text("Refreshing…") }
+        screenState.warning?.let { warning -> item("warning") { WarningStatus(warning) } }
+        items(screenState.retryNotices, key = { "retry-${it.target}" }) { notice ->
+            TextButton(
+                onClick = if (notice.target == MorningReviewRetryTarget.Refresh) onRetryRefresh else onRetryAction,
+                enabled = !screenState.actionInFlight,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (notice.target == MorningReviewRetryTarget.Refresh) "Retry refresh" else "Retry action") }
+        }
+        if (screenState.phase == MorningReviewPhase.Loading) item("loading") { Text("Loading morning review…") }
+        items(screenState.blockingCards, key = { "blocking-${it.taskId}" }) { card ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(card.title, style = MaterialTheme.typography.titleMedium)
+                    when (card) {
+                        is MorningReviewBlockingCard.Repair -> {
+                            Text(card.problemText)
+                            card.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            TextButton(
+                                onClick = {
+                                    repairingTask = taskLookup(card.taskId)
+                                    editorPresentation = morningReviewRepairPresentation
+                                },
+                                enabled = !screenState.actionInFlight,
+                                modifier = Modifier.testTag("morning-repair-${card.taskId}")
+                            ) { Text("Repair") }
+                        }
+                        is MorningReviewBlockingCard.SyncPending -> {
+                            Text(card.statusText)
+                            TextButton(onClick = onPendingRetry, enabled = !screenState.actionInFlight) { Text("Retry") }
+                        }
+                    }
+                }
             }
-            else -> Unit
         }
-        Text(screenState.headerText, style = MaterialTheme.typography.headlineSmall)
-        Text(screenState.absoluteDateLabel)
-        screenState.warning?.let { WarningStatus(it, onRetry = onRetryRefresh) }
-        screenState.blockingCards.forEach { card ->
-            Row(Modifier.fillMaxWidth()) {
-                Text(card.title, Modifier.weight(1f))
-                if (card is MorningReviewBlockingCard.Repair) TextButton(onClick = {
-                    repairingTask = taskLookup(card.taskId)
-                    editorPresentation = morningReviewRepairPresentation
-                }) { Text("Repair") }
-                if (card is MorningReviewBlockingCard.SyncPending) TextButton(onClick = onPendingRetry) { Text("Retry") }
-            }
+        if (screenState.overdueRows.isNotEmpty()) {
+            item("overdue-heading") { Text("Overdue", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
+            items(screenState.overdueRows, key = { "overdue-${it.taskId}" }) { row -> AgendaRow(row, !screenState.actionInFlight, onOverdueDone, onOverdueEdit) {
+                repairingTask = taskLookup(row.taskId)
+                editorPresentation = morningReviewOverduePresentation
+            } }
         }
-        screenState.overdueRows.forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                Text(row.title, Modifier.weight(1f))
-                TextButton(onClick = { onOverdueDone(row.taskId) }, enabled = row.doneEnabled) { Text("Done") }
-                TextButton(onClick = {
-                    onOverdueEdit(row.taskId)
-                    repairingTask = taskLookup(row.taskId)
-                    editorPresentation = morningReviewOverduePresentation
-                }) { Text("Edit") }
-            }
+        if (screenState.todayRows.isNotEmpty()) {
+            item("today-heading") { Text("Today", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() }) }
+            items(screenState.todayRows, key = { "today-${it.taskId}" }) { row -> AgendaRow(row, !screenState.actionInFlight, onOverdueDone, onOverdueEdit) {
+                repairingTask = taskLookup(row.taskId)
+                editorPresentation = morningReviewOverduePresentation
+            } }
         }
-        screenState.todayRows.forEach { Text("${it.timeLabel} ${it.title}") }
-        Button(onClick = onStart, enabled = screenState.startDayEnabled, modifier = Modifier.fillMaxWidth()) { Text(screenState.startDayLabel) }
-        TextButton(onClick = onSnooze, enabled = screenState.snoozeEnabled, modifier = Modifier.fillMaxWidth()) { Text("Snooze 5 min") }
-        if (showBack) TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
-        screenState.retryNotices.filter { it.target == MorningReviewRetryTarget.Action }.forEach {
-            TextButton(onClick = onRetryAction) { Text("Retry action") }
+        item("start-day") { Button(onClick = onStart, enabled = screenState.startDayEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text(screenState.startDayLabel) } }
+        item("snooze") { TextButton(onClick = onSnooze, enabled = screenState.snoozeEnabled && !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text("Snooze 5 min") } }
+        if (screenState.showBack) item("back") { TextButton(onClick = onBack, enabled = !screenState.actionInFlight, modifier = Modifier.fillMaxWidth()) { Text("Back") } }
+    }
+}
+
+@Composable
+private fun AgendaRow(
+    row: MorningReviewAgendaRow,
+    actionsEnabled: Boolean,
+    onDone: (String) -> Unit,
+    onEdit: (String) -> Unit,
+    openEditor: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Column(Modifier.weight(1f)) {
+            Text(row.title, style = MaterialTheme.typography.titleMedium)
+            Text(row.timeLabel, style = MaterialTheme.typography.bodyMedium)
+            Text(row.subline, style = MaterialTheme.typography.bodySmall)
         }
+        TextButton(onClick = { onDone(row.taskId) }, enabled = row.doneEnabled && actionsEnabled) { Text("Done") }
+        TextButton(onClick = { onEdit(row.taskId); openEditor() }, enabled = actionsEnabled) { Text("Edit") }
     }
 }
 
@@ -317,50 +260,6 @@ internal fun completeMorningReviewEditorSelection(): TaskSnapshotItem? = null
 
 internal fun shouldCloseMorningReviewEditor(opened: TaskSnapshotItem?, current: TaskSnapshotItem?): Boolean =
     opened != null && (current == null || opened.occurrenceKey != current.occurrenceKey || opened.taskRevision != current.taskRevision)
-
-/** Compatibility bridge for pre-Task-5 hosts; Task 6 migrates them to the explicit state input. */
-@Composable
-fun MorningReviewScreen(
-    invalidTasks: List<TaskSnapshotItem> = emptyList(),
-    onBack: () -> Unit,
-    onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ -> CoordinatorActionResult.FailedAndHidden("Repair is unavailable") },
-    onRepairSuccess: (String) -> Unit = {},
-    onStart: () -> Unit = {},
-    onSnooze: () -> Unit = {},
-    onOverdueDone: (String) -> Unit = {},
-    showBack: Boolean = true,
-    contentState: MorningReviewContentState = MorningReviewContentState.Ready(),
-    snoozing: Boolean = false,
-    actionErrorMessage: String? = null,
-    onDismissActionError: () -> Unit = {},
-    onRetryAction: () -> Unit = {},
-    onRetryRefresh: () -> Unit = {},
-    loadProjects: (suspend () -> List<ProjectItem>)? = null,
-    refreshProjects: (suspend () -> List<ProjectItem>)? = null,
-    nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
-) {
-    when (contentState) {
-        MorningReviewContentState.Loading -> {
-            BlockingLoadingState("Loading morning review...")
-            return
-        }
-        is MorningReviewContentState.Error -> {
-            BlockingErrorState(message = contentState.message, onRetry = onRetryRefresh)
-            return
-        }
-        is MorningReviewContentState.Ready -> Unit
-    }
-    val snapshot = SnapshotViewState(0, "", invalidTasks, emptyList(), emptyList(), emptyList(), emptyList(), invalidTasks)
-    val readyState = buildMorningReviewScreenState(snapshot, refreshInFlight = contentState.refreshing, actionInFlight = snoozing, actionError = actionErrorMessage, now = Instant.now(), zoneId = ZoneId.systemDefault(), showBack = showBack)
-        .copy(warning = contentState.warning, refreshing = contentState.refreshing)
-    MorningReviewScreen(
-        screenState = readyState,
-        taskLookup = { id -> invalidTasks.firstOrNull { it.id == id } }, onBack = onBack, onRepair = onRepair,
-        onRepairSuccess = onRepairSuccess, onStart = onStart, onSnooze = onSnooze, onOverdueDone = onOverdueDone,
-        showBack = showBack, onRetryAction = onRetryAction, onRetryRefresh = onRetryRefresh,
-        loadProjects = loadProjects, refreshProjects = refreshProjects, nowProvider = nowProvider
-    )
-}
 
 @Composable
 internal fun ActivityLogSection(task: TaskSnapshotItem) {
@@ -511,128 +410,5 @@ private fun MorningReviewRepairEditor(
             message = choices.errorMessage,
             onRetry = onRetryChoices
         )
-    }
-}
-
-@Composable
-private fun MorningReviewHeader(
-    state: MorningReviewReadyState,
-    onRetryRefresh: () -> Unit
-) {
-    BuzerPanel {
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            Text(
-                text = state.headerText,
-                style = MaterialTheme.typography.headlineSmall
-            )
-            state.headerProgressText?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            if (state.refreshing) InlineLoadingStatus("Refreshing...")
-            state.warning?.let { WarningStatus(it, onRetry = onRetryRefresh) }
-        }
-    }
-}
-
-@Composable
-private fun MorningReviewTaskList(
-    invalidTasks: List<TaskSnapshotItem>,
-    onRepair: (TaskSnapshotItem) -> Unit,
-    onStart: () -> Unit,
-    onSnooze: () -> Unit,
-    onBack: () -> Unit,
-    showBack: Boolean,
-    snoozing: Boolean,
-    contentState: MorningReviewContentState
-) {
-    val readyState = (contentState as? MorningReviewContentState.Ready)?.let {
-        buildMorningReviewReadyState(
-            invalidTasks = invalidTasks,
-            warning = it.warning,
-            refreshing = it.refreshing
-        )
-    } ?: buildMorningReviewReadyState(invalidTasks, warning = null, refreshing = false)
-
-    if (readyState.cards.isEmpty()) {
-        Button(
-            onClick = onStart,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Done")
-        }
-    } else {
-        readyState.cards.forEach { card ->
-            MorningReviewRepairCard(
-                state = card,
-                onRepair = { onRepair(card.task) },
-                onSnooze = onSnooze,
-                snoozing = snoozing
-            )
-        }
-    }
-
-    if (showBack) {
-        TextButton(
-            onClick = onBack,
-            enabled = !snoozing
-        ) {
-            Text("Back")
-        }
-    }
-}
-
-@Composable
-private fun MorningReviewRepairCard(
-    state: MorningReviewTaskCardState,
-    onRepair: () -> Unit,
-    onSnooze: () -> Unit,
-    snoozing: Boolean
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            Text(
-                text = state.title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = state.problemText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            TaskDetailsBlock(description = state.description)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                LoadingActionButton(
-                    label = state.repairActionLabel,
-                    loadingLabel = "Repairing...",
-                    loading = false,
-                    onClick = onRepair,
-                    enabled = !snoozing,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("morning-repair-${state.task.id}")
-                )
-                TextButton(
-                    onClick = onSnooze,
-                    enabled = !snoozing,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("morning-snooze-${state.task.id}")
-                ) {
-                    Text(state.snoozeActionLabel)
-                }
-            }
-        }
     }
 }

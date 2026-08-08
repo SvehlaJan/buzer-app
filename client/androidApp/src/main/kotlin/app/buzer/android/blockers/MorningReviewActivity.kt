@@ -198,7 +198,6 @@ class MorningReviewActivity : ComponentActivity() {
                 onPendingRetry = ::runForcedRefresh,
                 onOverdueDone = ::runOverdueDone,
                 onOverdueEdit = {},
-                showBack = source == MorningReviewEntrySource.Home,
                 onRetryAction = { lifecycleScope.launch { session.retryAction() } },
                 onRetryRefresh = ::runForcedRefresh
             )
