@@ -20,9 +20,14 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.buzer.android.MainActivity
 import app.buzer.android.blockers.FakeBackendClient
+import app.buzer.android.morningreview.MorningReviewLocalState
+import app.buzer.android.morningreview.MorningReviewLocalStateStore
+import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.tasks.AddTaskDependencies
 import java.io.File
 import java.lang.reflect.Modifier
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -165,7 +170,12 @@ class EditTaskFakeBackendTest {
         }
 
     private fun resetTestState() {
-        File(ApplicationProvider.getApplicationContext<Context>().filesDir, "latest_snapshot.json").delete()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        MorningReviewRuntimeClock.setForTests(null)
+        File(context.filesDir, "latest_snapshot.json").delete()
+        MorningReviewLocalStateStore.fromContext(context).replace(
+            MorningReviewLocalState(lastAcknowledgedDate = LocalDate.now(ZoneId.systemDefault()))
+        )
         fakeBackend.setFailActions(false)
         fakeBackend.setFailProjects(false)
         fakeBackend.resetCalls()

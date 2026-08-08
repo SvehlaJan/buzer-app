@@ -67,3 +67,5 @@ Verification:
 - Final Task 9 code-quality review: PASS after replacing this stale debugging handoff with current evidence.
 - No known Task 9 product or test failures remain.
 - Task 10 still requires complete client/backend verification, the full unfiltered real-backend suite, repository hygiene audit, and the final feature handoff.
+
+Task 10 editor isolation: Add/Edit E2E resets clear snapshot authority, restore the runtime clock, and acknowledge today before MainActivity launch.
