@@ -23,8 +23,8 @@ object MorningReviewDependencies {
         stateStore = MorningReviewLocalStateStore.fromContext(context),
         actions = MorningReviewSchedulerActions(scheduler(context)),
         cachedSnapshotLoader = { SnapshotStore(context.applicationContext).load()?.let(SnapshotReducer::reduce) },
-        nowProvider = Instant::now,
-        zoneProvider = ZoneId::systemDefault,
+        nowProvider = MorningReviewRuntimeClock::now,
+        zoneProvider = MorningReviewRuntimeClock::zoneId,
         errorReporter = { operation, failureContext, error ->
             AppLog.warn("morning_review_alarm $operation $failureContext", error)
         }

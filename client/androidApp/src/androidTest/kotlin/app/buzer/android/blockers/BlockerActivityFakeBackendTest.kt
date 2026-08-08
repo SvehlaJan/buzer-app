@@ -50,6 +50,7 @@ import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import app.buzer.android.morningreview.MorningReviewAlarmReason
 import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
+import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
 import java.io.File
 import java.time.LocalDate
@@ -666,6 +667,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     private fun resetTestState(morningReviewScenario: String? = null) {
+        MorningReviewRuntimeClock.setForTests(null)
         // Each test replaces the fake backend's fixture snapshot. Clear the persisted authority
         // first so monotonic snapshot protection cannot intentionally retain the prior test's
         // snapshot after a fake-backend restart.

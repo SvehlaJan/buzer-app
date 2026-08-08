@@ -18,6 +18,7 @@ import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewEntrySource
 import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MorningReviewResult
 import app.buzer.android.morningreview.MorningReviewSessionController
 import app.buzer.android.morningreview.MorningReviewSessionState
@@ -58,7 +59,7 @@ class MorningReviewActivity : ComponentActivity() {
         val errorReporter = BlockerErrorReporter(applicationContext)
         val scheduler = MorningReviewDependencies.scheduler(applicationContext)
         val notificationCleaner = AndroidBlockerNotificationCleaner(applicationContext)
-        val zone = ZoneId.systemDefault()
+        val zone = MorningReviewRuntimeClock.zoneId()
         var sessionState by mutableStateOf(MorningReviewSessionState())
         val session = MorningReviewSessionController({ sessionState = it }, sessionState)
 
@@ -125,13 +126,13 @@ class MorningReviewActivity : ComponentActivity() {
 
         fun acknowledge() = runLocalAction(
             label = "acknowledge",
-            operation = { scheduler.acknowledge(Instant.now(), zone) },
+            operation = { scheduler.acknowledge(MorningReviewRuntimeClock.now(), zone) },
             result = MorningReviewResult.Acknowledged
         )
 
         fun snooze() = runLocalAction(
             label = "snooze",
-            operation = { scheduler.snooze(Instant.now(), zone) },
+            operation = { scheduler.snooze(MorningReviewRuntimeClock.now(), zone) },
             result = MorningReviewResult.Snoozed
         )
 
@@ -174,7 +175,7 @@ class MorningReviewActivity : ComponentActivity() {
                     refreshError = sessionState.refreshError,
                     actionInFlight = sessionState.actionInFlight,
                     actionError = sessionState.actionError,
-                    now = Instant.now(), zoneId = zone, showBack = source == MorningReviewEntrySource.Home
+                    now = MorningReviewRuntimeClock.now(), zoneId = zone, showBack = source == MorningReviewEntrySource.Home
                 ),
                 taskLookup = { taskId -> sessionState.snapshot?.tasks?.firstOrNull { it.id == taskId } },
                 onBack = {

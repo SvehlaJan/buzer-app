@@ -32,6 +32,7 @@ class MorningReviewAlarmInstrumentationTest {
     @Before
     @After
     fun clearMorningReviewState() {
+        MorningReviewRuntimeClock.setForTests(null)
         File(context.filesDir, "latest_snapshot.json").delete()
         context.getSystemService(NotificationManager::class.java).cancelAll()
         stateStore.read().scheduledAlarm?.let { alarm ->

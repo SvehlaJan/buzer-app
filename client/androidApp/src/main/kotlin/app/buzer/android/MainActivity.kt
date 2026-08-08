@@ -19,6 +19,7 @@ import app.buzer.android.morningreview.MorningReviewAvailability
 import app.buzer.android.morningreview.MorningReviewBoundaryTiming
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MorningReviewEntryController
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewScheduleCalculator
@@ -168,8 +169,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshMorningReviewAvailability() {
-        val now = Instant.now()
-        val zoneId = ZoneId.systemDefault()
+        val now = MorningReviewRuntimeClock.now()
+        val zoneId = MorningReviewRuntimeClock.zoneId()
         morningReviewScheduler.reconcile(now, zoneId)
         val availability = morningReviewCalculator.availability(
             state = morningReviewStateStore.read(),
@@ -190,7 +191,7 @@ class MainActivity : ComponentActivity() {
     private fun armMorningReviewReevaluation(availability: MorningReviewAvailability) {
         morningReviewReevaluationJob?.cancel()
         if (!morningReviewEntryController.isForeground) return
-        val delayMillis = Duration.between(Instant.now(), availability.nextReevaluationAt).toMillis()
+        val delayMillis = Duration.between(MorningReviewRuntimeClock.now(), availability.nextReevaluationAt).toMillis()
         morningReviewReevaluationJob = lifecycleScope.launch {
             when (val timing = MorningReviewBoundaryTiming.from(delayMillis)) {
                 is MorningReviewBoundaryTiming.Delay -> delay(timing.milliseconds)
@@ -201,7 +202,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun morningReviewBlockingCount(): Int = snapshotViewState
-        ?.let { selectOwnerAgenda(it, Instant.now(), ZoneId.systemDefault()).blocking.size }
+        ?.let { selectOwnerAgenda(it, MorningReviewRuntimeClock.now(), MorningReviewRuntimeClock.zoneId()).blocking.size }
         ?: 0
 
     private fun reportRefreshFailure(error: Throwable) {

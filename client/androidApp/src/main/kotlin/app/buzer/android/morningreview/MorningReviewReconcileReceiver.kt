@@ -14,7 +14,7 @@ class MorningReviewReconcileReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED -> MorningReviewDependencies.scheduler(context.applicationContext)
-                .reconcile(Instant.now(), ZoneId.systemDefault())
+                .reconcile(MorningReviewRuntimeClock.now(), MorningReviewRuntimeClock.zoneId())
         }
     }
 }

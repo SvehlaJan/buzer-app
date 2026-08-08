@@ -70,6 +70,16 @@ The scoped device runner needs a clean emulator/app state and usable connected-t
 - GMD follow-up migrated repaired-task assertions from title disappearance to absent attention + visible `Start day`; failure-action injection now starts after initial Review load; failure-dialog Back uses the activity dispatcher.
 - Invalid-review E2E now asserts the stable disabled global Start control instead of removed `unresolved` copy.
 
+## Phase B enabling seam
+
+- Added internal `MorningReviewRuntimeClock`, defaulting to `Instant.now()` and `ZoneId.systemDefault()`; it is used by MainActivity, Morning Review activity/receiver, and alarm handler dependencies.
+- Both owned Android instrumentation fixtures clear the override as part of reset/cleanup.
+
+Verification:
+- Command: `./gradlew :androidApp:compileDebugKotlin :androidApp:compileDebugAndroidTestKotlin`
+- Result: PASS
+- Evidence: production and Android instrumentation Kotlin compilation succeeded.
+
 Verification:
 - Command: `npm test -- e2eServer.test.ts e2eFixtures.test.ts` and `npm run typecheck`
 - Result: PASS
