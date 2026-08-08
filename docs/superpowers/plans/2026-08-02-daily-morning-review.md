@@ -583,7 +583,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/MorningReviewRepairHostTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt` only after focused host tests are green; full migration is Task 9.
 
-- [ ] **Step 1: Add RED Compose host tests.**
+- [x] **Step 1: Add RED Compose host tests.**
 
   Cover visible ordering/focus and callbacks:
 
@@ -597,7 +597,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - Home entry shows Back; Automated entry does not;
   - large font scale can scroll to both global actions without clipped fixed-height containers.
 
-- [ ] **Step 2: Confirm instrumentation source is RED.**
+- [x] **Step 2: Confirm instrumentation source is RED.**
 
   ```bash
   ./gradlew :androidApp:compileDebugAndroidTestKotlin
@@ -605,15 +605,15 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Expected: failures for the new state/callback parameters and removed per-card Snooze contract.
 
-- [ ] **Step 3: Render state, not raw task classification.**
+- [x] **Step 3: Render state, not raw task classification.**
 
   Replace `MorningReviewTaskList`'s raw invalid list with a single `LazyColumn` driven by `MorningReviewScreenState`. Keep the existing `TaskEditorUpdateScreen` Repair host, project retry status, full update request, checklist editing, and Activity footer. Generalize only enough to host overdue Edit; do not fork another editor.
 
-- [ ] **Step 4: Make actions global and accessible.**
+- [x] **Step 4: Make actions global and accessible.**
 
   Put `Start day`/`Start day without data` and `Snooze 5 min` after content in deterministic traversal order. Mark section headers with `heading()`, expose disabled primary semantics, use minimum Material touch targets, and request focus on the Blocking/Summary heading when phase changes. Do not make Snooze icon-only.
 
-- [ ] **Step 5: Run focused host tests GREEN.**
+- [x] **Step 5: Run focused host tests GREEN.**
 
   If a managed device is available:
 
@@ -627,7 +627,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   ./gradlew :androidApp:compileDebugAndroidTestKotlin :androidApp:testDebugUnitTest --tests '*MorningReview*Test'
   ```
 
-- [ ] **Step 6: Commit UI.**
+- [x] **Step 6: Commit UI.**
 
   ```bash
   git add client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/MorningReviewRepairHostTest.kt
