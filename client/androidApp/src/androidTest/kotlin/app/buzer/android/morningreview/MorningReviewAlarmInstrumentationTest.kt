@@ -185,12 +185,13 @@ class MorningReviewAlarmInstrumentationTest {
         val dump = FileInputStream(descriptor.fileDescriptor).bufferedReader().use { it.readText() }
         // API 34's live alarm schedule is the Pending alarm batches section. Recent problems,
         // cancellation history, and Alarm Stats can all retain old identities and are excluded.
-        val pendingHeader = "Pending alarm batches:"
-        val pendingStart = dump.indexOf(pendingHeader)
-        check(pendingStart >= 0) { "API34 alarm dump missing '$pendingHeader': ${dump.take(4_000)}" }
-        val afterPending = dump.substring(pendingStart + pendingHeader.length)
-        val pending = afterPending.substringBefore("Idle mode state:")
-            .substringBefore("Past-due non-wakeup alarms:")
+        val pendingHeader = Regex("(?m)^\\s*(?:\\d+ pending alarms:|Pending alarm batches: \\d+)\\s*$")
+            .find(dump)
+        check(pendingHeader != null) {
+            "API34 alarm dump missing pending-alarm header: ${dump.take(4_000)}"
+        }
+        val afterPending = dump.substring(pendingHeader.range.last + 1)
+        val pending = afterPending.substringBefore("Pending user blocked background alarms:")
         val marker = "app.buzer.action.ALARM_RECEIVER.MORNING_REVIEW"
         val count = pending.lineSequence().count { it.contains(marker) }
         assertEquals(
