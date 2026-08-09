@@ -106,6 +106,26 @@ class ReadinessDeviceController(
         runShell("cmd appops set $packageName POST_NOTIFICATION ${allowDeny(allow)}")
     }
 
+    /**
+     * Best-effort only, and known to never actually change device state on this build: this
+     * app declares the `USE_EXACT_ALARM` permission in `AndroidManifest.xml` (added 2026-06-02,
+     * `b8e7efaf`, for Morning Review's exact-alarm delivery reliability -- a deliberate,
+     * load-bearing decision for this personal sideloaded app, not something to remove). Holding
+     * that permission makes `AlarmManager.canScheduleExactAlarms()` return `true`
+     * unconditionally, regardless of the `SCHEDULE_EXACT_ALARM` app-op set below. So
+     * `deny(ExactAlarms)` can never actually make this device "not ready" for that one
+     * capability -- and that is correct behavior, not a bug: if a capability is genuinely always
+     * granted, [AndroidEnforcementReadinessChecker]/the readiness gate are right to never block
+     * on it. `ForegroundReadinessInstrumentationTest` is written to never assert an observable
+     * "exact alarms missing" gate step on this build accordingly.
+     *
+     * `cmd appops set ... USE_EXACT_ALARM allow|deny` is also not a real app-op on this
+     * platform -- confirmed by hand it errors `Unknown operation string: USE_EXACT_ALARM`, which
+     * `runShell` silently discards (it drains and closes the command's output without inspecting
+     * it). The call is kept anyway because it matches the literal command list this controller
+     * was specified against, in case a future device or manifest configuration (e.g.
+     * `USE_EXACT_ALARM` removed) makes it meaningful again.
+     */
     private fun setExactAlarms(allow: Boolean) {
         // SCHEDULE_EXACT_ALARM/USE_EXACT_ALARM app-op gating was introduced in API 31 (S).
         if (sdkInt < Build.VERSION_CODES.S) return

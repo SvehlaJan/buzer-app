@@ -42,15 +42,20 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * RED coverage for Task 5 of the foreground-enforcement-readiness plan. `MainActivity` does not
- * wire in a readiness gate yet (that is Task 6) -- every test here that launches `MainActivity`
- * with a missing capability is EXPECTED to fail against today's code, because Home renders
- * immediately regardless of device readiness. That failure is the correct, intended outcome of
- * this task; do not "fix" it by touching `MainActivity`.
+ * Coverage for the foreground-enforcement-readiness plan's `MainActivity` gate (wired in Task 6).
+ * Originally written in Task 5 as RED coverage before that gate existed; now exercises the real
+ * gate end to end.
  *
- * [settingsIntents_arePackageScopedForEveryDestination] is the one exception: it exercises
- * [ReadinessSettingsIntentFactory] directly (already implemented in Task 2) since nothing in
- * `MainActivity` launches those intents yet to intercept.
+ * [settingsIntents_arePackageScopedForEveryDestination] exercises [ReadinessSettingsIntentFactory]
+ * directly rather than through `MainActivity`.
+ *
+ * ExactAlarms is not independently observable on this build: `AndroidManifest.xml` declares
+ * `USE_EXACT_ALARM`, which makes `AlarmManager.canScheduleExactAlarms()` unconditionally `true`
+ * regardless of device app-op state (see [ReadinessDeviceController.setExactAlarms] for the full
+ * explanation). That capability is therefore excluded from
+ * [missingCapabilities_advanceInRequiredOrderOnEveryForeground]'s denial/walk sequence, and
+ * [missingCapability_neverLaunchesSettingsWithoutTap_andBackCannotDismiss] targets Overlay
+ * instead of ExactAlarms as its one always-missing capability.
  */
 @RunWith(AndroidJUnit4::class)
 class ForegroundReadinessInstrumentationTest {
@@ -99,7 +104,10 @@ class ForegroundReadinessInstrumentationTest {
     @Test
     fun missingCapabilities_advanceInRequiredOrderOnEveryForeground() {
         resetTestState()
-        DeviceReadinessCapability.entries.forEach(deviceController::deny)
+        // ExactAlarms is excluded: it can never be observed as missing on this build (see
+        // ReadinessDeviceController.setExactAlarms), so the walk goes straight from Notifications
+        // to Full-screen -- correctly skipping the always-ready step in between.
+        DENIABLE_CAPABILITIES.forEach(deviceController::deny)
         // Persist request history first so the very first checkpoint resolves to the app
         // Settings step instead of a runtime permission dialog this test cannot drive.
         deviceController.markNotificationRequested()
@@ -109,10 +117,6 @@ class ForegroundReadinessInstrumentationTest {
         waitForReadinessGate(step = 1, title = "Turn on Buzer notifications")
 
         deviceController.grant(DeviceReadinessCapability.Notifications)
-        foregroundTransition(scenario)
-        waitForReadinessGate(step = 2, title = "Allow exact alarms")
-
-        deviceController.grant(DeviceReadinessCapability.ExactAlarms)
         foregroundTransition(scenario)
         waitForReadinessGate(step = 3, title = "Allow full-screen alerts")
 
@@ -133,22 +137,25 @@ class ForegroundReadinessInstrumentationTest {
     fun missingCapability_neverLaunchesSettingsWithoutTap_andBackCannotDismiss() {
         resetTestState()
         deviceController.grantAll()
-        deviceController.deny(DeviceReadinessCapability.ExactAlarms)
+        // Overlay stands in for "any one capability missing, mid-sequence, with no special-case
+        // behavior" -- ExactAlarms can't be used here since it can never be observed as missing
+        // on this build (see ReadinessDeviceController.setExactAlarms).
+        deviceController.deny(DeviceReadinessCapability.Overlay)
 
         val scenario = launchMain()
 
-        waitForReadinessGate(step = 2, title = "Allow exact alarms")
+        waitForReadinessGate(step = 4, title = "Allow display over other apps")
         assertEquals(Lifecycle.State.RESUMED, scenario.state)
 
         // Idling Compose alone -- with no tap on the primary action -- must never auto-launch
         // Settings or otherwise dismiss the gate.
         composeRule.waitForIdle()
         assertEquals(Lifecycle.State.RESUMED, scenario.state)
-        composeRule.onNodeWithTag(READINESS_TITLE_TAG).assertTextEquals("Allow exact alarms")
+        composeRule.onNodeWithTag(READINESS_TITLE_TAG).assertTextEquals("Allow display over other apps")
 
         pressBack()
 
-        composeRule.onNodeWithTag(READINESS_TITLE_TAG).assertTextEquals("Allow exact alarms")
+        composeRule.onNodeWithTag(READINESS_TITLE_TAG).assertTextEquals("Allow display over other apps")
         assertEquals(Lifecycle.State.RESUMED, scenario.state)
     }
 
@@ -268,9 +275,9 @@ class ForegroundReadinessInstrumentationTest {
             }
         } catch (timeout: Throwable) {
             throw AssertionError(
-                "Expected foreground readiness gate step \"$expectedStepLabel\" ($title) but " +
-                    "MainActivity has no readiness gate wired in yet (that is Task 6, not this " +
-                    "task) -- homeMarkerVisible=${homeMarkerVisible()}.",
+                "Expected foreground readiness gate step \"$expectedStepLabel\" ($title) but it " +
+                    "was not observed within ${READINESS_TIMEOUT_MILLIS}ms -- " +
+                    "homeMarkerVisible=${homeMarkerVisible()}.",
                 timeout
             )
         }
@@ -314,5 +321,13 @@ class ForegroundReadinessInstrumentationTest {
         const val READINESS_TIMEOUT_MILLIS = 15_000L
         const val READINESS_STEP_TAG = "readiness-step"
         const val READINESS_TITLE_TAG = "readiness-title"
+
+        // ExactAlarms omitted: unrevocable on this build, see ReadinessDeviceController.setExactAlarms.
+        val DENIABLE_CAPABILITIES = listOf(
+            DeviceReadinessCapability.Notifications,
+            DeviceReadinessCapability.FullScreenIntent,
+            DeviceReadinessCapability.Overlay,
+            DeviceReadinessCapability.BatteryExemption
+        )
     }
 }
