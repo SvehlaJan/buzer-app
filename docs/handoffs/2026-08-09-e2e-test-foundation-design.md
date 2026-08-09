@@ -6,7 +6,7 @@ Date: 2026-08-09
 
 - Task: brainstorm and document the foundation phase of the Android E2E test overhaul.
 - Design: `docs/superpowers/specs/2026-08-09-e2e-test-foundation-design.md`.
-- Status: brainstorming sections approved; written specification prepared for user review.
+- Status: accepted by the user; implementation plan prepared for Claude Code with Sonnet 5.
 - Implementation: not started. The brainstorming hard gate prohibits implementation
   before written-spec approval and a separate implementation plan.
 - Branch: `feature/e2e-foundation-design`.
@@ -81,7 +81,7 @@ Verification:
 
 ## Next Recommended Step
 
-The user reviews the committed written specification. After explicit approval, invoke
-the writing-plans skill and create
-`docs/superpowers/plans/2026-08-09-e2e-test-foundation.md` as a self-contained plan for
-delegation to Antigravity/Gemini.
+Use `docs/superpowers/plans/2026-08-09-e2e-test-foundation.md` and the planning handoff
+`docs/handoffs/2026-08-09-e2e-test-foundation-planning.md` for execution by Claude Code
+with Sonnet 5. Do not implement until the foreground-readiness prerequisite is
+integrated.

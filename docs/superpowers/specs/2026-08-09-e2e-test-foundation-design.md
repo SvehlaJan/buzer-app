@@ -2,7 +2,7 @@
 
 Date: 2026-08-09
 
-Status: approved in brainstorming; pending written-spec review
+Status: accepted
 
 ## Purpose
 
