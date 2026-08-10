@@ -72,6 +72,7 @@ describe("seeding", () => {
         expect.objectContaining({ id: "child-unassigned-1", checked: false })
       ]);
       expect(byId.get("task-incomplete-checklist")).toMatchObject({
+        state: "started",
         checkedCount: 0,
         totalCount: 1
       });
