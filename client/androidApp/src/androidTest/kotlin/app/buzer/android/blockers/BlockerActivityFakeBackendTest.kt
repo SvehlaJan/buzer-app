@@ -55,6 +55,7 @@ import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MORNING_REVIEW_TASK_ID
+import app.buzer.android.readiness.ReadinessDeviceController
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
@@ -76,6 +77,7 @@ class BlockerActivityFakeBackendTest {
     val composeRule = createEmptyComposeRule()
 
     private val fakeBackend = FakeBackendClient()
+    private val readinessDeviceController = ReadinessDeviceController()
     private val trackedScenarios = mutableListOf<ActivityScenario<out android.app.Activity>>()
 
     @After
@@ -937,6 +939,11 @@ class BlockerActivityFakeBackendTest {
             )
         }
         blockerErrorLog().delete()
+        // Device permission/app-op/power-management grants only -- orthogonal to the Morning
+        // Review local state and clock reset above, so this cannot acknowledge Morning Review or
+        // move its clock.
+        readinessDeviceController.clearNotificationRequestHistory()
+        readinessDeviceController.grantAll()
     }
 
     private fun setMorningReviewClock(instant: String, zone: ZoneId = ZoneId.of("Europe/Bratislava")) {

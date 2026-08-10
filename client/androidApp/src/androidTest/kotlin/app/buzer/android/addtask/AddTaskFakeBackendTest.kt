@@ -1,6 +1,9 @@
 package app.buzer.android.addtask
 
+import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -32,6 +35,7 @@ import app.buzer.android.blockers.FakeBackendClient
 import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewRuntimeClock
+import app.buzer.android.readiness.ReadinessDeviceController
 import app.buzer.android.tasks.AddTaskDependencies
 import java.io.File
 import java.lang.reflect.Modifier
@@ -54,6 +58,7 @@ class AddTaskFakeBackendTest {
     val composeRule = createEmptyComposeRule()
 
     private val fakeBackend = FakeBackendClient()
+    private val readinessDeviceController = ReadinessDeviceController()
 
     @Test
     fun addTask_requiresExplicitProjectSelectionOnFirstOpen() {
@@ -471,12 +476,27 @@ class AddTaskFakeBackendTest {
         MorningReviewLocalStateStore.fromContext(context).replace(
             MorningReviewLocalState(lastAcknowledgedDate = LocalDate.now(ZoneId.systemDefault()))
         )
+        // readinessDeviceController.grantAll() below grants real Overlay/Notifications capability.
+        // MainActivity's onCreate()/onResume() unconditionally reconciles enforcement on every
+        // launch, which can schedule a fresh AlarmManager alarm and show a real notification --
+        // silently no-op'd before this permission was granted, now real. Cancelling both before
+        // every launch is defense-in-depth against state leaked by an earlier test, matching
+        // BlockerActivityFakeBackendTest.resetTestState()'s existing precaution. It does not by
+        // itself prevent a fresh alarm scheduled during *this* test's own launch/reconcile; the
+        // fixture data driving that (backend/test/fakes/e2eFixtures.ts) is corrected separately so
+        // no fixture task re-arms enforcement's catch-up start-blocker policy during these tests.
+        context.getSystemService(NotificationManager::class.java).cancelAll()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.getSystemService(AlarmManager::class.java).cancelAll()
+        }
         fakeBackend.setFailActions(false)
         fakeBackend.setFailProjects(false)
         fakeBackend.setFailNextChildAdd(false)
         fakeBackend.resetCalls()
         resetProjectRepositoryCache()
         clearProjectSelection()
+        readinessDeviceController.clearNotificationRequestHistory()
+        readinessDeviceController.grantAll()
     }
 
     private fun resetProjectRepositoryCache() {

@@ -1,6 +1,9 @@
 package app.buzer.android.addtask
 
+import android.app.AlarmManager
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import android.os.SystemClock
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
@@ -23,6 +26,7 @@ import app.buzer.android.blockers.FakeBackendClient
 import app.buzer.android.morningreview.MorningReviewLocalState
 import app.buzer.android.morningreview.MorningReviewLocalStateStore
 import app.buzer.android.morningreview.MorningReviewRuntimeClock
+import app.buzer.android.readiness.ReadinessDeviceController
 import app.buzer.android.tasks.AddTaskDependencies
 import java.io.File
 import java.lang.reflect.Modifier
@@ -46,6 +50,7 @@ class EditTaskFakeBackendTest {
     val composeRule = createEmptyComposeRule()
 
     private val fakeBackend = FakeBackendClient()
+    private val readinessDeviceController = ReadinessDeviceController()
 
     @Test
     fun editTask_projectAndAssigneeStayDraftOnlyUntilOneFullRootUpdate() {
@@ -106,7 +111,21 @@ class EditTaskFakeBackendTest {
                 assertEquals(retriedPayloads.first().getValue("rootPatch"), retriedPayloads.last().getValue("rootPatch"))
                 assertEquals(retriedPayloads.first().getValue("childMutations"), retriedPayloads.last().getValue("childMutations"))
 
-                composeRule.onNodeWithText("Dismiss").performClick()
+                // The dismiss TextButton's Text("Dismiss") is absorbed into its parent's merged
+                // semantics node (standard Compose AlertDialog dismissButton behavior), so it is
+                // only addressable as its own node via the unmerged tree -- confirmed by reading
+                // ErrorAlertDialog (StatusComponents.kt): exactly one Dismiss control can be
+                // present here, this is not papering over a duplicate/overlapping dialog.
+                // waitForUpdateCallCount above only confirms the fake backend recorded the retry's
+                // HTTP call; it says nothing about whether the app has finished processing that
+                // response and recomposed the failure dialog yet, so wait for the (unmerged) node
+                // to actually exist before clicking it.
+                composeRule.waitUntil(timeoutMillis = 15_000) {
+                    composeRule.onAllNodesWithText("Dismiss", useUnmergedTree = true)
+                        .fetchSemanticsNodes()
+                        .isNotEmpty()
+                }
+                composeRule.onNodeWithText("Dismiss", useUnmergedTree = true).performClick()
                 composeRule.onNodeWithText("Cancel").performClick()
                 waitForText("Discard changes?")
                 composeRule.onNodeWithText("Keep editing").performClick()
@@ -176,12 +195,27 @@ class EditTaskFakeBackendTest {
         MorningReviewLocalStateStore.fromContext(context).replace(
             MorningReviewLocalState(lastAcknowledgedDate = LocalDate.now(ZoneId.systemDefault()))
         )
+        // readinessDeviceController.grantAll() below grants real Overlay/Notifications capability.
+        // MainActivity's onCreate()/onResume() unconditionally reconciles enforcement on every
+        // launch, which can schedule a fresh AlarmManager alarm and show a real notification --
+        // silently no-op'd before this permission was granted, now real. Cancelling both before
+        // every launch is defense-in-depth against state leaked by an earlier test, matching
+        // BlockerActivityFakeBackendTest.resetTestState()'s existing precaution. It does not by
+        // itself prevent a fresh alarm scheduled during *this* test's own launch/reconcile; the
+        // fixture data driving that (backend/test/fakes/e2eFixtures.ts) is corrected separately so
+        // no fixture task re-arms enforcement's catch-up start-blocker policy during these tests.
+        context.getSystemService(NotificationManager::class.java).cancelAll()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.getSystemService(AlarmManager::class.java).cancelAll()
+        }
         fakeBackend.setFailActions(false)
         fakeBackend.setFailProjects(false)
         fakeBackend.resetCalls()
         val field = AddTaskDependencies::class.java.getDeclaredField("cachedProjectRepository")
         field.isAccessible = true
         field.set(if (Modifier.isStatic(field.modifiers)) null else AddTaskDependencies, null)
+        readinessDeviceController.clearNotificationRequestHistory()
+        readinessDeviceController.grantAll()
     }
 
     private fun waitForText(text: String) {
