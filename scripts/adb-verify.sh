@@ -116,7 +116,7 @@ cmd_alarms() {
 cmd_perms() {
   echo "# appops ($app_id)"
   adbx shell cmd appops get "$app_id" \
-    | filter 'POST_NOTIFICATION|SCHEDULE_EXACT_ALARM|USE_FULL_SCREEN_INTENT|SYSTEM_ALERT_WINDOW'
+    | filter 'POST_NOTIFICATION|SCHEDULE_EXACT_ALARM|USE_EXACT_ALARM|USE_FULL_SCREEN_INTENT|SYSTEM_ALERT_WINDOW'
   echo "# deviceidle whitelist"
   adbx shell dumpsys deviceidle whitelist | filter "$app_id"
 }
