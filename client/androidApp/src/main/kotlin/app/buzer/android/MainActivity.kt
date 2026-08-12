@@ -201,9 +201,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun performForegroundReadinessAction() {
-        val action = readinessController.beginPrimaryAction() ?: return
-        foregroundReadinessState = readinessController.state
         try {
+            val action = readinessController.beginPrimaryAction() ?: return
+            foregroundReadinessState = readinessController.state
             when (action) {
                 ForegroundReadinessAction.RequestNotificationPermission ->
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)

@@ -2,6 +2,7 @@ package app.buzer.android.readiness
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -90,6 +91,26 @@ class ForegroundReadinessControllerTest {
             ForegroundReadinessGateState.Blocking(NEEDS_RUNTIME_PERMISSION, actionInFlight = true),
             controller.state
         )
+    }
+
+    @Test
+    fun beginPrimaryActionPropagatesRequestHistoryPersistenceFailureRatherThanSwallowingIt() {
+        val checker = queueOf({ NEEDS_RUNTIME_PERMISSION })
+        val history = object : NotificationPermissionRequestHistory {
+            override fun wasRequested(): Boolean = false
+            override fun markRequested(): Nothing =
+                throw IllegalStateException("Could not persist notification permission request history")
+        }
+        val controller = ForegroundReadinessController(checker, history, reportError = { _, _ -> })
+        val stateBeforeAction = controller.refresh()
+
+        assertFailsWith<IllegalStateException> { controller.beginPrimaryAction() }
+
+        // The controller must not have silently caught the failure and returned an action as if
+        // the request history were durably recorded, nor corrupted its own state in the process —
+        // callers (MainActivity) are the ones responsible for catching this and routing it through
+        // onLaunchFailure(), matching a prompt whose history failed to persist never being launched.
+        assertEquals(stateBeforeAction, controller.state)
     }
 
     // --- Denied/cancelled prompt routes to Settings, using recorded history --------
