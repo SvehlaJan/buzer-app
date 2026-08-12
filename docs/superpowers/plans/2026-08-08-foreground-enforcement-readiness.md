@@ -1090,7 +1090,7 @@ npm run build
 
 Expected: all existing backend tests, TypeScript checking, and build pass. Record the exact test count in the handoff.
 
-- [x] **Step 4: Run the full unfiltered real-backend E2E suite**
+- [ ] **Step 4: Run the full unfiltered real-backend E2E suite**
 
 From repository root:
 
@@ -1099,6 +1099,18 @@ env -u ANDROID_SERIAL -u ANDROID_TEST_CLASS scripts/e2e-real-backend.sh
 ```
 
 Expected: the full suite passes with the new readiness tests included. Scoped passes are not sufficient because the gate changes every `MainActivity` startup.
+
+**Not achieved as a single clean run, on review (2026-08-11).** Multiple full-suite attempts
+(4 total across two sessions) all crash the shared instrumentation process at the same position
+(~66-69/109) on `ForegroundReadinessInstrumentationTest`'s foreground-transition test, including
+after that test was simplified from 4 internal `MainActivity` relaunches to 1 — the crash
+recurred identically, proving it is caused by *cumulative* launches across the whole shared,
+non-orchestrated process (no Android Test Orchestrator in this repo), not this test's own
+weight. Every one of the 109 tests has been confirmed passing at least once across isolated and
+combined runs; see `docs/handoffs/2026-08-11-foreground-readiness-review-fixes.md` for the full
+evidence. Left unchecked rather than marked done on a technicality — the literal "one clean run"
+bar genuinely was not met, and won't be until Test Orchestrator adoption (out of scope for this
+plan) provides real per-test process isolation.
 
 - [ ] **Step 5: Perform the physical-device sequential setup smoke**
 

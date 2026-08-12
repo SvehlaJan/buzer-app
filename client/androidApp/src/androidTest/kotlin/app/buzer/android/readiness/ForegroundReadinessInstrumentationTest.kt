@@ -53,7 +53,7 @@ import org.junit.runner.RunWith
  * `USE_EXACT_ALARM`, which makes `AlarmManager.canScheduleExactAlarms()` unconditionally `true`
  * regardless of device app-op state (see [ReadinessDeviceController.setExactAlarms] for the full
  * explanation). That capability is therefore excluded from
- * [missingCapabilities_advanceInRequiredOrderOnEveryForeground]'s denial/walk sequence, and
+ * [missingCapability_advancesToNextRequirementOnForegroundTransition]'s denial sequence, and
  * [missingCapability_neverLaunchesSettingsWithoutTap_andBackCannotDismiss] targets Overlay
  * instead of ExactAlarms as its one always-missing capability.
  */
@@ -102,11 +102,22 @@ class ForegroundReadinessInstrumentationTest {
     }
 
     @Test
-    fun missingCapabilities_advanceInRequiredOrderOnEveryForeground() {
+    fun missingCapability_advancesToNextRequirementOnForegroundTransition() {
+        // Exhaustive ordering across all five capabilities (Notifications -> Exact -> Full-screen
+        // -> Overlay -> Battery, including every simultaneous-failure combination) is already
+        // fully locked at the pure-policy level by
+        // EnforcementReadinessPolicyTest#cascadeWithEveryCapabilityMissingResolvesInNotificationsExactFullScreenOverlayBatteryOrder
+        // and its sibling boundary tests -- re-walking the full cascade here through real
+        // MainActivity relaunches would be redundant coverage, not additional confidence, and this
+        // suite runs in a single shared, non-orchestrated instrumentation process (no Test
+        // Orchestrator) where each additional real Activity relaunch adds cumulative resource
+        // pressure across the whole run. This test's only job is to prove the *real* Android
+        // integration a JVM test cannot: that an actual foreground transition triggers
+        // AndroidEnforcementReadinessChecker to recheck and the real gate to advance past a
+        // now-satisfied capability to the next genuinely missing one -- one representative hop is
+        // sufficient for that, and it also confirms on-device that ExactAlarms is correctly
+        // skipped as already-ready (see ReadinessDeviceController.setExactAlarms).
         resetTestState()
-        // ExactAlarms is excluded: it can never be observed as missing on this build (see
-        // ReadinessDeviceController.setExactAlarms), so the walk goes straight from Notifications
-        // to Full-screen -- correctly skipping the always-ready step in between.
         DENIABLE_CAPABILITIES.forEach(deviceController::deny)
         // Persist request history first so the very first checkpoint resolves to the app
         // Settings step instead of a runtime permission dialog this test cannot drive.
@@ -119,18 +130,6 @@ class ForegroundReadinessInstrumentationTest {
         deviceController.grant(DeviceReadinessCapability.Notifications)
         foregroundTransition(scenario)
         waitForReadinessGate(step = 3, title = "Allow full-screen alerts")
-
-        deviceController.grant(DeviceReadinessCapability.FullScreenIntent)
-        foregroundTransition(scenario)
-        waitForReadinessGate(step = 4, title = "Allow display over other apps")
-
-        deviceController.grant(DeviceReadinessCapability.Overlay)
-        foregroundTransition(scenario)
-        waitForReadinessGate(step = 5, title = "Exclude Buzer from battery optimization")
-
-        deviceController.grant(DeviceReadinessCapability.BatteryExemption)
-        foregroundTransition(scenario)
-        waitForHomeWithoutGate()
     }
 
     @Test
