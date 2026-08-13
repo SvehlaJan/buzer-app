@@ -109,27 +109,24 @@ class ForegroundReadinessInstrumentationTest {
         // EnforcementReadinessPolicyTest#cascadeWithEveryCapabilityMissingResolvesInNotificationsExactFullScreenOverlayBatteryOrder
         // and its sibling boundary tests -- re-walking the full cascade here through real
         // MainActivity relaunches would be redundant coverage, not additional confidence, and this
-        // suite runs in a single shared, non-orchestrated instrumentation process (no Test
-        // Orchestrator) where each additional real Activity relaunch adds cumulative resource
-        // pressure across the whole run. This test's only job is to prove the *real* Android
+        // suite runs in a single shared, non-orchestrated instrumentation process. This test's
+        // only job is to prove the *real* Android
         // integration a JVM test cannot: that an actual foreground transition triggers
         // AndroidEnforcementReadinessChecker to recheck and the real gate to advance past a
         // now-satisfied capability to the next genuinely missing one -- one representative hop is
-        // sufficient for that, and it also confirms on-device that ExactAlarms is correctly
-        // skipped as already-ready (see ReadinessDeviceController.setExactAlarms).
+        // sufficient for that.
         resetTestState()
-        DENIABLE_CAPABILITIES.forEach(deviceController::deny)
-        // Persist request history first so the very first checkpoint resolves to the app
-        // Settings step instead of a runtime permission dialog this test cannot drive.
-        deviceController.markNotificationRequested()
+        deviceController.grantAll()
+        deviceController.deny(DeviceReadinessCapability.FullScreenIntent)
+        deviceController.deny(DeviceReadinessCapability.Overlay)
 
         val scenario = launchMain()
 
-        waitForReadinessGate(step = 1, title = "Turn on Buzer notifications")
-
-        deviceController.grant(DeviceReadinessCapability.Notifications)
-        foregroundTransition(scenario)
         waitForReadinessGate(step = 3, title = "Allow full-screen alerts")
+
+        deviceController.grant(DeviceReadinessCapability.FullScreenIntent)
+        foregroundTransition(scenario)
+        waitForReadinessGate(step = 4, title = "Allow display over other apps")
     }
 
     @Test
@@ -321,12 +318,5 @@ class ForegroundReadinessInstrumentationTest {
         const val READINESS_STEP_TAG = "readiness-step"
         const val READINESS_TITLE_TAG = "readiness-title"
 
-        // ExactAlarms omitted: unrevocable on this build, see ReadinessDeviceController.setExactAlarms.
-        val DENIABLE_CAPABILITIES = listOf(
-            DeviceReadinessCapability.Notifications,
-            DeviceReadinessCapability.FullScreenIntent,
-            DeviceReadinessCapability.Overlay,
-            DeviceReadinessCapability.BatteryExemption
-        )
     }
 }

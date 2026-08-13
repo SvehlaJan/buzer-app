@@ -87,16 +87,12 @@ class ReadinessDeviceController(
         // revoke via UiAutomation/`appops` on older platforms because the permission does not
         // gate delivery there.
         if (sdkInt < Build.VERSION_CODES.TIRAMISU) return
-        // Deliberately not `pm grant`/`pm revoke`: this instrumentation-only test module isn't
-        // built with Android Test Orchestrator, so the JUnit runner and the app under test share
-        // one OS process for the whole class. `pm grant`/`revoke` targets that shared process
-        // from outside it via raw shell and can bring it down (observed as a `signal 9` kill of
-        // the shared process ~200ms after a `pm revoke` call, compounded by prior real
-        // `MainActivity` launches earlier in the same run). `UiAutomation.grantRuntimePermission`
-        // / `revokeRuntimePermission` is the API built for mutating a permission held by the very
-        // process instrumentation is attached to, and is what the platform itself recommends
-        // (`pm revoke` logs "UiAutomation.revokeRuntimePermission() is more robust and should be
-        // used instead of 'pm revoke'"). Same precedent as
+        // `UiAutomation.grantRuntimePermission` / `revokeRuntimePermission` is more robust than
+        // raw `pm grant` / `pm revoke` for performing this operation. It does not make an
+        // ordinary runtime-permission revocation safe for the currently running target UID,
+        // however: `revokeRuntimePermission` may terminate that UID. Callers in this
+        // non-orchestrated instrumentation process must therefore not revoke a runtime
+        // permission that is currently granted. Same precedent as
         // MorningReviewAlarmInstrumentationTest's grantNotifications().
         if (allow) {
             uiAutomation.grantRuntimePermission(packageName, Manifest.permission.POST_NOTIFICATIONS)
