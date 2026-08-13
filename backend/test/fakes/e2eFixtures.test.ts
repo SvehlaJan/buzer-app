@@ -207,7 +207,8 @@ describe("e2eFixtureSeed", () => {
       { id: "task-reschedule", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
       { id: "task-deadline-fail", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
       { id: "task-reschedule-fail", kind: "started", startedAt: "2026-07-18T09:31:00.000Z" },
-      { id: "task-reconciliation-pending", kind: "reconciliation_pending" }
+      { id: "task-reconciliation-pending", kind: "reconciliation_pending" },
+      { id: "task-incomplete-checklist", kind: "started", startedAt: "2026-07-18T09:41:00.000Z" }
     ]);
   });
 

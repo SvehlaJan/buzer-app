@@ -485,7 +485,15 @@ export function e2eFixtureSeed(now: Date): E2EFixtureSeed {
     { id: "task-reschedule", kind: "started", startedAt: iso(-29) },
     { id: "task-deadline-fail", kind: "started", startedAt: iso(-29) },
     { id: "task-reschedule-fail", kind: "started", startedAt: iso(-29) },
-    { id: "task-reconciliation-pending", kind: "reconciliation_pending" }
+    { id: "task-reconciliation-pending", kind: "reconciliation_pending" },
+    // Without this nudge the task is "planned" while already inside its due window, which makes
+    // AlarmPlanCalculator's catch-up policy (decision 2026-07-06-catchup-start-blocker) re-arm an
+    // immediate START_BLOCKER alarm on every MainActivity reconcile -- harmless before foreground
+    // readiness could grant real Overlay permission (OverlayBlockerService no-op'd with
+    // reason=no_permission), but a real focus-stealing overlay once it can. Marking it already
+    // "started" matches its already-started siblings above and keeps it out of that catch-up path
+    // while leaving its due window, checklist state, and Home visibility unchanged.
+    { id: "task-incomplete-checklist", kind: "started", startedAt: iso(-19) }
   ];
 
   const occurrencePins: E2EOccurrencePin[] = tasks
