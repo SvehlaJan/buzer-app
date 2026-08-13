@@ -3,7 +3,8 @@
 Date: 2026-08-12
 Plan: `docs/superpowers/plans/2026-08-08-foreground-enforcement-readiness.md`
 Branch/worktree: `feature/foreground-readiness` / `/Users/svehla/playground/buzer-app/.worktrees/foreground-readiness`
-Status: P1 correction verified by the focused readiness class and the full unfiltered real-backend E2E suite.
+Status: P1 correction verified, merged to `master`, pushed, and confirmed by post-merge focused
+instrumentation and GitHub CI.
 
 ## Scope
 
@@ -96,6 +97,16 @@ Verification:
 - Result: PASS
 - Evidence: `Finished 109 tests on pixel8Api34`; `BUILD SUCCESSFUL in 6m 16s`; 0 failures.
 
+Verification:
+- Command: `ANDROID_TEST_CLASS=app.buzer.android.readiness.ForegroundReadinessInstrumentationTest scripts/e2e-real-backend.sh` (post-merge on `master`)
+- Result: PASS
+- Evidence: all 5 readiness tests passed; `BUILD SUCCESSFUL in 52s`.
+
+Verification:
+- Command: GitHub Actions CI run `31732884633`
+- Result: PASS
+- Evidence: merge commit `77e9a98` (`merge: add foreground enforcement readiness`) was pushed to `master`; CI client job passed in 3m 21s and backend job passed in 44s.
+
 ## Assumptions
 
 - The preserved PID/signal-9 evidence supplied with this task is sufficient RED evidence; the
@@ -106,4 +117,4 @@ Verification:
 ## Next step
 
 Complete the still-pending physical Pixel 10 smoke and `adb-verify.sh health` evidence (Task 8
-Step 5), then complete review, integration, push, and CI confirmation (Task 8 Step 9).
+Step 5).

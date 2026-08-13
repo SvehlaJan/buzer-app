@@ -1179,7 +1179,7 @@ git add scripts/adb-verify.sh docs/handoffs/2026-08-08-foreground-enforcement-re
 git commit -m "docs: hand off foreground readiness"
 ```
 
-- [ ] **Step 9: Review, integrate, push, and confirm CI**
+- [x] **Step 9: Review, integrate, push, and confirm CI**
 
 After code/spec review, merge the implementation branch into `master`, push, and run:
 
@@ -1189,6 +1189,11 @@ gh run watch <run-id> --exit-status
 ```
 
 Do not report completion over a red CI run. The repository CI does not run managed-device instrumentation, so the local unfiltered E2E result remains mandatory release evidence.
+
+**Completed 2026-08-13.** Merge commit `77e9a98` (`merge: add foreground enforcement readiness`)
+was pushed to `master`. The post-merge focused readiness class passed all 5 tests (`BUILD
+SUCCESSFUL in 52s`). GitHub Actions CI run `31732884633` passed: client in 3m 21s and backend in
+44s.
 
 ## Completion criteria
 
