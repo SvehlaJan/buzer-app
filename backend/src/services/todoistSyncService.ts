@@ -12,10 +12,21 @@ import {
   type OccurrenceDecision
 } from "./occurrenceReconciler.js";
 
+export interface TodoistSyncDiagnostics {
+  lastSyncAt: string | null;
+  lastOutcome: "success" | "error" | null;
+  durationMs: number | null;
+  errorMessage?: string | null;
+}
+
 export class TodoistSyncService {
   private syncTail: Promise<void> = Promise.resolve();
   private manualSyncInFlight: Promise<void> | null = null;
   private readonly occurrenceReconciler = new OccurrenceReconciler();
+  private lastSyncAt: string | null = null;
+  private lastOutcome: "success" | "error" | null = null;
+  private lastDurationMs: number | null = null;
+  private lastErrorMessage: string | null = null;
 
   constructor(
     private readonly db: Database.Database,
@@ -25,6 +36,15 @@ export class TodoistSyncService {
     private readonly currentUserId = "",
     private readonly collaborators = new CollaboratorRepository(db)
   ) {}
+
+  getLastSyncDiagnostics(): TodoistSyncDiagnostics {
+    return {
+      lastSyncAt: this.lastSyncAt,
+      lastOutcome: this.lastOutcome,
+      durationMs: this.lastDurationMs,
+      ...(this.lastErrorMessage ? { errorMessage: this.lastErrorMessage } : {})
+    };
+  }
 
   syncNow(): Promise<void> {
     if (this.manualSyncInFlight !== null) return this.manualSyncInFlight;
@@ -36,7 +56,22 @@ export class TodoistSyncService {
   }
 
   async syncOnce(): Promise<void> {
-    const run = this.syncTail.then(() => this.syncOnceSerialized());
+    const start = Date.now();
+    const run = this.syncTail.then(async () => {
+      try {
+        await this.syncOnceSerialized();
+        this.lastSyncAt = new Date().toISOString();
+        this.lastOutcome = "success";
+        this.lastDurationMs = Date.now() - start;
+        this.lastErrorMessage = null;
+      } catch (err) {
+        this.lastSyncAt = new Date().toISOString();
+        this.lastOutcome = "error";
+        this.lastDurationMs = Date.now() - start;
+        this.lastErrorMessage = err instanceof Error ? err.message : String(err);
+        throw err;
+      }
+    });
     this.syncTail = run.catch(() => undefined);
     return run;
   }

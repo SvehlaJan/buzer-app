@@ -250,12 +250,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ? new DryRunSender()
     : new WhatsAppWebSender({
       sessionPath: CONFIG.WHATSAPP_SESSION_PATH,
-      clientId: CONFIG.WHATSAPP_CLIENT_ID
+      clientId: CONFIG.WHATSAPP_CLIENT_ID,
+      observability: backendObservability
     });
   if (whatsappSender instanceof WhatsAppWebSender) {
     await whatsappSender.initialize();
   }
-  const escalationService = new EscalationService(db, tasks, whatsappSender, whatsappRecipientId);
+  const escalationService = new EscalationService(
+    db,
+    tasks,
+    whatsappSender,
+    whatsappRecipientId,
+    { observability: backendObservability }
+  );
   const synchronizer = new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators);
   const app = buildServer({
     db,
@@ -270,8 +277,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     synchronizer,
     {
       runImmediately: true,
+      observability: backendObservability,
       onError: (error) => {
-        backendObservability.captureHandled("todoist_poller_error", error);
         app.log.error({ err: error }, "Todoist sync failed");
       }
     }

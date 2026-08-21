@@ -18,6 +18,10 @@ export interface DiagnosticCorrelation {
   baggage?: string;
   reportSessionId?: string;
   androidDiagnosticEventId?: string;
+  consecutiveFailureCount?: number;
+  recipientConfigured?: string;
+  escalationId?: string;
+  [key: string]: unknown;
 }
 
 export interface BackendObservability {
@@ -67,6 +71,18 @@ export class NoOpBackendObservability implements BackendObservability {
 
   async flush(_timeoutMs: number = 2000): Promise<boolean> {
     return true;
+  }
+}
+
+function applyCorrelationToScope(scope: Sentry.Scope, correlation?: DiagnosticCorrelation): void {
+  if (!correlation) return;
+  const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
+  scope.setContext("correlation", sanitized);
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (value !== undefined && value !== null && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
+      const snakeKey = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+      scope.setTag(snakeKey, String(value));
+    }
   }
 }
 
@@ -138,15 +154,12 @@ export class SentryBackendObservability implements BackendObservability {
     if (!this.enabled) return;
     const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
     Sentry.setContext("correlation", sanitized);
-    if (correlation.deviceId) Sentry.setTag("device_id", correlation.deviceId);
-    if (correlation.taskId) Sentry.setTag("task_id", correlation.taskId);
-    if (correlation.occurrenceKey) Sentry.setTag("occurrence_key", correlation.occurrenceKey);
-    if (correlation.actionId) Sentry.setTag("action_id", correlation.actionId);
-    if (correlation.requestId) Sentry.setTag("request_id", correlation.requestId);
-    if (correlation.traceId) Sentry.setTag("trace_id", correlation.traceId);
-    if (correlation.baggage) Sentry.setTag("baggage", correlation.baggage);
-    if (correlation.reportSessionId) Sentry.setTag("report_session_id", correlation.reportSessionId);
-    if (correlation.androidDiagnosticEventId) Sentry.setTag("android_diagnostic_event_id", correlation.androidDiagnosticEventId);
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (value !== undefined && value !== null && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
+        const snakeKey = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+        Sentry.setTag(snakeKey, String(value));
+      }
+    }
   }
 
   captureHandled(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
@@ -155,19 +168,7 @@ export class SentryBackendObservability implements BackendObservability {
     Sentry.withScope((scope) => {
       scope.setLevel("error");
       scope.setTag("marker", marker);
-      if (correlation) {
-        const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
-        scope.setContext("correlation", sanitized);
-        if (correlation.deviceId) scope.setTag("device_id", correlation.deviceId);
-        if (correlation.taskId) scope.setTag("task_id", correlation.taskId);
-        if (correlation.occurrenceKey) scope.setTag("occurrence_key", correlation.occurrenceKey);
-        if (correlation.actionId) scope.setTag("action_id", correlation.actionId);
-        if (correlation.requestId) scope.setTag("request_id", correlation.requestId);
-        if (correlation.traceId) scope.setTag("trace_id", correlation.traceId);
-        if (correlation.baggage) scope.setTag("baggage", correlation.baggage);
-        if (correlation.reportSessionId) scope.setTag("report_session_id", correlation.reportSessionId);
-        if (correlation.androidDiagnosticEventId) scope.setTag("android_diagnostic_event_id", correlation.androidDiagnosticEventId);
-      }
+      applyCorrelationToScope(scope, correlation);
       if (error instanceof Error) {
         eventId = Sentry.captureException(error);
       } else {
@@ -183,19 +184,7 @@ export class SentryBackendObservability implements BackendObservability {
     Sentry.withScope((scope) => {
       scope.setLevel("fatal");
       scope.setTag("marker", marker);
-      if (correlation) {
-        const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
-        scope.setContext("correlation", sanitized);
-        if (correlation.deviceId) scope.setTag("device_id", correlation.deviceId);
-        if (correlation.taskId) scope.setTag("task_id", correlation.taskId);
-        if (correlation.occurrenceKey) scope.setTag("occurrence_key", correlation.occurrenceKey);
-        if (correlation.actionId) scope.setTag("action_id", correlation.actionId);
-        if (correlation.requestId) scope.setTag("request_id", correlation.requestId);
-        if (correlation.traceId) scope.setTag("trace_id", correlation.traceId);
-        if (correlation.baggage) scope.setTag("baggage", correlation.baggage);
-        if (correlation.reportSessionId) scope.setTag("report_session_id", correlation.reportSessionId);
-        if (correlation.androidDiagnosticEventId) scope.setTag("android_diagnostic_event_id", correlation.androidDiagnosticEventId);
-      }
+      applyCorrelationToScope(scope, correlation);
       if (error instanceof Error) {
         eventId = Sentry.captureException(error);
       } else {
@@ -218,19 +207,7 @@ export class SentryBackendObservability implements BackendObservability {
       scope.setTag("report_session_id", reportSessionId);
       scope.setTag("feedback_submitted", String(submitted));
       scope.setTag("capsule_schema_version", "1");
-      if (context) {
-        const sanitized = redactObject(context as unknown as Record<string, unknown>);
-        scope.setContext("correlation", sanitized);
-        if (context.deviceId) scope.setTag("device_id", context.deviceId);
-        if (context.taskId) scope.setTag("task_id", context.taskId);
-        if (context.occurrenceKey) scope.setTag("occurrence_key", context.occurrenceKey);
-        if (context.actionId) scope.setTag("action_id", context.actionId);
-        if (context.requestId) scope.setTag("request_id", context.requestId);
-        if (context.traceId) scope.setTag("trace_id", context.traceId);
-        if (context.baggage) scope.setTag("baggage", context.baggage);
-        if (context.reportSessionId) scope.setTag("report_session_id", context.reportSessionId);
-        if (context.androidDiagnosticEventId) scope.setTag("android_diagnostic_event_id", context.androidDiagnosticEventId);
-      }
+      applyCorrelationToScope(scope, context);
       for (const att of attachments) {
         scope.addAttachment({
           filename: att.pathname,
