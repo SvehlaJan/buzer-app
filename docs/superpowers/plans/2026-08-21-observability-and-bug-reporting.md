@@ -202,7 +202,7 @@ silently improvise across agents.
 - Create: `client/shared/src/androidHostTest/kotlin/app/buzer/shared/diagnostics/RedactionCorpusParityTest.kt`
 - Create: `test-fixtures/observability/redaction-corpus.json`
 
-- [ ] **Step 1: Write failing redaction tests.**
+- [x] **Step 1: Write failing redaction tests.**
 
 Create the canonical cross-runtime fixture at
 `test-fixtures/observability/redaction-corpus.json`. The Android-host parity test can use
@@ -231,7 +231,7 @@ fun redactsNestedCredentialKeysAndEmbeddedBearerValues() {
 }
 ```
 
-- [ ] **Step 2: Run the new test and confirm RED.**
+- [x] **Step 2: Run the new test and confirm RED.**
 
 ```bash
 cd client
@@ -240,7 +240,7 @@ cd client
 
 Expected: FAIL because the redactor does not exist.
 
-- [ ] **Step 3: Implement deterministic models and redaction.**
+- [x] **Step 3: Implement deterministic models and redaction.**
 
 Use serializable data classes with explicit versions and capture status:
 
@@ -293,7 +293,7 @@ data class DiagnosticNetworkExchange(
 credential-key set plus patterns for authorization schemes, credential URLs, QR/session
 markers, and PEM blocks. Preserve field shape and replace the value with `[REDACTED]`.
 
-- [ ] **Step 4: Write failing AppLog sink tests.**
+- [x] **Step 4: Write failing AppLog sink tests.**
 
 Assert severity/throwable mapping and sink failure isolation.
 
@@ -306,7 +306,7 @@ fun sinkFailureNeverBreaksApplicationLogging() {
 }
 ```
 
-- [ ] **Step 5: Implement the AppLog fan-out.**
+- [x] **Step 5: Implement the AppLog fan-out.**
 
 Keep Kermit as the local writer. Add a small shared record sink rather than replacing the
 global logger configuration:
@@ -358,7 +358,7 @@ object AppLog {
 The production sink owns redaction; tests must prove a failing sink is swallowed. Do not
 catch or suppress the application's original exception outside this fan-out.
 
-- [ ] **Step 6: Run shared diagnostic tests and the complete shared suite.**
+- [x] **Step 6: Run shared diagnostic tests and the complete shared suite.**
 
 ```bash
 cd client
@@ -368,7 +368,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit and hand off.**
+- [x] **Step 7: Commit and hand off.**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/diagnostics client/shared/src/commonTest/kotlin/app/buzer/shared/diagnostics client/shared/src/androidHostTest/kotlin/app/buzer/shared/diagnostics test-fixtures/observability/redaction-corpus.json docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-01-shared-primitives.md
