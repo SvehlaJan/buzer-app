@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "sentinels": [
+    "SECRET_TODOIST_123",
+    "SECRET_ANDROID_123",
+    "SECRET_WHATSAPP_123",
+    "SECRET_SENTRY_123",
+    "SECRET_PASSWORD_999",
+    "SECRET_PRIVATE_KEY_456",
+    "SECRET_COOKIE_789",
+    "SECRET_COOKIE_123",
+    "SECRET_BEARER_123",
+    "SECRET_REFRESH_TOKEN_000",
+    "SECRET_BASIC_AUTH_ABC",
+    "my secret passphrase with spaces",
+    "single quoted secret with spaces"
+  ],
+  "stringCases": [
+    {
+      "name": "bearer_token_standard",
+      "input": "Authorization: Bearer SECRET_ANDROID_123",
+      "expected": "Authorization: Bearer [REDACTED]"
+    },
+    {
+      "name": "bearer_token_lowercase",
+      "input": "header bearer SECRET_ANDROID_123 attached",
+      "expected": "header bearer [REDACTED] attached"
+    },
+    {
+      "name": "bearer_token_quoted",
+      "input": "Bearer \"SECRET_BEARER_123\"",
+      "expected": "Bearer \"[REDACTED]\""
+    },
+    {
+      "name": "basic_auth_standard",
+      "input": "Authorization: Basic SECRET_BASIC_AUTH_ABC",
+      "expected": "Authorization: Basic [REDACTED]"
+    },
+    {
+      "name": "basic_auth_lowercase",
+      "input": "auth basic SECRET_BASIC_AUTH_ABC header",
+      "expected": "auth basic [REDACTED] header"
+    },
+    {
+      "name": "url_with_user_and_password",
+      "input": "https://user:SECRET_PASSWORD_999@api.example.com/v1/sync",
+      "expected": "https://[REDACTED]:[REDACTED]@api.example.com/v1/sync"
+    },
+    {
+      "name": "url_with_token_user",
+      "input": "https://SECRET_TODOIST_123@api.todoist.com/rest/v2/tasks",
+      "expected": "https://[REDACTED]@api.todoist.com/rest/v2/tasks"
+    },
+    {
+      "name": "pem_private_key_single_block",
+      "input": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...\nSECRET_PRIVATE_KEY_456\n-----END PRIVATE KEY-----",
+      "expected": "[REDACTED]"
+    },
+    {
+      "name": "pem_rsa_private_key_block",
+      "input": "key data:\n-----BEGIN RSA PRIVATE KEY-----\nSECRET_PRIVATE_KEY_456\n-----END RSA PRIVATE KEY-----\nend key",
+      "expected": "key data:\n[REDACTED]\nend key"
+    },
+    {
+      "name": "pem_ec_private_key_block",
+      "input": "-----BEGIN EC PRIVATE KEY-----\nSECRET_PRIVATE_KEY_456\n-----END EC PRIVATE KEY-----",
+      "expected": "[REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_todoist_token",
+      "input": "todoist_token=SECRET_TODOIST_123 status=error",
+      "expected": "todoist_token=[REDACTED] status=error"
+    },
+    {
+      "name": "key_value_in_log_sentry_auth_token",
+      "input": "sentry_auth_token: SECRET_SENTRY_123",
+      "expected": "sentry_auth_token: [REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_password",
+      "input": "password=\"SECRET_PASSWORD_999\" in payload",
+      "expected": "password=\"[REDACTED]\" in payload"
+    },
+    {
+      "name": "key_value_quoted_password_with_spaces",
+      "input": "password=\"my secret passphrase with spaces\"",
+      "expected": "password=\"[REDACTED]\""
+    },
+    {
+      "name": "key_value_single_quoted_secret_with_spaces",
+      "input": "secret='single quoted secret with spaces'",
+      "expected": "secret='[REDACTED]'"
+    },
+    {
+      "name": "key_value_in_log_cookie",
+      "input": "cookie: session=SECRET_COOKIE_789; other=123",
+      "expected": "cookie: [REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_unquoted_cookie",
+      "input": "cookie=SECRET_COOKIE_123",
+      "expected": "cookie=[REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_set_cookie",
+      "input": "Set-Cookie: auth_token=SECRET_COOKIE_789; Secure",
+      "expected": "Set-Cookie: [REDACTED]"
+    },
+    {
+      "name": "whatsapp_qr_raw_string",
+      "input": "qr_code: 1@SECRET_WHATSAPP_123,abc,xyz",
+      "expected": "qr_code: [REDACTED]"
+    },
+    {
+      "name": "already_redacted_bearer",
+      "input": "Authorization: Bearer [REDACTED]",
+      "expected": "Authorization: Bearer [REDACTED]"
+    },
+    {
+      "name": "already_redacted_value",
+      "input": "api_token=[REDACTED]",
+      "expected": "api_token=[REDACTED]"
+    },
+    {
+      "name": "stacktrace_with_embedded_token",
+      "input": "java.lang.IllegalStateException: Failed request with Authorization: Bearer SECRET_ANDROID_123\n\tat app.buzer.client.Api.send(Api.kt:42)",
+      "expected": "java.lang.IllegalStateException: Failed request with Authorization: Bearer [REDACTED]\n\tat app.buzer.client.Api.send(Api.kt:42)"
+    }
+  ],
+  "jsonCases": [
+    {
+      "name": "nested_credentials_map",
+      "input": {
+        "authorization": "Bearer SECRET_ANDROID_123",
+        "cookie": "session=SECRET_COOKIE_789",
+        "set-cookie": "auth=SECRET_COOKIE_789",
+        "token": "SECRET_ANDROID_123",
+        "api_token": "SECRET_ANDROID_123",
+        "access_token": "SECRET_ANDROID_123",
+        "refresh_token": "SECRET_REFRESH_TOKEN_000",
+        "password": "SECRET_PASSWORD_999",
+        "secret": "SECRET_SENTRY_123",
+        "private_key": "SECRET_PRIVATE_KEY_456",
+        "nested": {
+          "TodoistToken": "SECRET_TODOIST_123",
+          "sentry_auth_token": "SECRET_SENTRY_123",
+          "password": "SECRET_PASSWORD_999",
+          "api_token": "SECRET_ANDROID_123",
+          "access_token": "SECRET_ANDROID_123",
+          "refresh_token": "SECRET_REFRESH_TOKEN_000",
+          "secret": "SECRET_SENTRY_123",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nSECRET_PRIVATE_KEY_456\n-----END PRIVATE KEY-----",
+          "whatsapp_session": "SECRET_WHATSAPP_123"
+        },
+        "items": [
+          "Bearer SECRET_ANDROID_123",
+          {
+            "password": "SECRET_PASSWORD_999"
+          }
+        ],
+        "message": "request failed Authorization: Bearer SECRET_ANDROID_123",
+        "safeKey": "safeValue",
+        "occurrenceKey": "occurrence_123",
+        "reportSessionId": "session_abc"
+      },
+      "expected": {
+        "authorization": "[REDACTED]",
+        "cookie": "[REDACTED]",
+        "set-cookie": "[REDACTED]",
+        "token": "[REDACTED]",
+        "api_token": "[REDACTED]",
+        "access_token": "[REDACTED]",
+        "refresh_token": "[REDACTED]",
+        "password": "[REDACTED]",
+        "secret": "[REDACTED]",
+        "private_key": "[REDACTED]",
+        "nested": {
+          "TodoistToken": "[REDACTED]",
+          "sentry_auth_token": "[REDACTED]",
+          "password": "[REDACTED]",
+          "api_token": "[REDACTED]",
+          "access_token": "[REDACTED]",
+          "refresh_token": "[REDACTED]",
+          "secret": "[REDACTED]",
+          "private_key": "[REDACTED]",
+          "whatsapp_session": "[REDACTED]"
+        },
+        "items": [
+          "Bearer [REDACTED]",
+          {
+            "password": "[REDACTED]"
+          }
+        ],
+        "message": "request failed Authorization: Bearer [REDACTED]",
+        "safeKey": "safeValue",
+        "occurrenceKey": "occurrence_123",
+        "reportSessionId": "session_abc"
+      }
+    }
+  ]
+}
