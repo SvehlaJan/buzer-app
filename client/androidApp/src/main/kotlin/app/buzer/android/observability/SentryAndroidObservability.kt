@@ -226,10 +226,12 @@ class SentryAndroidObservability : AndroidObservability {
             this.eventId = sentryEventId
             level = SentryLevel.INFO
             message = io.sentry.protocol.Message().apply {
-                formatted = "Android Diagnostic Event"
+                formatted = "buzer.android.manual_report"
             }
             setTag("report_session_id", reportSessionId)
+            setTag("android_diagnostic_event_id", eventId)
             setTag("feedback_submitted", submitted.toString())
+            setTag("capsule_schema_version", "1")
             context.deviceId?.let { setTag("device_id", it) }
             context.taskId?.let { setTag("task_id", it) }
             context.occurrenceKey?.let { setTag("occurrence_key", it) }
@@ -242,7 +244,9 @@ class SentryAndroidObservability : AndroidObservability {
 
             val diagnosticMap = buildMap<String, Any?> {
                 put("report_session_id", reportSessionId)
+                put("android_diagnostic_event_id", eventId)
                 put("feedback_submitted", submitted)
+                put("capsule_schema_version", "1")
                 context.deviceId?.let { put("device_id", it) }
                 context.taskId?.let { put("task_id", it) }
                 context.occurrenceKey?.let { put("occurrence_key", it) }
@@ -294,12 +298,37 @@ object ObservabilityRuntime {
     var instance: AndroidObservability = NoOpAndroidObservability
         internal set
 
+    @Volatile
+    var coordinator: ManualReportCoordinator? = null
+        internal set
+
     fun initialize(
         context: Context,
         dsn: String = BuildConfig.SENTRY_ANDROID_DSN,
         environment: String = BuildConfig.SENTRY_ENVIRONMENT,
         release: String = BuildConfig.SENTRY_RELEASE
     ): AndroidObservability {
+        val manualCoordinator = ManualReportCoordinator(
+            observability = object : AndroidObservability {
+                override fun isEnabled(): Boolean = instance.isEnabled()
+                override fun setContext(context: DiagnosticCorrelation) = instance.setContext(context)
+                override fun addLog(record: DiagnosticLogRecord, throwable: Throwable?) = instance.addLog(record, throwable)
+                override fun captureHandled(marker: String, throwable: Throwable, context: DiagnosticCorrelation): String? =
+                    instance.captureHandled(marker, throwable, context)
+                override fun newEventId(): String = instance.newEventId()
+                override fun captureDiagnosticEvent(
+                    eventId: String,
+                    reportSessionId: String,
+                    submitted: Boolean,
+                    context: DiagnosticCorrelation,
+                    attachments: List<DiagnosticAttachment>
+                ): String = instance.captureDiagnosticEvent(eventId, reportSessionId, submitted, context, attachments)
+                override fun showFeedback(associatedEventId: String?) = instance.showFeedback(associatedEventId)
+                override fun flush(timeoutMillis: Long): Boolean = instance.flush(timeoutMillis)
+            }
+        )
+        coordinator = manualCoordinator
+
         if (dsn.isBlank()) {
             val noOp = NoOpAndroidObservability
             instance = noOp
@@ -327,11 +356,26 @@ object ObservabilityRuntime {
             options.beforeBreadcrumb = SentryOptions.BeforeBreadcrumbCallback { breadcrumb, _ ->
                 SentryEventSanitizer.sanitizeBreadcrumb(breadcrumb)
             }
-            options.feedbackOptions.isUseShakeGesture = true
-            options.feedbackOptions.isUseSentryUser = false
-            options.feedbackOptions.isShowName = false
-            options.feedbackOptions.isShowEmail = false
-            options.feedbackOptions.isShowBranding = false
+            options.feedbackOptions.apply {
+                isUseShakeGesture = true
+                isUseSentryUser = false
+                isShowName = false
+                isShowEmail = false
+                isShowBranding = false
+                formTitle = "Report a bug"
+                messageLabel = "What went wrong?"
+                messagePlaceholder = "What did you expect, and what happened?"
+                submitButtonLabel = "Send report"
+                successMessageText = "Report sent. Thank you."
+                onFormOpen = Runnable { coordinator?.onFormOpen() }
+                onFormClose = Runnable { coordinator?.onFormClose() }
+                onSubmitSuccess = io.sentry.SentryFeedbackOptions.SentryFeedbackCallback {
+                    coordinator?.onSubmitSuccess(it)
+                }
+                onSubmitError = io.sentry.SentryFeedbackOptions.SentryFeedbackCallback {
+                    coordinator?.onSubmitError(it)
+                }
+            }
         }
 
         val sentryObservability = SentryAndroidObservability()
@@ -342,8 +386,13 @@ object ObservabilityRuntime {
         return sentryObservability
     }
 
+    fun showFeedback(associatedEventId: String? = null) {
+        instance.showFeedback(associatedEventId)
+    }
+
     internal fun resetForTests(newAdapter: AndroidObservability = NoOpAndroidObservability) {
         instance = newAdapter
+        coordinator = null
         AppLog.installSink { record, throwable ->
             instance.addLog(record, throwable)
         }

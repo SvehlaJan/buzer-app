@@ -40,6 +40,7 @@ import app.buzer.android.ui.HomeDoneActionHandler
 import app.buzer.android.ui.agenda.selectOwnerAgenda
 import app.buzer.android.ui.screens.ForegroundReadinessGate
 import app.buzer.android.ui.status.setBuzerContent
+import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.TaskActionRequest
@@ -166,7 +167,8 @@ class MainActivity : ComponentActivity() {
                     onUpdateTask = ::updateTask,
                     morningReviewBannerVisible = morningReviewAvailability?.bannerVisible ?: false,
                     morningReviewBlockingCount = morningReviewBlockingCount(),
-                    onOpenMorningReview = ::openHomeMorningReview
+                    onOpenMorningReview = ::openHomeMorningReview,
+                    onReportBug = { ObservabilityRuntime.instance.showFeedback() }
                 )
                 ForegroundReadinessGate(
                     state = foregroundReadinessState,

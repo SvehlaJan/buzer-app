@@ -727,7 +727,7 @@ git commit -m "feat: collect Android diagnostic capsules"
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/ui/screens/HomeScreenTest.kt`
 - Create: `client/androidApp/src/androidTest/kotlin/app/buzer/android/observability/BugReportFlowInstrumentationTest.kt`
 
-- [ ] **Step 1: Write failing state-machine tests.**
+- [x] **Step 1: Write failing state-machine tests.**
 
 Use states `idle -> form_open -> submitted|failed|closed -> idle`. Assert exactly one
 UUID/session and one reserved Sentry event ID, frozen state at form open, no stacked
@@ -753,7 +753,7 @@ fun successfulSubmissionEmitsPairedEventsAndClearsScope() = runTest {
 }
 ```
 
-- [ ] **Step 2: Implement the coordinator.**
+- [x] **Step 2: Implement the coordinator.**
 
 The coordinator receives interfaces for UUID/time, context snapshot, attachment
 collection, Sentry event IDs/capture, temporary scope, and backend report. On form open
@@ -771,7 +771,7 @@ event capture path that preserves a supplied ID. If that API has changed, stop a
 this plan to use the design-approved immediate-capture fallback. Never silently omit the
 Android event ID from feedback scope. Use `report_session_id` as the primary join key.
 
-- [ ] **Step 3: Wire current native feedback callbacks.**
+- [x] **Step 3: Wire current native feedback callbacks.**
 
 Use the verified API:
 
@@ -801,7 +801,7 @@ options.feedbackOptions.apply {
 The visible action invokes `Sentry.feedback().show()` through `AndroidObservability`, so
 both paths use exactly the same form and callbacks.
 
-- [ ] **Step 4: Add the Home fallback action.**
+- [x] **Step 4: Add the Home fallback action.**
 
 Add `onReportBug: () -> Unit = {}` to `HomeScreen` and `BuzerApp`, pass it from
 `MainActivity`, and populate `IconFabStack.secondaryActions`:
@@ -819,7 +819,7 @@ secondaryActions = listOf(
 The action remains reachable in loading/error/ready Home states. Preserve Add as the
 primary action.
 
-- [ ] **Step 5: Add UI and instrumentation tests.**
+- [x] **Step 5: Add UI and instrumentation tests.**
 
 Extend `HomeScreenTest` to expand the stack, find `Report a bug`, click it, and assert the
 callback exactly once. `BugReportFlowInstrumentationTest` injects a fake
@@ -827,7 +827,7 @@ callback exactly once. `BugReportFlowInstrumentationTest` injects a fake
 launcher/session callback without network. Do not attempt to simulate accelerometer
 shake in the emulator.
 
-- [ ] **Step 6: Run focused Android tests and the required scoped E2E authority.**
+- [x] **Step 6: Run focused Android tests and the required scoped E2E authority.**
 
 ```bash
 cd client
@@ -838,7 +838,7 @@ ANDROID_TEST_CLASS=app.buzer.android.observability.BugReportFlowInstrumentationT
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit and hand off.**
+- [x] **Step 7: Commit and hand off.**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android client/androidApp/src/test/kotlin/app/buzer/android/observability client/androidApp/src/androidTest/kotlin/app/buzer/android docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-05-android-feedback.md

@@ -39,21 +39,26 @@ class HomeScreenTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun fabStackRendersAddTaskOnlyAndNotMorningReview() {
+    fun fabStackRendersAddTaskAndReportBugAndNotMorningReview() {
         var addTaskClicked = false
+        var reportBugClicked = false
         val state = buildEmptyReadyState()
 
         composeRule.setContent {
             BuzerTheme {
                 HomeScreen(
                     state = state,
-                    onAddTask = { addTaskClicked = true }
+                    onAddTask = { addTaskClicked = true },
+                    onReportBug = { reportBugClicked = true }
                 )
             }
         }
 
         composeRule.onNodeWithContentDescription("Add task").assertIsDisplayed().performClick()
         assertTrue(addTaskClicked)
+
+        composeRule.onNodeWithContentDescription("Report a bug").assertIsDisplayed().performClick()
+        assertTrue(reportBugClicked)
 
         composeRule.onNodeWithContentDescription("Morning review").assertDoesNotExist()
     }

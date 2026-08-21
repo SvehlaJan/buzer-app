@@ -73,7 +73,8 @@ fun HomeScreen(
     onToggleChecklistItem: (String, String) -> Unit = { _, _ -> },
     onOpenMorningReview: () -> Unit = {},
     onToggleOverdueExpanded: () -> Unit = {},
-    onToggleUnassignedExpanded: () -> Unit = {}
+    onToggleUnassignedExpanded: () -> Unit = {},
+    onReportBug: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -341,7 +342,13 @@ fun HomeScreen(
                     onClick = onAddTask,
                     icon = { Text("+", style = MaterialTheme.typography.headlineSmall) }
                 ),
-                secondaryActions = emptyList()
+                secondaryActions = listOf(
+                    IconFabAction(
+                        contentDescription = "Report a bug",
+                        onClick = onReportBug,
+                        icon = { Text("!", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+                    )
+                )
             )
         }
     }

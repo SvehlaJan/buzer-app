@@ -50,6 +50,7 @@ fun BuzerApp(
     morningReviewBannerVisible: Boolean = false,
     morningReviewBlockingCount: Int? = null,
     onOpenMorningReview: () -> Unit = {},
+    onReportBug: () -> Unit = {},
     nowProvider: () -> Instant = { Instant.now() },
     zoneIdProvider: () -> ZoneId = { ZoneId.systemDefault() }
 ) {
@@ -98,7 +99,8 @@ fun BuzerApp(
                         onOpenMorningReview()
                     },
                     onToggleOverdueExpanded = { overdueExpanded = !overdueExpanded },
-                    onToggleUnassignedExpanded = { unassignedExpanded = !unassignedExpanded }
+                    onToggleUnassignedExpanded = { unassignedExpanded = !unassignedExpanded },
+                    onReportBug = onReportBug
                 )
 
                 AppSection.Add -> AddTaskScreen(
