@@ -1,5 +1,7 @@
 package app.buzer.shared.api
 
+import app.buzer.shared.diagnostics.DiagnosticReportRequest
+import app.buzer.shared.diagnostics.DiagnosticReportResponse
 import app.buzer.shared.model.ActivityLogEntry
 import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ChecklistItem
@@ -342,5 +344,76 @@ class BuzerApiClientContractTest {
         assertContains(body, "\"expectedChildRevision\":\"r:8\"")
         assertFalse(body.contains("checked"))
         assertFalse(body.contains("buzer"))
+    }
+
+    @Test
+    fun createDiagnosticReportPostsJsonAndDecodesResponse() = runBlocking {
+        val reportResponseJson = """
+            {
+              "schemaVersion": 1,
+              "reportSessionId": "session-uuid-123",
+              "backendDiagnosticEventId": "abcdef0123456789abcdef0123456789",
+              "outcome": "captured"
+            }
+        """.trimIndent()
+
+        var capturedMethod: HttpMethod? = null
+        var capturedPath: String? = null
+        var capturedAuth: String? = null
+        var capturedContentType: String? = null
+        var capturedBodyText: String? = null
+
+        val client = BuzerApiClient(
+            baseUrl = "https://fake.invalid",
+            token = "test-token",
+            httpClient = defaultHttpClient(
+                token = "test-token",
+                engine = MockEngine { request ->
+                    capturedMethod = request.method
+                    capturedPath = request.url.encodedPath
+                    capturedAuth = request.headers[HttpHeaders.Authorization]
+                    capturedContentType = request.body.contentType?.toString()
+                    capturedBodyText = (request.body as? TextContent)?.text
+                    respond(
+                        content = ByteReadChannel(reportResponseJson),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            )
+        )
+
+        val request = DiagnosticReportRequest(
+            schemaVersion = 1,
+            reportSessionId = "session-uuid-123",
+            androidDiagnosticEventId = "1234567890abcdef1234567890abcdef",
+            deviceId = "device-uuid-1",
+            capturedAt = "2026-08-21T12:00:00Z",
+            taskId = "task-1",
+            occurrenceKey = "occ-1",
+            actionId = "action-1",
+            requestIds = listOf("req-1", "req-2"),
+            traceId = "trace-1"
+        )
+
+        val response = client.createDiagnosticReport(request)
+
+        assertEquals(HttpMethod.Post, capturedMethod)
+        assertEquals("/diagnostics/reports", capturedPath)
+        assertEquals("Bearer test-token", capturedAuth)
+        assertEquals("application/json", capturedContentType)
+        assertContains(capturedBodyText ?: "", "\"reportSessionId\":\"session-uuid-123\"")
+        assertContains(capturedBodyText ?: "", "\"androidDiagnosticEventId\":\"1234567890abcdef1234567890abcdef\"")
+        assertContains(capturedBodyText ?: "", "\"deviceId\":\"device-uuid-1\"")
+        assertContains(capturedBodyText ?: "", "\"taskId\":\"task-1\"")
+        assertContains(capturedBodyText ?: "", "\"occurrenceKey\":\"occ-1\"")
+        assertContains(capturedBodyText ?: "", "\"actionId\":\"action-1\"")
+        assertContains(capturedBodyText ?: "", "\"requestIds\":[\"req-1\",\"req-2\"]")
+        assertContains(capturedBodyText ?: "", "\"traceId\":\"trace-1\"")
+
+        assertEquals(1, response.schemaVersion)
+        assertEquals("session-uuid-123", response.reportSessionId)
+        assertEquals("abcdef0123456789abcdef0123456789", response.backendDiagnosticEventId)
+        assertEquals("captured", response.outcome)
     }
 }
