@@ -44,6 +44,29 @@ class StartBlockerActivity : ComponentActivity() {
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
         val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "StartBlocker",
+                currentActivity = "StartBlockerActivity",
+                blockerType = "StartBlocker",
+                appSection = "Enforcement"
+            )
+        }
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateCorrelation {
+            it.copy(
+                taskId = taskId,
+                occurrenceKey = occurrenceKey
+            )
+        }
+        app.buzer.android.observability.ObservabilityRuntime.instance.setContext(
+            app.buzer.shared.diagnostics.DiagnosticCorrelation(
+                screen = "StartBlocker",
+                blockerType = "StartBlocker",
+                taskId = taskId,
+                occurrenceKey = occurrenceKey,
+                appSection = "Enforcement"
+            )
+        )
         if (taskId == null || occurrenceKey.isNullOrBlank()) {
             AppLog.debug("start_blocker missing_alarm_identity")
             errorReporter.report(
@@ -57,6 +80,17 @@ class StartBlockerActivity : ComponentActivity() {
 
         val coordinator = createCoordinator() ?: return
         prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
+    }
+
+    override fun onDestroy() {
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        super.onDestroy()
     }
 
     private fun createCoordinator(): EnforcementCoordinator? {

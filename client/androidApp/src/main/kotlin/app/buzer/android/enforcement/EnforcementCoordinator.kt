@@ -17,6 +17,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+import app.buzer.android.observability.AndroidObservability
+import app.buzer.android.observability.DiagnosticContextStore
+import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
+
 sealed interface CoordinatorActionResult {
     data object Success : CoordinatorActionResult
     data class Pending(val response: MutationResponse) : CoordinatorActionResult
@@ -43,7 +48,9 @@ class EnforcementCoordinator(
     private val errorReporter: BlockerErrorReporting,
     private val blockerNotificationCleaner: BlockerNotificationCleaner = NoOpBlockerNotificationCleaner,
     private val nowProvider: () -> String = { Instant.now().toString() },
-    private val logger: (String) -> Unit = {}
+    private val logger: (String) -> Unit = {},
+    private val observability: AndroidObservability = ObservabilityRuntime.instance,
+    private val contextStore: DiagnosticContextStore = DiagnosticContextStore.instance
 ) {
     private val childActionMutex = Mutex()
     private val inFlightChildren = mutableSetOf<Pair<String, String>>()
@@ -193,6 +200,14 @@ class EnforcementCoordinator(
         val scheduledAlarms = plan.alarms
             .map(AndroidEnforcementMapper::toScheduledAlarm)
         scheduledAlarmRegistry.reconcile(scheduledAlarms, alarmScheduler)
+        val nextAlarmEpoch = scheduledAlarms.minOfOrNull { it.triggerAtEpochMillis }
+        val nextAlarmInstant = nextAlarmEpoch?.let { Instant.ofEpochMilli(it).toString() }
+        contextStore.updateScheduling { current ->
+            current.copy(
+                alarmsRegistered = scheduledAlarms.size,
+                nextAlarmAt = nextAlarmInstant
+            )
+        }
         logger(
             "reconcile complete scheduled=${plan.alarms.size} " +
                 "preStart=${plan.alarms.count { it.kind == DesiredAlarmKind.PRE_START_WARNING }} " +
@@ -219,6 +234,14 @@ class EnforcementCoordinator(
             "mutation applied taskId=$taskId occurrence=$occurrenceKey " +
                 "actionId=${response.actionId} outcome=${response.outcome}"
         )
+        contextStore.updateActions { current ->
+            current.copy(
+                lastActionId = response.actionId,
+                lastActionOutcome = response.outcome.name,
+                lastActionError = null,
+                pendingActionsCount = maxOf(0, (current.pendingActionsCount ?: 1) - 1)
+            )
+        }
         when (response.outcome) {
             MutationOutcome.completed -> CoordinatorActionResult.Success
             MutationOutcome.reconciliation_pending -> CoordinatorActionResult.Pending(response.copy(snapshot = appliedSnapshot))
@@ -235,6 +258,15 @@ class EnforcementCoordinator(
         occurrenceKey = occurrenceKey,
         snapshot = snapshot
     ) { appliedSnapshot ->
+        contextStore.updateSync { current ->
+            current.copy(
+                scheduleVersion = appliedSnapshot.scheduleVersion.toString(),
+                snapshotGeneration = appliedSnapshot.snapshotGeneration,
+                lastSyncAt = nowProvider(),
+                lastSyncResult = "conflict",
+                cachedTaskCount = appliedSnapshot.tasks.size
+            )
+        }
         CoordinatorActionResult.Stale(appliedSnapshot, message)
     }
 
@@ -254,6 +286,12 @@ class EnforcementCoordinator(
                             "incomingGeneration=${snapshot.snapshotGeneration} " +
                             "cachedGeneration=${application.snapshot.snapshotGeneration}"
                     )
+                    contextStore.updateSync { current ->
+                        current.copy(
+                            lastSyncAt = nowProvider(),
+                            lastSyncResult = "stale"
+                        )
+                    }
                     CoordinatorActionResult.Stale(
                         snapshot = application.snapshot,
                         message = "A newer authoritative snapshot is already applied"
@@ -264,6 +302,16 @@ class EnforcementCoordinator(
                     snapshotStore.save(application.snapshot)
                     reconcile(application.snapshot)
                     blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
+                    contextStore.updateSync { current ->
+                        current.copy(
+                            scheduleVersion = application.snapshot.scheduleVersion.toString(),
+                            snapshotGeneration = application.snapshot.snapshotGeneration,
+                            lastSyncAt = nowProvider(),
+                            lastSyncResult = "success",
+                            cachedTaskCount = application.snapshot.tasks.size,
+                            lastSyncError = null
+                        )
+                    }
                     result(application.snapshot)
                 }
 
@@ -282,6 +330,13 @@ class EnforcementCoordinator(
                 "authoritative snapshot local_failure taskId=$taskId occurrence=$occurrenceKey " +
                     "scheduleVersion=${snapshot.scheduleVersion} message=$message"
             )
+            contextStore.updateSync { current ->
+                current.copy(
+                    lastSyncAt = nowProvider(),
+                    lastSyncResult = "error",
+                    lastSyncError = message
+                )
+            }
             CoordinatorActionResult.LocalReconciliationFailed(snapshot, message)
         }
     }
@@ -292,11 +347,27 @@ class EnforcementCoordinator(
             if (application.applied) {
                 snapshotStore.save(application.snapshot)
                 reconcile(application.snapshot)
+                contextStore.updateSync { current ->
+                    current.copy(
+                        scheduleVersion = application.snapshot.scheduleVersion.toString(),
+                        snapshotGeneration = application.snapshot.snapshotGeneration,
+                        lastSyncAt = nowProvider(),
+                        lastSyncResult = "success",
+                        cachedTaskCount = application.snapshot.tasks.size,
+                        lastSyncError = null
+                    )
+                }
             } else if (application.stale) {
                 logger(
                     "refresh ignored_stale incomingGeneration=${snapshot.snapshotGeneration} " +
                         "cachedGeneration=${application.snapshot.snapshotGeneration}"
                 )
+                contextStore.updateSync { current ->
+                    current.copy(
+                        lastSyncAt = nowProvider(),
+                        lastSyncResult = "stale"
+                    )
+                }
             }
             application.snapshot
         }
@@ -344,16 +415,49 @@ class EnforcementCoordinator(
         request: TaskActionRequest,
         call: suspend () -> MutationResponse
     ): CoordinatorActionResult {
+        val occurrenceKey = request.expectedOccurrenceKey
+        contextStore.updateCorrelation { current ->
+            current.copy(
+                taskId = taskId,
+                occurrenceKey = occurrenceKey,
+                actionId = request.actionId
+            )
+        }
+        contextStore.updateActions { current ->
+            current.copy(
+                lastActionId = request.actionId,
+                pendingActionsCount = (current.pendingActionsCount ?: 0) + 1
+            )
+        }
+        observability.setContext(
+            DiagnosticCorrelation(
+                taskId = taskId,
+                occurrenceKey = occurrenceKey,
+                actionId = request.actionId,
+                appSection = "Enforcement"
+            )
+        )
         return try {
-            val occurrenceKey = request.expectedOccurrenceKey
             logger("action start action=$action taskId=$taskId occurrence=$occurrenceKey")
             applyMutationResponse(taskId, occurrenceKey, call())
         } catch (error: CancellationException) {
+            contextStore.updateActions { current ->
+                current.copy(
+                    pendingActionsCount = maxOf(0, (current.pendingActionsCount ?: 1) - 1)
+                )
+            }
             throw error
         } catch (error: BuzerApiException) {
             val snapshot = error.snapshot
             when {
                 error.status == 409 && snapshot != null -> {
+                    contextStore.updateActions { current ->
+                        current.copy(
+                            lastActionOutcome = "conflict",
+                            lastActionError = error.message,
+                            pendingActionsCount = maxOf(0, (current.pendingActionsCount ?: 1) - 1)
+                        )
+                    }
                     applyConflictSnapshot(
                         taskId = taskId,
                         occurrenceKey = request.expectedOccurrenceKey,
@@ -363,6 +467,13 @@ class EnforcementCoordinator(
                 }
 
                 error.status == 429 -> {
+                    contextStore.updateActions { current ->
+                        current.copy(
+                            lastActionOutcome = "rate_limited",
+                            lastActionError = error.message,
+                            pendingActionsCount = maxOf(0, (current.pendingActionsCount ?: 1) - 1)
+                        )
+                    }
                     val retryAfterSeconds = error.retryAfterSeconds ?: RETRY_DELAY_SECONDS
                     CoordinatorActionResult.RetryAfter(
                         retryAfterSeconds = retryAfterSeconds,
@@ -371,10 +482,10 @@ class EnforcementCoordinator(
                     )
                 }
 
-                else -> failedAction(action, taskId, request.expectedOccurrenceKey, error)
+                else -> failedAction(action, taskId, request.expectedOccurrenceKey, error, request.actionId)
             }
         } catch (error: Exception) {
-            failedAction(action, taskId, request.expectedOccurrenceKey, error)
+            failedAction(action, taskId, request.expectedOccurrenceKey, error, request.actionId)
         }
     }
 
@@ -418,10 +529,19 @@ class EnforcementCoordinator(
         action: BlockerAction,
         taskId: String,
         occurrenceKey: String,
-        error: Throwable
+        error: Throwable,
+        actionId: String? = null
     ): CoordinatorActionResult {
         val message = error.message ?: error::class.simpleName ?: "unknown error"
-        errorReporter.report(action, taskId, message)
+        contextStore.updateActions { current ->
+            current.copy(
+                lastActionId = actionId ?: current.lastActionId,
+                lastActionOutcome = "error",
+                lastActionError = message,
+                pendingActionsCount = maxOf(0, (current.pendingActionsCount ?: 1) - 1)
+            )
+        }
+        errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
         logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
         if (action == BlockerAction.POSTPONE_START) {
             alarmScheduler.schedule(startRetryAlarm(taskId, occurrenceKey))

@@ -860,7 +860,7 @@ git commit -m "feat: add native Android bug reporting"
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/BlockerErrorReporterTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidContextWiringTest.kt`
 
-- [ ] **Step 1: Add failing critical-capture tests.**
+- [x] **Step 1: Add failing critical-capture tests.**
 
 `BlockerErrorReporter` must continue appending its local file and showing its notification,
 then asynchronously report the action/task/error to observability. A broken observer must
@@ -874,7 +874,7 @@ not suppress the file or notification. Assert selected fatality classification:
 Also assert throwable identity deduplication so nested error boundaries cannot capture
 the same `Throwable` twice.
 
-- [ ] **Step 2: Inject observability through dependency roots.**
+- [x] **Step 2: Inject observability through dependency roots.**
 
 Pass `ObservabilityRuntime.instance` into `EnforcementDependencies`, blocker activities,
 overlay service, receivers, morning review, and readiness reporters. Do not add direct
@@ -883,7 +883,7 @@ screen/section, current task and occurrence, snapshot generation/counts, last sy
 scheduled alarms, readiness permissions/app-ops, blocker type, action/request IDs, and
 process/device state.
 
-- [ ] **Step 3: Guard all telemetry calls.**
+- [x] **Step 3: Guard all telemetry calls.**
 
 Every producer call is non-suspending or dispatched to the observability scope and
 wrapped by the adapter. No caller catches its business exception merely to make telemetry
@@ -896,7 +896,7 @@ rg -n 'import io\.sentry' client/androidApp/src/main/kotlin/app/buzer/android --
 
 Expected: no output.
 
-- [ ] **Step 4: Run affected existing suites.**
+- [x] **Step 4: Run affected existing suites.**
 
 ```bash
 cd client
@@ -906,7 +906,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit and hand off.**
+- [x] **Step 5: Commit and hand off.**
 
 ```bash
 git add client/androidApp/src/main/kotlin client/androidApp/src/test/kotlin docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-06-android-context.md

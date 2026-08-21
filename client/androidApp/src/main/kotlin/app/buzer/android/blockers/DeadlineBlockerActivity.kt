@@ -48,6 +48,29 @@ class DeadlineBlockerActivity : ComponentActivity() {
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
         val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "DeadlineBlocker",
+                currentActivity = "DeadlineBlockerActivity",
+                blockerType = "DeadlineBlocker",
+                appSection = "Enforcement"
+            )
+        }
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateCorrelation {
+            it.copy(
+                taskId = taskId,
+                occurrenceKey = occurrenceKey
+            )
+        }
+        app.buzer.android.observability.ObservabilityRuntime.instance.setContext(
+            app.buzer.shared.diagnostics.DiagnosticCorrelation(
+                screen = "DeadlineBlocker",
+                blockerType = "DeadlineBlocker",
+                taskId = taskId,
+                occurrenceKey = occurrenceKey,
+                appSection = "Enforcement"
+            )
+        )
         if (taskId == null || occurrenceKey.isNullOrBlank()) {
             AppLog.debug("deadline_blocker missing_alarm_identity")
             errorReporter.report(
@@ -61,6 +84,17 @@ class DeadlineBlockerActivity : ComponentActivity() {
 
         val coordinator = createCoordinator() ?: return
         prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
+    }
+
+    override fun onDestroy() {
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        super.onDestroy()
     }
 
     private fun createCoordinator(): EnforcementCoordinator? {

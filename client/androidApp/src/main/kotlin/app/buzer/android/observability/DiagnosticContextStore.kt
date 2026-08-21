@@ -195,5 +195,7 @@ open class DiagnosticContextStore {
         correlationRef.set(CorrelationDiagnosticContext())
     }
 
-    companion object : DiagnosticContextStore()
+    companion object : DiagnosticContextStore() {
+        val instance: DiagnosticContextStore get() = this
+    }
 }

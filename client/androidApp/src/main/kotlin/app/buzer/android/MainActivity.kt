@@ -131,6 +131,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         NotificationChannels.ensureCreated(this)
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "Home",
+                currentActivity = "MainActivity",
+                appSection = "Home"
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            app.buzer.shared.diagnostics.DiagnosticCorrelation(
+                screen = "Home",
+                appSection = "Home"
+            )
+        )
         foregroundReadinessState = readinessController.refresh()
         coordinator = runCatching { EnforcementDependencies.coordinator(applicationContext) }
             .onFailure {
@@ -138,7 +151,8 @@ class MainActivity : ComponentActivity() {
                 BlockerErrorReporter(applicationContext).report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = null,
-                    message = it.message ?: "enforcement configuration failed"
+                    message = it.message ?: "enforcement configuration failed",
+                    throwable = it
                 )
             }
             .getOrNull()
@@ -181,6 +195,19 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         morningReviewEntryController.onResume()
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "Home",
+                currentActivity = "MainActivity",
+                appSection = "Home"
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            app.buzer.shared.diagnostics.DiagnosticCorrelation(
+                screen = "Home",
+                appSection = "Home"
+            )
+        )
         applyReadinessState(readinessController.refresh())
         refreshEnforcement(forceTodoist = false)
     }
@@ -246,6 +273,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (!morningReviewEntryController.openHome()) return
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "MorningReview",
+                appSection = "MorningReview"
+            )
+        }
         morningReviewLauncher.launch(
             MorningReviewContract.homeIntent(Intent(this, MorningReviewActivity::class.java))
         )
@@ -297,10 +330,18 @@ class MainActivity : ComponentActivity() {
     private fun reportRefreshFailure(error: Throwable) {
         AppLog.error("main refresh failed", error)
         homeRefreshError = error.message ?: "snapshot refresh failed"
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateSync {
+            it.copy(
+                lastSyncAt = Instant.now().toString(),
+                lastSyncResult = "error",
+                lastSyncError = error.message ?: error::class.simpleName
+            )
+        }
         BlockerErrorReporter(applicationContext).report(
             action = BlockerAction.REFRESH_SNAPSHOT,
             taskId = null,
-            message = error.message ?: "snapshot refresh failed"
+            message = error.message ?: "snapshot refresh failed",
+            throwable = error
         )
     }
 

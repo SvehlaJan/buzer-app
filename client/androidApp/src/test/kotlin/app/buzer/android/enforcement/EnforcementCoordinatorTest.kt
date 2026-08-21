@@ -608,7 +608,7 @@ class EnforcementCoordinatorTest {
             listOf(scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T09:35:00Z")),
             scheduler.scheduled
         )
-        assertEquals(listOf(ErrorRecord(BlockerAction.POSTPONE_START, "task-1", "backend unavailable")), reporter.errors)
+        assertEquals(listOf(ErrorRecord(BlockerAction.POSTPONE_START, "task-1", "backend unavailable", "backend unavailable")), reporter.errors)
     }
 
     @Test
@@ -707,7 +707,7 @@ class EnforcementCoordinatorTest {
         assertTrue(result is CoordinatorActionResult.FailedAndHidden)
         assertTrue(scheduler.scheduled.isEmpty())
         assertTrue(scheduler.cancelled.isEmpty())
-        assertEquals(listOf(ErrorRecord(BlockerAction.COMPLETE_TASK, "task-1", "backend unavailable")), reporter.errors)
+        assertEquals(listOf(ErrorRecord(BlockerAction.COMPLETE_TASK, "task-1", "backend unavailable", "backend unavailable")), reporter.errors)
     }
 
     @Test
@@ -975,14 +975,21 @@ class EnforcementCoordinatorTest {
     private data class ErrorRecord(
         val action: BlockerAction,
         val taskId: String?,
-        val message: String
+        val message: String,
+        val throwableMessage: String? = null
     )
 
     private class RecordingErrorReporter : BlockerErrorReporting {
         val errors = mutableListOf<ErrorRecord>()
 
-        override fun report(action: BlockerAction, taskId: String?, message: String, showNotification: Boolean) {
-            errors += ErrorRecord(action, taskId, message)
+        override fun report(
+            action: BlockerAction,
+            taskId: String?,
+            message: String,
+            showNotification: Boolean,
+            throwable: Throwable?
+        ) {
+            errors += ErrorRecord(action, taskId, message, throwable?.message)
         }
     }
 

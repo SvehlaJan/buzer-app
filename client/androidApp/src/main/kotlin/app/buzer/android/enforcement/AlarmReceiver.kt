@@ -29,6 +29,10 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
 
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateScheduling { current ->
+            current.copy(lastFiredAlarm = "${kind.name} taskId=$taskId occurrenceKey=$occurrenceKey")
+        }
+
         dispatchAlarmDelivery(
             kind = kind,
             handleMorningReview = {

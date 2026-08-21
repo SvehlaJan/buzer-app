@@ -43,6 +43,21 @@ class MorningReviewActivity : ComponentActivity() {
             finish()
         }
         val source = MorningReviewContract.entrySource(intent)
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "MorningReview",
+                currentActivity = "MorningReviewActivity",
+                blockerType = "MorningReview",
+                appSection = "MorningReview"
+            )
+        }
+        app.buzer.android.observability.ObservabilityRuntime.instance.setContext(
+            app.buzer.shared.diagnostics.DiagnosticCorrelation(
+                screen = "MorningReview",
+                blockerType = "MorningReview",
+                appSection = "MorningReview"
+            )
+        )
         if (source == MorningReviewEntrySource.Automated) {
             configureBlockerWindow()
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -68,7 +83,7 @@ class MorningReviewActivity : ComponentActivity() {
             val message = error.message ?: "enforcement configuration failed"
             session.forceSyncFailed(message)
             AppLog.error("morning_review coordinator create failed", error)
-            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
             null
         }
 
@@ -82,7 +97,7 @@ class MorningReviewActivity : ComponentActivity() {
             val message = error.message ?: "local snapshot load failed"
             session.forceSyncFailed(message)
             AppLog.error("morning_review cached snapshot load failed", error)
-            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
         }
 
         fun runForcedRefresh() {
@@ -203,5 +218,16 @@ class MorningReviewActivity : ComponentActivity() {
                 onRetryRefresh = ::runForcedRefresh
             )
         }
+    }
+
+    override fun onDestroy() {
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        super.onDestroy()
     }
 }

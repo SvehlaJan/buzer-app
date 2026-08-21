@@ -3,32 +3,44 @@ package app.buzer.android.enforcement
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import app.buzer.android.observability.AndroidObservability
+import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
+import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import java.io.File
 import java.time.Instant
+import java.util.Collections
+import java.util.WeakHashMap
+import kotlinx.coroutines.CancellationException
 
 interface BlockerErrorReporting {
     fun report(
         action: BlockerAction,
         taskId: String?,
         message: String,
-        showNotification: Boolean = true
+        showNotification: Boolean = true,
+        throwable: Throwable? = null
     )
 }
 
 class BlockerErrorReporter(
     private val context: Context?,
     directory: File,
-    private val fileName: String = "blocker_action_errors.log"
+    private val fileName: String = "blocker_action_errors.log",
+    private val observability: AndroidObservability = ObservabilityRuntime.instance
 ) : BlockerErrorReporting {
     constructor(
         context: Context,
-        fileName: String = "blocker_action_errors.log"
-    ) : this(context, context.filesDir, fileName)
+        fileName: String = "blocker_action_errors.log",
+        observability: AndroidObservability = ObservabilityRuntime.instance
+    ) : this(context, context.filesDir, fileName, observability)
 
     constructor(
         directory: File,
-        fileName: String = "blocker_action_errors.log"
-    ) : this(null, directory, fileName)
+        fileName: String = "blocker_action_errors.log",
+        observability: AndroidObservability = ObservabilityRuntime.instance
+    ) : this(null, directory, fileName, observability)
 
     private val file = directory.resolve(fileName)
 
@@ -36,14 +48,84 @@ class BlockerErrorReporter(
         action: BlockerAction,
         taskId: String?,
         message: String,
-        showNotification: Boolean
+        showNotification: Boolean,
+        throwable: Throwable?
     ) {
-        file.appendText(
-            "${Instant.now()} action=${action.name} taskId=${taskId.orEmpty()} message=${message.singleLine()}\n"
-        )
-        if (showNotification) {
-            showNotification(action, message.singleLine())
+        runCatching {
+            file.appendText(
+                "${Instant.now()} action=${action.name} taskId=${taskId.orEmpty()} message=${message.singleLine()}\n"
+            )
         }
+        if (showNotification) {
+            runCatching {
+                showNotification(action, message.singleLine())
+            }
+        }
+        runCatching {
+            reportToObservability(action, taskId, message, throwable)
+        }
+    }
+
+    private fun reportToObservability(
+        action: BlockerAction,
+        taskId: String?,
+        message: String,
+        throwable: Throwable?
+    ) {
+        val correlation = DiagnosticCorrelation(
+            taskId = taskId,
+            appSection = "Enforcement"
+        )
+        if (isCaptureWorthyNonFatal(action, message, throwable)) {
+            val exceptionToCapture = throwable ?: RuntimeException("Blocker action error: ${action.name} - $message")
+            if (shouldCapture(exceptionToCapture)) {
+                val marker = "enforcement.${action.name.lowercase()}"
+                observability.captureHandled(marker, exceptionToCapture, correlation)
+            }
+        } else {
+            observability.addLog(
+                DiagnosticLogRecord(
+                    capturedAt = Instant.now().toString(),
+                    severity = "warning",
+                    tag = "BlockerError",
+                    message = "action=${action.name} taskId=${taskId.orEmpty()} message=$message",
+                    throwableType = throwable?.let { it::class.simpleName },
+                    throwableMessage = throwable?.message
+                ),
+                throwable
+            )
+        }
+    }
+
+    private fun isCaptureWorthyNonFatal(
+        action: BlockerAction,
+        message: String,
+        throwable: Throwable?
+    ): Boolean {
+        if (throwable is CancellationException) return false
+        if (isValidationOrClientError(throwable, message)) return false
+        return true
+    }
+
+    private fun isValidationOrClientError(throwable: Throwable?, message: String): Boolean {
+        if (throwable is IllegalArgumentException &&
+            (throwable.message?.contains("validation", ignoreCase = true) == true || message.contains("validation", ignoreCase = true))
+        ) {
+            return true
+        }
+        if (throwable is BuzerApiException) {
+            if (throwable.status == 400 || throwable.status == 422 || throwable.status == 409 || throwable.status == 429) {
+                return true
+            }
+        }
+        if (message.contains("validation", ignoreCase = true) || message.contains("invalid input", ignoreCase = true)) {
+            return true
+        }
+        return false
+    }
+
+    private fun shouldCapture(throwable: Throwable): Boolean {
+        return capturedThrowables.add(throwable)
     }
 
     private fun showNotification(action: BlockerAction, message: String) {
@@ -59,12 +141,18 @@ class BlockerErrorReporter(
             .setAutoCancel(true)
             .build()
         appContext.getSystemService(NotificationManager::class.java)
-            .notify(ERROR_NOTIFICATION_ID, notification)
+            ?.notify(ERROR_NOTIFICATION_ID, notification)
     }
 
     private fun String.singleLine(): String = replace('\n', ' ').replace('\r', ' ')
 
-    private companion object {
+    companion object {
         const val ERROR_NOTIFICATION_ID = 9417
+        private val capturedThrowables: MutableSet<Throwable> =
+            Collections.newSetFromMap(Collections.synchronizedMap(WeakHashMap<Throwable, Boolean>()))
+
+        internal fun resetDeduplicationForTests() {
+            capturedThrowables.clear()
+        }
     }
 }
