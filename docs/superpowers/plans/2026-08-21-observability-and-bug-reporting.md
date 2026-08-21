@@ -388,7 +388,7 @@ git commit -m "feat: add shared diagnostic primitives"
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientContractTest.kt`
 - Create: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientDiagnosticsTest.kt`
 
-- [ ] **Step 1: Add serializable endpoint DTOs and failing contract tests.**
+- [x] **Step 1: Add serializable endpoint DTOs and failing contract tests.**
 
 ```kotlin
 @Serializable
@@ -417,7 +417,7 @@ data class DiagnosticReportResponse(
 Test exact `POST /diagnostics/reports`, bearer auth, JSON body, five-second timeout,
 response decoding, and unchanged ID round-trip.
 
-- [ ] **Step 2: Add failing network-recording tests.**
+- [x] **Step 2: Add failing network-recording tests.**
 
 Inject `requestIdProvider`, `traceHeaderProvider`, and `networkSink` into the client.
 Assert:
@@ -430,7 +430,7 @@ Assert:
 - outgoing `X-Request-ID`, `sentry-trace`, and `baggage` do not replace bearer auth;
 - a broken sink does not change the HTTP result.
 
-- [ ] **Step 3: Run focused tests and confirm RED.**
+- [x] **Step 3: Run focused tests and confirm RED.**
 
 ```bash
 cd client
@@ -439,7 +439,7 @@ cd client
 
 Expected: FAIL for missing API and instrumentation.
 
-- [ ] **Step 4: Implement explicit, testable instrumentation.**
+- [x] **Step 4: Implement explicit, testable instrumentation.**
 
 Do not depend on an Android-only Sentry Ktor integration in common code. Define:
 
@@ -475,7 +475,7 @@ suspend fun createDiagnosticReport(
     }.decodeBody()
 ```
 
-- [ ] **Step 5: Run focused and full shared tests.**
+- [x] **Step 5: Run focused and full shared tests.**
 
 ```bash
 cd client
@@ -485,7 +485,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit and hand off.**
+- [x] **Step 6: Commit and hand off.**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared client/shared/src/commonTest/kotlin/app/buzer/shared docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-02-shared-api.md
