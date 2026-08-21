@@ -13,6 +13,7 @@ import app.buzer.android.enforcement.ScheduledAlarm
 import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import app.buzer.android.enforcement.ScheduledAlarmRegistry
 import app.buzer.android.sync.SnapshotStorage
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TaskActionRequest
@@ -23,6 +24,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
@@ -204,6 +206,151 @@ class AndroidContextWiringTest {
         assertEquals("StartBlocker", contextStore.snapshot().ui.screen)
         assertEquals("StartBlocker", contextStore.snapshot().ui.blockerType)
         assertEquals("Enforcement", contextStore.snapshot().ui.appSection)
+    }
+
+    @Test
+    fun blockerLifecycleCleansUpUiAndCorrelationFields() {
+        // 1. Simulate StartBlockerActivity onCreate entry
+        val startTaskId = "start-task-1"
+        val startOccurrenceKey = "start-task-1#2026-08-21"
+
+        contextStore.updateUi {
+            it.copy(
+                screen = "StartBlocker",
+                currentActivity = "StartBlockerActivity",
+                blockerType = "StartBlocker",
+                appSection = "Enforcement"
+            )
+        }
+        contextStore.updateCorrelation {
+            it.copy(
+                taskId = startTaskId,
+                occurrenceKey = startOccurrenceKey
+            )
+        }
+        recordingObservability.setContext(
+            DiagnosticCorrelation(
+                screen = "StartBlocker",
+                blockerType = "StartBlocker",
+                taskId = startTaskId,
+                occurrenceKey = startOccurrenceKey,
+                appSection = "Enforcement"
+            )
+        )
+
+        val startActive = contextStore.snapshot()
+        assertEquals("StartBlocker", startActive.ui.screen)
+        assertEquals("StartBlockerActivity", startActive.ui.currentActivity)
+        assertEquals("StartBlocker", startActive.ui.blockerType)
+        assertEquals("Enforcement", startActive.ui.appSection)
+        assertEquals(startTaskId, startActive.correlation.taskId)
+        assertEquals(startOccurrenceKey, startActive.correlation.occurrenceKey)
+
+        assertEquals(1, recordingObservability.contexts.size)
+        assertEquals(startTaskId, recordingObservability.contexts.last().taskId)
+        assertEquals(startOccurrenceKey, recordingObservability.contexts.last().occurrenceKey)
+
+        // 2. Simulate StartBlockerActivity onDestroy cleanup
+        contextStore.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        contextStore.updateCorrelation {
+            it.copy(
+                taskId = null,
+                occurrenceKey = null
+            )
+        }
+        recordingObservability.setContext(
+            DiagnosticCorrelation(
+                screen = null,
+                blockerType = null,
+                taskId = null,
+                occurrenceKey = null
+            )
+        )
+
+        val startCleared = contextStore.snapshot()
+        assertNull(startCleared.ui.screen)
+        assertNull(startCleared.ui.blockerType)
+        assertNull(startCleared.ui.currentActivity)
+        assertNull(startCleared.correlation.taskId)
+        assertNull(startCleared.correlation.occurrenceKey)
+
+        assertEquals(2, recordingObservability.contexts.size)
+        val clearedCorrelation = recordingObservability.contexts.last()
+        assertNull(clearedCorrelation.screen)
+        assertNull(clearedCorrelation.blockerType)
+        assertNull(clearedCorrelation.taskId)
+        assertNull(clearedCorrelation.occurrenceKey)
+
+        // 3. Simulate DeadlineBlockerActivity onCreate entry
+        val deadlineTaskId = "deadline-task-2"
+        val deadlineOccurrenceKey = "deadline-task-2#2026-08-21"
+
+        contextStore.updateUi {
+            it.copy(
+                screen = "DeadlineBlocker",
+                currentActivity = "DeadlineBlockerActivity",
+                blockerType = "DeadlineBlocker",
+                appSection = "Enforcement"
+            )
+        }
+        contextStore.updateCorrelation {
+            it.copy(
+                taskId = deadlineTaskId,
+                occurrenceKey = deadlineOccurrenceKey
+            )
+        }
+        recordingObservability.setContext(
+            DiagnosticCorrelation(
+                screen = "DeadlineBlocker",
+                blockerType = "DeadlineBlocker",
+                taskId = deadlineTaskId,
+                occurrenceKey = deadlineOccurrenceKey,
+                appSection = "Enforcement"
+            )
+        )
+
+        val deadlineActive = contextStore.snapshot()
+        assertEquals("DeadlineBlocker", deadlineActive.ui.screen)
+        assertEquals("DeadlineBlockerActivity", deadlineActive.ui.currentActivity)
+        assertEquals("DeadlineBlocker", deadlineActive.ui.blockerType)
+        assertEquals(deadlineTaskId, deadlineActive.correlation.taskId)
+        assertEquals(deadlineOccurrenceKey, deadlineActive.correlation.occurrenceKey)
+
+        // 4. Simulate DeadlineBlockerActivity onDestroy cleanup
+        contextStore.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        contextStore.updateCorrelation {
+            it.copy(
+                taskId = null,
+                occurrenceKey = null
+            )
+        }
+        recordingObservability.setContext(
+            DiagnosticCorrelation(
+                screen = null,
+                blockerType = null,
+                taskId = null,
+                occurrenceKey = null
+            )
+        )
+
+        val deadlineCleared = contextStore.snapshot()
+        assertNull(deadlineCleared.ui.screen)
+        assertNull(deadlineCleared.ui.blockerType)
+        assertNull(deadlineCleared.ui.currentActivity)
+        assertNull(deadlineCleared.correlation.taskId)
+        assertNull(deadlineCleared.correlation.occurrenceKey)
     }
 
     @Test
