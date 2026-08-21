@@ -18,6 +18,7 @@ export interface DiagnosticCorrelation {
   baggage?: string;
   reportSessionId?: string;
   androidDiagnosticEventId?: string;
+  backendDiagnosticEventId?: string;
   consecutiveFailureCount?: number;
   recipientConfigured?: string;
   escalationId?: string;
@@ -205,6 +206,7 @@ export class SentryBackendObservability implements BackendObservability {
     Sentry.withScope((scope) => {
       scope.setLevel("info");
       scope.setTag("report_session_id", reportSessionId);
+      scope.setTag("backend_diagnostic_event_id", eventId);
       scope.setTag("feedback_submitted", String(submitted));
       scope.setTag("capsule_schema_version", "1");
       applyCorrelationToScope(scope, context);

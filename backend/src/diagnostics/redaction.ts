@@ -8,7 +8,7 @@ const COOKIE_HEADER_PATTERN = /\b(cookie|set-cookie|set_cookie)\s*:\s*(?!\[REDAC
 
 const QR_KEY_PATTERN = /\b(qr_code|qr_string|qr_content|whatsapp_session)\s*([:=])\s*(?!\[REDACTED\])[^\r\n]+/gi;
 
-const KEY_VALUE_PATTERN = /(["']?)\b(password|passwd|pwd|secret|secret_token|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|id_token|todoist_token|sentry_auth_token|sentry_token|devicetoken|device_token|session_token|session_key|credentials|credential|private_key|api_key|token|cookie|set-cookie|set_cookie)\1\s*([:=])\s*(?:(["'])(?!\[REDACTED\]\4)([^\r\n]*?)\4|(?!\[REDACTED\])([^\s,;"'\r\n]+))/gi;
+const KEY_VALUE_PATTERN = /(["']?)\b(password|passwd|pwd|secret|secret_token|secret_cookie|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|id_token|todoist_token|sentry_auth_token|sentry_token|devicetoken|device_token|session_token|session_key|credentials|credential|private_key|api_key|token|cookie|set-cookie|set_cookie)\1\s*([:=])\s*(?:(["'])(?!\[REDACTED\]\4)([^\r\n]*?)\4|(?!\[REDACTED\])([^\s,;"'\r\n]+))/gi;
 
 const EXACT_CREDENTIAL_KEYS = new Set([
   "authorization",
@@ -65,7 +65,8 @@ export function isCredentialKey(rawKey: string): boolean {
     normalized.endsWith("secret") ||
     normalized.endsWith("password") ||
     normalized.endsWith("privatekey") ||
-    normalized.endsWith("apikey")
+    normalized.endsWith("apikey") ||
+    normalized.endsWith("cookie")
   ) {
     return true;
   }

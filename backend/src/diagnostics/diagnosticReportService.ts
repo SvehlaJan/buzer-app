@@ -71,6 +71,7 @@ export class DiagnosticReportService {
       deviceId: request.deviceId,
       reportSessionId: request.reportSessionId,
       androidDiagnosticEventId: request.androidDiagnosticEventId,
+      backendDiagnosticEventId,
       ...(request.taskId ? { taskId: request.taskId } : {}),
       ...(request.occurrenceKey ? { occurrenceKey: request.occurrenceKey } : {}),
       ...(request.actionId ? { actionId: request.actionId } : {}),
