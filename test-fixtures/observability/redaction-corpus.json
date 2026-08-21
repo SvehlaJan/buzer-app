@@ -8,8 +8,12 @@
     "SECRET_PASSWORD_999",
     "SECRET_PRIVATE_KEY_456",
     "SECRET_COOKIE_789",
+    "SECRET_COOKIE_123",
+    "SECRET_BEARER_123",
     "SECRET_REFRESH_TOKEN_000",
-    "SECRET_BASIC_AUTH_ABC"
+    "SECRET_BASIC_AUTH_ABC",
+    "my secret passphrase with spaces",
+    "single quoted secret with spaces"
   ],
   "stringCases": [
     {
@@ -21,6 +25,11 @@
       "name": "bearer_token_lowercase",
       "input": "header bearer SECRET_ANDROID_123 attached",
       "expected": "header bearer [REDACTED] attached"
+    },
+    {
+      "name": "bearer_token_quoted",
+      "input": "Bearer \"SECRET_BEARER_123\"",
+      "expected": "Bearer \"[REDACTED]\""
     },
     {
       "name": "basic_auth_standard",
@@ -73,9 +82,24 @@
       "expected": "password=\"[REDACTED]\" in payload"
     },
     {
+      "name": "key_value_quoted_password_with_spaces",
+      "input": "password=\"my secret passphrase with spaces\"",
+      "expected": "password=\"[REDACTED]\""
+    },
+    {
+      "name": "key_value_single_quoted_secret_with_spaces",
+      "input": "secret='single quoted secret with spaces'",
+      "expected": "secret='[REDACTED]'"
+    },
+    {
       "name": "key_value_in_log_cookie",
       "input": "cookie: session=SECRET_COOKIE_789; other=123",
       "expected": "cookie: [REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_unquoted_cookie",
+      "input": "cookie=SECRET_COOKIE_123",
+      "expected": "cookie=[REDACTED]"
     },
     {
       "name": "key_value_in_log_set_cookie",

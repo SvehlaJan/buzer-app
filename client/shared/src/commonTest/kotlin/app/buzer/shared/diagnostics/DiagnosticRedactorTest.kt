@@ -36,6 +36,12 @@ class DiagnosticRedactorTest {
         val bearerLower = redactor.redactString("header bearer SECRET_ANDROID_123 attached")
         assertEquals("header bearer [REDACTED] attached", bearerLower)
 
+        val bearerQuoted = redactor.redactString("Bearer \"SECRET_BEARER_123\"")
+        assertEquals("Bearer \"[REDACTED]\"", bearerQuoted)
+
+        val bearerSingleQuoted = redactor.redactString("Bearer 'SECRET_BEARER_123'")
+        assertEquals("Bearer '[REDACTED]'", bearerSingleQuoted)
+
         val basicUpper = redactor.redactString("Authorization: Basic SECRET_BASIC_AUTH_ABC")
         assertEquals("Authorization: Basic [REDACTED]", basicUpper)
 
@@ -70,15 +76,50 @@ class DiagnosticRedactorTest {
         assertEquals("todoist_token=[REDACTED] status=error", redactor.redactString("todoist_token=SECRET_TODOIST_123 status=error"))
         assertEquals("sentry_auth_token: [REDACTED]", redactor.redactString("sentry_auth_token: SECRET_SENTRY_123"))
         assertEquals("password=\"[REDACTED]\" in payload", redactor.redactString("password=\"SECRET_PASSWORD_999\" in payload"))
+        assertEquals("password=\"[REDACTED]\"", redactor.redactString("password=\"my secret passphrase with spaces\""))
+        assertEquals("secret='[REDACTED]'", redactor.redactString("secret='single quoted secret with spaces'"))
+        assertEquals("cookie=[REDACTED]", redactor.redactString("cookie=SECRET_COOKIE_123"))
+        assertEquals("set_cookie=[REDACTED]", redactor.redactString("set_cookie=SECRET_COOKIE_123"))
+        assertEquals("set-cookie=[REDACTED]", redactor.redactString("set-cookie=SECRET_COOKIE_123"))
         assertEquals("cookie: [REDACTED]", redactor.redactString("cookie: session=SECRET_COOKIE_789; other=123"))
         assertEquals("Set-Cookie: [REDACTED]", redactor.redactString("Set-Cookie: auth_token=SECRET_COOKIE_789; Secure"))
         assertEquals("qr_code: [REDACTED]", redactor.redactString("qr_code: 1@SECRET_WHATSAPP_123,abc,xyz"))
     }
 
     @Test
+    fun redactsQuotedSecretsAndSentinelsAreCompletelyAbsent() {
+        val input = """
+            password="my secret passphrase with spaces"
+            secret='single quoted secret with spaces'
+            cookie=SECRET_COOKIE_123
+            Bearer "SECRET_BEARER_123"
+        """.trimIndent()
+
+        val redacted = redactor.redactString(input)
+
+        val sentinels = listOf(
+            "my secret passphrase with spaces",
+            "single quoted secret with spaces",
+            "SECRET_COOKIE_123",
+            "SECRET_BEARER_123"
+        )
+        for (sentinel in sentinels) {
+            assertFalse(redacted.contains(sentinel), "Expected sentinel '$sentinel' to be absent")
+        }
+
+        assertTrue(redacted.contains("password=\"[REDACTED]\""))
+        assertTrue(redacted.contains("secret='[REDACTED]'"))
+        assertTrue(redacted.contains("cookie=[REDACTED]"))
+        assertTrue(redacted.contains("Bearer \"[REDACTED]\""))
+    }
+
+    @Test
     fun preservesAlreadyRedactedAndSafeValues() {
         assertEquals("Authorization: Bearer [REDACTED]", redactor.redactString("Authorization: Bearer [REDACTED]"))
+        assertEquals("Authorization: Bearer \"[REDACTED]\"", redactor.redactString("Authorization: Bearer \"[REDACTED]\""))
         assertEquals("api_token=[REDACTED]", redactor.redactString("api_token=[REDACTED]"))
+        assertEquals("password=\"[REDACTED]\"", redactor.redactString("password=\"[REDACTED]\""))
+        assertEquals("secret='[REDACTED]'", redactor.redactString("secret='[REDACTED]'"))
         assertEquals("Regular safe log message with id=task-123", redactor.redactString("Regular safe log message with id=task-123"))
     }
 

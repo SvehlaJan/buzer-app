@@ -18,7 +18,12 @@ class DiagnosticRedactor {
         // 2. Bearer and Basic authorization patterns
         text = AUTH_SCHEME_PATTERN.replace(text) { matchResult ->
             val scheme = matchResult.groupValues[1]
-            "$scheme [REDACTED]"
+            val quote = matchResult.groupValues[2]
+            if (quote.isNotEmpty()) {
+                "$scheme $quote[REDACTED]$quote"
+            } else {
+                "$scheme [REDACTED]"
+            }
         }
 
         // 3. Credentials in URLs (e.g. https://user:pass@host or https://token@host)
@@ -52,16 +57,17 @@ class DiagnosticRedactor {
 
         // 5. In-text key-value assignments (e.g. password="...", token=..., sentry_auth_token: ...)
         text = KEY_VALUE_PATTERN.replace(text) { matchResult ->
-            val key = matchResult.groupValues[1]
-            val delimiter = matchResult.groupValues[2]
-            val quote = matchResult.groupValues[3]
-            val value = matchResult.groupValues[4]
+            val keyQuote = matchResult.groupValues[1]
+            val key = matchResult.groupValues[2]
+            val delimiter = matchResult.groupValues[3]
+            val valQuote = matchResult.groupValues[4]
+            val value = if (valQuote.isNotEmpty()) matchResult.groupValues[5] else matchResult.groupValues[6]
             if (value == "[REDACTED]") {
                 matchResult.value
             } else if (delimiter.contains(":")) {
-                "$key: $quote[REDACTED]$quote"
+                "$keyQuote$key$keyQuote: $valQuote[REDACTED]$valQuote"
             } else {
-                "$key=$quote[REDACTED]$quote"
+                "$keyQuote$key$keyQuote=$valQuote[REDACTED]$valQuote"
             }
         }
 
@@ -135,7 +141,7 @@ class DiagnosticRedactor {
         )
 
         private val AUTH_SCHEME_PATTERN = Regex(
-            """(?i)\b(bearer|basic)\s+(?!\[REDACTED\])[^\s,;"'\r\n]+"""
+            """(?i)\b(bearer|basic)\s+(?:(["'])(?!\[REDACTED\]\2)([^\r\n]*?)\2|(?!\[REDACTED\])[^\s,;"'\r\n]+)"""
         )
 
         private val URL_CREDENTIALS_PATTERN = Regex(
@@ -143,7 +149,7 @@ class DiagnosticRedactor {
         )
 
         private val COOKIE_HEADER_PATTERN = Regex(
-            """(?i)\b(cookie|set-cookie)\s*:\s*(?!\[REDACTED\])[^\r\n]+"""
+            """(?i)\b(cookie|set-cookie|set_cookie)\s*:\s*(?!\[REDACTED\])[^\r\n]+"""
         )
 
         private val QR_KEY_PATTERN = Regex(
@@ -151,7 +157,7 @@ class DiagnosticRedactor {
         )
 
         private val KEY_VALUE_PATTERN = Regex(
-            """(?i)\b(password|passwd|pwd|secret|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|id_token|todoist_token|sentry_auth_token|sentry_token|private_key|api_key|token)\s*([:=])\s*(["']?)(?!\[REDACTED\])([^\s,;"'\r\n]+)\3"""
+            """(?i)(["']?)\b(password|passwd|pwd|secret|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|id_token|todoist_token|sentry_auth_token|sentry_token|devicetoken|device_token|session_token|session_key|credentials|credential|private_key|api_key|token|cookie|set-cookie|set_cookie)\1\s*([:=])\s*(?:(["'])(?!\[REDACTED\]\4)([^\r\n]*?)\4|(?!\[REDACTED\])([^\s,;"'\r\n]+))"""
         )
 
         private val EXACT_CREDENTIAL_KEYS = setOf(
