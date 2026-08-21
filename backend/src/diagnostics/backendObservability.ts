@@ -248,8 +248,12 @@ export class SentryBackendObservability implements BackendObservability {
 
 export class BackendObservabilityRuntime {
   private instance: BackendObservability = new NoOpBackendObservability();
+  private initialized: boolean = false;
 
   initialize(dsn?: string, environment?: string, release?: string): BackendObservability {
+    if (this.initialized) {
+      return this.instance;
+    }
     if (!dsn || dsn.trim() === "") {
       this.instance = new NoOpBackendObservability();
     } else {
@@ -259,6 +263,7 @@ export class BackendObservabilityRuntime {
         release: release ?? "buzer-backend@0.1.0+local"
       });
     }
+    this.initialized = true;
     return this.instance;
   }
 
@@ -268,6 +273,12 @@ export class BackendObservabilityRuntime {
 
   setInstance(instance: BackendObservability): void {
     this.instance = instance;
+    this.initialized = true;
+  }
+
+  reset(): void {
+    this.instance = new NoOpBackendObservability();
+    this.initialized = false;
   }
 }
 

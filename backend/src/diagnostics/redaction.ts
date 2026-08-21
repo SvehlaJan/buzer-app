@@ -166,6 +166,9 @@ export function redactAny(value: unknown): unknown {
   if (value instanceof Error) {
     return redactString(value.message);
   }
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? value.toString() : value.toISOString();
+  }
   if (Array.isArray(value)) {
     return value.map((item) => redactAny(item));
   }

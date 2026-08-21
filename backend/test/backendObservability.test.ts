@@ -13,6 +13,7 @@ import {
 import {
   NoOpBackendObservability,
   SentryBackendObservability,
+  BackendObservabilityRuntime,
   backendObservabilityRuntime,
   type BackendObservability,
   type DiagnosticAttachment,
@@ -149,14 +150,26 @@ describe("BackendObservability boundary", () => {
     expect(flushResult).toBe(true);
   });
 
-  it("backendObservabilityRuntime initializes NoOp for blank DSN", () => {
+  it("backendObservabilityRuntime initializes NoOp for blank DSN and is idempotent", () => {
+    backendObservabilityRuntime.reset();
     const obs = backendObservabilityRuntime.initialize("");
     expect(obs.isEnabled()).toBe(false);
     expect(obs).toBeInstanceOf(NoOpBackendObservability);
 
     const obsWhitespace = backendObservabilityRuntime.initialize("   ");
+    expect(obsWhitespace).toBe(obs);
     expect(obsWhitespace.isEnabled()).toBe(false);
-    expect(obsWhitespace).toBeInstanceOf(NoOpBackendObservability);
+  });
+
+  it("BackendObservabilityRuntime is idempotent on multiple initialize calls", () => {
+    const runtime = new BackendObservabilityRuntime();
+    const obs1 = runtime.initialize("https://public@sentry.example.com/1", "test-env", "buzer-backend@0.1.0+test");
+    expect(obs1.isEnabled()).toBe(true);
+    expect(obs1).toBeInstanceOf(SentryBackendObservability);
+
+    // Second initialize call returns the exact same instance and does not re-initialize
+    const obs2 = runtime.initialize("https://other@sentry.example.com/2");
+    expect(obs2).toBe(obs1);
   });
 
   it("SentryBackendObservability initializes when DSN is present", () => {

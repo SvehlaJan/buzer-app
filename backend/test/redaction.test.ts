@@ -114,4 +114,25 @@ describe("Redaction Parity Engine", () => {
       list: ["Authorization: Basic [REDACTED]"]
     });
   });
+
+  it("handles Date instances in redactAny and redactObject", () => {
+    const date = new Date("2026-08-21T20:00:00.000Z");
+    expect(redactAny(date)).toBe("2026-08-21T20:00:00.000Z");
+
+    const objWithDate = {
+      timestamp: date,
+      nested: {
+        updatedAt: new Date("2026-08-21T21:00:00.000Z")
+      }
+    };
+    expect(redactObject(objWithDate)).toEqual({
+      timestamp: "2026-08-21T20:00:00.000Z",
+      nested: {
+        updatedAt: "2026-08-21T21:00:00.000Z"
+      }
+    });
+
+    const invalidDate = new Date("invalid");
+    expect(redactAny(invalidDate)).toBe("Invalid Date");
+  });
 });
