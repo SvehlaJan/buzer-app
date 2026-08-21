@@ -9,65 +9,80 @@ class DiagnosticRedactor {
 
     fun redactString(input: String): String {
         if (input.isEmpty()) return input
+        if (!input.contains(":") && !input.contains("=") && !input.contains("@") && !input.contains("-----") && !input.contains("bearer", ignoreCase = true) && !input.contains("basic", ignoreCase = true)) {
+            return input
+        }
 
         var text = input
 
         // 1. PEM private key blocks
-        text = PEM_PATTERN.replace(text, "[REDACTED]")
+        if (text.contains("-----")) {
+            text = PEM_PATTERN.replace(text, "[REDACTED]")
+        }
 
         // 2. Bearer and Basic authorization patterns
-        text = AUTH_SCHEME_PATTERN.replace(text) { matchResult ->
-            val scheme = matchResult.groupValues[1]
-            val quote = matchResult.groupValues[2]
-            if (quote.isNotEmpty()) {
-                "$scheme $quote[REDACTED]$quote"
-            } else {
-                "$scheme [REDACTED]"
+        if (text.contains("bearer", ignoreCase = true) || text.contains("basic", ignoreCase = true)) {
+            text = AUTH_SCHEME_PATTERN.replace(text) { matchResult ->
+                val scheme = matchResult.groupValues[1]
+                val quote = matchResult.groupValues[2]
+                if (quote.isNotEmpty()) {
+                    "$scheme $quote[REDACTED]$quote"
+                } else {
+                    "$scheme [REDACTED]"
+                }
             }
         }
 
         // 3. Credentials in URLs (e.g. https://user:pass@host or https://token@host)
-        text = URL_CREDENTIALS_PATTERN.replace(text) { matchResult ->
-            val scheme = matchResult.groupValues[1]
-            val creds = matchResult.groupValues[2]
-            if (creds == "[REDACTED]" || creds == "[REDACTED]:[REDACTED]") {
-                matchResult.value
-            } else if (creds.contains(":")) {
-                "$scheme[REDACTED]:[REDACTED]@"
-            } else {
-                "$scheme[REDACTED]@"
+        if (text.contains("@")) {
+            text = URL_CREDENTIALS_PATTERN.replace(text) { matchResult ->
+                val scheme = matchResult.groupValues[1]
+                val creds = matchResult.groupValues[2]
+                if (creds == "[REDACTED]" || creds == "[REDACTED]:[REDACTED]") {
+                    matchResult.value
+                } else if (creds.contains(":")) {
+                    "$scheme[REDACTED]:[REDACTED]@"
+                } else {
+                    "$scheme[REDACTED]@"
+                }
             }
         }
 
         // 4. Header-like / multiline cookie / set-cookie / qr_code patterns
-        text = COOKIE_HEADER_PATTERN.replace(text) { matchResult ->
-            val headerName = matchResult.groupValues[1]
-            "$headerName: [REDACTED]"
+        if (text.contains("cookie", ignoreCase = true) || text.contains("set-cookie", ignoreCase = true)) {
+            text = COOKIE_HEADER_PATTERN.replace(text) { matchResult ->
+                val headerName = matchResult.groupValues[1]
+                "$headerName: [REDACTED]"
+            }
         }
 
-        text = QR_KEY_PATTERN.replace(text) { matchResult ->
-            val keyName = matchResult.groupValues[1]
-            val sep = matchResult.groupValues[2]
-            if (sep.contains(":")) {
-                "$keyName: [REDACTED]"
-            } else {
-                "$keyName=[REDACTED]"
+        if (text.contains("qr", ignoreCase = true) || text.contains("whatsapp", ignoreCase = true)) {
+            text = QR_KEY_PATTERN.replace(text) { matchResult ->
+                val keyName = matchResult.groupValues[1]
+                val sep = matchResult.groupValues[2]
+                if (sep.contains(":")) {
+                    "$keyName: [REDACTED]"
+                } else {
+                    "$keyName=[REDACTED]"
+                }
             }
         }
 
         // 5. In-text key-value assignments (e.g. password="...", token=..., sentry_auth_token: ...)
-        text = KEY_VALUE_PATTERN.replace(text) { matchResult ->
-            val keyQuote = matchResult.groupValues[1]
-            val key = matchResult.groupValues[2]
-            val delimiter = matchResult.groupValues[3]
-            val valQuote = matchResult.groupValues[4]
-            val value = if (valQuote.isNotEmpty()) matchResult.groupValues[5] else matchResult.groupValues[6]
-            if (value == "[REDACTED]") {
-                matchResult.value
-            } else if (delimiter.contains(":")) {
-                "$keyQuote$key$keyQuote: $valQuote[REDACTED]$valQuote"
-            } else {
-                "$keyQuote$key$keyQuote=$valQuote[REDACTED]$valQuote"
+        if (text.contains(":") || text.contains("=")) {
+            text = KEY_VALUE_PATTERN.replace(text) { matchResult ->
+                val keyQuote = matchResult.groupValues[1]
+                val key = matchResult.groupValues[2]
+                val delimiter = matchResult.groupValues[3]
+                val valQuote = matchResult.groupValues[4]
+                val value = if (valQuote.isNotEmpty()) matchResult.groupValues[5] else matchResult.groupValues[6]
+                if (value == "[REDACTED]") {
+                    matchResult.value
+                } else if (delimiter.contains(":")) {
+                    "$keyQuote$key$keyQuote: $valQuote[REDACTED]$valQuote"
+                } else {
+                    "$keyQuote$key$keyQuote=$valQuote[REDACTED]$valQuote"
+                }
             }
         }
 
