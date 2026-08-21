@@ -179,4 +179,34 @@ describe("TodoistPoller Diagnostics", () => {
     expect(poller.getDiagnostics().consecutiveFailures).toBe(1);
     expect(mockObs.handledCaptures).toHaveLength(1); // No new capture
   });
+
+  it("safely handles exceptions thrown within onError callback", async () => {
+    const diagBuffer = new RingBuffer<unknown>(50);
+    const logBuffer = new RingBuffer<string>(50);
+    const mockObs = createMockObservability();
+    const syncOnce = vi.fn().mockRejectedValue(new Error("Sync exploded"));
+    const throwingOnError = vi.fn(() => {
+      throw new Error("Callback exploded");
+    });
+
+    const poller = new TodoistPoller(
+      { syncOnce },
+      {
+        onError: throwingOnError,
+        observability: mockObs,
+        diagnosticRingBuffer: diagBuffer,
+        logRingBuffer: logBuffer
+      }
+    );
+
+    // Should not throw
+    await poller.tick();
+    await poller.tick();
+    await poller.tick();
+
+    expect(throwingOnError).toHaveBeenCalledTimes(3);
+    expect(poller.getDiagnostics().consecutiveFailures).toBe(3);
+    expect(mockObs.handledCaptures).toHaveLength(1);
+    expect(mockObs.handledCaptures[0]?.marker).toBe("buzer.backend.todoist_poll_failure");
+  });
 });

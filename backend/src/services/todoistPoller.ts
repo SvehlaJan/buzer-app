@@ -125,13 +125,17 @@ export class TodoistPoller {
         `[${new Date().toISOString()}] WARN Todoist poll failed (consecutive=${this.consecutiveFailures}, duration=${durationMs}ms): ${redactString(errorMessage)}`
       );
 
-      this.options.onError?.(error);
-
       if (this.consecutiveFailures >= 3) {
         this.observability.captureHandled("buzer.backend.todoist_poll_failure", error, {
           consecutiveFailureCount: this.consecutiveFailures,
           consecutive_failure_count: this.consecutiveFailures
         });
+      }
+
+      try {
+        this.options.onError?.(error);
+      } catch {
+        // Safe callback isolation
       }
     } finally {
       this.running = false;

@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it, vi } from "vitest";
+import qrcode from "qrcode-terminal";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WhatsAppWebSender } from "../../src/accountability/whatsappWebSender.js";
 import { RingBuffer } from "../../src/diagnostics/ringBuffer.js";
 import type { BackendObservability } from "../../src/diagnostics/backendObservability.js";
@@ -24,6 +25,10 @@ function createMockObservability(): BackendObservability & {
 }
 
 describe("WhatsAppWebSender Diagnostics", () => {
+  beforeEach(() => {
+    vi.spyOn(qrcode, "generate").mockImplementation(() => {});
+  });
+
   it("logs sanitized message without raw QR code upon qr event", async () => {
     const logBuffer = new RingBuffer<string>(50);
     const mockObs = createMockObservability();
