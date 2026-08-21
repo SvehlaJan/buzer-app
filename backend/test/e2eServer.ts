@@ -13,6 +13,7 @@ import {
   type E2EMorningReviewScenario
 } from "./fakes/e2eFixtures.js";
 import { E2E_SCENARIOS, E2ETodoistAdapter, type E2EScenario } from "./fakes/e2eTodoistAdapter.js";
+import { RecordingBackendObservability } from "./fakes/recordingBackendObservability.js";
 
 const CURRENT_USER_ID = "user-me";
 const ANDROID_API_TOKEN = "test-token";
@@ -40,6 +41,7 @@ export interface E2EServer {
   app: ReturnType<typeof buildServer>;
   adapter: E2ETodoistAdapter;
   db: Database.Database;
+  observability: RecordingBackendObservability;
   reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
@@ -61,13 +63,15 @@ export async function buildE2EServer(): Promise<E2EServer> {
   const synchronizer = new TodoistSyncService(db, tasks, projects, adapter, CURRENT_USER_ID);
   const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true);
   const escalationService = new EscalationService(db, tasks, new DryRunSender(), "e2e-recipient");
+  const observability = new RecordingBackendObservability();
   const app = buildServer({
     db,
     currentUserId: CURRENT_USER_ID,
     androidApiToken: ANDROID_API_TOKEN,
     todoist: adapter,
     escalationService,
-    rateLimit: { max: 100_000, timeWindowMs: 60_000 }
+    rateLimit: { max: 100_000, timeWindowMs: 60_000 },
+    observability
   });
 
   const calls: RecordedCall[] = [];
@@ -137,6 +141,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
     })();
     calls.splice(0);
     fullCalls.splice(0);
+    observability.clear();
     controls.failActions = false;
     controls.failSnapshot = false;
     controls.failProjects = false;
@@ -146,9 +151,9 @@ export async function buildE2EServer(): Promise<E2EServer> {
     await seed(morningReviewScenario);
   };
 
-  registerDebugSurface(app, { adapter, calls, fullCalls, controls, snapshots, reset });
+  registerDebugSurface(app, { adapter, calls, fullCalls, controls, snapshots, observability, reset });
   await seed();
-  return { app, adapter, db, reset };
+  return { app, adapter, db, observability, reset };
 }
 
 interface DebugSurfaceOptions {
@@ -163,6 +168,7 @@ interface DebugSurfaceOptions {
     syncHold: SyncHold | null;
   };
   snapshots: TaskSnapshotService;
+  observability: RecordingBackendObservability;
   reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
@@ -180,7 +186,7 @@ function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScena
 }
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
-  const { adapter, calls, fullCalls, controls, snapshots, reset } = options;
+  const { adapter, calls, fullCalls, controls, snapshots, observability, reset } = options;
   const correlatedCalls = new Map<string, RecordedCall>();
 
   app.addHook("preHandler", async (request, reply) => {
@@ -267,6 +273,25 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
   });
   app.get("/__calls", async () => ({ calls }));
   app.get("/__calls/full", async () => ({ calls: fullCalls }));
+  app.get("/__sentry/events", async () => ({
+    events: observability.diagnosticEvents.map((e) => ({
+      eventId: e.eventId,
+      reportSessionId: e.reportSessionId,
+      submitted: e.submitted,
+      message: e.message,
+      tags: e.tags,
+      context: e.context,
+      attachments: e.attachments.map((a) => ({
+        pathname: a.pathname,
+        contentType: a.contentType,
+        length: a.bytes.length,
+        content: a.bytes.toString("utf8")
+      }))
+    })),
+    diagnosticEvents: observability.diagnosticEvents,
+    handledErrors: observability.handledErrors,
+    fatalErrors: observability.fatalErrors
+  }));
   app.post("/__fail-actions", async (request) => ({
     failActions: controls.failActions = (request.body as { enabled?: unknown } | null)?.enabled === true
   }));

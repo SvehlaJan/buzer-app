@@ -1230,18 +1230,18 @@ git commit -m "feat: report backend operational failures"
 - Create or modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/observability/BugReportRealBackendTest.kt`
 - Create: `docs/notes/observability-contract-v1.md`
 
-- [ ] **Step 1: Re-audit the integrated E2E foundation.**
+- [x] **Step 1: Re-audit the integrated E2E foundation.**
 
 Use its typed control client, run/session IDs, reset, wait, and compact diagnostics. Do not
 restore removed `tools/fake-backend` code. Record exact chosen helper paths in the plan and
 handoff if they differ from this baseline.
 
-- [ ] **Step 2: Add an in-memory Sentry capture sink to `e2eServer`.**
+- [x] **Step 2: Add an in-memory Sentry capture sink to `e2eServer`.**
 
 Expose captured diagnostic metadata only through the authenticated test control surface.
 Reset it between tests. Never contact Sentry Cloud and never expose production secrets.
 
-- [ ] **Step 3: Add failing real-backend instrumentation coverage.**
+- [x] **Step 3: Add failing real-backend instrumentation coverage.**
 
 Launch the app with blank Sentry DSN but recording Android adapter, invoke `Report a bug`,
 simulate form success through the test-only adapter, and assert:
@@ -1255,13 +1255,13 @@ simulate form success through the test-only adapter, and assert:
   status;
 - collector timeout/screenshot unavailable still yields partial evidence.
 
-- [ ] **Step 4: Add trace/request propagation contract coverage.**
+- [x] **Step 4: Add trace/request propagation contract coverage.**
 
 Assert `sentry-trace`/`baggage` propagation when a fake trace provider is active, unique
 `X-Request-ID`, unchanged bearer auth, backend request context, and no header values in
 diagnostics.
 
-- [ ] **Step 5: Run scoped then full real-backend E2E.**
+- [x] **Step 5: Run scoped then full real-backend E2E.**
 
 ```bash
 ANDROID_TEST_CLASS=app.buzer.android.observability.BugReportRealBackendTest scripts/e2e-real-backend.sh
@@ -1271,7 +1271,7 @@ scripts/e2e-real-backend.sh
 Expected: PASS. The second unfiltered run is mandatory because this changes visible Home
 UI and application wiring.
 
-- [ ] **Step 6: Run all JVM/backend verification.**
+- [x] **Step 6: Run all JVM/backend verification.**
 
 ```bash
 cd client
@@ -1284,7 +1284,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit and hand off.**
+- [x] **Step 7: Commit and hand off.**
 
 ```bash
 git add backend/test client/androidApp/src/androidTest docs/notes/observability-contract-v1.md docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-10-e2e-contract.md
