@@ -38,7 +38,6 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlin.time.TimeSource
-import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -198,7 +197,7 @@ class BuzerApiClient(
         val traceHeaders = traceHeaderProvider()
         val traceId = traceHeaders?.traceId
         val actionId = extractActionId(body)
-        val startedAt = Clock.System.now().toString()
+        val startedAt = kotlin.time.Clock.System.now().toString()
         val startTime = TimeSource.Monotonic.markNow()
 
         var status: Int? = null
@@ -245,7 +244,7 @@ class BuzerApiClient(
                 outcome = when {
                     e is io.ktor.client.plugins.HttpRequestTimeoutException ||
                     e is io.ktor.client.network.sockets.SocketTimeoutException ||
-                    e is io.ktor.client.plugins.ConnectTimeoutException ||
+                    e is io.ktor.client.network.sockets.ConnectTimeoutException ||
                     e is kotlinx.coroutines.TimeoutCancellationException ||
                     e::class.simpleName?.contains("Timeout", ignoreCase = true) == true -> "timeout"
                     e is kotlinx.coroutines.CancellationException -> "cancelled"

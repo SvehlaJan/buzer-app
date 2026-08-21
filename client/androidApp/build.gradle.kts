@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose.multiplatform)
+    alias(libs.plugins.sentry.android.gradle)
 }
 
 val localProperties = Properties().apply {
@@ -37,6 +38,10 @@ android {
         buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${backendConfigValue("BUZER_BACKEND_TOKEN")}\"")
         buildConfigField("String", "BUZER_ASSIGNEE_ME_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_ME_ID")}\"")
         buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
+        buildConfigField("String", "SENTRY_ANDROID_DSN", "\"${backendConfigValue("SENTRY_ANDROID_DSN")}\"")
+        buildConfigField("String", "SENTRY_ENVIRONMENT", "\"${backendConfigValue("SENTRY_ENVIRONMENT").ifBlank { "development-device" }}\"")
+        buildConfigField("String", "BUZER_GIT_SHA", "\"${providers.environmentVariable("GITHUB_SHA").orNull?.take(12) ?: "local"}\"")
+        buildConfigField("String", "SENTRY_RELEASE", "\"app.buzer@${versionName}+${providers.environmentVariable("GITHUB_SHA").orNull?.take(12) ?: "local"}\"")
     }
 
     buildFeatures {
@@ -62,6 +67,20 @@ android {
     }
 }
 
+sentry {
+    includeProguardMapping.set(true)
+    autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+    uploadNativeSymbols.set(false)
+    autoUploadNativeSymbols.set(false)
+    includeNativeSources.set(false)
+    includeSourceContext.set(true)
+    autoUploadSourceContext.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+    autoInstallation {
+        enabled.set(false)
+    }
+    telemetry.set(false)
+}
+
 kotlin {
     jvmToolchain(17)
 }
@@ -76,6 +95,8 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.wheel.picker.compose)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.sentry.android)
+    implementation(libs.sentry.android.replay)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
