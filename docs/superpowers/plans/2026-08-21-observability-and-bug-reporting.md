@@ -511,7 +511,7 @@ git commit -m "feat: instrument shared API diagnostics"
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidObservabilityConfigTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/observability/SentryEventSanitizerTest.kt`
 
-- [ ] **Step 1: Re-resolve Sentry Android docs and pin versions.**
+- [x] **Step 1: Re-resolve Sentry Android docs and pin versions.**
 
 Use Context7 and official release pages. If 8.53.0/6.19.0 is no longer suitable, update
 the plan and record why before changing the catalog.
@@ -531,7 +531,7 @@ upload, SDK telemetry, Logcat capture, and broad bytecode instrumentation. Enabl
 and source-context upload only when `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and project values
 exist. Add the two explicit SDK dependencies.
 
-- [ ] **Step 2: Add build-time configuration without embedding an auth token.**
+- [x] **Step 2: Add build-time configuration without embedding an auth token.**
 
 Extend the existing `backendConfigValue` helper usage:
 
@@ -544,13 +544,13 @@ buildConfigField("String", "SENTRY_RELEASE", "\"app.buzer@${defaultConfig.versio
 
 Never create a `BuildConfig.SENTRY_AUTH_TOKEN`.
 
-- [ ] **Step 3: Write failing configuration and event-sanitizer tests.**
+- [x] **Step 3: Write failing configuration and event-sanitizer tests.**
 
 Test blank DSN -> disabled no-op, nonblank DSN -> enabled, sample policies, release and
 environment mapping, `beforeSend`, `beforeBreadcrumb`, `beforeSendLog`, and attachment
 name/content filtering with seeded secrets.
 
-- [ ] **Step 4: Define the production/test boundary.**
+- [x] **Step 4: Define the production/test boundary.**
 
 ```kotlin
 interface AndroidObservability {
@@ -574,7 +574,7 @@ interface AndroidObservability {
 Provide `NoOpAndroidObservability` and a recording fake in test source. Production maps
 returned `SentryId` values to 32 lowercase hex strings.
 
-- [ ] **Step 5: Initialize Sentry in `BuzerApplication`.**
+- [x] **Step 5: Initialize Sentry in `BuzerApplication`.**
 
 Register the application in the manifest with `android:name=".BuzerApplication"` and
 disable manifest auto-init so the explicit config is authoritative:
@@ -602,13 +602,13 @@ callbacks. Configure feedback with name/email hidden, Sentry user disabled, shak
 and callbacks delegated to a coordinator installed in Task 5. Blank DSN installs the
 no-op adapter and still installs the local ring-buffer sink.
 
-- [ ] **Step 6: Track the current foreground activity weakly.**
+- [x] **Step 6: Track the current foreground activity weakly.**
 
 Implement `Application.ActivityLifecycleCallbacks` with `WeakReference<Activity>` and
 return only a started/resumed, non-finishing activity. This supports bounded screenshot
 capture without retaining activities.
 
-- [ ] **Step 7: Run focused tests, Android unit tests, and assemble.**
+- [x] **Step 7: Run focused tests, Android unit tests, and assemble.**
 
 ```bash
 cd client
@@ -619,7 +619,7 @@ cd client
 Expected: PASS. Inspect the debug APK/build config and confirm no Sentry auth token is
 present.
 
-- [ ] **Step 8: Commit and hand off.**
+- [x] **Step 8: Commit and hand off.**
 
 ```bash
 git add client/gradle/libs.versions.toml client/build.gradle.kts client/androidApp/build.gradle.kts client/androidApp/src/main/AndroidManifest.xml client/androidApp/src/main/kotlin/app/buzer/android/BuzerApplication.kt client/androidApp/src/main/kotlin/app/buzer/android/observability client/androidApp/src/test/kotlin/app/buzer/android/observability docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-03-android-bootstrap.md

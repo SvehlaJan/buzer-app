@@ -119,7 +119,7 @@ class BuzerApiClientDiagnosticsTest {
     fun redactsSecretsAndTruncatesLargeBodies() = runBlocking {
         val sink = RecordingNetworkSink()
         val largePadding = "x".repeat(70_000)
-        val responseBodyWithSecret = """{"secret_token":"SECRET_VALUE_123","padding":"$largePadding"}"""
+        val responseBodyWithSecret = """{"actionId":"action-create-99","outcome":"completed","snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]},"secret_token":"SECRET_VALUE_123","padding":"$largePadding"}"""
 
         val client = BuzerApiClient(
             baseUrl = "https://api.buzer.invalid",
