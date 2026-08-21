@@ -12,19 +12,19 @@ export interface FormatIssueBodyParams {
   category: TriageCategory;
   fingerprint: string;
   sentryIssueId: string;
-  issue?: SentryIssue;
-  event?: SentryEvent;
-  pairedSession?: PairedManualReportSession;
-  attachments?: SentryAttachment[];
+  issue?: SentryIssue | undefined;
+  event?: SentryEvent | undefined;
+  pairedSession?: PairedManualReportSession | undefined;
+  attachments?: SentryAttachment[] | undefined;
 }
 
 export interface FormatCommentBodyParams {
   category: TriageCategory;
   fingerprint: string;
   sentryIssueId: string;
-  issue?: SentryIssue;
-  event?: SentryEvent;
-  isReopen?: boolean;
+  issue?: SentryIssue | undefined;
+  event?: SentryEvent | undefined;
+  isReopen?: boolean | undefined;
 }
 
 export function findTagValue(tags: SentryTag[] | undefined, key: string): string | undefined {

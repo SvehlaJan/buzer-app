@@ -8,6 +8,24 @@ export interface SentryClientOptions {
   fetchFn?: typeof fetch;
 }
 
+export function parseSentryLinkHeader(linkHeader: string | null | undefined): { nextUrl?: string; hasMore: boolean } {
+  if (!linkHeader) return { hasMore: false };
+  // Sentry Link header format:
+  // <url>; rel="previous"; results="false"; cursor="...", <url>; rel="next"; results="true"; cursor="..."
+  const parts = linkHeader.split(',');
+  for (const part of parts) {
+    const isNext = /rel="?next"?/i.test(part);
+    const hasResults = /results="?true"?/i.test(part);
+    if (isNext && hasResults) {
+      const match = part.match(/<([^>]+)>/);
+      if (match && match[1]) {
+        return { nextUrl: match[1], hasMore: true };
+      }
+    }
+  }
+  return { hasMore: false };
+}
+
 export class SentryClient {
   private readonly authToken: string;
   private readonly org: string;
@@ -21,8 +39,10 @@ export class SentryClient {
     this.fetchFn = options.fetchFn || fetch;
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const url = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  private async rawRequest(pathOrUrl: string): Promise<Response> {
+    const url = pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')
+      ? pathOrUrl
+      : `${this.baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
     try {
       const response = await this.fetchFn(url, {
         method: 'GET',
@@ -34,23 +54,55 @@ export class SentryClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Sentry API error: ${response.status} ${response.statusText} at ${path}`);
+        throw new Error(`Sentry API error: ${response.status} ${response.statusText} at ${pathOrUrl}`);
       }
 
-      return (await response.json()) as T;
+      return response;
     } catch (err: any) {
       throw new Error(redactString(`Failed Sentry request: ${err?.message || String(err)}`));
     }
   }
 
-  async fetchIssues(projectSlug: string, query = 'is:unresolved', lookbackHours?: number): Promise<SentryIssue[]> {
+  private async request<T>(path: string): Promise<T> {
+    const response = await this.rawRequest(path);
+    return (await response.json()) as T;
+  }
+
+  async fetchIssues(
+    projectSlug: string,
+    query = 'is:unresolved',
+    lookbackHours?: number,
+    maxPages = 5
+  ): Promise<SentryIssue[]> {
     let queryParam = query;
     if (lookbackHours && lookbackHours > 0) {
-      queryParam = `${query} age:-${lookbackHours}h`;
+      queryParam = `${query} last_seen:-${lookbackHours}h`;
     }
-    const path = `/api/0/projects/${encodeURIComponent(this.org)}/${encodeURIComponent(projectSlug)}/issues/?query=${encodeURIComponent(queryParam)}`;
-    const issues = await this.request<SentryIssue[]>(path);
-    return issues;
+    let nextUrl: string | undefined = `/api/0/projects/${encodeURIComponent(this.org)}/${encodeURIComponent(projectSlug)}/issues/?query=${encodeURIComponent(queryParam)}`;
+    const allIssues: SentryIssue[] = [];
+    let page = 0;
+
+    while (nextUrl && page < maxPages) {
+      page++;
+      const response = await this.rawRequest(nextUrl);
+      const issues = (await response.json()) as SentryIssue[];
+
+      if (!Array.isArray(issues) || issues.length === 0) {
+        break;
+      }
+
+      allIssues.push(...issues);
+
+      const linkHeader = response.headers?.get('link');
+      const { hasMore, nextUrl: linkNextUrl } = parseSentryLinkHeader(linkHeader);
+      if (hasMore && linkNextUrl) {
+        nextUrl = linkNextUrl;
+      } else {
+        nextUrl = undefined;
+      }
+    }
+
+    return allIssues;
   }
 
   async fetchLatestEvent(issueId: string): Promise<SentryEvent | null> {

@@ -40,7 +40,7 @@ export function parseArgs(args: string[]): SyncOptions {
   options.githubRepo = options.githubRepo || process.env.GITHUB_REPOSITORY;
 
   if (process.env.SENTRY_PROJECTS) {
-    options.sentryProjects?.push(...process.env.SENTRY_PROJECTS.split(',').map((s) => s.trim()));
+    options.sentryProjects?.push(...process.env.SENTRY_PROJECTS.split(',').map((s: string) => s.trim()));
   }
   if (process.env.SENTRY_ANDROID_PROJECT_ID) {
     options.sentryProjects?.push(process.env.SENTRY_ANDROID_PROJECT_ID.trim());
@@ -126,7 +126,7 @@ export async function runSync(options: SyncOptions): Promise<TriageDecision[]> {
         const created = await githubClient.createIssue({
           title: decision.issueTitle,
           body: decision.issueBody || '',
-          labels: decision.labels
+          ...(decision.labels ? { labels: decision.labels } : {})
         });
         console.log(`  -> Created GitHub Issue #${created.number} (${created.html_url})`);
       }

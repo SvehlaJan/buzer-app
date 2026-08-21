@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "bin": {
-    "sentry-github-sync": "./dist/index.js"
+    "sentry-github-sync": "./dist/src/index.js"
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --exclude 'dist/**'",
+    "test:watch": "vitest --exclude 'dist/**'",
     "start": "tsx src/index.ts"
   },
   "devDependencies": {

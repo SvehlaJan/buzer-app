@@ -221,4 +221,56 @@ describe('Triage Pairing and Decision Logic', () => {
     expect(decisions[0]!.action).toBe('ignore');
     expect(decisions[0]!.reason).toContain('ignored');
   });
+
+  it('performs exact Sentry ID matching and avoids numeric substring collisions', () => {
+    const issue12: SentryIssue = {
+      id: '12',
+      title: 'Crash in module A',
+      level: 'fatal',
+      project: { id: 'buzer-android', slug: 'buzer-android' }
+    };
+
+    // Existing issue has ID 12345 (which contains '12' as substring)
+    const existingGitHubIssues: GitHubIssue[] = [
+      {
+        number: 99,
+        title: '[Sentry] fatal: Crash in module B',
+        state: 'open',
+        body: '<!-- sentry-fingerprint: sentry-issue:12345 -->\n<!-- sentry-issue-id: 12345 -->\nOther crash'
+      }
+    ];
+
+    const decisions = triageSentryIssues([issue12], existingGitHubIssues);
+    expect(decisions).toHaveLength(1);
+    // Should create a new issue, NOT match issue #99 via substring collision
+    expect(decisions[0]!.action).toBe('create_issue');
+    expect(decisions[0]!.sentryIssueId).toBe('12');
+  });
+
+  it('correctly matches exact ID in paired plus-separated Sentry ID string', () => {
+    const issue12: SentryIssue = {
+      id: '12',
+      title: 'buzer.android.manual_report',
+      project: { id: 'buzer-android', slug: 'buzer-android' },
+      latestEvent: {
+        id: 'evt-12',
+        tags: [{ key: 'report_session_id', value: 'sess-xyz' }]
+      }
+    };
+
+    const existingGitHubIssues: GitHubIssue[] = [
+      {
+        number: 55,
+        title: '[Sentry] manual_report: User Report (sess-xyz)',
+        state: 'open',
+        body: '<!-- sentry-issue-id: 12+34 -->\nOld report'
+      }
+    ];
+
+    const decisions = triageSentryIssues([issue12], existingGitHubIssues);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.action).toBe('comment');
+    expect(decisions[0]!.targetGitHubIssueNumber).toBe(55);
+  });
 });
+

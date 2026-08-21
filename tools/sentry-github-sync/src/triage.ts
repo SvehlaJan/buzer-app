@@ -93,6 +93,19 @@ export function generateFingerprint(
   return `sentry-issue:${issue.id}`;
 }
 
+export function matchesIssue(
+  gh: GitHubIssue,
+  fingerprint: string,
+  relatedSentryIssues: SentryIssue[]
+): boolean {
+  const ghFingerprint = extractFingerprint(gh.body);
+  const ghSentryId = extractSentryIssueId(gh.body);
+
+  if (ghFingerprint && ghFingerprint === fingerprint) return true;
+  if (ghSentryId && relatedSentryIssues.some((si) => ghSentryId.split('+').includes(si.id))) return true;
+  return false;
+}
+
 export function triageSentryIssues(
   issues: SentryIssue[],
   existingGitHubIssues: GitHubIssue[]
@@ -155,14 +168,9 @@ export function triageSentryIssues(
     const relatedSentryIssues = [group.android, group.backend, ...group.other].filter((i): i is SentryIssue => Boolean(i));
 
     // Match against existing GitHub issues
-    const matchingGitHubIssue = existingGitHubIssues.find((gh) => {
-      const ghFingerprint = extractFingerprint(gh.body);
-      const ghSentryId = extractSentryIssueId(gh.body);
-
-      if (ghFingerprint && ghFingerprint === fingerprint) return true;
-      if (ghSentryId && relatedSentryIssues.some((si) => ghSentryId.includes(si.id))) return true;
-      return false;
-    });
+    const matchingGitHubIssue = existingGitHubIssues.find((gh) =>
+      matchesIssue(gh, fingerprint, relatedSentryIssues)
+    );
 
     const labels = [
       'observability',
@@ -277,11 +285,9 @@ export function triageSentryIssues(
       platform
     ];
 
-    const matchingGitHubIssue = existingGitHubIssues.find((gh) => {
-      const ghFingerprint = extractFingerprint(gh.body);
-      const ghSentryId = extractSentryIssueId(gh.body);
-      return ghFingerprint === fingerprint || ghSentryId === sentryIssueId;
-    });
+    const matchingGitHubIssue = existingGitHubIssues.find((gh) =>
+      matchesIssue(gh, fingerprint, [issue])
+    );
 
     if (!matchingGitHubIssue) {
       const issueBody = formatIssueBody({

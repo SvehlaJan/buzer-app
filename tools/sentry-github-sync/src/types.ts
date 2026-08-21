@@ -6,21 +6,21 @@ export interface SentryTag {
 export interface SentryAttachment {
   id: string;
   name: string;
-  type?: string;
-  size?: number;
-  dateCreated?: string;
+  type?: string | undefined;
+  size?: number | undefined;
+  dateCreated?: string | undefined;
 }
 
 export interface SentryStackFrame {
-  filename?: string;
-  function?: string;
-  module?: string;
-  lineno?: number;
-  colno?: number;
-  in_app?: boolean;
-  context_line?: string;
-  pre_context?: string[];
-  post_context?: string[];
+  filename?: string | undefined;
+  function?: string | undefined;
+  module?: string | undefined;
+  lineno?: number | undefined;
+  colno?: number | undefined;
+  in_app?: boolean | undefined;
+  context_line?: string | undefined;
+  pre_context?: string[] | undefined;
+  post_context?: string[] | undefined;
 }
 
 export interface SentryEntry {
@@ -30,69 +30,70 @@ export interface SentryEntry {
 
 export interface SentryEvent {
   id: string;
-  eventID?: string;
-  title?: string;
-  message?: string;
-  platform?: string;
-  dateCreated?: string;
-  tags?: SentryTag[];
-  entries?: SentryEntry[];
-  attachments?: SentryAttachment[];
-  contexts?: Record<string, unknown>;
-  extra?: Record<string, unknown>;
-  user?: Record<string, unknown>;
+  eventID?: string | undefined;
+  title?: string | undefined;
+  message?: string | undefined;
+  platform?: string | undefined;
+  dateCreated?: string | undefined;
+  tags?: SentryTag[] | undefined;
+  entries?: SentryEntry[] | undefined;
+  attachments?: SentryAttachment[] | undefined;
+  contexts?: Record<string, unknown> | undefined;
+  extra?: Record<string, unknown> | undefined;
+  user?: Record<string, unknown> | undefined;
 }
 
 export interface SentryIssueProject {
   id: string;
-  name?: string;
-  slug?: string;
+  name?: string | undefined;
+  slug?: string | undefined;
 }
 
 export interface SentryIssue {
   id: string;
   title: string;
-  culprit?: string;
-  permalink?: string;
-  shortId?: string;
-  level?: string;
-  status?: string;
-  substatus?: string;
-  count?: string | number;
-  userCount?: number;
-  firstSeen?: string;
-  lastSeen?: string;
-  platform?: string;
-  project?: SentryIssueProject;
-  metadata?: Record<string, unknown>;
-  tags?: SentryTag[];
-  latestEvent?: SentryEvent;
+  culprit?: string | undefined;
+  permalink?: string | undefined;
+  shortId?: string | undefined;
+  level?: string | undefined;
+  status?: string | undefined;
+  substatus?: string | undefined;
+  count?: string | number | undefined;
+  userCount?: number | undefined;
+  firstSeen?: string | undefined;
+  lastSeen?: string | undefined;
+  platform?: string | undefined;
+  project?: SentryIssueProject | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  tags?: SentryTag[] | undefined;
+  latestEvent?: SentryEvent | undefined;
 }
 
 export interface GitHubLabel {
-  id?: number;
+  id?: number | undefined;
   name: string;
-  description?: string;
-  color?: string;
+  description?: string | undefined;
+  color?: string | undefined;
 }
 
 export interface GitHubIssue {
   number: number;
   title: string;
-  body?: string;
+  body?: string | undefined;
   state: 'open' | 'closed';
-  html_url?: string;
-  labels?: Array<string | GitHubLabel>;
-  created_at?: string;
-  updated_at?: string;
-  closed_at?: string | null;
+  html_url?: string | undefined;
+  labels?: Array<string | GitHubLabel> | undefined;
+  pull_request?: unknown | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+  closed_at?: string | null | undefined;
 }
 
 export interface GitHubComment {
-  id?: number;
+  id?: number | undefined;
   body: string;
-  html_url?: string;
-  created_at?: string;
+  html_url?: string | undefined;
+  created_at?: string | undefined;
 }
 
 export type TriageCategory = 'fatal' | 'handled_non_fatal' | 'manual_report' | 'validation';
@@ -101,10 +102,10 @@ export type TriageDecisionAction = 'create_issue' | 'comment' | 'reopen_and_comm
 
 export interface PairedManualReportSession {
   reportSessionId: string;
-  androidEvent?: SentryEvent;
-  backendEvent?: SentryEvent;
-  androidIssue?: SentryIssue;
-  backendIssue?: SentryIssue;
+  androidEvent?: SentryEvent | undefined;
+  backendEvent?: SentryEvent | undefined;
+  androidIssue?: SentryIssue | undefined;
+  backendIssue?: SentryIssue | undefined;
 }
 
 export interface TriageDecision {
@@ -114,20 +115,20 @@ export interface TriageDecision {
   fingerprint: string;
   sentryIssueId: string;
   issueTitle: string;
-  issueBody?: string;
-  commentBody?: string;
-  targetGitHubIssueNumber?: number;
-  labels?: string[];
+  issueBody?: string | undefined;
+  commentBody?: string | undefined;
+  targetGitHubIssueNumber?: number | undefined;
+  labels?: string[] | undefined;
   sentryIssues: SentryIssue[];
-  pairedSession?: PairedManualReportSession;
+  pairedSession?: PairedManualReportSession | undefined;
 }
 
 export interface SyncOptions {
-  dryRun?: boolean;
-  sentryToken?: string;
-  sentryOrg?: string;
-  sentryProjects?: string[];
-  githubToken?: string;
-  githubRepo?: string;
-  lookbackHours?: number;
+  dryRun?: boolean | undefined;
+  sentryToken?: string | undefined;
+  sentryOrg?: string | undefined;
+  sentryProjects?: string[] | undefined;
+  githubToken?: string | undefined;
+  githubRepo?: string | undefined;
+  lookbackHours?: number | undefined;
 }

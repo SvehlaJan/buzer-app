@@ -8,6 +8,20 @@ export interface GitHubClientOptions {
   fetchFn?: typeof fetch;
 }
 
+export function parseGitHubLinkHeader(linkHeader: string | null | undefined): { nextUrl?: string } {
+  if (!linkHeader) return {};
+  const parts = linkHeader.split(',');
+  for (const part of parts) {
+    if (/rel="?next"?/i.test(part)) {
+      const match = part.match(/<([^>]+)>/);
+      if (match && match[1]) {
+        return { nextUrl: match[1] };
+      }
+    }
+  }
+  return {};
+}
+
 export class GitHubClient {
   private readonly token: string;
   private readonly repo: string;
@@ -21,8 +35,10 @@ export class GitHubClient {
     this.fetchFn = options.fetchFn || fetch;
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  private async rawRequest(pathOrUrl: string, options: RequestInit = {}): Promise<Response> {
+    const url = pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')
+      ? pathOrUrl
+      : `${this.baseUrl}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
     try {
       const response = await this.fetchFn(url, {
         ...options,
@@ -40,16 +56,47 @@ export class GitHubClient {
         throw new Error(`GitHub API error ${response.status} ${response.statusText}: ${errorText}`);
       }
 
-      return (await response.json()) as T;
+      return response;
     } catch (err: any) {
       throw new Error(redactString(`Failed GitHub request: ${err?.message || String(err)}`));
     }
   }
 
-  async fetchIssues(state: 'open' | 'closed' | 'all' = 'all'): Promise<GitHubIssue[]> {
-    const path = `/repos/${this.repo}/issues?state=${encodeURIComponent(state)}&per_page=100`;
-    const issues = await this.request<GitHubIssue[]>(path);
-    return issues;
+  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const response = await this.rawRequest(path, options);
+    return (await response.json()) as T;
+  }
+
+  async fetchIssues(state: 'open' | 'closed' | 'all' = 'all', maxPages = 5): Promise<GitHubIssue[]> {
+    const allIssues: GitHubIssue[] = [];
+    let nextUrl: string | undefined = `/repos/${this.repo}/issues?state=${encodeURIComponent(state)}&per_page=100`;
+    let page = 0;
+
+    while (nextUrl && page < maxPages) {
+      page++;
+      const response = await this.rawRequest(nextUrl);
+      const items = (await response.json()) as (GitHubIssue & { pull_request?: unknown })[];
+
+      if (!Array.isArray(items) || items.length === 0) {
+        break;
+      }
+
+      // Filter out pull requests
+      const issuesOnly = items.filter((item) => !item.pull_request);
+      allIssues.push(...issuesOnly);
+
+      const linkHeader = response.headers?.get('link');
+      const { nextUrl: linkNextUrl } = parseGitHubLinkHeader(linkHeader);
+      if (linkNextUrl) {
+        nextUrl = linkNextUrl;
+      } else if (items.length === 100 && page < maxPages) {
+        nextUrl = `/repos/${this.repo}/issues?state=${encodeURIComponent(state)}&per_page=100&page=${page + 1}`;
+      } else {
+        nextUrl = undefined;
+      }
+    }
+
+    return allIssues;
   }
 
   async createIssue(params: { title: string; body: string; labels?: string[] }): Promise<GitHubIssue> {
