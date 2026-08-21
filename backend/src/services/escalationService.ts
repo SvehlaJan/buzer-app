@@ -5,19 +5,43 @@ import { buildEscalationMessage } from "../accountability/escalationMessage.js";
 import { computeDeadlineAt } from "../domain/time.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
 import { recurrenceFingerprint } from "./occurrenceReconciler.js";
+import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
+import { backendDiagnosticRingBuffer, backendLogRingBuffer, type RingBuffer } from "../diagnostics/ringBuffer.js";
+import { redactString } from "../diagnostics/redaction.js";
 
 export type EscalationResult =
   | { status: "sent"; escalationId: string; sentAt: string }
   | { status: "failed"; escalationId: string; errorMessage: string }
   | { status: "already_claimed"; escalationId: string | null };
 
+export interface EscalationServiceOptions {
+  observability?: BackendObservability;
+  diagnosticRingBuffer?: RingBuffer<unknown>;
+  logRingBuffer?: RingBuffer<string>;
+}
+
 export class EscalationService {
+  private readonly observability: BackendObservability;
+  private readonly diagnosticRingBuffer: RingBuffer<unknown>;
+  private readonly logRingBuffer: RingBuffer<string>;
+
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
     private readonly sender: AccountabilitySender,
-    private readonly recipientId: string
-  ) {}
+    private readonly recipientId: string,
+    options?: EscalationServiceOptions | BackendObservability
+  ) {
+    if (options && "captureHandled" in options) {
+      this.observability = options;
+      this.diagnosticRingBuffer = backendDiagnosticRingBuffer;
+      this.logRingBuffer = backendLogRingBuffer;
+    } else {
+      this.observability = options?.observability ?? backendObservability;
+      this.diagnosticRingBuffer = options?.diagnosticRingBuffer ?? backendDiagnosticRingBuffer;
+      this.logRingBuffer = options?.logRingBuffer ?? backendLogRingBuffer;
+    }
+  }
 
   async getHealth(): Promise<{ connected: boolean; detail: string }> {
     return this.sender.getHealth();
@@ -72,7 +96,17 @@ export class EscalationService {
       ).get(taskId, occurrenceKey) as
         | { id: string }
         | undefined;
-      return { status: "already_claimed", escalationId: row?.id ?? null };
+      const escalationId = row?.id ?? null;
+      this.diagnosticRingBuffer.add({
+        type: "whatsapp_escalation",
+        timestamp: createdAt,
+        taskId,
+        occurrenceKey,
+        escalationId,
+        status: "already_claimed",
+        dismissCount
+      });
+      return { status: "already_claimed", escalationId };
     }
 
     try {
@@ -85,6 +119,33 @@ export class EscalationService {
     } catch (error) {
       const messageText = error instanceof Error ? error.message : String(error);
       this.db.prepare("update whatsapp_escalations set status = 'failed', error_message = ? where id = ?").run(messageText, id);
+
+      this.diagnosticRingBuffer.add({
+        type: "whatsapp_escalation",
+        timestamp: new Date().toISOString(),
+        taskId,
+        occurrenceKey,
+        escalationId: id,
+        status: "failed",
+        dismissCount,
+        error: redactString(messageText)
+      });
+
+      this.logRingBuffer.add(
+        `[${new Date().toISOString()}] ERROR WhatsApp escalation delivery failed for task ${taskId}: ${redactString(messageText)}`
+      );
+
+      this.observability.captureHandled("buzer.backend.escalation_delivery_failure", error, {
+        taskId,
+        occurrenceKey,
+        task_id: taskId,
+        occurrence_key: occurrenceKey,
+        recipient_configured: this.recipientId.trim() !== "" ? "true" : "false",
+        recipientConfigured: this.recipientId.trim() !== "" ? "true" : "false",
+        escalationId: id,
+        escalation_id: id
+      });
+
       return { status: "failed", escalationId: id, errorMessage: messageText };
     }
 
@@ -97,6 +158,21 @@ export class EscalationService {
       });
     });
     tx();
+
+    this.diagnosticRingBuffer.add({
+      type: "whatsapp_escalation",
+      timestamp: sentAt,
+      taskId,
+      occurrenceKey,
+      escalationId: id,
+      status: "sent",
+      dismissCount
+    });
+
+    this.logRingBuffer.add(
+      `[${sentAt}] INFO WhatsApp escalation sent for task ${taskId}`
+    );
+
     return { status: "sent", escalationId: id, sentAt };
   }
 }

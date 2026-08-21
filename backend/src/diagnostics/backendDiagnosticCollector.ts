@@ -229,11 +229,14 @@ export async function collectDiagnosticsCapsule(
       ).get() as { sync_token?: string; mirror_contract_version?: number; updated_at?: string } | undefined;
 
       if (row) {
+        const syncDiag = options.synchronizer?.getLastSyncDiagnostics?.();
         todoistSection = {
           hasSyncToken: Boolean(row.sync_token && row.sync_token.trim() !== ""),
           syncTokenLength: row.sync_token ? row.sync_token.length : 0,
           mirrorContractVersion: row.mirror_contract_version ?? 1,
-          lastSyncAt: row.updated_at ?? null
+          lastSyncAt: row.updated_at ?? syncDiag?.lastSyncAt ?? null,
+          ...(syncDiag?.lastOutcome ? { lastOutcome: syncDiag.lastOutcome } : {}),
+          ...(syncDiag?.durationMs !== null && syncDiag?.durationMs !== undefined ? { lastDurationMs: syncDiag.durationMs } : {})
         };
         sectionStatuses["todoist"] = { status: "complete" };
       } else {

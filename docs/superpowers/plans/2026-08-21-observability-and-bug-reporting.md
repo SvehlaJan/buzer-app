@@ -1163,7 +1163,7 @@ git commit -m "feat: add backend diagnostic reports"
 - Modify: `backend/src/server.ts`
 - Modify matching tests under `backend/test/services/` and `backend/test/accountability/`
 
-- [ ] **Step 1: Write failing alert-signal tests.**
+- [x] **Step 1: Write failing alert-signal tests.**
 
 Add injected callbacks/interfaces, not direct Sentry imports. Assert:
 
@@ -1177,27 +1177,27 @@ Add injected callbacks/interfaces, not direct Sentry imports. Assert:
 - reconnect cancels the pending disconnect alert;
 - QR content and recipient/auth/session values never enter logs/events.
 
-- [ ] **Step 2: Implement stateful health signal tracking.**
+- [x] **Step 2: Implement stateful health signal tracking.**
 
 Extend `TodoistPollerOptions` with `onSuccess`, retain `onError`, and expose no mutable
 state publicly. Implement a small `OperationalHealthMonitor` in
 `backend/src/observability/` that owns counters/timers and calls the observability adapter.
 Inject a clock/timer scheduler for deterministic tests.
 
-- [ ] **Step 3: Replace WhatsApp `console.*` with the injected observer.**
+- [x] **Step 3: Replace WhatsApp `console.*` with the injected observer.**
 
 Preserve local operator-readable messages but route them through redacted
 `BackendObservability.log`. On QR, log only `qr_required=true`; continue rendering the QR
 locally through `qrcode-terminal` because the existing operator workflow needs it, but
 never pass the QR string to observability.
 
-- [ ] **Step 4: Capture escalation failures with task/action correlation.**
+- [x] **Step 4: Capture escalation failures with task/action correlation.**
 
 When `EscalationService.sendForTask` returns `failed`, report escalation ID, task ID,
 occurrence key, and error classification. Do not attach recipient ID or raw WhatsApp
 session/provider data.
 
-- [ ] **Step 5: Run focused and full backend verification.**
+- [x] **Step 5: Run focused and full backend verification.**
 
 ```bash
 cd backend
@@ -1209,7 +1209,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit and hand off.**
+- [x] **Step 6: Commit and hand off.**
 
 ```bash
 git add backend/src/services backend/src/accountability/whatsappWebSender.ts backend/src/observability backend/src/server.ts backend/test/services backend/test/accountability backend/test/observability docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-09-backend-signals.md

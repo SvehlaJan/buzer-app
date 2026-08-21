@@ -5,11 +5,18 @@ import whatsappWeb from "whatsapp-web.js";
 import type { AccountabilitySender, EscalationInput } from "./accountabilitySender.js";
 import { buildEscalationMessage } from "./escalationMessage.js";
 
+import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
+import { backendLogRingBuffer, type RingBuffer } from "../diagnostics/ringBuffer.js";
+import { redactString } from "../diagnostics/redaction.js";
+
 const { Client, LocalAuth } = whatsappWeb;
 
 export interface WhatsAppWebSenderOptions {
   sessionPath: string;
   clientId: string;
+  observability?: BackendObservability;
+  logRingBuffer?: RingBuffer<string>;
+  client?: InstanceType<typeof Client>;
 }
 
 const chromiumSingletonFiles = new Set(["SingletonLock", "SingletonSocket", "SingletonCookie"]);
@@ -53,16 +60,23 @@ export function removeStaleChromiumSingletonLocks(sessionPath: string): string[]
 
 export class WhatsAppWebSender implements AccountabilitySender {
   private readonly client: InstanceType<typeof Client>;
+  private readonly observability: BackendObservability;
+  private readonly logRingBuffer: RingBuffer<string>;
   private ready = false;
   private lastDetail = "not initialized";
 
   constructor(options: WhatsAppWebSenderOptions) {
+    this.observability = options.observability ?? backendObservability;
+    this.logRingBuffer = options.logRingBuffer ?? backendLogRingBuffer;
+
     const removedLocks = removeStaleChromiumSingletonLocks(options.sessionPath);
     if (removedLocks.length > 0) {
-      console.warn(`Removed ${removedLocks.length} stale WhatsApp Chromium profile lock file(s)`);
+      const msg = `Removed ${removedLocks.length} stale WhatsApp Chromium profile lock file(s)`;
+      console.warn(msg);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] WARN ${msg}`);
     }
 
-    this.client = new Client({
+    this.client = options.client ?? new Client({
       authStrategy: new LocalAuth({
         clientId: options.clientId,
         dataPath: options.sessionPath
@@ -76,28 +90,46 @@ export class WhatsAppWebSender implements AccountabilitySender {
     this.client.on("qr", (qr: string) => {
       this.ready = false;
       this.lastDetail = "qr required";
-      console.log("WhatsApp authentication QR required");
+      const logLine = "WhatsApp authentication QR required";
+      console.log(logLine);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] INFO ${logLine}`);
       qrcode.generate(qr, { small: true });
     });
     this.client.on("authenticated", () => {
       this.ready = false;
       this.lastDetail = "authenticated";
-      console.log("WhatsApp authenticated");
+      const logLine = "WhatsApp authenticated";
+      console.log(logLine);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] INFO ${logLine}`);
     });
     this.client.on("ready", () => {
       this.ready = true;
       this.lastDetail = "ready";
-      console.log("WhatsApp ready");
+      const logLine = "WhatsApp ready";
+      console.log(logLine);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] INFO ${logLine}`);
     });
     this.client.on("auth_failure", (message: string) => {
       this.ready = false;
       this.lastDetail = `auth failure: ${message}`;
-      console.error(`WhatsApp auth failure: ${message}`);
+      const logLine = `WhatsApp auth failure: ${message}`;
+      console.error(logLine);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] ERROR ${redactString(logLine)}`);
+      this.observability.captureHandled(
+        "buzer.backend.whatsapp_auth_failure",
+        new Error(message)
+      );
     });
     this.client.on("disconnected", (reason: string) => {
       this.ready = false;
       this.lastDetail = `disconnected: ${reason}`;
-      console.warn(`WhatsApp disconnected: ${reason}`);
+      const logLine = `WhatsApp disconnected: ${reason}`;
+      console.warn(logLine);
+      this.logRingBuffer.add(`[${new Date().toISOString()}] WARN ${redactString(logLine)}`);
+      this.observability.captureHandled(
+        "buzer.backend.whatsapp_disconnected",
+        new Error(reason)
+      );
     });
   }
 
