@@ -224,7 +224,7 @@ describe("Fastify Telemetry & Request Tracing Hooks", () => {
     // Verify diagnostic ring buffer contains request
     const diagSnapshot = backendDiagnosticRingBuffer.snapshot();
     expect(diagSnapshot.length).toBeGreaterThan(0);
-    const entry = diagSnapshot[0];
+    const entry = diagSnapshot[0] as Record<string, any>;
     expect(entry.requestId).toBe(customRequestId);
     expect(entry.statusCode).toBe(200);
     expect(entry.method).toBe("GET");
@@ -321,7 +321,7 @@ describe("Fastify Telemetry & Request Tracing Hooks", () => {
 
     const diagSnapshot = backendDiagnosticRingBuffer.snapshot();
     expect(diagSnapshot.length).toBeGreaterThan(0);
-    const entry = diagSnapshot[0];
+    const entry = diagSnapshot[0] as Record<string, any>;
     expect(entry.requestBody).toBeDefined();
     expect(Buffer.byteLength(entry.requestBody, "utf8")).toBeLessThanOrEqual(65536);
     expect(entry.requestBody).not.toContain("SECRET_PASSWORD_999");

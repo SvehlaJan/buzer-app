@@ -8,6 +8,8 @@ import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
 import type { TodoistSyncService } from "../services/todoistSyncService.js";
 import type { BuildServerOptions } from "../server.js";
 import { isBearerTokenValid, requireBearerToken } from "./auth.js";
+import { DiagnosticReportService, diagnosticReportRequestSchema } from "../diagnostics/diagnosticReportService.js";
+import { backendObservability } from "../diagnostics/backendObservability.js";
 
 const MAX_OPAQUE_VALUE_LENGTH = 200;
 const MAX_TEXT_LENGTH = 16_384;
@@ -93,6 +95,7 @@ export interface RouteServices {
   snapshots: TaskSnapshotService;
   collaborators: CollaboratorRepository;
   synchronizer: TodoistSyncService;
+  diagnostics?: DiagnosticReportService;
 }
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions, services: RouteServices): void {
@@ -260,6 +263,36 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     new DeviceRepository(options.db).upsertCheckIn({ id: body.deviceId, appVersion: body.appVersion, permissions: body.permissions, checkedInAt: new Date().toISOString() });
     return { ok: true };
   });
+  app.post(
+    "/diagnostics/reports",
+    {
+      config: {
+        rateLimit: {
+          max: 6,
+          timeWindow: 60_000,
+          hook: "preValidation",
+          keyGenerator: (req) => {
+            const headerDevice = req.headers["x-device-id"] as string | undefined;
+            const bodyDevice = (req.body as { deviceId?: string } | undefined)?.deviceId;
+            const deviceId = headerDevice ?? bodyDevice;
+            return deviceId ? `device:${deviceId}` : req.ip;
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      const body = diagnosticReportRequestSchema.parse(request.body);
+      const diagnosticService =
+        services.diagnostics ??
+        new DiagnosticReportService(
+          options.db,
+          options.observability ?? backendObservability,
+          services.synchronizer,
+          options.escalationService
+        );
+      return reply.status(202).send(await diagnosticService.handleReport(body));
+    }
+  );
 }
 
 interface ProjectCollaboratorResponse {

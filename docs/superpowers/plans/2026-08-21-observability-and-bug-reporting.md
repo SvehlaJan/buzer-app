@@ -1045,7 +1045,7 @@ git commit -m "feat: bootstrap backend observability"
 - Modify: `backend/test/http/routes.test.ts`
 - Modify: `backend/test/http/rateLimit.test.ts`
 
-- [ ] **Step 1: Add failing migration/idempotency tests.**
+- [x] **Step 1: Add failing migration/idempotency tests.**
 
 Create migration version 5 and include the final table in `schema.sql`:
 
@@ -1067,7 +1067,7 @@ create index if not exists diagnostic_reports_device_created
 Test fresh migration, upgrade from version 4, duplicate insertion returns the original
 response, and no existing table/trigger changes.
 
-- [ ] **Step 2: Add failing route validation/auth/rate-limit tests.**
+- [x] **Step 2: Add failing route validation/auth/rate-limit tests.**
 
 Use a strict Zod body: literal schema version `1`, UUID report session, 32 lowercase hex
 Android event ID, ISO instant, at most 20 unique bounded request IDs, and bounded
@@ -1076,7 +1076,7 @@ Android event ID, ISO instant, at most 20 unique bounded request IDs, and bounde
 one device/IP -> 429. The diagnostic route's narrow limit must not consume the ordinary
 60/minute route budget.
 
-- [ ] **Step 3: Add failing read-only service tests.**
+- [x] **Step 3: Add failing read-only service tests.**
 
 Inject fake `TodoistAdapter`, `AccountabilitySender`, action service, and synchronizer
 that throw if called. A report must still succeed. Assert selectors query only existing
@@ -1098,7 +1098,7 @@ requests to 100/15 minutes, bodies to 64 KiB, attachments to 8 MiB, service coll
 two seconds, and route deadline to three seconds. Every missing/truncated section gets
 explicit status metadata.
 
-- [ ] **Step 4: Implement repository and service.**
+- [x] **Step 4: Implement repository and service.**
 
 Use prepared `SELECT` statements only in capsule collectors. The only write is the
 idempotency result inserted after the Sentry adapter returns an event ID. Serialize
@@ -1123,14 +1123,14 @@ tests inject `RecordingBackendObservability`, which returns deterministic 32-hex
 When Sentry ingest is temporarily unreachable, the real SDK still returns an event ID
 and caches its envelope, so the endpoint remains `202 captured`.
 
-- [ ] **Step 5: Register the route without coupling it to action services.**
+- [x] **Step 5: Register the route without coupling it to action services.**
 
 Add `diagnostics: DiagnosticReportService` to `RouteServices`. Register the route with a
 route-specific rate-limit config and an `AbortController`/timeout. Authentication remains
 the existing `preHandler`. Never call `services.actions` or `services.synchronizer` from
 this route.
 
-- [ ] **Step 6: Run focused and full backend suites.**
+- [x] **Step 6: Run focused and full backend suites.**
 
 ```bash
 cd backend
@@ -1142,7 +1142,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit and hand off.**
+- [x] **Step 7: Commit and hand off.**
 
 ```bash
 git add backend/src/db backend/src/observability backend/src/server.ts backend/src/http/routes.ts backend/test/db/migrations.test.ts backend/test/observability backend/test/http docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-08-backend-capsule.md

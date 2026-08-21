@@ -66,4 +66,4 @@ export class RingBuffer<T> {
 }
 
 export const backendLogRingBuffer = new RingBuffer<string>(1000, 15 * 60 * 1000);
-export const backendDiagnosticRingBuffer = new RingBuffer<any>(100, 15 * 60 * 1000);
+export const backendDiagnosticRingBuffer = new RingBuffer<unknown>(100, 15 * 60 * 1000);
