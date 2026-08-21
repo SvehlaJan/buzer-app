@@ -95,25 +95,29 @@ class AndroidAttachmentCollector(
         var rawThreadDump: String? = null
         val threadResult = runCatching {
             withTimeoutOrNull(timeoutPerCollectorMillis) {
-                kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                val dump = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
                     if (threadDumpProvider != null) {
                         threadDumpProvider.invoke()
                     } else {
                         diagnosticCollector.buildThreadDump()
                     }
                 }
+                TimedCollectorResult(dump)
             }
         }
         if (threadResult.isFailure) {
             sectionStatuses["threads"] = DiagnosticSectionStatus.failed("error")
         } else {
-            rawThreadDump = threadResult.getOrNull()
-            if (rawThreadDump == null) {
+            val timed = threadResult.getOrNull()
+            if (timed == null) {
                 sectionStatuses["threads"] = DiagnosticSectionStatus.unavailable("timeout")
-            } else if (rawThreadDump.isBlank()) {
-                sectionStatuses["threads"] = DiagnosticSectionStatus.unavailable("empty")
             } else {
-                sectionStatuses["threads"] = DiagnosticSectionStatus.complete("ok")
+                rawThreadDump = timed.value
+                if (rawThreadDump.isNullOrBlank()) {
+                    sectionStatuses["threads"] = DiagnosticSectionStatus.unavailable("empty")
+                } else {
+                    sectionStatuses["threads"] = DiagnosticSectionStatus.complete("ok")
+                }
             }
         }
 
@@ -121,7 +125,7 @@ class AndroidAttachmentCollector(
         var rawScreenshot: ByteArray? = null
         val screenshotResult = runCatching {
             withTimeoutOrNull(timeoutPerCollectorMillis) {
-                kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                val captured = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
                     if (screenshotProvider != null) {
                         screenshotProvider.invoke()
                     } else {
@@ -129,18 +133,22 @@ class AndroidAttachmentCollector(
                         diagnosticCollector.captureScreenshot(activity)
                     }
                 }
+                TimedCollectorResult(captured)
             }
         }
         if (screenshotResult.isFailure) {
             sectionStatuses["screenshot"] = DiagnosticSectionStatus.failed("error")
         } else {
-            rawScreenshot = screenshotResult.getOrNull()
-            if (rawScreenshot == null) {
+            val timed = screenshotResult.getOrNull()
+            if (timed == null) {
                 sectionStatuses["screenshot"] = DiagnosticSectionStatus.unavailable("timeout")
-            } else if (rawScreenshot.isEmpty()) {
-                sectionStatuses["screenshot"] = DiagnosticSectionStatus.unavailable("headless")
             } else {
-                sectionStatuses["screenshot"] = DiagnosticSectionStatus.complete("ok")
+                rawScreenshot = timed.value
+                if (rawScreenshot == null || rawScreenshot.isEmpty()) {
+                    sectionStatuses["screenshot"] = DiagnosticSectionStatus.unavailable("headless")
+                } else {
+                    sectionStatuses["screenshot"] = DiagnosticSectionStatus.complete("ok")
+                }
             }
         }
 
@@ -412,3 +420,5 @@ class AndroidAttachmentCollector(
         )
     }
 }
+
+private data class TimedCollectorResult<T>(val value: T?)

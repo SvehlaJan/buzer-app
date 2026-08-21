@@ -224,15 +224,17 @@ class AndroidDiagnosticCollector(
                 var copyResult = PixelCopy.ERROR_UNKNOWN
                 val handlerThread = HandlerThread("PixelCopyScreenshot")
                 handlerThread.start()
-                val handler = Handler(handlerThread.looper)
+                val success = try {
+                    val handler = Handler(handlerThread.looper)
+                    PixelCopy.request(window, bitmap, { result ->
+                        copyResult = result
+                        latch.countDown()
+                    }, handler)
 
-                PixelCopy.request(window, bitmap, { result ->
-                    copyResult = result
-                    latch.countDown()
-                }, handler)
-
-                val success = latch.await(1000, TimeUnit.MILLISECONDS)
-                handlerThread.quitSafely()
+                    latch.await(1000, TimeUnit.MILLISECONDS)
+                } finally {
+                    handlerThread.quitSafely()
+                }
 
                 if (success && copyResult == PixelCopy.SUCCESS) {
                     val outputStream = ByteArrayOutputStream()

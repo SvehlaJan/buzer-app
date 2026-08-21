@@ -234,4 +234,44 @@ class AndroidAttachmentCollectorTest {
         // Info log should be dropped under budget pressure
         assertFalse(logContent.contains("Info log message #1"))
     }
+
+    @Test
+    fun screenshotCollectorDifferentiatesHeadlessNullFromTimeout() = runBlocking {
+        val collector = AndroidAttachmentCollector(
+            contextStore = contextStore,
+            ringBuffer = ringBuffer,
+            screenshotProvider = { null },
+            threadDumpProvider = { "\"Thread\" (id=1)\n" }
+        )
+
+        val attachments = collector.collectAttachments(
+            reportSessionId = "rep-headless",
+            eventId = "evt-headless"
+        )
+
+        val capsuleAttachment = attachments.first { it.pathname == "android-diagnostics-v1.json" }
+        val parsedCapsule = json.decodeFromString<AndroidDiagnosticCapsule>(capsuleAttachment.bytes.decodeToString())
+        assertEquals("unavailable", parsedCapsule.sectionStatuses["screenshot"]?.status)
+        assertEquals("headless", parsedCapsule.sectionStatuses["screenshot"]?.reasonCode)
+    }
+
+    @Test
+    fun screenshotCollectorDifferentiatesHeadlessEmptyByteArrayFromTimeout() = runBlocking {
+        val collector = AndroidAttachmentCollector(
+            contextStore = contextStore,
+            ringBuffer = ringBuffer,
+            screenshotProvider = { ByteArray(0) },
+            threadDumpProvider = { "\"Thread\" (id=1)\n" }
+        )
+
+        val attachments = collector.collectAttachments(
+            reportSessionId = "rep-headless-empty",
+            eventId = "evt-headless-empty"
+        )
+
+        val capsuleAttachment = attachments.first { it.pathname == "android-diagnostics-v1.json" }
+        val parsedCapsule = json.decodeFromString<AndroidDiagnosticCapsule>(capsuleAttachment.bytes.decodeToString())
+        assertEquals("unavailable", parsedCapsule.sectionStatuses["screenshot"]?.status)
+        assertEquals("headless", parsedCapsule.sectionStatuses["screenshot"]?.reasonCode)
+    }
 }

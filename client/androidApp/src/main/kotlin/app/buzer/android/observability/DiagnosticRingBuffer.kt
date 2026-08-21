@@ -16,10 +16,15 @@ object Utf8Truncator {
         while (i < input.length) {
             val codePoint = input.codePointAt(i)
             val charCount = Character.charCount(codePoint)
-            val cpBytes = String(Character.toChars(codePoint)).toByteArray(Charsets.UTF_8).size
+            val cpBytes = when {
+                codePoint <= 0x7F -> 1
+                codePoint <= 0x7FF -> 2
+                codePoint <= 0xFFFF -> 3
+                else -> 4
+            }
             if (byteCount + cpBytes > maxBytes) break
             byteCount += cpBytes
-            sb.append(input.substring(i, i + charCount))
+            sb.append(input, i, i + charCount)
             i += charCount
         }
         return sb.toString()
