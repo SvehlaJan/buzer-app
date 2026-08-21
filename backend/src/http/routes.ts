@@ -280,7 +280,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
         }
       }
     },
-    async (request) => {
+    async (request, reply) => {
       const body = diagnosticReportRequestSchema.parse(request.body);
       const diagnosticService =
         services.diagnostics ??
@@ -290,7 +290,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
           services.synchronizer,
           options.escalationService
         );
-      return diagnosticService.handleReport(body);
+      return reply.status(202).send(await diagnosticService.handleReport(body));
     }
   );
 }

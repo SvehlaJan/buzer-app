@@ -35,7 +35,7 @@ export interface CollectDiagnosticsOptions {
   synchronizer?: TodoistSyncService | null | undefined;
   escalationService?: EscalationService | null | undefined;
   logRingBuffer?: RingBuffer<string> | undefined;
-  diagnosticRingBuffer?: RingBuffer<any> | undefined;
+  diagnosticRingBuffer?: RingBuffer<unknown> | undefined;
   maxTotalBytes?: number | undefined;
 }
 
@@ -365,16 +365,13 @@ export async function collectDiagnosticsCapsule(
     const logsBudget = Math.floor(remainingBudget * 0.6);
 
     // Filter logs: Keep error and warn lines first
-    const errorWarnLines = redactedLogEntries.filter(
-      (line) => line.includes("WARN") || line.includes("ERROR") || line.includes("fatal") || line.includes("client_error")
-    );
+    const isImportantLog = (line: string) => /\b(warn|error|fatal|client_error)\b/i.test(line);
+    const errorWarnLines = redactedLogEntries.filter(isImportantLog);
     let truncatedLogText = errorWarnLines.join("\n");
     if (Buffer.byteLength(truncatedLogText, "utf8") > logsBudget) {
       truncatedLogText = truncateUtf8(truncatedLogText, logsBudget);
     } else {
-      const infoLines = redactedLogEntries.filter(
-        (line) => !line.includes("WARN") && !line.includes("ERROR") && !line.includes("fatal") && !line.includes("client_error")
-      );
+      const infoLines = redactedLogEntries.filter((line) => !isImportantLog(line));
       for (const line of infoLines) {
         const candidate = truncatedLogText ? `${truncatedLogText}\n${line}` : line;
         if (Buffer.byteLength(candidate, "utf8") <= logsBudget) {

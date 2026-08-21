@@ -129,7 +129,7 @@ describe("POST /diagnostics/reports endpoint", () => {
     await app.close();
   });
 
-  it("processes valid report request and returns 200 with captured response", async () => {
+  it("processes valid report request and returns 202 with captured response", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const recordingObservability = new RecordingBackendObservability();
@@ -162,7 +162,7 @@ describe("POST /diagnostics/reports endpoint", () => {
       payload
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(202);
     const body = response.json();
     expect(body).toMatchObject({
       schemaVersion: 1,
@@ -218,7 +218,7 @@ describe("POST /diagnostics/reports endpoint", () => {
       headers: { authorization: "Bearer secret-token" },
       payload
     });
-    expect(res1.statusCode).toBe(200);
+    expect(res1.statusCode).toBe(202);
     const body1 = res1.json();
     expect(body1).toMatchObject({
       schemaVersion: 1,
@@ -235,7 +235,7 @@ describe("POST /diagnostics/reports endpoint", () => {
       headers: { authorization: "Bearer secret-token" },
       payload
     });
-    expect(res2.statusCode).toBe(200);
+    expect(res2.statusCode).toBe(202);
     const body2 = res2.json();
     expect(body2).toEqual(body1);
     // Should NOT emit a new Sentry event
@@ -273,7 +273,7 @@ describe("POST /diagnostics/reports endpoint", () => {
         headers: { authorization: "Bearer secret-token" },
         payload: makePayload(i, "device-rate-A")
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.statusCode).toBe(202);
     }
 
     // 7th request for device-rate-A should be rate limited (429)
@@ -292,7 +292,40 @@ describe("POST /diagnostics/reports endpoint", () => {
       headers: { authorization: "Bearer secret-token" },
       payload: makePayload(8, "device-rate-B")
     });
-    expect(otherDevice.statusCode).toBe(200);
+    expect(otherDevice.statusCode).toBe(202);
+
+    await app.close();
+  });
+
+  it("rejects unsupported schemaVersion with validation error", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const app = buildServer({
+      db,
+      currentUserId: "user-1",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter()
+    });
+
+    const invalidVersionPayload = {
+      schemaVersion: 2,
+      reportSessionId: "session-unsupported-version",
+      androidDiagnosticEventId: "android-evt-v2",
+      deviceId: "device-1",
+      capturedAt: "2026-08-21T12:00:00Z"
+    };
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/diagnostics/reports",
+      headers: { authorization: "Bearer secret-token" },
+      payload: invalidVersionPayload
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "validation_error"
+    });
 
     await app.close();
   });

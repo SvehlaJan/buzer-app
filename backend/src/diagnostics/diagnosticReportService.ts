@@ -9,7 +9,7 @@ import type { BackendObservability, DiagnosticCorrelation } from "./backendObser
 const MAX_OPAQUE_VALUE_LENGTH = 200;
 
 export const diagnosticReportRequestSchema = z.strictObject({
-  schemaVersion: z.number().int().default(1),
+  schemaVersion: z.literal(1).default(1),
   reportSessionId: z.string().trim().min(1).max(MAX_OPAQUE_VALUE_LENGTH),
   androidDiagnosticEventId: z.string().trim().min(1).max(MAX_OPAQUE_VALUE_LENGTH),
   deviceId: z.string().trim().min(1).max(MAX_OPAQUE_VALUE_LENGTH),
