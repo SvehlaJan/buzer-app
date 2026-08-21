@@ -149,6 +149,41 @@ class SentryEventSanitizerTest {
     }
 
     @Test
+    fun sanitizesContextsWithListsAndNestedObjects() {
+        val contexts = io.sentry.protocol.Contexts().apply {
+            this["todoist_token"] = "SECRET_TODOIST_123"
+            this["list_data"] = listOf(
+                "Bearer SECRET_BEARER_123",
+                mapOf(
+                    "api_key" to "SECRET_ANDROID_123",
+                    "safe_key" to "password=\"SECRET_PASSWORD_999\""
+                )
+            )
+            this["nested_object"] = mapOf(
+                "headers" to listOf("Cookie: session=SECRET_COOKIE_789"),
+                "token" to "SECRET_SENTRY_123"
+            )
+        }
+
+        val sanitized = SentryEventSanitizer.sanitizeContexts(contexts)
+
+        assertEquals("[REDACTED]", sanitized["todoist_token"])
+
+        @Suppress("UNCHECKED_CAST")
+        val listData = sanitized["list_data"] as List<Any?>
+        assertEquals("Bearer [REDACTED]", listData[0])
+        val nestedMap = listData[1] as Map<String, Any?>
+        assertEquals("[REDACTED]", nestedMap["api_key"])
+        assertEquals("password=\"[REDACTED]\"", nestedMap["safe_key"])
+
+        @Suppress("UNCHECKED_CAST")
+        val nestedObj = sanitized["nested_object"] as Map<String, Any?>
+        val headers = nestedObj["headers"] as List<Any?>
+        assertEquals("Cookie: [REDACTED]", headers[0])
+        assertEquals("[REDACTED]", nestedObj["token"])
+    }
+
+    @Test
     fun sanitizesTextAndJsonAttachmentsAndPreservesBinaryAttachments() {
         // 1. JSON Attachment
         val jsonPayload = """{"token":"SECRET_TODOIST_123","user":"test","password":"SECRET_PASSWORD_999"}"""

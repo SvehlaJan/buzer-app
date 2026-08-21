@@ -15,6 +15,7 @@ import io.sentry.SentryLevel
 import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.core.SentryAndroidOptions
+import io.sentry.protocol.Contexts
 import io.sentry.protocol.SentryId
 
 object SentryEventSanitizer {
@@ -44,17 +45,7 @@ object SentryEventSanitizer {
             }
         }
 
-        val contextKeys = event.contexts.keys().toList()
-        for (key in contextKeys) {
-            val value = event.contexts[key]
-            if (DiagnosticRedactor.isCredentialKey(key)) {
-                event.contexts[key] = "[REDACTED]"
-            } else if (value is Map<*, *>) {
-                event.contexts[key] = redactor.redactMap(value)
-            } else if (value is String) {
-                event.contexts[key] = redactor.redactString(value)
-            }
-        }
+        sanitizeContexts(event.contexts)
 
         event.breadcrumbs?.forEach { breadcrumb ->
             sanitizeBreadcrumb(breadcrumb)
@@ -72,6 +63,22 @@ object SentryEventSanitizer {
         }
 
         return event
+    }
+
+    fun sanitizeContexts(contexts: Contexts): Contexts {
+        val contextKeys = contexts.keys().toList()
+        for (key in contextKeys) {
+            val value = contexts[key]
+            if (DiagnosticRedactor.isCredentialKey(key)) {
+                contexts[key] = "[REDACTED]"
+            } else {
+                val redacted = redactor.redactAny(value)
+                if (redacted != null) {
+                    contexts[key] = redacted
+                }
+            }
+        }
+        return contexts
     }
 
     fun sanitizeBreadcrumb(breadcrumb: Breadcrumb): Breadcrumb {
@@ -125,16 +132,24 @@ class SentryAndroidObservability : AndroidObservability {
 
     override fun setContext(context: DiagnosticCorrelation) {
         Sentry.configureScope { scope ->
-            context.deviceId?.let { scope.setTag("device_id", it) }
-            context.taskId?.let { scope.setTag("task_id", it) }
-            context.occurrenceKey?.let { scope.setTag("occurrence_key", it) }
-            context.actionId?.let { scope.setTag("action_id", it) }
-            context.requestId?.let { scope.setTag("request_id", it) }
-            context.traceId?.let { scope.setTag("trace_id", it) }
-            context.screen?.let { scope.setTag("screen", it) }
-            context.blockerType?.let { scope.setTag("blocker_type", it) }
-            context.appSection?.let { scope.setTag("app_section", it) }
-            context.reportSessionId?.let { scope.setTag("report_session_id", it) }
+            fun setOrRemoveTag(key: String, value: String?) {
+                if (value != null) {
+                    scope.setTag(key, value)
+                } else {
+                    scope.removeTag(key)
+                }
+            }
+
+            setOrRemoveTag("device_id", context.deviceId)
+            setOrRemoveTag("task_id", context.taskId)
+            setOrRemoveTag("occurrence_key", context.occurrenceKey)
+            setOrRemoveTag("action_id", context.actionId)
+            setOrRemoveTag("request_id", context.requestId)
+            setOrRemoveTag("trace_id", context.traceId)
+            setOrRemoveTag("screen", context.screen)
+            setOrRemoveTag("blocker_type", context.blockerType)
+            setOrRemoveTag("app_section", context.appSection)
+            setOrRemoveTag("report_session_id", context.reportSessionId)
 
             val diagnosticMap = buildMap<String, Any?> {
                 context.deviceId?.let { put("device_id", it) }
@@ -150,6 +165,8 @@ class SentryAndroidObservability : AndroidObservability {
             }
             if (diagnosticMap.isNotEmpty()) {
                 scope.setContexts("diagnostic", diagnosticMap)
+            } else {
+                scope.removeContexts("diagnostic")
             }
         }
     }
