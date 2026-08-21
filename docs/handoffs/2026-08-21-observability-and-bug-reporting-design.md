@@ -8,16 +8,18 @@ Date: 2026-08-21
   loop for the Android client and Node/VPS backend.
 - Canonical design:
   `docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md`.
-- Status: interactive design approved; written-spec review pending; implementation and
-  implementation planning have not started.
+- Status: interactive and written design approved. The self-contained implementation
+  plan now exists at
+  `docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`; runtime
+  implementation has not started.
 - Branch: `feature/observability-design`.
 - Worktree: `.worktrees/observability-design`.
 - Starting commit: `2d75e9d` (`master` at worktree creation).
 
 ## Plan/Task/Steps Attempted
 
-- No implementation plan exists yet; this session followed the brainstorming design
-  workflow.
+- The design phase followed the brainstorming workflow. After explicit written approval,
+  planning continued under the writing-plans workflow; see the separate planning handoff.
 - Audited the approved product specification, current worktrees/status, recent E2E and
   readiness handoffs, current E2E foundation plan, Kermit logging, Android Gradle and
   manifest configuration, backend startup/logging, and deployment/test references.
@@ -131,15 +133,15 @@ to the repository.
 - No Sentry organization/project was created.
 - No DSN or auth token was obtained or stored.
 - No GitHub/Sentry integration or alert was configured.
-- No implementation plan was written.
+- No runtime implementation was performed. The later planning session produced the
+  implementation plan linked above.
 - No runtime code, tests, deployment, APK install, or canary report was performed.
 - The documentation branch has not been merged into `master`.
 
 ## Next Recommended Step
 
-1. Review the written design for completeness and request any changes.
-2. After explicit written-spec approval, use `superpowers:writing-plans` to create a
-   self-contained implementation plan with sequential shared-contract tasks and explicit
-   Android/backend/operations worktree ownership.
-3. Keep external operator prerequisites and live canary gates visible in that plan; do
-   not mark the feature complete from fake-transport tests alone.
+1. Choose an execution mode from the planning handoff.
+2. Execute shared contract Tasks 1-2 before independently assigning Android/backend
+   work.
+3. Keep external operator prerequisites and live canary gates open; do not mark the
+   feature complete from fake-transport tests alone.
