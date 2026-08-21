@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { z } from "zod";
+import { DiagnosticReportRepository } from "../repositories/diagnosticReportRepository.js";
 import type { EscalationService } from "../services/escalationService.js";
 import type { TodoistSyncService } from "../services/todoistSyncService.js";
 import { collectDiagnosticsCapsule } from "./backendDiagnosticCollector.js";
@@ -30,14 +31,24 @@ export interface DiagnosticReportResponse {
 }
 
 export class DiagnosticReportService {
+  private readonly repository: DiagnosticReportRepository;
+
   constructor(
     private readonly db: Database.Database,
     private readonly observability: BackendObservability,
     private readonly synchronizer?: TodoistSyncService | null,
-    private readonly escalationService?: EscalationService | null
-  ) {}
+    private readonly escalationService?: EscalationService | null,
+    repository?: DiagnosticReportRepository
+  ) {
+    this.repository = repository ?? new DiagnosticReportRepository(db);
+  }
 
   async handleReport(request: DiagnosticReportRequest): Promise<DiagnosticReportResponse> {
+    const existing = this.repository.findByReportSessionId(request.reportSessionId);
+    if (existing !== null) {
+      return JSON.parse(existing.responseJson) as DiagnosticReportResponse;
+    }
+
     const backendDiagnosticEventId = this.observability.newEventId();
 
     const { attachments } = await collectDiagnosticsCapsule({
@@ -59,6 +70,7 @@ export class DiagnosticReportService {
     const correlation: DiagnosticCorrelation = {
       deviceId: request.deviceId,
       reportSessionId: request.reportSessionId,
+      androidDiagnosticEventId: request.androidDiagnosticEventId,
       ...(request.taskId ? { taskId: request.taskId } : {}),
       ...(request.occurrenceKey ? { occurrenceKey: request.occurrenceKey } : {}),
       ...(request.actionId ? { actionId: request.actionId } : {}),
@@ -73,11 +85,23 @@ export class DiagnosticReportService {
       attachments
     );
 
-    return {
+    const response: DiagnosticReportResponse = {
       schemaVersion: 1,
       reportSessionId: request.reportSessionId,
       backendDiagnosticEventId: capturedEventId || backendDiagnosticEventId,
       outcome: "captured"
     };
+
+    this.repository.saveReport({
+      reportSessionId: request.reportSessionId,
+      androidDiagnosticEventId: request.androidDiagnosticEventId,
+      backendDiagnosticEventId: response.backendDiagnosticEventId,
+      deviceId: request.deviceId,
+      capturedAt: request.capturedAt,
+      responseJson: JSON.stringify(response),
+      createdAt: new Date().toISOString()
+    });
+
+    return response;
   }
 }

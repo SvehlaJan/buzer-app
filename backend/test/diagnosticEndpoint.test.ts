@@ -180,11 +180,66 @@ describe("POST /diagnostics/reports endpoint", () => {
     expect(captured!.context).toMatchObject({
       deviceId: "device-100",
       reportSessionId: "session-ok-123",
+      androidDiagnosticEventId: "android-ok-456",
       taskId: "task-test-1",
       occurrenceKey: "occ-test-1",
       actionId: "act-test-1",
       traceId: "trace-xyz"
     });
+
+    await app.close();
+  });
+
+  it("returns identical response idempotently for duplicate reportSessionId without re-capturing Sentry event", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const recordingObservability = new RecordingBackendObservability();
+
+    const app = buildServer({
+      db,
+      currentUserId: "user-1",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObservability
+    });
+
+    const payload = {
+      schemaVersion: 1,
+      reportSessionId: "session-idempotent-endpoint",
+      androidDiagnosticEventId: "android-idem-1",
+      deviceId: "device-idem-1",
+      capturedAt: "2026-08-21T12:00:00Z"
+    };
+
+    // First POST
+    const res1 = await app.inject({
+      method: "POST",
+      url: "/diagnostics/reports",
+      headers: { authorization: "Bearer secret-token" },
+      payload
+    });
+    expect(res1.statusCode).toBe(200);
+    const body1 = res1.json();
+    expect(body1).toMatchObject({
+      schemaVersion: 1,
+      reportSessionId: "session-idempotent-endpoint",
+      backendDiagnosticEventId: expect.stringMatching(/^[a-f0-9]{32}$/),
+      outcome: "captured"
+    });
+    expect(recordingObservability.capturedEvents).toHaveLength(1);
+
+    // Duplicate POST
+    const res2 = await app.inject({
+      method: "POST",
+      url: "/diagnostics/reports",
+      headers: { authorization: "Bearer secret-token" },
+      payload
+    });
+    expect(res2.statusCode).toBe(200);
+    const body2 = res2.json();
+    expect(body2).toEqual(body1);
+    // Should NOT emit a new Sentry event
+    expect(recordingObservability.capturedEvents).toHaveLength(1);
 
     await app.close();
   });

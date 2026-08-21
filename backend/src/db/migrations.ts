@@ -34,6 +34,11 @@ export function migrate(db: Database.Database): void {
       migrateToVersionFour(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(4, new Date().toISOString());
     }
+    const migrationFiveApplied = db.prepare("select 1 from schema_migrations where version = 5").get() !== undefined;
+    if (!migrationFiveApplied) {
+      migrateToVersionFive(db);
+      db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(5, new Date().toISOString());
+    }
   });
 
   tx();
@@ -163,6 +168,23 @@ function migrateToVersionFour(db: Database.Database): void {
       updated_at text not null,
       primary key (todoist_project_id, todoist_user_id)
     );
+  `);
+}
+
+function migrateToVersionFive(db: Database.Database): void {
+  db.exec(`
+    create table if not exists diagnostic_reports (
+      report_session_id text primary key,
+      android_diagnostic_event_id text not null,
+      backend_diagnostic_event_id text not null,
+      device_id text not null,
+      captured_at text not null,
+      response_json text not null,
+      created_at text not null
+    );
+
+    create index if not exists diagnostic_reports_device_created
+      on diagnostic_reports(device_id, created_at);
   `);
 }
 

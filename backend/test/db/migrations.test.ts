@@ -96,6 +96,7 @@ describe("migrate", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "commitment_states",
       "devices",
+      "diagnostic_reports",
       "schema_migrations",
       "snapshot_generations",
       "task_action_commands",
@@ -126,6 +127,23 @@ describe("migrate", () => {
       { name: "todoist_collaborators" },
       { name: "todoist_project_collaborators" }
     ]);
+  });
+
+  it("applies the diagnostic reports migration to an existing v4 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      drop table diagnostic_reports;
+      delete from schema_migrations where version = 5;
+    `);
+
+    migrate(db);
+
+    expect(db.prepare("select version from schema_migrations where version = 5").get()).toEqual({ version: 5 });
+    const tables = db.prepare("select name from sqlite_master where type = 'table' and name = 'diagnostic_reports'").all();
+    expect(tables).toEqual([{ name: "diagnostic_reports" }]);
+    const indexes = db.prepare("pragma index_list(diagnostic_reports)").all() as Array<{ name: string }>;
+    expect(indexes.map((idx) => idx.name)).toContain("diagnostic_reports_device_created");
   });
 
   it("adds project mirror, commitment owner, and task description columns to an existing database", () => {
@@ -534,7 +552,8 @@ describe("migrate", () => {
       { version: 1 },
       { version: 2 },
       { version: 3 },
-      { version: 4 }
+      { version: 4 },
+      { version: 5 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;

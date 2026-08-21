@@ -8,6 +8,7 @@ import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
 import { CollaboratorRepository } from "./repositories/collaboratorRepository.js";
+import { DiagnosticReportRepository } from "./repositories/diagnosticReportRepository.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
@@ -158,11 +159,13 @@ export function buildServer(options: BuildServerOptions) {
   const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
+  const diagnosticReports = new DiagnosticReportRepository(options.db);
   const diagnostics = new DiagnosticReportService(
     options.db,
     observability,
     synchronizer,
-    options.escalationService
+    options.escalationService,
+    diagnosticReports
   );
   const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
   const actions = new TaskActionService(
