@@ -25,6 +25,7 @@ import {
   backendObservabilityRuntime,
   type DiagnosticCorrelation
 } from "./diagnostics/backendObservability.js";
+import { DiagnosticReportService } from "./diagnostics/diagnosticReportService.js";
 import { backendDiagnosticRingBuffer, backendLogRingBuffer, truncateUtf8 } from "./diagnostics/ringBuffer.js";
 import { redactString } from "./diagnostics/redaction.js";
 
@@ -157,6 +158,12 @@ export function buildServer(options: BuildServerOptions) {
   const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
+  const diagnostics = new DiagnosticReportService(
+    options.db,
+    observability,
+    synchronizer,
+    options.escalationService
+  );
   const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
   const actions = new TaskActionService(
     options.db,
@@ -180,7 +187,7 @@ export function buildServer(options: BuildServerOptions) {
     }
   );
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer });
+    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer, diagnostics });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
