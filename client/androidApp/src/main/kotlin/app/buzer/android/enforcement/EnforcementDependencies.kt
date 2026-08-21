@@ -2,10 +2,15 @@ package app.buzer.android.enforcement
 
 import android.content.Context
 import app.buzer.android.BuildConfig
+import app.buzer.android.observability.AndroidObservability
+import app.buzer.android.observability.DiagnosticContextStore
+import app.buzer.android.observability.DiagnosticRingBuffer
+import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.sync.DeviceIdentityStore
 import app.buzer.android.sync.SnapshotStore
-import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.api.BuzerApiClient
+import app.buzer.shared.api.TraceHeaders
+import app.buzer.shared.diagnostics.AppLog
 
 object EnforcementDependencies {
     fun deviceIdentityStore(context: Context): DeviceIdentityStore =
@@ -21,21 +26,41 @@ object EnforcementDependencies {
         return null
     }
 
-    fun coordinator(context: Context): EnforcementCoordinator {
+    fun buzerApiClient(
+        observability: AndroidObservability = ObservabilityRuntime.instance
+    ): BuzerApiClient {
         val error = configError()
         require(error == null) { error.orEmpty() }
-        val client = BuzerApiClient(
+        return BuzerApiClient(
             baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/'),
-            token = BuildConfig.BUZER_BACKEND_TOKEN
+            token = BuildConfig.BUZER_BACKEND_TOKEN,
+            networkSink = { exchange ->
+                DiagnosticRingBuffer.instance.network.add(exchange)
+            },
+            traceHeaderProvider = {
+                val correlation = DiagnosticContextStore.instance.snapshot().correlation
+                if (correlation.traceId != null) {
+                    TraceHeaders(traceId = correlation.traceId)
+                } else null
+            }
         )
+    }
+
+    fun coordinator(
+        context: Context,
+        observability: AndroidObservability = ObservabilityRuntime.instance
+    ): EnforcementCoordinator {
+        val client = buzerApiClient(observability)
         return EnforcementCoordinator(
             api = BuzerEnforcementApi(client),
             snapshotStore = SnapshotStore(context),
             alarmScheduler = AndroidAlarmScheduler(context),
             scheduledAlarmRegistry = ScheduledAlarmRegistry.fromContext(context),
-            errorReporter = BlockerErrorReporter(context),
+            errorReporter = BlockerErrorReporter(context, observability = observability),
             blockerNotificationCleaner = AndroidBlockerNotificationCleaner(context),
-            logger = AppLog::debug
+            logger = AppLog::debug,
+            observability = observability,
+            contextStore = DiagnosticContextStore.instance
         )
     }
 }

@@ -13,10 +13,13 @@ import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
+import app.buzer.android.observability.DiagnosticContextStore
+import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.StartBlockerScreen
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
@@ -44,6 +47,29 @@ class StartBlockerActivity : ComponentActivity() {
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
         val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
+        DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "StartBlocker",
+                currentActivity = "StartBlockerActivity",
+                blockerType = "StartBlocker",
+                appSection = "Enforcement"
+            )
+        }
+        DiagnosticContextStore.instance.updateCorrelation {
+            it.copy(
+                taskId = taskId,
+                occurrenceKey = occurrenceKey
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            DiagnosticCorrelation(
+                screen = "StartBlocker",
+                blockerType = "StartBlocker",
+                taskId = taskId,
+                occurrenceKey = occurrenceKey,
+                appSection = "Enforcement"
+            )
+        )
         if (taskId == null || occurrenceKey.isNullOrBlank()) {
             AppLog.debug("start_blocker missing_alarm_identity")
             errorReporter.report(
@@ -59,6 +85,31 @@ class StartBlockerActivity : ComponentActivity() {
         prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
     }
 
+    override fun onDestroy() {
+        DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        DiagnosticContextStore.instance.updateCorrelation {
+            it.copy(
+                taskId = null,
+                occurrenceKey = null
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            DiagnosticCorrelation(
+                screen = null,
+                blockerType = null,
+                taskId = null,
+                occurrenceKey = null
+            )
+        )
+        super.onDestroy()
+    }
+
     private fun createCoordinator(): EnforcementCoordinator? {
         return try {
             EnforcementDependencies.coordinator(applicationContext)
@@ -67,7 +118,8 @@ class StartBlockerActivity : ComponentActivity() {
             errorReporter.report(
                 action = BlockerAction.REFRESH_SNAPSHOT,
                 taskId = null,
-                message = error.message ?: "enforcement configuration failed"
+                message = error.message ?: "enforcement configuration failed",
+                throwable = error
             )
             finish()
             null
@@ -90,7 +142,8 @@ class StartBlockerActivity : ComponentActivity() {
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = taskId,
-                    message = error.message ?: "local snapshot load failed"
+                    message = error.message ?: "local snapshot load failed",
+                    throwable = error
                 )
             }
 
@@ -129,7 +182,8 @@ class StartBlockerActivity : ComponentActivity() {
                 errorReporter.report(
                     action = BlockerAction.REFRESH_SNAPSHOT,
                     taskId = taskId,
-                    message = error.message ?: "snapshot refresh failed"
+                    message = error.message ?: "snapshot refresh failed",
+                    throwable = error
                 )
             }
             if (!isFinishing) showBlocker(coordinator, taskId, occurrenceKey)

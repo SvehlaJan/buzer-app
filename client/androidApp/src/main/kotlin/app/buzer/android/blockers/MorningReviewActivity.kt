@@ -22,10 +22,13 @@ import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MorningReviewResult
 import app.buzer.android.morningreview.MorningReviewSessionController
 import app.buzer.android.morningreview.MorningReviewSessionState
+import app.buzer.android.observability.DiagnosticContextStore
+import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.screens.MorningReviewScreen
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotReducer
@@ -43,6 +46,21 @@ class MorningReviewActivity : ComponentActivity() {
             finish()
         }
         val source = MorningReviewContract.entrySource(intent)
+        DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = "MorningReview",
+                currentActivity = "MorningReviewActivity",
+                blockerType = "MorningReview",
+                appSection = "MorningReview"
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            DiagnosticCorrelation(
+                screen = "MorningReview",
+                blockerType = "MorningReview",
+                appSection = "MorningReview"
+            )
+        )
         if (source == MorningReviewEntrySource.Automated) {
             configureBlockerWindow()
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -68,7 +86,7 @@ class MorningReviewActivity : ComponentActivity() {
             val message = error.message ?: "enforcement configuration failed"
             session.forceSyncFailed(message)
             AppLog.error("morning_review coordinator create failed", error)
-            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
             null
         }
 
@@ -82,7 +100,7 @@ class MorningReviewActivity : ComponentActivity() {
             val message = error.message ?: "local snapshot load failed"
             session.forceSyncFailed(message)
             AppLog.error("morning_review cached snapshot load failed", error)
-            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
+            errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
         }
 
         fun runForcedRefresh() {
@@ -91,7 +109,7 @@ class MorningReviewActivity : ComponentActivity() {
                 session.forceSync { SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()) }?.let { error ->
                     val message = error.message ?: "snapshot refresh failed"
                     AppLog.error("morning_review forced sync failed", error)
-                    errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message)
+                    errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
                 }
             }
         }
@@ -203,5 +221,22 @@ class MorningReviewActivity : ComponentActivity() {
                 onRetryRefresh = ::runForcedRefresh
             )
         }
+    }
+
+    override fun onDestroy() {
+        DiagnosticContextStore.instance.updateUi {
+            it.copy(
+                screen = null,
+                blockerType = null,
+                currentActivity = null
+            )
+        }
+        ObservabilityRuntime.instance.setContext(
+            DiagnosticCorrelation(
+                screen = null,
+                blockerType = null
+            )
+        )
+        super.onDestroy()
     }
 }

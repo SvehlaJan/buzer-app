@@ -149,5 +149,7 @@ open class DiagnosticRingBuffer(
         network.clear()
     }
 
-    companion object : DiagnosticRingBuffer()
+    companion object : DiagnosticRingBuffer() {
+        val instance: DiagnosticRingBuffer get() = this
+    }
 }

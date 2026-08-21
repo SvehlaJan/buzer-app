@@ -36,6 +36,15 @@ class AndroidEnforcementReadinessChecker(
             batteryOptimizationExempt = context.getSystemService(PowerManager::class.java)
                 .isIgnoringBatteryOptimizations(context.packageName)
         )
+        app.buzer.android.observability.DiagnosticContextStore.instance.updateReadiness { current ->
+            current.copy(
+                notificationsGranted = snapshot.appNotificationsEnabled && snapshot.notificationRuntimeGranted,
+                exactAlarmGranted = snapshot.exactAlarmsAllowed,
+                fullScreenIntentGranted = snapshot.fullScreenIntentAllowed,
+                overlayGranted = snapshot.overlayAllowed,
+                batteryOptimizationExempt = snapshot.batteryOptimizationExempt
+            )
+        }
         return EnforcementReadinessPolicy.evaluate(
             snapshot = snapshot,
             requiredChannels = NotificationChannels.requiredForEnforcement

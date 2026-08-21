@@ -36,6 +36,13 @@ object BootReconcileRunner {
                 throw error
             } catch (error: Throwable) {
                 AppLog.error("boot_reconcile failed ${error.message}", error)
+                BlockerErrorReporter(context).report(
+                    action = BlockerAction.REFRESH_SNAPSHOT,
+                    taskId = null,
+                    message = error.message ?: "boot reconcile failed",
+                    showNotification = false,
+                    throwable = error
+                )
             } finally {
                 pendingResult.finish()
             }
