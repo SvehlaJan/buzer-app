@@ -935,7 +935,7 @@ git commit -m "feat: correlate Android enforcement diagnostics"
 - Modify: `backend/src/server.ts`
 - Create tests: `backend/test/observability/redactor.test.ts`, `ringBuffer.test.ts`, and `backendObservability.test.ts`
 
-- [ ] **Step 1: Install and lock the current Node SDK.**
+- [x] **Step 1: Install and lock the current Node SDK.**
 
 ```bash
 cd backend
@@ -945,14 +945,14 @@ npm install @sentry/node@10.70.0
 Do not add browser replay or another logger. Add `sourceMap: true` and
 `inlineSources: true` to build TypeScript options.
 
-- [ ] **Step 2: Write failing backend redaction/buffer tests.**
+- [x] **Step 2: Write failing backend redaction/buffer tests.**
 
 Mirror Task 1's secret corpus and bounds. The two language implementations need identical
 behavior for the corpus, not shared source code. Read the canonical
 `test-fixtures/observability/redaction-corpus.json`; both suites assert every input's
 expected output and absence of all sentinel values.
 
-- [ ] **Step 3: Define a fakeable backend boundary.**
+- [x] **Step 3: Define a fakeable backend boundary.**
 
 ```ts
 export interface BackendObservability {
@@ -968,7 +968,7 @@ Provide `NoopBackendObservability`, `RecordingBackendObservability` for tests, a
 Sentry implementation. Log locally as one redacted JSON line and add structured Sentry
 logs/breadcrumbs. Only error paths call `captureException`.
 
-- [ ] **Step 4: Initialize Sentry before application imports.**
+- [x] **Step 4: Initialize Sentry before application imports.**
 
 `backend/src/instrument.ts` imports only `@sentry/node` and a dependency-free redactor.
 It calls `Sentry.init` with blank-DSN disabled behavior, release/environment,
@@ -989,7 +989,7 @@ Use Node ESM preload so Fastify is imported after initialization:
 Update Docker to `CMD ["npm", "run", "start"]`. Tests continue importing `buildServer`
 directly and receive the no-op/recording adapter; no test preload is required.
 
-- [ ] **Step 5: Add request context and error capture to Fastify.**
+- [x] **Step 5: Add request context and error capture to Fastify.**
 
 Extend `BuildServerOptions` with `observability?: BackendObservability` and configure
 Fastify with `requestIdHeader: "x-request-id"`. Use Fastify's request ID as `request_id`,
@@ -999,13 +999,13 @@ current official `setupFastifyErrorHandler(app)` after routes. Expected 4xx doma
 are logs; 5xx and unexpected errors are captured. Keep `logger: false` and never record
 the authorization header.
 
-- [ ] **Step 6: Add graceful process handling.**
+- [x] **Step 6: Add graceful process handling.**
 
 Capture `unhandledRejection` and `uncaughtException`, flush for at most two seconds, then
 preserve normal process-failure semantics. On `SIGTERM`/`SIGINT`, close Fastify and flush
 without exceeding the existing container shutdown window.
 
-- [ ] **Step 7: Run focused and complete backend verification.**
+- [x] **Step 7: Run focused and complete backend verification.**
 
 ```bash
 cd backend
@@ -1017,7 +1017,7 @@ npm run build
 
 Expected: PASS. Run `rg` over `dist`/test output for seeded secrets and find none.
 
-- [ ] **Step 8: Commit and hand off.**
+- [x] **Step 8: Commit and hand off.**
 
 ```bash
 git add backend/package.json backend/package-lock.json backend/tsconfig.json backend/tsconfig.build.json backend/src/instrument.ts backend/src/observability backend/src/server.ts backend/test/observability backend/.env.example Dockerfile docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-07-backend-bootstrap.md
