@@ -643,14 +643,14 @@ git commit -m "feat: bootstrap Android observability"
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidDiagnosticCollectorTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidAttachmentCollectorTest.kt`
 
-- [ ] **Step 1: Write failing immutable-context tests.**
+- [x] **Step 1: Write failing immutable-context tests.**
 
 Define sections for UI, sync/snapshot, scheduling/alarms, readiness/permissions, action
 journal knowledge, process/device, and correlation. Test atomic section updates, a frozen
 snapshot that cannot change, reset semantics, and that updating context never throws to a
 producer.
 
-- [ ] **Step 2: Write failing ring-buffer and capsule isolation/bounds tests.**
+- [x] **Step 2: Write failing ring-buffer and capsule isolation/bounds tests.**
 
 Assert newest-first snapshot order, 1,000-record and 15-minute eviction, UTF-8 byte
 truncation without splitting a code point, and JVM thread safety. Every collector returns `complete`, `partial`, `unavailable`, or `failed` plus a stable
@@ -671,7 +671,7 @@ Deterministic truncation priority is report/release/correlation identity; curren
 snapshot, action, alarm, and readiness state; error/warning logs; failed/slow network
 exchanges; screenshot; then info/debug history. Record every drop/truncation.
 
-- [ ] **Step 3: Implement versioned capsule serialization.**
+- [x] **Step 3: Implement versioned capsule serialization.**
 
 Use a single deterministic `Json` instance and schema version `1`. Implement every
 approved section: report/release identity; device/process/app version; activity/editor/
@@ -686,14 +686,14 @@ status metadata.
 Collect only app-process threads and app-owned state, never unrestricted Logcat or the
 SQLite database file.
 
-- [ ] **Step 4: Implement screenshot and thread collectors.**
+- [x] **Step 4: Implement screenshot and thread collectors.**
 
 Use the weak current activity. Capture the activity window with `PixelCopy` on API 26+,
 compress to WebP/JPEG under 2 MiB, and return `unavailable` if there is no valid surface.
 Build the thread dump from `Thread.getAllStackTraces()`, sorted by thread name and capped
 at 512 KiB. Run both off the main thread with timeouts; never block form submission.
 
-- [ ] **Step 5: Run focused and complete Android JVM tests.**
+- [x] **Step 5: Run focused and complete Android JVM tests.**
 
 ```bash
 cd client
@@ -703,7 +703,7 @@ cd client
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit and hand off.**
+- [x] **Step 6: Commit and hand off.**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/observability client/androidApp/src/test/kotlin/app/buzer/android/observability docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-04-android-capsule.md
