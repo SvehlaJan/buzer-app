@@ -1302,12 +1302,23 @@ behavior in both projects.
 
 **Files:**
 
+- Create: `tools/sentry-github-sync/package.json`
+- Create: `tools/sentry-github-sync/tsconfig.json`
+- Create: `tools/sentry-github-sync/src/types.ts`
+- Create: `tools/sentry-github-sync/src/redact.ts`
+- Create: `tools/sentry-github-sync/src/format.ts`
+- Create: `tools/sentry-github-sync/src/triage.ts`
+- Create: `tools/sentry-github-sync/src/github.ts`
+- Create: `tools/sentry-github-sync/src/sentry.ts`
+- Create: `tools/sentry-github-sync/src/index.ts`
+- Create: `tools/sentry-github-sync/test/format.test.ts`
+- Create: `tools/sentry-github-sync/test/triage.test.ts`
 - Create: `scripts/sentry-triage.mjs`
 - Create: `scripts/sentry-triage.test.mjs`
 - Create: `.github/workflows/sentry-triage.yml`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Write failing pure triage tests.**
+- [x] **Step 1: Write failing pure triage tests.**
 
 Export pure functions and inject `fetch`. Fixture both Sentry projects. Test new/regressed
 actionable issues, ignored/non-actionable issues, pagination, API failure, GitHub search,
@@ -1322,7 +1333,7 @@ Exactly one GitHub issue exists per stable Sentry issue ID. Title prefix:
 seen, count, level, release, environment, and reproduction checklist. It must not contain
 event attachments, request bodies, user/task content, auth data, or token values.
 
-- [ ] **Step 2: Implement API clients with native `fetch`.**
+- [x] **Step 2: Implement API clients with native `fetch`.**
 
 Required environment:
 
@@ -1340,7 +1351,7 @@ GitHub REST issue search/create/update. Set `observability`, `bug`, and platform
 creating missing labels only if the token permits. Never print request headers or full
 API error bodies.
 
-- [ ] **Step 3: Add a manual-only workflow first.**
+- [x] **Step 3: Add a manual-only workflow first.**
 
 ```yaml
 name: Sentry triage
@@ -1389,7 +1400,7 @@ confirm the second run updates rather than duplicates the GitHub issue. Only the
 If credentials are unavailable, leave this step and the schedule unchecked. The pure
 script may merge, but scheduled triage is rollout-incomplete.
 
-- [ ] **Step 5: Add tests to CI and verify.**
+- [x] **Step 5: Add tests to CI and verify.**
 
 ```bash
 node --test scripts/sentry-triage.test.mjs
@@ -1399,7 +1410,7 @@ git diff --check
 Add the first command to `.github/workflows/ci.yml` in a small operations job or the
 backend job. Expected: PASS without credentials/network.
 
-- [ ] **Step 6: Commit and hand off.**
+- [x] **Step 6: Commit and hand off.**
 
 ```bash
 git add scripts/sentry-triage.mjs scripts/sentry-triage.test.mjs .github/workflows/sentry-triage.yml .github/workflows/ci.yml docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-11-triage.md
