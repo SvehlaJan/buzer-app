@@ -15,6 +15,7 @@ export interface DiagnosticCorrelation {
   actionId?: string;
   requestId?: string;
   traceId?: string;
+  baggage?: string;
   reportSessionId?: string;
 }
 
@@ -142,6 +143,7 @@ export class SentryBackendObservability implements BackendObservability {
     if (correlation.actionId) Sentry.setTag("action_id", correlation.actionId);
     if (correlation.requestId) Sentry.setTag("request_id", correlation.requestId);
     if (correlation.traceId) Sentry.setTag("trace_id", correlation.traceId);
+    if (correlation.baggage) Sentry.setTag("baggage", correlation.baggage);
     if (correlation.reportSessionId) Sentry.setTag("report_session_id", correlation.reportSessionId);
   }
 
@@ -160,6 +162,7 @@ export class SentryBackendObservability implements BackendObservability {
         if (correlation.actionId) scope.setTag("action_id", correlation.actionId);
         if (correlation.requestId) scope.setTag("request_id", correlation.requestId);
         if (correlation.traceId) scope.setTag("trace_id", correlation.traceId);
+        if (correlation.baggage) scope.setTag("baggage", correlation.baggage);
         if (correlation.reportSessionId) scope.setTag("report_session_id", correlation.reportSessionId);
       }
       if (error instanceof Error) {
@@ -186,6 +189,7 @@ export class SentryBackendObservability implements BackendObservability {
         if (correlation.actionId) scope.setTag("action_id", correlation.actionId);
         if (correlation.requestId) scope.setTag("request_id", correlation.requestId);
         if (correlation.traceId) scope.setTag("trace_id", correlation.traceId);
+        if (correlation.baggage) scope.setTag("baggage", correlation.baggage);
         if (correlation.reportSessionId) scope.setTag("report_session_id", correlation.reportSessionId);
       }
       if (error instanceof Error) {
@@ -208,7 +212,7 @@ export class SentryBackendObservability implements BackendObservability {
     Sentry.withScope((scope) => {
       scope.setLevel("info");
       scope.setTag("report_session_id", reportSessionId);
-      scope.setTag("submitted", String(submitted));
+      scope.setTag("feedback_submitted", String(submitted));
       if (context) {
         const sanitized = redactObject(context as unknown as Record<string, unknown>);
         scope.setContext("correlation", sanitized);
@@ -218,6 +222,7 @@ export class SentryBackendObservability implements BackendObservability {
         if (context.actionId) scope.setTag("action_id", context.actionId);
         if (context.requestId) scope.setTag("request_id", context.requestId);
         if (context.traceId) scope.setTag("trace_id", context.traceId);
+        if (context.baggage) scope.setTag("baggage", context.baggage);
       }
       for (const att of attachments) {
         scope.addAttachment({

@@ -240,7 +240,7 @@ describe("Fastify Telemetry & Request Tracing Hooks", () => {
     expect(generatedId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it("propagates sentry-trace and extracts correlation params (taskId, actionId, deviceId)", async () => {
+  it("propagates sentry-trace and baggage and extracts correlation params (taskId, actionId, deviceId)", async () => {
     const app = buildServer({
       db,
       currentUserId: "user-test",
@@ -250,12 +250,14 @@ describe("Fastify Telemetry & Request Tracing Hooks", () => {
     });
 
     const traceId = "12345678901234567890123456789012";
+    const baggage = "sentry-environment=production,sentry-release=1.0.0";
     await app.inject({
       method: "POST",
       url: "/tasks",
       headers: {
         authorization: "Bearer secret-token",
         "sentry-trace": traceId,
+        baggage,
         "x-device-id": "device-pixel-9"
       },
       payload: {
@@ -272,6 +274,7 @@ describe("Fastify Telemetry & Request Tracing Hooks", () => {
     const lastContext = contexts[contexts.length - 1];
     expect(lastContext).toBeDefined();
     expect(lastContext?.traceId).toBe(traceId);
+    expect(lastContext?.baggage).toBe(baggage);
     expect(lastContext?.deviceId).toBe("device-pixel-9");
     expect(lastContext?.actionId).toBe("act-999");
   });

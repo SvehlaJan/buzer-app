@@ -61,10 +61,12 @@ export function buildServer(options: BuildServerOptions) {
     (request as unknown as { startTime: number }).startTime = Date.now();
 
     const sentryTrace = (request.headers["sentry-trace"] as string | undefined) ?? undefined;
+    const baggage = (request.headers["baggage"] as string | undefined) ?? undefined;
 
     const correlation: DiagnosticCorrelation = {
       requestId,
-      ...(sentryTrace !== undefined ? { traceId: sentryTrace } : {})
+      ...(sentryTrace !== undefined ? { traceId: sentryTrace } : {}),
+      ...(baggage !== undefined ? { baggage } : {})
     };
     (request as unknown as { diagnosticCorrelation: DiagnosticCorrelation }).diagnosticCorrelation = correlation;
     observability.setContext(correlation);
@@ -211,6 +213,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     throw new Error("TODOIST_USER_ID, ANDROID_API_TOKEN, TODOIST_API_TOKEN, and WHATSAPP_RECIPIENT_ID are required");
   }
 
+  process.on("unhandledRejection", async (reason) => {
+    backendObservability.captureFatal("unhandled_rejection", reason);
+    try {
+      await backendObservability.flush(2000);
+    } finally {
+      process.exit(1);
+    }
+  });
+
+  process.on("uncaughtException", async (error) => {
+    backendObservability.captureFatal("uncaught_exception", error);
+    try {
+      await backendObservability.flush(2000);
+    } finally {
+      process.exit(1);
+    }
+  });
+
   const db = openDatabase(dbPath);
   const tasks = new TaskRepository(db);
   const projects = new ProjectRepository(db);
@@ -253,6 +273,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     await backendObservability.flush(2000);
   });
+
+  const handleSignal = async () => {
+    try {
+      await app.close();
+      await backendObservability.flush(2000);
+    } finally {
+      process.exit(0);
+    }
+  };
+
+  process.on("SIGTERM", () => void handleSignal());
+  process.on("SIGINT", () => void handleSignal());
 
   poller.start();
   await app.listen({ host: "0.0.0.0", port });

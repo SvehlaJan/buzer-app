@@ -35,4 +35,4 @@ RUN mkdir -p data whatsapp-sessions
 
 EXPOSE 18432
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "--import", "./dist/instrument.js", "./dist/server.js"]

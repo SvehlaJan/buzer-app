@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx src/server.ts",
+    "start": "node --import ./dist/instrument.js ./dist/server.js",
+    "dev": "node --import tsx --import ./src/instrument.ts ./src/server.ts",
     "e2e-server": "tsx test/e2eServer.ts",
     "migrate": "tsx src/db/migrations.ts"
   },
