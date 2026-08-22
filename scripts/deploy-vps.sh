@@ -17,7 +17,7 @@ git fetch origin "$branch"
 git checkout -B "$branch" "origin/$branch"
 
 git_sha_short=$(git rev-parse --short=12 HEAD 2>/dev/null || echo "vps")
-export SENTRY_RELEASE="${SENTRY_RELEASE:-buzer-backend@0.1.0+${git_sha_short}}"
+export SENTRY_RELEASE="${SENTRY_RELEASE:-app.buzer@0.1.0+${git_sha_short}}"
 
 docker compose --env-file "$env_file" -f "$compose_file" up -d --build --remove-orphans
 
