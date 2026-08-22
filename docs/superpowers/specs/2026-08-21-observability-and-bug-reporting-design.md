@@ -2,8 +2,9 @@
 
 Date: 2026-08-21
 
-Status: Approved in interactive design review on 2026-08-21. Implementation has not
-started.
+Status: Superseded on 2026-08-22 by
+`docs/superpowers/specs/2026-08-22-lean-observability-design.md`. Retained for historical
+context only; do not implement new work from this document.
 
 ## Relationship To Existing Product Truth
 

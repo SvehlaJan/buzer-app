@@ -7,16 +7,14 @@ This repository is a personal Todoist commitment companion. It has two MVP deplo
 
 The approved product spec is `docs/superpowers/specs/2026-04-30-todoist-commitment-companion-design.md`. Treat that file as product truth unless a later decision document explicitly changes it.
 
-The approved observability/bug-reporting extension is
-`docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md`, with the
-self-contained execution plan at
-`docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`. Operational runbooks
-are maintained under `docs/runbooks/` (`sentry-setup.md`, `observability-triage.md`, `production-rollout.md`)
-and architectural parameters in `docs/notes/observability-operations.md`. Any agent working
-on logging, diagnostics, Sentry, crash/ANR capture, Android feedback, the diagnostic
-endpoint, source maps/releases, alerts, or Sentry-to-GitHub triage must read both files.
-Until the plan's live-canary gates are checked, do not assume Sentry projects, DSNs,
-tokens, alerts, GitHub integration, or production rollout already exist.
+The approved observability/bug-reporting direction is
+`docs/superpowers/specs/2026-08-22-lean-observability-design.md`. It supersedes the
+2026-08-21 paired-capsule design and plan, which are retained only as historical records.
+Any agent working on logging, diagnostics, Sentry, crash/ANR capture, Android feedback,
+source maps/releases, alerts, or deletion of the superseded diagnostic endpoint/capsules
+must read the lean design and its current implementation plan. Until the new plan's
+live-canary gates are checked, do not assume DSNs, tokens, alerts, GitHub integration, or
+production rollout already exist.
 
 ## Required Start-Of-Session Routine
 
