@@ -1,74 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 import { TodoistPoller } from "../../src/services/todoistPoller.js";
-import { RingBuffer } from "../../src/diagnostics/ringBuffer.js";
-import type { BackendObservability } from "../../src/diagnostics/backendObservability.js";
-
-function createMockObservability(): BackendObservability & {
-  handledCaptures: Array<{ marker: string; error: unknown; correlation?: unknown }>;
-} {
-  const handledCaptures: Array<{ marker: string; error: unknown; correlation?: unknown }> = [];
-  return {
-    handledCaptures,
-    isEnabled: () => true,
-    setContext: vi.fn(),
-    captureHandled: vi.fn((marker: string, error: unknown, correlation?: unknown) => {
-      handledCaptures.push({ marker, error, correlation });
-      return "mock-event-id-001";
-    }),
-    captureFatal: vi.fn(),
-    newEventId: () => "mock-event-id",
-    captureDiagnosticEvent: vi.fn(),
-    flush: vi.fn(async () => true)
-  };
-}
+import { RecordingBackendObservability } from "../fakes/recordingBackendObservability.js";
 
 describe("TodoistPoller Diagnostics", () => {
-  it("records every successful poll cycle to diagnostic ring buffer and log ring buffer", async () => {
-    const diagBuffer = new RingBuffer<unknown>(50);
-    const logBuffer = new RingBuffer<string>(50);
-    const mockObs = createMockObservability();
+  it("tracks diagnostics on successful poll cycle without reporting errors", async () => {
+    const mockObs = new RecordingBackendObservability();
     const syncOnce = vi.fn().mockResolvedValue(undefined);
 
     const poller = new TodoistPoller(
       { syncOnce },
       {
-        observability: mockObs,
-        diagnosticRingBuffer: diagBuffer,
-        logRingBuffer: logBuffer
+        observability: mockObs
       }
     );
 
     await poller.tick();
 
     expect(syncOnce).toHaveBeenCalledTimes(1);
-    const diagSnapshot = diagBuffer.snapshot() as Array<{
-      type: string;
-      outcome: string;
-      consecutiveFailures: number;
-      durationMs: number;
-    }>;
-    expect(diagSnapshot).toHaveLength(1);
-    expect(diagSnapshot[0]?.type).toBe("todoist_poll");
-    expect(diagSnapshot[0]?.outcome).toBe("success");
-    expect(diagSnapshot[0]?.consecutiveFailures).toBe(0);
-    expect(typeof diagSnapshot[0]?.durationMs).toBe("number");
-
-    const logSnapshot = logBuffer.snapshot();
-    expect(logSnapshot).toHaveLength(1);
-    expect(logSnapshot[0]).toContain("INFO Todoist poll succeeded");
-
     const diag = poller.getDiagnostics();
     expect(diag.consecutiveFailures).toBe(0);
     expect(diag.lastOutcome).toBe("success");
     expect(diag.lastSyncAt).not.toBeNull();
     expect(typeof diag.lastDurationMs).toBe("number");
-    expect(mockObs.handledCaptures).toHaveLength(0);
+    expect(mockObs.backgroundFailures).toHaveLength(0);
   });
 
-  it("handles transient failures (<3) by recording to ring buffers and logging warning without Sentry alert", async () => {
-    const diagBuffer = new RingBuffer<unknown>(50);
-    const logBuffer = new RingBuffer<string>(50);
-    const mockObs = createMockObservability();
+  it("handles transient failures (<3) without triggering background failure capture", async () => {
+    const mockObs = new RecordingBackendObservability();
     const onError = vi.fn();
     const syncOnce = vi.fn().mockRejectedValue(new Error("Network timeout"));
 
@@ -76,9 +34,7 @@ describe("TodoistPoller Diagnostics", () => {
       { syncOnce },
       {
         onError,
-        observability: mockObs,
-        diagnosticRingBuffer: diagBuffer,
-        logRingBuffer: logBuffer
+        observability: mockObs
       }
     );
 
@@ -87,63 +43,52 @@ describe("TodoistPoller Diagnostics", () => {
     expect(poller.getDiagnostics().consecutiveFailures).toBe(1);
     expect(poller.getDiagnostics().lastOutcome).toBe("error");
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(mockObs.handledCaptures).toHaveLength(0);
+    expect(mockObs.backgroundFailures).toHaveLength(0);
 
     // Second failure
     await poller.tick();
     expect(poller.getDiagnostics().consecutiveFailures).toBe(2);
     expect(poller.getDiagnostics().lastOutcome).toBe("error");
     expect(onError).toHaveBeenCalledTimes(2);
-    expect(mockObs.handledCaptures).toHaveLength(0);
-
-    const logSnapshot = logBuffer.snapshot();
-    expect(logSnapshot).toHaveLength(2);
-    expect(logSnapshot[0]).toContain("WARN Todoist poll failed (consecutive=2");
-    expect(logSnapshot[1]).toContain("WARN Todoist poll failed (consecutive=1");
+    expect(mockObs.backgroundFailures).toHaveLength(0);
   });
 
   it("captures handled non-fatal buzer.backend.todoist_poll_failure on consecutiveFailures >= 3", async () => {
-    const diagBuffer = new RingBuffer<unknown>(50);
-    const logBuffer = new RingBuffer<string>(50);
-    const mockObs = createMockObservability();
+    const mockObs = new RecordingBackendObservability();
     const syncOnce = vi.fn().mockRejectedValue(new Error("Todoist 503 Service Unavailable"));
 
     const poller = new TodoistPoller(
       { syncOnce },
       {
-        observability: mockObs,
-        diagnosticRingBuffer: diagBuffer,
-        logRingBuffer: logBuffer
+        observability: mockObs
       }
     );
 
     // Failure 1 & 2
     await poller.tick();
     await poller.tick();
-    expect(mockObs.handledCaptures).toHaveLength(0);
+    expect(mockObs.backgroundFailures).toHaveLength(0);
 
     // Failure 3: Triggers alert!
     await poller.tick();
     expect(poller.getDiagnostics().consecutiveFailures).toBe(3);
-    expect(mockObs.handledCaptures).toHaveLength(1);
-    expect(mockObs.handledCaptures[0]?.marker).toBe("buzer.backend.todoist_poll_failure");
-    expect(mockObs.handledCaptures[0]?.correlation).toMatchObject({
-      consecutiveFailureCount: 3
+    expect(mockObs.backgroundFailures).toHaveLength(1);
+    expect(mockObs.backgroundFailures[0]?.marker).toBe("buzer.backend.todoist_poll_failure");
+    expect(mockObs.backgroundFailures[0]?.tags).toMatchObject({
+      consecutive_failure_count: "3"
     });
 
     // Failure 4: Continues alerting on persistent failure
     await poller.tick();
     expect(poller.getDiagnostics().consecutiveFailures).toBe(4);
-    expect(mockObs.handledCaptures).toHaveLength(2);
-    expect(mockObs.handledCaptures[1]?.correlation).toMatchObject({
-      consecutiveFailureCount: 4
+    expect(mockObs.backgroundFailures).toHaveLength(2);
+    expect(mockObs.backgroundFailures[1]?.tags).toMatchObject({
+      consecutive_failure_count: "4"
     });
   });
 
   it("resets consecutiveFailures to 0 on subsequent successful poll", async () => {
-    const diagBuffer = new RingBuffer<unknown>(50);
-    const logBuffer = new RingBuffer<string>(50);
-    const mockObs = createMockObservability();
+    const mockObs = new RecordingBackendObservability();
     let fail = true;
     const syncOnce = vi.fn().mockImplementation(async () => {
       if (fail) {
@@ -154,9 +99,7 @@ describe("TodoistPoller Diagnostics", () => {
     const poller = new TodoistPoller(
       { syncOnce },
       {
-        observability: mockObs,
-        diagnosticRingBuffer: diagBuffer,
-        logRingBuffer: logBuffer
+        observability: mockObs
       }
     );
 
@@ -165,7 +108,7 @@ describe("TodoistPoller Diagnostics", () => {
     await poller.tick();
     await poller.tick();
     expect(poller.getDiagnostics().consecutiveFailures).toBe(3);
-    expect(mockObs.handledCaptures).toHaveLength(1);
+    expect(mockObs.backgroundFailures).toHaveLength(1);
 
     // Now succeeds
     fail = false;
@@ -177,13 +120,11 @@ describe("TodoistPoller Diagnostics", () => {
     fail = true;
     await poller.tick();
     expect(poller.getDiagnostics().consecutiveFailures).toBe(1);
-    expect(mockObs.handledCaptures).toHaveLength(1); // No new capture
+    expect(mockObs.backgroundFailures).toHaveLength(1); // No new capture
   });
 
   it("safely handles exceptions thrown within onError callback", async () => {
-    const diagBuffer = new RingBuffer<unknown>(50);
-    const logBuffer = new RingBuffer<string>(50);
-    const mockObs = createMockObservability();
+    const mockObs = new RecordingBackendObservability();
     const syncOnce = vi.fn().mockRejectedValue(new Error("Sync exploded"));
     const throwingOnError = vi.fn(() => {
       throw new Error("Callback exploded");
@@ -193,9 +134,7 @@ describe("TodoistPoller Diagnostics", () => {
       { syncOnce },
       {
         onError: throwingOnError,
-        observability: mockObs,
-        diagnosticRingBuffer: diagBuffer,
-        logRingBuffer: logBuffer
+        observability: mockObs
       }
     );
 
@@ -206,7 +145,7 @@ describe("TodoistPoller Diagnostics", () => {
 
     expect(throwingOnError).toHaveBeenCalledTimes(3);
     expect(poller.getDiagnostics().consecutiveFailures).toBe(3);
-    expect(mockObs.handledCaptures).toHaveLength(1);
-    expect(mockObs.handledCaptures[0]?.marker).toBe("buzer.backend.todoist_poll_failure");
+    expect(mockObs.backgroundFailures).toHaveLength(1);
+    expect(mockObs.backgroundFailures[0]?.marker).toBe("buzer.backend.todoist_poll_failure");
   });
 });

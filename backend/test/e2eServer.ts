@@ -274,23 +274,9 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
   app.get("/__calls", async () => ({ calls }));
   app.get("/__calls/full", async () => ({ calls: fullCalls }));
   app.get("/__sentry/events", async () => ({
-    events: observability.diagnosticEvents.map((e) => ({
-      eventId: e.eventId,
-      reportSessionId: e.reportSessionId,
-      submitted: e.submitted,
-      message: e.message,
-      tags: e.tags,
-      context: e.context,
-      attachments: e.attachments.map((a) => ({
-        pathname: a.pathname,
-        contentType: a.contentType,
-        length: a.bytes.length,
-        content: a.bytes.toString("utf8")
-      }))
-    })),
-    diagnosticEvents: observability.diagnosticEvents,
-    handledErrors: observability.handledErrors,
-    fatalErrors: observability.fatalErrors
+    requestFailures: observability.requestFailures,
+    backgroundFailures: observability.backgroundFailures,
+    breadcrumbs: observability.breadcrumbs
   }));
   app.post("/__fail-actions", async (request) => ({
     failActions: controls.failActions = (request.body as { enabled?: unknown } | null)?.enabled === true

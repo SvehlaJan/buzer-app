@@ -1,10 +1,10 @@
+import * as crypto from "node:crypto";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import { DiagnosticReportRepository } from "../repositories/diagnosticReportRepository.js";
 import type { EscalationService } from "../services/escalationService.js";
 import type { TodoistSyncService } from "../services/todoistSyncService.js";
-import { collectDiagnosticsCapsule } from "./backendDiagnosticCollector.js";
-import type { BackendObservability, DiagnosticCorrelation } from "./backendObservability.js";
+import type { BackendObservability } from "./backendObservability.js";
 
 const MAX_OPAQUE_VALUE_LENGTH = 200;
 
@@ -35,9 +35,9 @@ export class DiagnosticReportService {
 
   constructor(
     private readonly db: Database.Database,
-    private readonly observability: BackendObservability,
-    private readonly synchronizer?: TodoistSyncService | null,
-    private readonly escalationService?: EscalationService | null,
+    _observability?: BackendObservability | null,
+    _synchronizer?: TodoistSyncService | null,
+    _escalationService?: EscalationService | null,
     repository?: DiagnosticReportRepository
   ) {
     this.repository = repository ?? new DiagnosticReportRepository(db);
@@ -49,47 +49,12 @@ export class DiagnosticReportService {
       return JSON.parse(existing.responseJson) as DiagnosticReportResponse;
     }
 
-    const backendDiagnosticEventId = this.observability.newEventId();
-
-    const { attachments } = await collectDiagnosticsCapsule({
-      reportSessionId: request.reportSessionId,
-      androidDiagnosticEventId: request.androidDiagnosticEventId,
-      backendDiagnosticEventId,
-      capturedAt: request.capturedAt,
-      deviceId: request.deviceId,
-      taskId: request.taskId,
-      occurrenceKey: request.occurrenceKey,
-      actionId: request.actionId,
-      requestIds: request.requestIds,
-      traceId: request.traceId,
-      db: this.db,
-      synchronizer: this.synchronizer,
-      escalationService: this.escalationService
-    });
-
-    const correlation: DiagnosticCorrelation = {
-      deviceId: request.deviceId,
-      reportSessionId: request.reportSessionId,
-      androidDiagnosticEventId: request.androidDiagnosticEventId,
-      backendDiagnosticEventId,
-      ...(request.taskId ? { taskId: request.taskId } : {}),
-      ...(request.occurrenceKey ? { occurrenceKey: request.occurrenceKey } : {}),
-      ...(request.actionId ? { actionId: request.actionId } : {}),
-      ...(request.traceId ? { traceId: request.traceId } : {})
-    };
-
-    const capturedEventId = this.observability.captureDiagnosticEvent(
-      backendDiagnosticEventId,
-      request.reportSessionId,
-      true,
-      correlation,
-      attachments
-    );
+    const backendDiagnosticEventId = crypto.randomUUID().replace(/-/g, "").toLowerCase();
 
     const response: DiagnosticReportResponse = {
       schemaVersion: 1,
       reportSessionId: request.reportSessionId,
-      backendDiagnosticEventId: capturedEventId || backendDiagnosticEventId,
+      backendDiagnosticEventId,
       outcome: "captured"
     };
 

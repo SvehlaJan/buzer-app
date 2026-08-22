@@ -1,6 +1,4 @@
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
-import { backendDiagnosticRingBuffer, backendLogRingBuffer, type RingBuffer } from "../diagnostics/ringBuffer.js";
-import { redactString } from "../diagnostics/redaction.js";
 
 export interface SyncOnceService {
   syncOnce(): Promise<void>;
@@ -19,8 +17,6 @@ export interface TodoistPollerOptions {
   onError?: (error: unknown) => void;
   onSuccess?: () => void;
   observability?: BackendObservability;
-  diagnosticRingBuffer?: RingBuffer<unknown>;
-  logRingBuffer?: RingBuffer<string>;
 }
 
 export class TodoistPoller {
@@ -31,16 +27,12 @@ export class TodoistPoller {
   private lastDurationMs: number | null = null;
   private lastSyncAt: string | null = null;
   private readonly observability: BackendObservability;
-  private readonly diagnosticRingBuffer: RingBuffer<unknown>;
-  private readonly logRingBuffer: RingBuffer<string>;
 
   constructor(
     private readonly service: SyncOnceService,
     private readonly options: TodoistPollerOptions = {}
   ) {
     this.observability = options.observability ?? backendObservability;
-    this.diagnosticRingBuffer = options.diagnosticRingBuffer ?? backendDiagnosticRingBuffer;
-    this.logRingBuffer = options.logRingBuffer ?? backendLogRingBuffer;
   }
 
   getDiagnostics(): TodoistPollerDiagnostics {
@@ -81,7 +73,6 @@ export class TodoistPoller {
 
     this.running = true;
     const start = Date.now();
-    const startTimeIso = new Date(start).toISOString();
     try {
       await this.service.syncOnce();
       const durationMs = Date.now() - start;
@@ -89,18 +80,6 @@ export class TodoistPoller {
       this.lastOutcome = "success";
       this.lastDurationMs = durationMs;
       this.lastSyncAt = new Date().toISOString();
-
-      this.diagnosticRingBuffer.add({
-        type: "todoist_poll",
-        timestamp: startTimeIso,
-        outcome: "success",
-        durationMs,
-        consecutiveFailures: 0
-      });
-
-      this.logRingBuffer.add(
-        `[${new Date().toISOString()}] INFO Todoist poll succeeded in ${durationMs}ms`
-      );
 
       this.options.onSuccess?.();
     } catch (error) {
@@ -110,25 +89,9 @@ export class TodoistPoller {
       this.lastDurationMs = durationMs;
       this.lastSyncAt = new Date().toISOString();
 
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      this.diagnosticRingBuffer.add({
-        type: "todoist_poll",
-        timestamp: startTimeIso,
-        outcome: "error",
-        durationMs,
-        consecutiveFailures: this.consecutiveFailures,
-        error: redactString(errorMessage)
-      });
-
-      this.logRingBuffer.add(
-        `[${new Date().toISOString()}] WARN Todoist poll failed (consecutive=${this.consecutiveFailures}, duration=${durationMs}ms): ${redactString(errorMessage)}`
-      );
-
       if (this.consecutiveFailures >= 3) {
-        this.observability.captureHandled("buzer.backend.todoist_poll_failure", error, {
-          consecutiveFailureCount: this.consecutiveFailures,
-          consecutive_failure_count: this.consecutiveFailures
+        this.observability.captureBackgroundFailure("buzer.backend.todoist_poll_failure", error, {
+          consecutive_failure_count: String(this.consecutiveFailures)
         });
       }
 

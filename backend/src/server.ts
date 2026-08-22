@@ -23,12 +23,9 @@ import { CONFIG } from "./config.js";
 import {
   type BackendObservability,
   backendObservability,
-  backendObservabilityRuntime,
-  type DiagnosticCorrelation
+  backendObservabilityRuntime
 } from "./diagnostics/backendObservability.js";
 import { DiagnosticReportService } from "./diagnostics/diagnosticReportService.js";
-import { backendDiagnosticRingBuffer, backendLogRingBuffer, truncateUtf8 } from "./diagnostics/ringBuffer.js";
-import { redactString } from "./diagnostics/redaction.js";
 
 export interface BuildServerOptions {
   db: Database.Database;
@@ -58,74 +55,7 @@ export function buildServer(options: BuildServerOptions) {
   });
 
   app.addHook("onRequest", async (request, reply) => {
-    const requestId = request.id;
-    reply.header("x-request-id", requestId);
-    (request as unknown as { startTime: number }).startTime = Date.now();
-
-    const sentryTrace = (request.headers["sentry-trace"] as string | undefined) ?? undefined;
-    const baggage = (request.headers["baggage"] as string | undefined) ?? undefined;
-
-    const correlation: DiagnosticCorrelation = {
-      requestId,
-      ...(sentryTrace !== undefined ? { traceId: sentryTrace } : {}),
-      ...(baggage !== undefined ? { baggage } : {})
-    };
-    (request as unknown as { diagnosticCorrelation: DiagnosticCorrelation }).diagnosticCorrelation = correlation;
-    observability.setContext(correlation);
-
-    const sanitizedUrl = redactString(request.raw.url ?? request.url);
-    backendLogRingBuffer.add(`[${new Date().toISOString()}] REQ ${request.method} ${sanitizedUrl} req_id=${requestId}`);
-  });
-
-  app.addHook("preHandler", async (request) => {
-    let sanitizedBody: string | undefined;
-    if (request.body !== undefined && request.body !== null) {
-      const rawBody = typeof request.body === "string" ? request.body : JSON.stringify(request.body);
-      sanitizedBody = truncateUtf8(redactString(rawBody), 65536);
-      (request as unknown as { sanitizedBody?: string }).sanitizedBody = sanitizedBody;
-    }
-
-    const params = request.params as Record<string, unknown> | undefined;
-    const body = typeof request.body === "object" && request.body !== null ? (request.body as Record<string, unknown>) : undefined;
-    const taskId = params?.taskId ?? params?.id ?? body?.taskId ?? body?.id;
-    const actionId = params?.actionId ?? body?.actionId;
-    const deviceId = (request.headers["x-device-id"] as string | undefined) ?? (body?.deviceId as string | undefined);
-    const occurrenceKey = (params?.occurrenceKey as string | undefined) ?? (body?.occurrenceKey as string | undefined);
-
-    const prev = (request as unknown as { diagnosticCorrelation?: DiagnosticCorrelation }).diagnosticCorrelation;
-    const correlation: DiagnosticCorrelation = {
-      ...prev,
-      ...(taskId !== undefined ? { taskId: String(taskId) } : {}),
-      ...(actionId !== undefined ? { actionId: String(actionId) } : {}),
-      ...(deviceId !== undefined ? { deviceId: String(deviceId) } : {}),
-      ...(occurrenceKey !== undefined ? { occurrenceKey: String(occurrenceKey) } : {})
-    };
-    (request as unknown as { diagnosticCorrelation: DiagnosticCorrelation }).diagnosticCorrelation = correlation;
-    observability.setContext(correlation);
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    const startTime = (request as unknown as { startTime?: number }).startTime;
-    const durationMs = startTime !== undefined ? Date.now() - startTime : 0;
-    const sanitizedUrl = redactString(request.raw.url ?? request.url);
-    const requestId = request.id;
-    const correlation = (request as unknown as { diagnosticCorrelation?: DiagnosticCorrelation }).diagnosticCorrelation;
-    const sanitizedBody = (request as unknown as { sanitizedBody?: string }).sanitizedBody;
-
-    backendDiagnosticRingBuffer.add({
-      timestamp: new Date().toISOString(),
-      requestId,
-      method: request.method,
-      url: sanitizedUrl,
-      statusCode: reply.statusCode,
-      durationMs,
-      requestBody: sanitizedBody,
-      correlation
-    });
-
-    backendLogRingBuffer.add(
-      `[${new Date().toISOString()}] RES ${request.method} ${sanitizedUrl} ${reply.statusCode} ${durationMs}ms req_id=${requestId}`
-    );
+    reply.header("x-request-id", request.id);
   });
 
   app.addHook("onError", async (request, reply, error) => {
@@ -136,15 +66,20 @@ export function buildServer(options: BuildServerOptions) {
       (typeof errStatusCode === "number" && errStatusCode >= 400 && errStatusCode < 500) ||
       (reply.statusCode >= 400 && reply.statusCode < 500);
 
-    const correlation = (request as unknown as { diagnosticCorrelation?: DiagnosticCorrelation }).diagnosticCorrelation;
-
     if (!isClientError) {
-      observability.captureHandled("fastify_unhandled_error", error, correlation);
-    } else {
-      const code = typeof errStatusCode === "number" ? errStatusCode : (reply.statusCode >= 400 ? reply.statusCode : 400);
-      backendLogRingBuffer.add(
-        `[${new Date().toISOString()}] WARN ${request.method} ${redactString(request.raw.url ?? request.url)} client_error=${code} ${redactString(error.message)} req_id=${request.id}`
-      );
+      const statusCode =
+        reply.statusCode >= 500
+          ? reply.statusCode
+          : typeof errStatusCode === "number" && errStatusCode >= 500
+          ? errStatusCode
+          : 500;
+
+      observability.captureRequestFailure(error, {
+        requestId: request.id,
+        method: request.method,
+        route: request.routeOptions?.url ?? request.url,
+        statusCode
+      });
     }
   });
 
@@ -223,23 +158,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     throw new Error("TODOIST_USER_ID, ANDROID_API_TOKEN, TODOIST_API_TOKEN, and WHATSAPP_RECIPIENT_ID are required");
   }
 
-  process.on("unhandledRejection", async (reason) => {
-    backendObservability.captureFatal("unhandled_rejection", reason);
-    try {
-      await backendObservability.flush(2000);
-    } finally {
-      process.exit(1);
-    }
-  });
-
-  process.on("uncaughtException", async (error) => {
-    backendObservability.captureFatal("uncaught_exception", error);
-    try {
-      await backendObservability.flush(2000);
-    } finally {
-      process.exit(1);
-    }
-  });
 
   const db = openDatabase(dbPath);
   const tasks = new TaskRepository(db);

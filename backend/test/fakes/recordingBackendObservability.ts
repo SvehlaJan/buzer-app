@@ -1,117 +1,67 @@
 import * as crypto from "node:crypto";
 import type {
   BackendObservability,
-  DiagnosticAttachment,
-  DiagnosticCorrelation
+  RequestFailureContext
 } from "../../src/diagnostics/backendObservability.js";
 
-export interface RecordedDiagnosticEvent {
-  eventId: string;
-  reportSessionId: string;
-  submitted: boolean;
-  context: DiagnosticCorrelation;
-  attachments: DiagnosticAttachment[];
+export interface RecordedBreadcrumb {
+  category: string;
   message: string;
-  tags: Record<string, string>;
+  data?: Record<string, unknown>;
 }
 
-export interface RecordedHandledError {
+export interface RecordedRequestFailure {
+  error: unknown;
+  context: RequestFailureContext;
+}
+
+export interface RecordedBackgroundFailure {
   marker: string;
   error: unknown;
-  correlation?: DiagnosticCorrelation | undefined;
-  tags?: Record<string, string>;
+  tags?: Record<string, string | undefined>;
 }
 
 export class RecordingBackendObservability implements BackendObservability {
-  public handledErrors: RecordedHandledError[] = [];
-  public fatalErrors: RecordedHandledError[] = [];
-  public diagnosticEvents: RecordedDiagnosticEvent[] = [];
-  public contexts: DiagnosticCorrelation[] = [];
+  public breadcrumbs: RecordedBreadcrumb[] = [];
+  public requestFailures: RecordedRequestFailure[] = [];
+  public backgroundFailures: RecordedBackgroundFailure[] = [];
   public enabled: boolean = true;
 
   isEnabled(): boolean {
     return this.enabled;
   }
 
-  setContext(correlation: DiagnosticCorrelation): void {
-    this.contexts.push(correlation);
+  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void {
+    this.breadcrumbs.push({
+      category,
+      message,
+      ...(data !== undefined ? { data } : {})
+    });
   }
 
-  captureHandled(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    const eventId = this.newEventId();
-    const tags: Record<string, string> = { marker };
-    if (correlation) {
-      for (const [k, v] of Object.entries(correlation)) {
-        if (v !== undefined && v !== null && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
-          const snakeKey = k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-          tags[snakeKey] = String(v);
-        }
-      }
-    }
-    this.handledErrors.push({ marker, error, correlation, tags });
-    return eventId;
-  }
-
-  captureFatal(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    const eventId = this.newEventId();
-    const tags: Record<string, string> = { marker };
-    if (correlation) {
-      for (const [k, v] of Object.entries(correlation)) {
-        if (v !== undefined && v !== null && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
-          const snakeKey = k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-          tags[snakeKey] = String(v);
-        }
-      }
-    }
-    this.fatalErrors.push({ marker, error, correlation, tags });
-    return eventId;
-  }
-
-  newEventId(): string {
+  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
+    if (!this.enabled) return undefined;
+    this.requestFailures.push({ error, context });
     return crypto.randomUUID().replace(/-/g, "").toLowerCase();
   }
 
-  captureDiagnosticEvent(
-    eventId: string,
-    reportSessionId: string,
-    submitted: boolean,
-    context: DiagnosticCorrelation,
-    attachments: DiagnosticAttachment[]
-  ): string {
-    const tags: Record<string, string> = {
-      report_session_id: reportSessionId,
-      backend_diagnostic_event_id: eventId,
-      feedback_submitted: String(submitted),
-      capsule_schema_version: "1"
-    };
-    if (context) {
-      for (const [k, v] of Object.entries(context)) {
-        if (v !== undefined && v !== null && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
-          const snakeKey = k.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-          tags[snakeKey] = String(v);
-        }
-      }
-    }
-    this.diagnosticEvents.push({
-      eventId,
-      reportSessionId,
-      submitted,
-      context,
-      attachments,
-      message: "buzer.backend.manual_report",
-      tags
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined {
+    if (!this.enabled) return undefined;
+    this.backgroundFailures.push({
+      marker,
+      error,
+      ...(tags !== undefined ? { tags } : {})
     });
-    return eventId;
+    return crypto.randomUUID().replace(/-/g, "").toLowerCase();
   }
 
-  async flush(_timeoutMs?: number): Promise<boolean> {
+  async flush(_timeoutMillis?: number): Promise<boolean> {
     return true;
   }
 
   clear(): void {
-    this.handledErrors.length = 0;
-    this.fatalErrors.length = 0;
-    this.diagnosticEvents.length = 0;
-    this.contexts.length = 0;
+    this.breadcrumbs.length = 0;
+    this.requestFailures.length = 0;
+    this.backgroundFailures.length = 0;
   }
 }

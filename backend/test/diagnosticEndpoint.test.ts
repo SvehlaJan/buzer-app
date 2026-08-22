@@ -1,63 +1,9 @@
 import Database from "better-sqlite3";
-import * as crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrations.js";
 import { buildServer } from "../src/server.js";
 import { FakeTodoistAdapter } from "./fakes/fakeTodoistAdapter.js";
-import type {
-  BackendObservability,
-  DiagnosticAttachment,
-  DiagnosticCorrelation
-} from "../src/diagnostics/backendObservability.js";
-
-class RecordingBackendObservability implements BackendObservability {
-  public capturedEvents: Array<{
-    eventId: string;
-    reportSessionId: string;
-    submitted: boolean;
-    context: DiagnosticCorrelation;
-    attachments: DiagnosticAttachment[];
-  }> = [];
-
-  isEnabled(): boolean {
-    return true;
-  }
-
-  setContext(_correlation: DiagnosticCorrelation): void {}
-
-  captureHandled(_marker: string, _error: unknown, _correlation?: DiagnosticCorrelation): string | null {
-    return null;
-  }
-
-  captureFatal(_marker: string, _error: unknown, _correlation?: DiagnosticCorrelation): string | null {
-    return null;
-  }
-
-  newEventId(): string {
-    return crypto.randomUUID().replace(/-/g, "").toLowerCase();
-  }
-
-  captureDiagnosticEvent(
-    eventId: string,
-    reportSessionId: string,
-    submitted: boolean,
-    context: DiagnosticCorrelation,
-    attachments: DiagnosticAttachment[]
-  ): string {
-    this.capturedEvents.push({
-      eventId,
-      reportSessionId,
-      submitted,
-      context,
-      attachments
-    });
-    return eventId;
-  }
-
-  async flush(_timeoutMs?: number): Promise<boolean> {
-    return true;
-  }
-}
+import { RecordingBackendObservability } from "./fakes/recordingBackendObservability.js";
 
 describe("POST /diagnostics/reports endpoint", () => {
   it("requires bearer authentication", async () => {
@@ -171,22 +117,6 @@ describe("POST /diagnostics/reports endpoint", () => {
       outcome: "captured"
     });
 
-    expect(recordingObservability.capturedEvents).toHaveLength(1);
-    const captured = recordingObservability.capturedEvents[0];
-    expect(captured).toBeDefined();
-    expect(captured!.eventId).toBe(body.backendDiagnosticEventId);
-    expect(captured!.reportSessionId).toBe("session-ok-123");
-    expect(captured!.submitted).toBe(true);
-    expect(captured!.context).toMatchObject({
-      deviceId: "device-100",
-      reportSessionId: "session-ok-123",
-      androidDiagnosticEventId: "android-ok-456",
-      taskId: "task-test-1",
-      occurrenceKey: "occ-test-1",
-      actionId: "act-test-1",
-      traceId: "trace-xyz"
-    });
-
     await app.close();
   });
 
@@ -226,7 +156,6 @@ describe("POST /diagnostics/reports endpoint", () => {
       backendDiagnosticEventId: expect.stringMatching(/^[a-f0-9]{32}$/),
       outcome: "captured"
     });
-    expect(recordingObservability.capturedEvents).toHaveLength(1);
 
     // Duplicate POST
     const res2 = await app.inject({
@@ -238,8 +167,6 @@ describe("POST /diagnostics/reports endpoint", () => {
     expect(res2.statusCode).toBe(202);
     const body2 = res2.json();
     expect(body2).toEqual(body1);
-    // Should NOT emit a new Sentry event
-    expect(recordingObservability.capturedEvents).toHaveLength(1);
 
     await app.close();
   });

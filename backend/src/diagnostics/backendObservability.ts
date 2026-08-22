@@ -1,44 +1,19 @@
-import * as crypto from "node:crypto";
 import * as Sentry from "@sentry/node";
-import { redactAny, redactObject, redactString } from "./redaction.js";
+import { redactObject, redactString } from "./redaction.js";
 
-export interface DiagnosticAttachment {
-  pathname: string;
-  bytes: Buffer;
-  contentType?: string;
-}
-
-export interface DiagnosticCorrelation {
-  deviceId?: string;
-  taskId?: string;
-  occurrenceKey?: string;
-  actionId?: string;
+export interface RequestFailureContext {
   requestId?: string;
-  traceId?: string;
-  baggage?: string;
-  reportSessionId?: string;
-  androidDiagnosticEventId?: string;
-  backendDiagnosticEventId?: string;
-  consecutiveFailureCount?: number;
-  recipientConfigured?: string;
-  escalationId?: string;
-  [key: string]: unknown;
+  method?: string;
+  route?: string;
+  statusCode?: number;
 }
 
 export interface BackendObservability {
   isEnabled(): boolean;
-  setContext(correlation: DiagnosticCorrelation): void;
-  captureHandled(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null;
-  captureFatal(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null;
-  newEventId(): string;
-  captureDiagnosticEvent(
-    eventId: string,
-    reportSessionId: string,
-    submitted: boolean,
-    context: DiagnosticCorrelation,
-    attachments: DiagnosticAttachment[]
-  ): string;
-  flush(timeoutMs?: number): Promise<boolean>;
+  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void;
+  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined;
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined;
+  flush(timeoutMillis?: number): Promise<boolean>;
 }
 
 export class NoOpBackendObservability implements BackendObservability {
@@ -46,44 +21,18 @@ export class NoOpBackendObservability implements BackendObservability {
     return false;
   }
 
-  setContext(_correlation: DiagnosticCorrelation): void {}
+  addBreadcrumb(_category: string, _message: string, _data?: Record<string, unknown>): void {}
 
-  captureHandled(_marker: string, _error: unknown, _correlation?: DiagnosticCorrelation): string | null {
-    return null;
+  captureRequestFailure(_error: unknown, _context: RequestFailureContext): string | undefined {
+    return undefined;
   }
 
-  captureFatal(_marker: string, _error: unknown, _correlation?: DiagnosticCorrelation): string | null {
-    return null;
+  captureBackgroundFailure(_marker: string, _error: unknown, _tags?: Record<string, string | undefined>): string | undefined {
+    return undefined;
   }
 
-  newEventId(): string {
-    return crypto.randomUUID().replace(/-/g, "").toLowerCase();
-  }
-
-  captureDiagnosticEvent(
-    eventId: string,
-    _reportSessionId: string,
-    _submitted: boolean,
-    _context: DiagnosticCorrelation,
-    _attachments: DiagnosticAttachment[]
-  ): string {
-    return eventId;
-  }
-
-  async flush(_timeoutMs: number = 2000): Promise<boolean> {
+  async flush(_timeoutMillis: number = 2000): Promise<boolean> {
     return true;
-  }
-}
-
-function applyCorrelationToScope(scope: Sentry.Scope, correlation?: DiagnosticCorrelation): void {
-  if (!correlation) return;
-  const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
-  scope.setContext("correlation", sanitized);
-  for (const [key, value] of Object.entries(sanitized)) {
-    if (value !== undefined && value !== null && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
-      const snakeKey = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-      scope.setTag(snakeKey, String(value));
-    }
   }
 }
 
@@ -106,10 +55,11 @@ export class SentryBackendObservability implements BackendObservability {
     Sentry.init({
       dsn: options.dsn,
       environment: options.environment ?? "development-vps",
-      release: options.release ?? "buzer-backend@0.1.0+local",
-      sendDefaultPii: true,
-      tracesSampleRate: 1.0,
+      release: options.release ?? "app.buzer@0.1.0+local",
+      sendDefaultPii: false,
       beforeSend: (event) => {
+        delete (event as { request?: unknown }).request;
+        delete (event as { user?: unknown }).user;
         if (event.message) {
           event.message = redactString(event.message);
         }
@@ -129,6 +79,16 @@ export class SentryBackendObservability implements BackendObservability {
         if (event.contexts) {
           event.contexts = redactObject(event.contexts) as Record<string, Record<string, unknown>>;
         }
+        if (event.breadcrumbs) {
+          for (const breadcrumb of event.breadcrumbs) {
+            if (breadcrumb.message) {
+              breadcrumb.message = redactString(breadcrumb.message);
+            }
+            if (breadcrumb.data) {
+              breadcrumb.data = redactObject(breadcrumb.data);
+            }
+          }
+        }
         return event;
       },
       beforeBreadcrumb: (breadcrumb) => {
@@ -147,88 +107,69 @@ export class SentryBackendObservability implements BackendObservability {
     return this.enabled;
   }
 
-  newEventId(): string {
-    return crypto.randomUUID().replace(/-/g, "").toLowerCase();
-  }
-
-  setContext(correlation: DiagnosticCorrelation): void {
+  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void {
     if (!this.enabled) return;
-    const sanitized = redactObject(correlation as unknown as Record<string, unknown>);
-    Sentry.setContext("correlation", sanitized);
-    for (const [key, value] of Object.entries(sanitized)) {
-      if (value !== undefined && value !== null && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
-        const snakeKey = key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-        Sentry.setTag(snakeKey, String(value));
-      }
-    }
+    const sanitizedMessage = redactString(message);
+    const sanitizedData = data !== undefined ? redactObject(data) : undefined;
+    Sentry.addBreadcrumb({
+      category,
+      message: sanitizedMessage,
+      ...(sanitizedData !== undefined ? { data: sanitizedData as Record<string, any> } : {}),
+      level: "info"
+    });
   }
 
-  captureHandled(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    if (!this.enabled) return null;
+  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
+    if (!this.enabled) return undefined;
+    let eventId: string | undefined;
+    Sentry.withScope((scope) => {
+      scope.setLevel("error");
+      if (context.requestId) {
+        scope.setTag("request_id", context.requestId);
+      }
+      if (context.method) {
+        scope.setTag("method", context.method);
+      }
+      if (context.route) {
+        scope.setTag("route", context.route);
+      }
+      if (context.statusCode !== undefined) {
+        scope.setTag("status_code", String(context.statusCode));
+      }
+      if (error instanceof Error) {
+        eventId = Sentry.captureException(error);
+      } else {
+        eventId = Sentry.captureMessage(redactString(String(error)));
+      }
+    });
+    return eventId ? eventId.replace(/-/g, "").toLowerCase() : undefined;
+  }
+
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined {
+    if (!this.enabled) return undefined;
     let eventId: string | undefined;
     Sentry.withScope((scope) => {
       scope.setLevel("error");
       scope.setTag("marker", marker);
-      applyCorrelationToScope(scope, correlation);
+      if (tags) {
+        for (const [key, value] of Object.entries(tags)) {
+          if (value !== undefined) {
+            scope.setTag(key, value);
+          }
+        }
+      }
       if (error instanceof Error) {
         eventId = Sentry.captureException(error);
       } else {
         eventId = Sentry.captureMessage(redactString(String(error)));
       }
     });
-    return eventId ? eventId.replace(/-/g, "").toLowerCase() : null;
+    return eventId ? eventId.replace(/-/g, "").toLowerCase() : undefined;
   }
 
-  captureFatal(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    if (!this.enabled) return null;
-    let eventId: string | undefined;
-    Sentry.withScope((scope) => {
-      scope.setLevel("fatal");
-      scope.setTag("marker", marker);
-      applyCorrelationToScope(scope, correlation);
-      if (error instanceof Error) {
-        eventId = Sentry.captureException(error);
-      } else {
-        eventId = Sentry.captureMessage(redactString(String(error)));
-      }
-    });
-    return eventId ? eventId.replace(/-/g, "").toLowerCase() : null;
-  }
-
-  captureDiagnosticEvent(
-    eventId: string,
-    reportSessionId: string,
-    submitted: boolean,
-    context: DiagnosticCorrelation,
-    attachments: DiagnosticAttachment[]
-  ): string {
-    if (!this.enabled) return eventId;
-    Sentry.withScope((scope) => {
-      scope.setLevel("info");
-      scope.setTag("report_session_id", reportSessionId);
-      scope.setTag("backend_diagnostic_event_id", eventId);
-      scope.setTag("feedback_submitted", String(submitted));
-      scope.setTag("capsule_schema_version", "1");
-      applyCorrelationToScope(scope, context);
-      for (const att of attachments) {
-        scope.addAttachment({
-          filename: att.pathname,
-          data: new Uint8Array(att.bytes),
-          ...(att.contentType !== undefined ? { contentType: att.contentType } : {})
-        });
-      }
-      Sentry.captureEvent({
-        event_id: eventId,
-        message: "buzer.backend.manual_report",
-        level: "info"
-      });
-    });
-    return eventId;
-  }
-
-  async flush(timeoutMs: number = 2000): Promise<boolean> {
+  async flush(timeoutMillis: number = 2000): Promise<boolean> {
     if (!this.enabled) return true;
-    return Sentry.flush(timeoutMs);
+    return Sentry.flush(timeoutMillis);
   }
 }
 
@@ -246,7 +187,7 @@ export class BackendObservabilityRuntime {
       this.instance = new SentryBackendObservability({
         dsn,
         environment: environment ?? "development-vps",
-        release: release ?? "buzer-backend@0.1.0+local"
+        release: release ?? "app.buzer@0.1.0+local"
       });
     }
     this.initialized = true;
@@ -274,34 +215,16 @@ export const backendObservability: BackendObservability = {
   isEnabled(): boolean {
     return backendObservabilityRuntime.getInstance().isEnabled();
   },
-  setContext(correlation: DiagnosticCorrelation): void {
-    backendObservabilityRuntime.getInstance().setContext(correlation);
+  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void {
+    backendObservabilityRuntime.getInstance().addBreadcrumb(category, message, data);
   },
-  captureHandled(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    return backendObservabilityRuntime.getInstance().captureHandled(marker, error, correlation);
+  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
+    return backendObservabilityRuntime.getInstance().captureRequestFailure(error, context);
   },
-  captureFatal(marker: string, error: unknown, correlation?: DiagnosticCorrelation): string | null {
-    return backendObservabilityRuntime.getInstance().captureFatal(marker, error, correlation);
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined {
+    return backendObservabilityRuntime.getInstance().captureBackgroundFailure(marker, error, tags);
   },
-  newEventId(): string {
-    return backendObservabilityRuntime.getInstance().newEventId();
-  },
-  captureDiagnosticEvent(
-    eventId: string,
-    reportSessionId: string,
-    submitted: boolean,
-    context: DiagnosticCorrelation,
-    attachments: DiagnosticAttachment[]
-  ): string {
-    return backendObservabilityRuntime.getInstance().captureDiagnosticEvent(
-      eventId,
-      reportSessionId,
-      submitted,
-      context,
-      attachments
-    );
-  },
-  flush(timeoutMs?: number): Promise<boolean> {
-    return backendObservabilityRuntime.getInstance().flush(timeoutMs);
+  flush(timeoutMillis?: number): Promise<boolean> {
+    return backendObservabilityRuntime.getInstance().flush(timeoutMillis);
   }
 };
