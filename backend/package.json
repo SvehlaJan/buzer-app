@@ -12,7 +12,7 @@
     "dev": "node --import tsx --import ./src/instrument.ts ./src/server.ts",
     "e2e-server": "tsx test/e2eServer.ts",
     "migrate": "tsx src/db/migrations.ts",
-    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org \"${SENTRY_ORG:-svehla}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" ./dist && sentry-cli sourcemaps upload --org \"${SENTRY_ORG:-svehla}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" --release \"${SENTRY_RELEASE:-buzer-backend@0.1.0+local}\" ./dist"
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org \"${SENTRY_ORG:-jans-gi}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" ./dist && sentry-cli sourcemaps upload --org \"${SENTRY_ORG:-jans-gi}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" --release \"${SENTRY_RELEASE:-app.buzer@0.1.0+local}\" ./dist"
   },
   "dependencies": {
     "@fastify/rate-limit": "10.3.0",

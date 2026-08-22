@@ -19,7 +19,7 @@ export function loadConfig(): AppConfig {
   return {
     SENTRY_BACKEND_DSN: process.env.SENTRY_BACKEND_DSN ?? "",
     SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT ?? "development-vps",
-    SENTRY_RELEASE: process.env.SENTRY_RELEASE ?? "buzer-backend@0.1.0+local",
+    SENTRY_RELEASE: process.env.SENTRY_RELEASE ?? "app.buzer@0.1.0+local",
     DATABASE_PATH: process.env.DATABASE_PATH ?? "data/buzer.sqlite",
     TODOIST_USER_ID: process.env.TODOIST_USER_ID ?? process.env.TODOIST_CURRENT_USER_ID ?? "",
     ANDROID_API_TOKEN: process.env.ANDROID_API_TOKEN ?? "",

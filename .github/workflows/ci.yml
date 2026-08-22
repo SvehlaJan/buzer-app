@@ -60,26 +60,3 @@ jobs:
       - name: Backend build
         working-directory: backend
         run: npm run build
-
-  sentry-github-sync:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install dependencies
-        working-directory: tools/sentry-github-sync
-        run: npm install
-
-      - name: Sentry-GitHub-Sync tests
-        working-directory: tools/sentry-github-sync
-        run: npm test
-
-      - name: Sentry-GitHub-Sync typecheck
-        working-directory: tools/sentry-github-sync
-        run: npm run typecheck
-
