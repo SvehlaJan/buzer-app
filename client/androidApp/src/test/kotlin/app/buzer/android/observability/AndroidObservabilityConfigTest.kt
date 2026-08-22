@@ -1,10 +1,9 @@
 package app.buzer.android.observability
 
-import android.app.Activity
-import android.content.Context
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
+import io.sentry.android.core.SentryAndroidOptions
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -17,14 +16,6 @@ import kotlin.test.assertTrue
 
 class AndroidObservabilityConfigTest {
 
-    private class TestActivity(
-        private val finishing: Boolean = false,
-        private val destroyed: Boolean = false
-    ) : Activity() {
-        override fun isFinishing(): Boolean = finishing
-        override fun isDestroyed(): Boolean = destroyed
-    }
-
     private class DummyContext : android.content.ContextWrapper(null)
 
     @Before
@@ -35,7 +26,6 @@ class AndroidObservabilityConfigTest {
     @After
     fun tearDown() {
         ObservabilityRuntime.resetForTests()
-        CurrentActivityTracker.setActivityForTest(null)
     }
 
     @Test
@@ -53,7 +43,6 @@ class AndroidObservabilityConfigTest {
         assertSame(NoOpAndroidObservability, ObservabilityRuntime.instance)
 
         // Verify NoOp methods behave safely
-        instance.setContext(DiagnosticCorrelation(deviceId = "dev-1"))
         instance.addLog(
             DiagnosticLogRecord(
                 capturedAt = "2026-08-21T12:00:00Z",
@@ -64,15 +53,7 @@ class AndroidObservabilityConfigTest {
             null
         )
         assertNull(instance.captureHandled("test.marker", RuntimeException("Boom")))
-        assertEquals("", instance.newEventId())
-        val returnedEventId = instance.captureDiagnosticEvent(
-            eventId = "evt-1",
-            reportSessionId = "rep-1",
-            submitted = true,
-            context = DiagnosticCorrelation(),
-            attachments = emptyList()
-        )
-        assertEquals("evt-1", returnedEventId)
+        instance.showFeedback()
         assertTrue(instance.flush(1000L))
     }
 
@@ -83,24 +64,7 @@ class AndroidObservabilityConfigTest {
 
         assertTrue(recording.isEnabled())
 
-        // 1. setContext
-        val correlation = DiagnosticCorrelation(
-            deviceId = "dev-42",
-            taskId = "task-99",
-            occurrenceKey = "occ-1",
-            actionId = "act-1",
-            requestId = "req-1",
-            traceId = "trace-1",
-            screen = "Home",
-            blockerType = "alarm",
-            appSection = "timeline",
-            reportSessionId = "rep-session-1"
-        )
-        recording.setContext(correlation)
-        assertEquals(1, recording.contexts.size)
-        assertEquals(correlation, recording.contexts.single())
-
-        // 2. addLog via AppLog
+        // 1. addLog via AppLog
         AppLog.info("Info log message")
         AppLog.error("Error log message", IllegalStateException("Error detail"))
         assertEquals(2, recording.logs.size)
@@ -110,80 +74,75 @@ class AndroidObservabilityConfigTest {
         assertEquals("error", recording.logs[1].first.severity)
         assertNotNull(recording.logs[1].second)
 
-        // 3. captureHandled
+        // 2. captureHandled
+        val correlation = DiagnosticCorrelation(
+            deviceId = "dev-42",
+            taskId = "task-99",
+            occurrenceKey = "occ-1",
+            actionId = "act-1",
+            requestId = "req-1",
+            screen = "Home",
+            blockerType = "alarm",
+            appSection = "timeline"
+        )
         val ex = RuntimeException("Handled exception")
         val handledId = recording.captureHandled("sync.error", ex, correlation)
         assertNotNull(handledId)
         assertEquals(1, recording.handledExceptions.size)
         assertEquals("sync.error", recording.handledExceptions.single().marker)
         assertSame(ex, recording.handledExceptions.single().throwable)
+        assertEquals(correlation, recording.handledExceptions.single().context)
 
-        // 4. newEventId
-        val id1 = recording.newEventId()
-        assertNotNull(id1)
-        assertTrue(id1.isNotBlank())
+        // 3. showFeedback
+        recording.showFeedback()
+        assertEquals(1, recording.feedbackShowCount)
 
-        // 5. captureDiagnosticEvent
-        val attachment = DiagnosticAttachment(
-            pathname = "test.txt",
-            bytes = "content".encodeToByteArray(),
-            contentType = "text/plain"
-        )
-        val eventId = recording.captureDiagnosticEvent(
-            eventId = "diag-evt-100",
-            reportSessionId = "rep-100",
-            submitted = true,
-            context = correlation,
-            attachments = listOf(attachment)
-        )
-        assertEquals("diag-evt-100", eventId)
-        assertEquals(1, recording.diagnosticEvents.size)
-        val captured = recording.diagnosticEvents.single()
-        assertEquals("diag-evt-100", captured.eventId)
-        assertEquals("rep-100", captured.reportSessionId)
-        assertTrue(captured.submitted)
-        assertEquals(listOf(attachment), captured.attachments)
-
-        // 6. showFeedback
-        recording.showFeedback("event-123")
-        assertEquals(listOf<String?>("event-123"), recording.feedbackRequests)
-
-        // 7. flush
+        // 4. flush
         assertTrue(recording.flush(2000L))
         assertEquals(1, recording.flushCount)
 
-        // 8. reset
+        // 5. reset
         recording.reset()
-        assertEquals(0, recording.contexts.size)
         assertEquals(0, recording.logs.size)
         assertEquals(0, recording.handledExceptions.size)
-        assertEquals(0, recording.diagnosticEvents.size)
-        assertEquals(0, recording.feedbackRequests.size)
+        assertEquals(0, recording.feedbackShowCount)
         assertEquals(0, recording.flushCount)
     }
 
     @Test
-    fun currentActivityTrackerTracksActivityWeakly() {
-        val activeActivity = TestActivity(finishing = false, destroyed = false)
-        CurrentActivityTracker.onActivityStarted(activeActivity)
-        CurrentActivityTracker.onActivityResumed(activeActivity)
+    fun sentryOptionsConfiguresPrivacySecurityAndFeedbackDefaults() {
+        val options = SentryAndroidOptions()
+        ObservabilityRuntime.configureSentryOptions(
+            options = options,
+            dsn = "https://examplePublicKey@o0.ingest.sentry.io/0",
+            environment = "staging",
+            release = "app.buzer@1.2.3+45"
+        )
 
-        assertSame(activeActivity, CurrentActivityTracker.currentActivity)
+        assertEquals("https://examplePublicKey@o0.ingest.sentry.io/0", options.dsn)
+        assertEquals("staging", options.environment)
+        assertEquals("app.buzer@1.2.3+45", options.release)
+        assertEquals(1.0, options.sampleRate)
+        assertNull(options.tracesSampleRate)
+        assertEquals(1.0, options.sessionReplay.onErrorSampleRate)
+        assertEquals(0.0, options.sessionReplay.sessionSampleRate)
+        assertTrue(options.isAnrEnabled)
+        assertFalse(options.isSendDefaultPii)
+        assertTrue(options.isAttachScreenshot)
+        assertTrue(options.isAttachViewHierarchy)
+        assertNotNull(options.beforeSend)
+        assertNotNull(options.beforeBreadcrumb)
 
-        // When finishing, currentActivity should be null
-        val finishingActivity = TestActivity(finishing = true, destroyed = false)
-        CurrentActivityTracker.onActivityStarted(finishingActivity)
-        assertNull(CurrentActivityTracker.currentActivity)
-
-        // When destroyed, currentActivity should be null
-        val destroyedActivity = TestActivity(finishing = false, destroyed = true)
-        CurrentActivityTracker.onActivityStarted(destroyedActivity)
-        assertNull(CurrentActivityTracker.currentActivity)
-
-        // Lifecycle transitions: stopped/destroyed clears matching activity
-        CurrentActivityTracker.onActivityStarted(activeActivity)
-        assertSame(activeActivity, CurrentActivityTracker.currentActivity)
-        CurrentActivityTracker.onActivityDestroyed(activeActivity)
-        assertNull(CurrentActivityTracker.currentActivity)
+        val feedback = options.feedbackOptions
+        assertTrue(feedback.isUseShakeGesture)
+        assertFalse(feedback.isUseSentryUser)
+        assertFalse(feedback.isShowName)
+        assertFalse(feedback.isShowEmail)
+        assertFalse(feedback.isShowBranding)
+        assertEquals("Report a bug", feedback.formTitle)
+        assertEquals("What went wrong?", feedback.messageLabel)
+        assertEquals("What did you expect, and what happened?", feedback.messagePlaceholder)
+        assertEquals("Send report", feedback.submitButtonLabel)
+        assertEquals("Report sent. Thank you.", feedback.successMessageText)
     }
 }

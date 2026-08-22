@@ -6,9 +6,7 @@ import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import app.buzer.shared.diagnostics.DiagnosticRedactor
-import io.sentry.Attachment
 import io.sentry.Breadcrumb
-import io.sentry.Hint
 import io.sentry.Sentry
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
@@ -22,6 +20,9 @@ object SentryEventSanitizer {
     private val redactor = DiagnosticRedactor()
 
     fun sanitizeEvent(event: SentryEvent): SentryEvent {
+        event.request = null
+        event.user = null
+
         event.message?.let { msg ->
             msg.formatted?.let { formatted ->
                 msg.formatted = redactor.redactString(formatted)
@@ -96,32 +97,6 @@ object SentryEventSanitizer {
         return breadcrumb
     }
 
-    fun sanitizeAttachment(attachment: DiagnosticAttachment): DiagnosticAttachment {
-        val isText = attachment.contentType?.startsWith("text/") == true ||
-            attachment.contentType?.contains("json") == true ||
-            attachment.pathname.endsWith(".json", ignoreCase = true) ||
-            attachment.pathname.endsWith(".txt", ignoreCase = true) ||
-            attachment.pathname.endsWith(".log", ignoreCase = true)
-
-        val sanitizedBytes = if (isText) {
-            val raw = runCatching { attachment.bytes.decodeToString() }.getOrNull()
-            if (raw != null) {
-                redactor.redactString(raw).toByteArray(Charsets.UTF_8)
-            } else {
-                attachment.bytes
-            }
-        } else {
-            attachment.bytes
-        }
-
-        val sanitizedPath = redactor.redactString(attachment.pathname)
-        return DiagnosticAttachment(
-            pathname = sanitizedPath,
-            bytes = sanitizedBytes,
-            contentType = attachment.contentType
-        )
-    }
-
     fun formatSentryId(sentryId: SentryId): String {
         return sentryId.toString().replace("-", "").lowercase()
     }
@@ -129,47 +104,6 @@ object SentryEventSanitizer {
 
 class SentryAndroidObservability : AndroidObservability {
     override fun isEnabled(): Boolean = Sentry.isEnabled()
-
-    override fun setContext(context: DiagnosticCorrelation) {
-        Sentry.configureScope { scope ->
-            fun setOrRemoveTag(key: String, value: String?) {
-                if (value != null) {
-                    scope.setTag(key, value)
-                } else {
-                    scope.removeTag(key)
-                }
-            }
-
-            setOrRemoveTag("device_id", context.deviceId)
-            setOrRemoveTag("task_id", context.taskId)
-            setOrRemoveTag("occurrence_key", context.occurrenceKey)
-            setOrRemoveTag("action_id", context.actionId)
-            setOrRemoveTag("request_id", context.requestId)
-            setOrRemoveTag("trace_id", context.traceId)
-            setOrRemoveTag("screen", context.screen)
-            setOrRemoveTag("blocker_type", context.blockerType)
-            setOrRemoveTag("app_section", context.appSection)
-            setOrRemoveTag("report_session_id", context.reportSessionId)
-
-            val diagnosticMap = buildMap<String, Any?> {
-                context.deviceId?.let { put("device_id", it) }
-                context.taskId?.let { put("task_id", it) }
-                context.occurrenceKey?.let { put("occurrence_key", it) }
-                context.actionId?.let { put("action_id", it) }
-                context.requestId?.let { put("request_id", it) }
-                context.traceId?.let { put("trace_id", it) }
-                context.screen?.let { put("screen", it) }
-                context.blockerType?.let { put("blocker_type", it) }
-                context.appSection?.let { put("app_section", it) }
-                context.reportSessionId?.let { put("report_session_id", it) }
-            }
-            if (diagnosticMap.isNotEmpty()) {
-                scope.setContexts("diagnostic", diagnosticMap)
-            } else {
-                scope.removeContexts("diagnostic")
-            }
-        }
-    }
 
     override fun addLog(record: DiagnosticLogRecord, throwable: Throwable?) {
         val breadcrumb = Breadcrumb().apply {
@@ -194,95 +128,23 @@ class SentryAndroidObservability : AndroidObservability {
         context: DiagnosticCorrelation
     ): String? {
         val event = SentryEvent(throwable).apply {
+            level = SentryLevel.ERROR
             setTag("marker", marker)
-            context.deviceId?.let { setTag("device_id", it) }
-            context.taskId?.let { setTag("task_id", it) }
-            context.occurrenceKey?.let { setTag("occurrence_key", it) }
-            context.actionId?.let { setTag("action_id", it) }
-            context.requestId?.let { setTag("request_id", it) }
-            context.traceId?.let { setTag("trace_id", it) }
-            context.screen?.let { setTag("screen", it) }
-            context.blockerType?.let { setTag("blocker_type", it) }
-            context.appSection?.let { setTag("app_section", it) }
-            context.reportSessionId?.let { setTag("report_session_id", it) }
+            context.deviceId?.takeIf { it.isNotBlank() }?.let { setTag("device_id", it) }
+            context.taskId?.takeIf { it.isNotBlank() }?.let { setTag("task_id", it) }
+            context.occurrenceKey?.takeIf { it.isNotBlank() }?.let { setTag("occurrence_key", it) }
+            context.actionId?.takeIf { it.isNotBlank() }?.let { setTag("action_id", it) }
+            context.requestId?.takeIf { it.isNotBlank() }?.let { setTag("request_id", it) }
+            context.screen?.takeIf { it.isNotBlank() }?.let { setTag("screen", it) }
+            context.blockerType?.takeIf { it.isNotBlank() }?.let { setTag("blocker_type", it) }
+            context.appSection?.takeIf { it.isNotBlank() }?.let { setTag("app_section", it) }
         }
         val sentryId = Sentry.captureEvent(event)
         return if (sentryId != SentryId.EMPTY_ID) SentryEventSanitizer.formatSentryId(sentryId) else null
     }
 
-    override fun newEventId(): String {
-        return SentryEventSanitizer.formatSentryId(SentryId())
-    }
-
-    override fun captureDiagnosticEvent(
-        eventId: String,
-        reportSessionId: String,
-        submitted: Boolean,
-        context: DiagnosticCorrelation,
-        attachments: List<DiagnosticAttachment>
-    ): String {
-        val sentryEventId = runCatching { SentryId(eventId) }.getOrDefault(SentryId())
-        val event = SentryEvent().apply {
-            this.eventId = sentryEventId
-            level = SentryLevel.INFO
-            message = io.sentry.protocol.Message().apply {
-                formatted = "buzer.android.manual_report"
-            }
-            setTag("report_session_id", reportSessionId)
-            setTag("android_diagnostic_event_id", eventId)
-            setTag("feedback_submitted", submitted.toString())
-            setTag("capsule_schema_version", "1")
-            context.deviceId?.let { setTag("device_id", it) }
-            context.taskId?.let { setTag("task_id", it) }
-            context.occurrenceKey?.let { setTag("occurrence_key", it) }
-            context.actionId?.let { setTag("action_id", it) }
-            context.requestId?.let { setTag("request_id", it) }
-            context.traceId?.let { setTag("trace_id", it) }
-            context.screen?.let { setTag("screen", it) }
-            context.blockerType?.let { setTag("blocker_type", it) }
-            context.appSection?.let { setTag("app_section", it) }
-
-            val diagnosticMap = buildMap<String, Any?> {
-                put("report_session_id", reportSessionId)
-                put("android_diagnostic_event_id", eventId)
-                put("feedback_submitted", submitted)
-                put("capsule_schema_version", "1")
-                context.deviceId?.let { put("device_id", it) }
-                context.taskId?.let { put("task_id", it) }
-                context.occurrenceKey?.let { put("occurrence_key", it) }
-                context.actionId?.let { put("action_id", it) }
-                context.requestId?.let { put("request_id", it) }
-                context.traceId?.let { put("trace_id", it) }
-                context.screen?.let { put("screen", it) }
-                context.blockerType?.let { put("blocker_type", it) }
-                context.appSection?.let { put("app_section", it) }
-            }
-            contexts["diagnostic"] = diagnosticMap
-        }
-
-        val hint = Hint()
-        attachments.forEach { att ->
-            val sanitized = SentryEventSanitizer.sanitizeAttachment(att)
-            hint.addAttachment(
-                Attachment(
-                    sanitized.bytes,
-                    sanitized.pathname,
-                    sanitized.contentType
-                )
-            )
-        }
-
-        val capturedId = Sentry.captureEvent(event, hint)
-        return SentryEventSanitizer.formatSentryId(capturedId)
-    }
-
-    override fun showFeedback(associatedEventId: String?) {
-        val sentryId = associatedEventId?.takeIf { it.isNotBlank() }?.let { runCatching { SentryId(it) }.getOrNull() }
-        if (sentryId != null) {
-            Sentry.feedback().show(sentryId) {}
-        } else {
-            Sentry.feedback().show()
-        }
+    override fun showFeedback() {
+        Sentry.feedback().show()
     }
 
     override fun flush(timeoutMillis: Long): Boolean {
@@ -298,9 +160,42 @@ object ObservabilityRuntime {
     var instance: AndroidObservability = NoOpAndroidObservability
         internal set
 
-    @Volatile
-    var coordinator: ManualReportCoordinator? = null
-        internal set
+    fun configureSentryOptions(
+        options: SentryAndroidOptions,
+        dsn: String,
+        environment: String,
+        release: String
+    ) {
+        options.dsn = dsn
+        options.release = release
+        options.environment = environment
+        options.sampleRate = 1.0
+        options.tracesSampleRate = null
+        options.sessionReplay.onErrorSampleRate = 1.0
+        options.sessionReplay.sessionSampleRate = 0.0
+        options.isAnrEnabled = true
+        options.isSendDefaultPii = false
+        options.isAttachScreenshot = true
+        options.isAttachViewHierarchy = true
+        options.beforeSend = SentryOptions.BeforeSendCallback { event, _ ->
+            SentryEventSanitizer.sanitizeEvent(event)
+        }
+        options.beforeBreadcrumb = SentryOptions.BeforeBreadcrumbCallback { breadcrumb, _ ->
+            SentryEventSanitizer.sanitizeBreadcrumb(breadcrumb)
+        }
+        options.feedbackOptions.apply {
+            isUseShakeGesture = true
+            isUseSentryUser = false
+            isShowName = false
+            isShowEmail = false
+            isShowBranding = false
+            formTitle = "Report a bug"
+            messageLabel = "What went wrong?"
+            messagePlaceholder = "What did you expect, and what happened?"
+            submitButtonLabel = "Send report"
+            successMessageText = "Report sent. Thank you."
+        }
+    }
 
     fun initialize(
         context: Context,
@@ -308,27 +203,6 @@ object ObservabilityRuntime {
         environment: String = BuildConfig.SENTRY_ENVIRONMENT,
         release: String = BuildConfig.SENTRY_RELEASE
     ): AndroidObservability {
-        val manualCoordinator = ManualReportCoordinator(
-            observability = object : AndroidObservability {
-                override fun isEnabled(): Boolean = instance.isEnabled()
-                override fun setContext(context: DiagnosticCorrelation) = instance.setContext(context)
-                override fun addLog(record: DiagnosticLogRecord, throwable: Throwable?) = instance.addLog(record, throwable)
-                override fun captureHandled(marker: String, throwable: Throwable, context: DiagnosticCorrelation): String? =
-                    instance.captureHandled(marker, throwable, context)
-                override fun newEventId(): String = instance.newEventId()
-                override fun captureDiagnosticEvent(
-                    eventId: String,
-                    reportSessionId: String,
-                    submitted: Boolean,
-                    context: DiagnosticCorrelation,
-                    attachments: List<DiagnosticAttachment>
-                ): String = instance.captureDiagnosticEvent(eventId, reportSessionId, submitted, context, attachments)
-                override fun showFeedback(associatedEventId: String?) = instance.showFeedback(associatedEventId)
-                override fun flush(timeoutMillis: Long): Boolean = instance.flush(timeoutMillis)
-            }
-        )
-        coordinator = manualCoordinator
-
         if (dsn.isBlank()) {
             val noOp = NoOpAndroidObservability
             instance = noOp
@@ -339,43 +213,7 @@ object ObservabilityRuntime {
         }
 
         SentryAndroid.init(context) { options: SentryAndroidOptions ->
-            options.dsn = dsn
-            options.release = release
-            options.environment = environment
-            options.sampleRate = 1.0
-            options.tracesSampleRate = 1.0
-            options.sessionReplay.onErrorSampleRate = 1.0
-            options.sessionReplay.sessionSampleRate = 0.0
-            options.isAnrEnabled = true
-            options.isSendDefaultPii = true
-            options.isAttachScreenshot = true
-            options.isAttachViewHierarchy = true
-            options.beforeSend = SentryOptions.BeforeSendCallback { event, _ ->
-                SentryEventSanitizer.sanitizeEvent(event)
-            }
-            options.beforeBreadcrumb = SentryOptions.BeforeBreadcrumbCallback { breadcrumb, _ ->
-                SentryEventSanitizer.sanitizeBreadcrumb(breadcrumb)
-            }
-            options.feedbackOptions.apply {
-                isUseShakeGesture = true
-                isUseSentryUser = false
-                isShowName = false
-                isShowEmail = false
-                isShowBranding = false
-                formTitle = "Report a bug"
-                messageLabel = "What went wrong?"
-                messagePlaceholder = "What did you expect, and what happened?"
-                submitButtonLabel = "Send report"
-                successMessageText = "Report sent. Thank you."
-                onFormOpen = Runnable { coordinator?.onFormOpen() }
-                onFormClose = Runnable { coordinator?.onFormClose() }
-                onSubmitSuccess = io.sentry.SentryFeedbackOptions.SentryFeedbackCallback {
-                    coordinator?.onSubmitSuccess(it)
-                }
-                onSubmitError = io.sentry.SentryFeedbackOptions.SentryFeedbackCallback {
-                    coordinator?.onSubmitError(it)
-                }
-            }
+            configureSentryOptions(options, dsn, environment, release)
         }
 
         val sentryObservability = SentryAndroidObservability()
@@ -386,15 +224,15 @@ object ObservabilityRuntime {
         return sentryObservability
     }
 
-    fun showFeedback(associatedEventId: String? = null) {
-        instance.showFeedback(associatedEventId)
+    fun showFeedback() {
+        instance.showFeedback()
     }
 
     internal fun resetForTests(newAdapter: AndroidObservability = NoOpAndroidObservability) {
         instance = newAdapter
-        coordinator = null
         AppLog.installSink { record, throwable ->
             instance.addLog(record, throwable)
         }
     }
 }
+

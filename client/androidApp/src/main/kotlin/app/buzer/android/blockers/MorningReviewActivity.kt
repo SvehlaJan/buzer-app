@@ -22,8 +22,6 @@ import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.android.morningreview.MorningReviewResult
 import app.buzer.android.morningreview.MorningReviewSessionController
 import app.buzer.android.morningreview.MorningReviewSessionState
-import app.buzer.android.observability.DiagnosticContextStore
-import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.screens.MorningReviewScreen
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
 import app.buzer.android.ui.status.setBuzerContent
@@ -46,21 +44,6 @@ class MorningReviewActivity : ComponentActivity() {
             finish()
         }
         val source = MorningReviewContract.entrySource(intent)
-        DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = "MorningReview",
-                currentActivity = "MorningReviewActivity",
-                blockerType = "MorningReview",
-                appSection = "MorningReview"
-            )
-        }
-        ObservabilityRuntime.instance.setContext(
-            DiagnosticCorrelation(
-                screen = "MorningReview",
-                blockerType = "MorningReview",
-                appSection = "MorningReview"
-            )
-        )
         if (source == MorningReviewEntrySource.Automated) {
             configureBlockerWindow()
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -224,19 +207,6 @@ class MorningReviewActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = null,
-                blockerType = null,
-                currentActivity = null
-            )
-        }
-        ObservabilityRuntime.instance.setContext(
-            DiagnosticCorrelation(
-                screen = null,
-                blockerType = null
-            )
-        )
         super.onDestroy()
     }
 }

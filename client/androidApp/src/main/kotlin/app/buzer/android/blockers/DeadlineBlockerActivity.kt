@@ -13,7 +13,6 @@ import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.observability.DiagnosticContextStore
 import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
@@ -51,29 +50,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
         errorReporter = BlockerErrorReporter(applicationContext)
         val taskId = intent.getStringExtra(AlarmIntentFactory.EXTRA_TASK_ID)
         val occurrenceKey = intent.getStringExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY)
-        DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = "DeadlineBlocker",
-                currentActivity = "DeadlineBlockerActivity",
-                blockerType = "DeadlineBlocker",
-                appSection = "Enforcement"
-            )
-        }
-        DiagnosticContextStore.instance.updateCorrelation {
-            it.copy(
-                taskId = taskId,
-                occurrenceKey = occurrenceKey
-            )
-        }
-        ObservabilityRuntime.instance.setContext(
-            DiagnosticCorrelation(
-                screen = "DeadlineBlocker",
-                blockerType = "DeadlineBlocker",
-                taskId = taskId,
-                occurrenceKey = occurrenceKey,
-                appSection = "Enforcement"
-            )
-        )
         if (taskId == null || occurrenceKey.isNullOrBlank()) {
             AppLog.debug("deadline_blocker missing_alarm_identity")
             errorReporter.report(
@@ -90,27 +66,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = null,
-                blockerType = null,
-                currentActivity = null
-            )
-        }
-        DiagnosticContextStore.instance.updateCorrelation {
-            it.copy(
-                taskId = null,
-                occurrenceKey = null
-            )
-        }
-        ObservabilityRuntime.instance.setContext(
-            DiagnosticCorrelation(
-                screen = null,
-                blockerType = null,
-                taskId = null,
-                occurrenceKey = null
-            )
-        )
         super.onDestroy()
     }
 

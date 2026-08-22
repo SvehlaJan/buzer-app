@@ -107,28 +107,6 @@ class OverlayBlockerService : Service() {
         generation: Long
     ) {
         if (!requestGenerations.isCurrent(generation)) return
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = "OverlayBlocker",
-                blockerType = request.kind.name,
-                appSection = "Enforcement"
-            )
-        }
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateCorrelation {
-            it.copy(
-                taskId = request.taskId,
-                occurrenceKey = request.occurrenceKey
-            )
-        }
-        app.buzer.android.observability.ObservabilityRuntime.instance.setContext(
-            app.buzer.shared.diagnostics.DiagnosticCorrelation(
-                screen = "OverlayBlocker",
-                blockerType = request.kind.name,
-                taskId = request.taskId,
-                occurrenceKey = request.occurrenceKey,
-                appSection = "Enforcement"
-            )
-        )
         val controller = BlockerOverlayController(this).also { this.controller = it }
         val shown = controller.show(request) { action -> handleAction(action, request, coordinator, generation) }
         if (!shown) {
@@ -291,18 +269,6 @@ class OverlayBlockerService : Service() {
         watcherJob = null
         controller?.remove()
         controller = null
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = null,
-                blockerType = null
-            )
-        }
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateCorrelation {
-            it.copy(
-                taskId = null,
-                occurrenceKey = null
-            )
-        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -314,18 +280,6 @@ class OverlayBlockerService : Service() {
         watcherJob = null
         controller?.remove()
         controller = null
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateUi {
-            it.copy(
-                screen = null,
-                blockerType = null
-            )
-        }
-        app.buzer.android.observability.DiagnosticContextStore.instance.updateCorrelation {
-            it.copy(
-                taskId = null,
-                occurrenceKey = null
-            )
-        }
         scope.cancel()
         super.onDestroy()
     }

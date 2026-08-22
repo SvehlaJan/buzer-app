@@ -4,12 +4,15 @@ import io.sentry.Breadcrumb
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
 import io.sentry.protocol.Message
+import io.sentry.protocol.Request
 import io.sentry.protocol.SentryException
 import io.sentry.protocol.SentryId
+import io.sentry.protocol.User
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SentryEventSanitizerTest {
@@ -24,6 +27,26 @@ class SentryEventSanitizerTest {
         "SECRET_COOKIE_789",
         "SECRET_BEARER_123"
     )
+
+    @Test
+    fun removesRequestAndUserFromEvent() {
+        val event = SentryEvent().apply {
+            request = Request().apply {
+                url = "https://api.example.com/tasks?token=SECRET_TODOIST_123"
+                queryString = "token=SECRET_TODOIST_123"
+                headers = mapOf("Authorization" to "Bearer SECRET_BEARER_123")
+            }
+            user = User().apply {
+                id = "user-123"
+                email = "user@example.com"
+                ipAddress = "192.168.1.1"
+            }
+        }
+
+        val sanitized = SentryEventSanitizer.sanitizeEvent(event)
+        assertNull(sanitized.request)
+        assertNull(sanitized.user)
+    }
 
     @Test
     fun sanitizesEventMessageExceptionsTagsContextsBreadcrumbsAndExtras() {
@@ -181,51 +204,6 @@ class SentryEventSanitizerTest {
         val headers = nestedObj["headers"] as List<Any?>
         assertEquals("Cookie: [REDACTED]", headers[0])
         assertEquals("[REDACTED]", nestedObj["token"])
-    }
-
-    @Test
-    fun sanitizesTextAndJsonAttachmentsAndPreservesBinaryAttachments() {
-        // 1. JSON Attachment
-        val jsonPayload = """{"token":"SECRET_TODOIST_123","user":"test","password":"SECRET_PASSWORD_999"}"""
-        val jsonAttachment = DiagnosticAttachment(
-            pathname = "report-token=SECRET_TODOIST_123.json",
-            bytes = jsonPayload.encodeToByteArray(),
-            contentType = "application/json"
-        )
-        val sanitizedJson = SentryEventSanitizer.sanitizeAttachment(jsonAttachment)
-        val sanitizedJsonText = sanitizedJson.bytes.decodeToString()
-
-        assertFalse(sanitizedJsonText.contains("SECRET_TODOIST_123"))
-        assertFalse(sanitizedJsonText.contains("SECRET_PASSWORD_999"))
-        assertTrue(sanitizedJsonText.contains("[REDACTED]"))
-        assertFalse(sanitizedJson.pathname.contains("SECRET_TODOIST_123"))
-        assertTrue(sanitizedJson.pathname.contains("[REDACTED]"))
-
-        // 2. Plain Text / Log Attachment
-        val logPayload = "2026-08-21T12:00:00Z qr_code: 1@SECRET_WHATSAPP_123,abc"
-        val logAttachment = DiagnosticAttachment(
-            pathname = "logs/app.log",
-            bytes = logPayload.encodeToByteArray(),
-            contentType = "text/plain"
-        )
-        val sanitizedLog = SentryEventSanitizer.sanitizeAttachment(logAttachment)
-        val sanitizedLogText = sanitizedLog.bytes.decodeToString()
-
-        assertFalse(sanitizedLogText.contains("SECRET_WHATSAPP_123"))
-        assertTrue(sanitizedLogText.contains("[REDACTED]"))
-
-        // 3. Binary Attachment (e.g. image bytes)
-        val binaryBytes = byteArrayOf(0x89.toByte(), 0x50.toByte(), 0x4E.toByte(), 0x47.toByte(), 0x01, 0x02, 0x03)
-        val binaryAttachment = DiagnosticAttachment(
-            pathname = "screenshot.png",
-            bytes = binaryBytes,
-            contentType = "image/png"
-        )
-        val sanitizedBinary = SentryEventSanitizer.sanitizeAttachment(binaryAttachment)
-
-        assertEquals("screenshot.png", sanitizedBinary.pathname)
-        assertTrue(sanitizedBinary.bytes.contentEquals(binaryBytes))
-        assertEquals("image/png", sanitizedBinary.contentType)
     }
 
     @Test

@@ -3,13 +3,10 @@ package app.buzer.android.enforcement
 import android.content.Context
 import app.buzer.android.BuildConfig
 import app.buzer.android.observability.AndroidObservability
-import app.buzer.android.observability.DiagnosticContextStore
-import app.buzer.android.observability.DiagnosticRingBuffer
 import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.sync.DeviceIdentityStore
 import app.buzer.android.sync.SnapshotStore
 import app.buzer.shared.api.BuzerApiClient
-import app.buzer.shared.api.TraceHeaders
 import app.buzer.shared.diagnostics.AppLog
 
 object EnforcementDependencies {
@@ -33,16 +30,7 @@ object EnforcementDependencies {
         require(error == null) { error.orEmpty() }
         return BuzerApiClient(
             baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/'),
-            token = BuildConfig.BUZER_BACKEND_TOKEN,
-            networkSink = { exchange ->
-                DiagnosticRingBuffer.instance.network.add(exchange)
-            },
-            traceHeaderProvider = {
-                val correlation = DiagnosticContextStore.instance.snapshot().correlation
-                if (correlation.traceId != null) {
-                    TraceHeaders(traceId = correlation.traceId)
-                } else null
-            }
+            token = BuildConfig.BUZER_BACKEND_TOKEN
         )
     }
 
@@ -59,8 +47,8 @@ object EnforcementDependencies {
             errorReporter = BlockerErrorReporter(context, observability = observability),
             blockerNotificationCleaner = AndroidBlockerNotificationCleaner(context),
             logger = AppLog::debug,
-            observability = observability,
-            contextStore = DiagnosticContextStore.instance
+            observability = observability
         )
     }
 }
+

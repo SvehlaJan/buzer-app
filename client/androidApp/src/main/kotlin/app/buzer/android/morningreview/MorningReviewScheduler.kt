@@ -100,9 +100,6 @@ class MorningReviewScheduler(
 
         try {
             stateStore.replace(persisted)
-            app.buzer.android.observability.DiagnosticContextStore.instance.updateScheduling { current ->
-                current.copy(morningReviewScheduledAt = desired.triggerAt.toString())
-            }
         } catch (persistenceFailure: Throwable) {
             recoverPersistenceFailure(persistenceFailure, desiredScheduledAlarm)
             throw persistenceFailure
