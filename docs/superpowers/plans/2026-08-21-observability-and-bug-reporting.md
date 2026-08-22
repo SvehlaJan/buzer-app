@@ -1435,7 +1435,7 @@ git commit -m "feat: triage Sentry issues into GitHub"
 - Create: `docs/notes/observability-operations.md`
 - Create: `docs/decisions/2026-08-21-hosted-sentry-observability.md`
 
-- [ ] **Step 1: Add source-map verification and upload commands.**
+- [x] **Step 1: Add source-map verification and upload commands.**
 
 Add `@sentry/cli@3.6.2` as a pinned development dependency. Keep ordinary `npm run build`
 credential-free. Add an explicit script that injects debug IDs and uploads only when all
@@ -1447,7 +1447,7 @@ operator environment or documents `SKIPPED`.
 Never pass `SENTRY_AUTH_TOKEN` into the final Docker image or write it to `.env` if the
 token is used only during build/upload.
 
-- [ ] **Step 2: Document exact local and VPS configuration.**
+- [x] **Step 2: Document exact local and VPS configuration.**
 
 Add blank examples:
 
@@ -1462,14 +1462,14 @@ secrets/variables, disabling behavior, local fake commands, event/tag search exa
 retention/budget expectations, alert thresholds, release resolution, rollback, and how
 to disable Sentry without disabling local diagnostics.
 
-- [ ] **Step 3: Record the architecture decision.**
+- [x] **Step 3: Record the architecture decision.**
 
 The decision must state: hosted Sentry; two projects; native shake/form plus visible
 fallback; broad PII/task capture permitted; secrets prohibited; Sentry inbox + GitHub
 queue; no autonomous fixes/deploys; paired Android/backend capsules; best-effort boundary;
 and supersession rules.
 
-- [ ] **Step 4: Write the operator setup checklist.**
+- [x] **Step 4: Write the operator setup checklist.**
 
 `docs/notes/observability-operations.md` must list unchecked external steps:
 
@@ -1491,7 +1491,7 @@ check an item merely because code supports it.
 Update `AGENTS.md` with any observability verification command that becomes mandatory,
 especially the triage unit test, secret-canary scan, and live-canary completion rule.
 
-- [ ] **Step 5: Verify docs/config contain names but no values.**
+- [x] **Step 5: Verify docs/config contain names but no values.**
 
 ```bash
 git diff --check
@@ -1502,7 +1502,7 @@ rg -n 'SECRET_(ANDROID|TODOIST|SENTRY|WHATSAPP)_' docs scripts backend client
 Expected: first PASS; second has no committed secret values; third finds only intentional
 test fixtures/assertions.
 
-- [ ] **Step 6: Commit and hand off.**
+- [x] **Step 6: Commit and hand off.**
 
 ```bash
 git add AGENTS.md backend/package.json backend/package-lock.json backend/.env.example scripts/deploy-vps.sh docs/notes/local-development.md docs/notes/vps-deployment.md docs/notes/observability-operations.md docs/decisions/2026-08-21-hosted-sentry-observability.md docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-task-12-operations.md

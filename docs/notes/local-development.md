@@ -144,6 +144,35 @@ BUZER_BACKEND_TOKEN=your-dev-token
 
 Do not commit real values. If either value is blank, the Android app shows a local configuration error instead of calling the backend.
 
+## Observability & Sentry Configuration
+
+### Android Sentry Configuration
+The Android app reads Sentry configuration from `client/local.properties` (for local development) or Gradle properties:
+
+```properties
+SENTRY_ANDROID_DSN=https://<key>@<org>.ingest.sentry.io/<project-id>
+SENTRY_ENVIRONMENT=development-device
+SENTRY_ORG=svehla
+SENTRY_PROJECT=buzer-android
+```
+
+- When `SENTRY_ANDROID_DSN` is empty or omitted, Sentry SDK initialization becomes a safe no-op while local Kermit/AppLog logging and diagnostics continue to function normally.
+- In tests (`testDebugUnitTest`, `testAndroidHostTest`, `e2e-real-backend.sh`), Sentry calls use in-memory recording fakes and do not contact Sentry Cloud.
+
+### Backend Sentry Configuration
+The backend loads Sentry configuration from environment variables or `backend/.env`:
+
+```dotenv
+SENTRY_BACKEND_DSN=https://<key>@<org>.ingest.sentry.io/<project-id>
+SENTRY_ENVIRONMENT=development-backend
+SENTRY_RELEASE=buzer-backend@0.1.0+local
+SENTRY_ORG=svehla
+SENTRY_PROJECT=buzer-backend
+```
+
+- When `SENTRY_BACKEND_DSN` is empty, backend Sentry initialization is a safe no-op.
+- See `docs/notes/observability-operations.md` and `docs/runbooks/sentry-setup.md` for full operations specifications.
+
 ## Secrets
 
 Secrets stay out of Git. Use `.env.example` files for documented variable names only.

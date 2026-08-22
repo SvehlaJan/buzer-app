@@ -11,7 +11,8 @@
     "start": "node --import ./dist/instrument.js ./dist/server.js",
     "dev": "node --import tsx --import ./src/instrument.ts ./src/server.ts",
     "e2e-server": "tsx test/e2eServer.ts",
-    "migrate": "tsx src/db/migrations.ts"
+    "migrate": "tsx src/db/migrations.ts",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org \"${SENTRY_ORG:-svehla}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" ./dist && sentry-cli sourcemaps upload --org \"${SENTRY_ORG:-svehla}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" --release \"${SENTRY_RELEASE:-buzer-backend@0.1.0+local}\" ./dist"
   },
   "dependencies": {
     "@fastify/rate-limit": "10.3.0",
@@ -25,6 +26,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@sentry/cli": "3.6.2",
     "@types/better-sqlite3": "7.6.13",
     "@types/node": "22.19.20",
     "tsx": "4.22.4",

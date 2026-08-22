@@ -10,7 +10,9 @@ The approved product spec is `docs/superpowers/specs/2026-04-30-todoist-commitme
 The approved observability/bug-reporting extension is
 `docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md`, with the
 self-contained execution plan at
-`docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`. Any agent working
+`docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`. Operational runbooks
+are maintained under `docs/runbooks/` (`sentry-setup.md`, `observability-triage.md`, `production-rollout.md`)
+and architectural parameters in `docs/notes/observability-operations.md`. Any agent working
 on logging, diagnostics, Sentry, crash/ANR capture, Android feedback, the diagnostic
 endpoint, source maps/releases, alerts, or Sentry-to-GitHub triage must read both files.
 Until the plan's live-canary gates are checked, do not assume Sentry projects, DSNs,

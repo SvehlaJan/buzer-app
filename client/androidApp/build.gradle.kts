@@ -69,13 +69,15 @@ android {
 }
 
 sentry {
+    org.set(providers.gradleProperty("SENTRY_ORG").orNull ?: "svehla")
+    projectName.set(providers.gradleProperty("SENTRY_PROJECT").orNull ?: "buzer-android")
     includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+    autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent || localProperties.getProperty("SENTRY_AUTH_TOKEN") != null)
     uploadNativeSymbols.set(false)
     autoUploadNativeSymbols.set(false)
     includeNativeSources.set(false)
     includeSourceContext.set(true)
-    autoUploadSourceContext.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+    autoUploadSourceContext.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent || localProperties.getProperty("SENTRY_AUTH_TOKEN") != null)
     autoInstallation {
         enabled.set(false)
     }

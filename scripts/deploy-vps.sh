@@ -16,11 +16,20 @@ cd "$repo_dir"
 git fetch origin "$branch"
 git checkout -B "$branch" "origin/$branch"
 
+git_sha_short=$(git rev-parse --short=12 HEAD 2>/dev/null || echo "vps")
+export SENTRY_RELEASE="${SENTRY_RELEASE:-buzer-backend@0.1.0+${git_sha_short}}"
+
 docker compose --env-file "$env_file" -f "$compose_file" up -d --build --remove-orphans
 
 for attempt in $(seq 1 "$health_max_attempts"); do
   if curl --fail --silent --show-error "$health_url" >/dev/null; then
     echo "Buzer backend is healthy at $health_url"
+    if [ -n "${SENTRY_AUTH_TOKEN:-}" ]; then
+      echo "Uploading backend source maps to Sentry for release $SENTRY_RELEASE..."
+      (cd backend && npm run build && npm run sentry:sourcemaps) || echo "Warning: Sentry source map upload failed"
+    else
+      echo "SENTRY_AUTH_TOKEN not set; skipping source map upload."
+    fi
     exit 0
   fi
 
