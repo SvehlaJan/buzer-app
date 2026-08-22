@@ -69,6 +69,8 @@ android {
 }
 
 sentry {
+    org.set(providers.gradleProperty("SENTRY_ORG").orNull ?: "svehla")
+    projectName.set(providers.gradleProperty("SENTRY_PROJECT").orNull ?: "buzer-android")
     includeProguardMapping.set(true)
     autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
     uploadNativeSymbols.set(false)

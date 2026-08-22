@@ -45,6 +45,9 @@ WHATSAPP_RECIPIENT_ID=replace-with-chat-id
 WHATSAPP_DRY_RUN=true
 WHATSAPP_SESSION_PATH=./whatsapp-sessions
 WHATSAPP_CLIENT_ID=buzer
+SENTRY_BACKEND_DSN=
+SENTRY_ENVIRONMENT=production-vps
+SENTRY_RELEASE=buzer-backend@0.1.0+vps
 ```
 
 Use a long random Android API token:

@@ -19,6 +19,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=18432
+      - SENTRY_BACKEND_DSN=${SENTRY_BACKEND_DSN:-}
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production-vps}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-buzer-backend@0.1.0+vps}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || '18432') + '/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
