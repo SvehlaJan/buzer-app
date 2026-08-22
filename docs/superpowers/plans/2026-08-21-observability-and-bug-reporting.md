@@ -1577,11 +1577,12 @@ git grep -i -E "https://[a-f0-9]+@[a-z0-9.]+\.ingest\.sentry\.io/[0-9]+" || true
 Result: **0 matches** (zero secret leaks across the codebase; only synthetic tokens in unit test fixtures).
 Generated final comprehensive handoff: `docs/handoffs/2026-08-21-observability-final-handoff.md`.
 
-## Completion Definition
-
-The codebase implementation across Tasks 1–13 is complete and fully verified. The feature is code-complete and awaiting the Phase 4 live canary operator gate upon Sentry Cloud credential provisioning.
-git commit -m "test: verify observability rollout"
+- [x] **Step 6: Commit and hand off.**
+```bash
+git add docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md docs/handoffs/2026-08-21-observability-final-handoff.md
+git commit -m "docs: complete final automated verification and handoff"
 ```
+Generated final comprehensive handoff: `docs/handoffs/2026-08-21-observability-final-handoff.md`.
 
 ## Completion Definition
 
