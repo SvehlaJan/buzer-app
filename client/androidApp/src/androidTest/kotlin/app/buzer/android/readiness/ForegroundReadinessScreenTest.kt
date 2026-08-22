@@ -51,7 +51,15 @@ class ForegroundReadinessScreenTest {
     fun onlyOneEnabledPrimaryActionExists() {
         setGate(exactAlarmsState())
 
-        composeRule.onAllNodes(hasClickAction() and isEnabled()).assertCountEquals(1)
+        composeRule.onAllNodes(hasTestTag("readiness-primary-action") and isEnabled()).assertCountEquals(1)
+    }
+
+    @Test
+    fun reportBugActionInvokesCallback() {
+        var reportCount = 0
+        setGate(exactAlarmsState(), onReportBug = { reportCount++ })
+        composeRule.onNodeWithTag("readiness-report-bug").assertIsDisplayed().performClick()
+        assertEquals(1, reportCount)
     }
 
     @Test
@@ -130,7 +138,7 @@ class ForegroundReadinessScreenTest {
         composeRule.onNodeWithText("Couldn't verify device readiness").assertIsDisplayed()
         composeRule.onNodeWithText("Retry").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithTag("readiness-step").assertDoesNotExist()
-        composeRule.onAllNodes(hasClickAction() and isEnabled()).assertCountEquals(1)
+        composeRule.onAllNodes(hasTestTag("readiness-primary-action") and isEnabled()).assertCountEquals(1)
     }
 
     @Test
@@ -151,15 +159,21 @@ class ForegroundReadinessScreenTest {
 
     private fun setGate(
         state: ForegroundReadinessGateState,
-        onPrimaryAction: () -> Unit = {}
-    ) = setGateState({ state }, onPrimaryAction)
+        onPrimaryAction: () -> Unit = {},
+        onReportBug: () -> Unit = {}
+    ) = setGateState({ state }, onPrimaryAction, onReportBug)
 
     private fun setGateState(
         state: () -> ForegroundReadinessGateState,
-        onPrimaryAction: () -> Unit = {}
+        onPrimaryAction: () -> Unit = {},
+        onReportBug: () -> Unit = {}
     ) = composeRule.setContent {
         BuzerTheme {
-            ForegroundReadinessGate(state = state(), onPrimaryAction = onPrimaryAction)
+            ForegroundReadinessGate(
+                state = state(),
+                onPrimaryAction = onPrimaryAction,
+                onReportBug = onReportBug
+            )
         }
     }
 

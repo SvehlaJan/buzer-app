@@ -13,6 +13,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -154,7 +155,8 @@ private fun requirementCopy(requirement: ReadinessRequirement): RequirementCopy 
 @Composable
 fun ForegroundReadinessGate(
     state: ForegroundReadinessGateState,
-    onPrimaryAction: () -> Unit
+    onPrimaryAction: () -> Unit,
+    onReportBug: () -> Unit
 ) {
     val screen = buildForegroundReadinessScreenState(state) ?: return
     Dialog(
@@ -208,6 +210,14 @@ fun ForegroundReadinessGate(
                         .testTag("readiness-primary-action")
                 ) {
                     Text(screen.primaryLabel, style = MaterialTheme.typography.labelLarge)
+                }
+                TextButton(
+                    onClick = onReportBug,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("readiness-report-bug")
+                ) {
+                    Text("Report a bug")
                 }
             }
         }

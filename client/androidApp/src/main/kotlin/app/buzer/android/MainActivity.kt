@@ -173,7 +173,8 @@ class MainActivity : ComponentActivity() {
                 )
                 ForegroundReadinessGate(
                     state = foregroundReadinessState,
-                    onPrimaryAction = ::performForegroundReadinessAction
+                    onPrimaryAction = ::performForegroundReadinessAction,
+                    onReportBug = { ObservabilityRuntime.instance.showFeedback() }
                 )
             }
         }
