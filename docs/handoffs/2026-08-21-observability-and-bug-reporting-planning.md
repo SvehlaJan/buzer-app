@@ -1,5 +1,8 @@
 # Observability And Bug Reporting Planning Handoff
 
+> [!WARNING]
+> **SUPERSEDED (2026-08-22):** This planning handoff has been superseded by `docs/superpowers/specs/2026-08-22-lean-observability-design.md`, `docs/decisions/2026-08-22-lean-observability.md`, and `docs/superpowers/plans/2026-08-22-lean-observability.md`. It is retained for historical provenance only.
+
 Date: 2026-08-21
 
 ## Task And Status

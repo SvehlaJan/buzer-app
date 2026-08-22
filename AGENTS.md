@@ -8,13 +8,16 @@ This repository is a personal Todoist commitment companion. It has two MVP deplo
 The approved product spec is `docs/superpowers/specs/2026-04-30-todoist-commitment-companion-design.md`. Treat that file as product truth unless a later decision document explicitly changes it.
 
 The approved observability/bug-reporting direction is
-`docs/superpowers/specs/2026-08-22-lean-observability-design.md`. It supersedes the
+`docs/superpowers/specs/2026-08-22-lean-observability-design.md` and
+`docs/decisions/2026-08-22-lean-observability.md`. It supersedes the
 2026-08-21 paired-capsule design and plan, which are retained only as historical records.
-Any agent working on logging, diagnostics, Sentry, crash/ANR capture, Android feedback,
-source maps/releases, alerts, or deletion of the superseded diagnostic endpoint/capsules
-must read the lean design and its current implementation plan. Until the new plan's
-live-canary gates are checked, do not assume DSNs, tokens, alerts, GitHub integration, or
-production rollout already exist.
+Key architectural agreements:
+- **Android client**: Sends crashes, ANRs, error replays, native screenshots/view hierarchies, sanitized `AppLog` breadcrumbs, selected handled exceptions, and native user feedback directly to Sentry.
+- **Backend VPS**: Sends explicit 5xx request failures (via Fastify `onError`) and background failures (poller, WhatsApp, escalation) to Sentry alongside stdout logging.
+- **No custom telemetry infrastructure**: No custom diagnostic endpoint (`POST /diagnostics/reports`), paired capsule attachments (`android-diagnostics-v1.json`/`backend-diagnostics-v1.json`), trace propagation (`sentry-trace`/`baggage`), persistence table (`diagnostic_reports`), or Sentry-to-GitHub bot (`tools/sentry-github-sync`) exists.
+- **Operational triage**: Triage occurs directly in the Sentry UI (searchable by release, timestamp, and standard tags like `request_id`, `task_id`, `action_id`, `occurrence_key`). GitHub issues are created manually only when needed.
+- **Canonical configuration**: Hosted Sentry organization `jans-gi`, Android project `buzer-android` (`4511950606172240`), backend project `buzer-backend` (`4511950617641040`), canonical release identifier `app.buzer@<version>+<sha>`.
+Until live-canary gates are checked, do not assume DSNs, tokens, alerts, or production rollout already exist.
 
 ## Required Start-Of-Session Routine
 

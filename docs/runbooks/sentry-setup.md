@@ -1,8 +1,8 @@
 # Sentry Setup Runbook
 
-**Organization:** `svehla` (or `jans-gi`)  
-**Projects:** `buzer-android`, `buzer-backend`  
-**Purpose:** Setup guide for Hosted Sentry projects, DSNs, API tokens, metric & alert rules, and GitHub repository integration.
+**Organization:** `jans-gi`
+**Projects:** `buzer-android` (`4511950606172240`), `buzer-backend` (`4511950617641040`)
+**Purpose:** Setup guide for Hosted Sentry projects, DSNs, API tokens, alert rules, and GitHub repository integration for source context.
 
 ---
 
@@ -10,28 +10,29 @@
 
 ### Organization Configuration
 1. Log into Sentry Cloud: [https://sentry.io](https://sentry.io).
-2. Organization name: `svehla` (slug: `svehla` or `jans-gi`).
-3. Ensure the organization timezone is set to `Europe/Prague` (or your local timezone) and data scrubbers are enabled.
+2. Verify Organization slug: `jans-gi`.
+3. Verify the organization timezone is set to `Europe/Prague` (or your local timezone) and data scrubbers are enabled.
 
 ### Project 1: `buzer-android`
-1. Navigate to **Settings > Projects > Create Project**.
+1. Navigate to **Settings > Projects > Create Project** (or verify existing).
 2. Platform: **Android** (Kotlin).
-3. Project name: `buzer-android`.
-4. Set default alert rule: Alert me for every new issue.
-5. In **Project Settings > General Settings**:
-   - Verify Project Slug: `buzer-android`.
-   - Store the generated Client Key (DSN) securely (for `SENTRY_ANDROID_DSN`).
-6. In **Project Settings > ProGuard & Native**:
+3. Project Slug: `buzer-android` (Project ID: `4511950606172240`).
+4. In **Project Settings > Client Keys (DSN)**:
+   - Copy the DSN for use as `SENTRY_ANDROID_DSN`.
+5. In **Project Settings > ProGuard & Native**:
    - Ensure ProGuard / R8 mapping file processing is enabled.
    - Ensure Source Context repository linking is enabled.
+6. In **Project Settings > Replays**:
+   - Verify Session Replay is enabled (Error Replay rate: 100%, Session Replay: 0%).
+7. In **Project Settings > User Feedback**:
+   - Verify User Feedback widget is enabled.
 
 ### Project 2: `buzer-backend`
-1. Navigate to **Settings > Projects > Create Project**.
-2. Platform: **Node.js** (Fastify / Express).
-3. Project name: `buzer-backend`.
-4. In **Project Settings > General Settings**:
-   - Verify Project Slug: `buzer-backend`.
-   - Store the generated Client Key (DSN) securely (for `SENTRY_BACKEND_DSN`).
+1. Navigate to **Settings > Projects > Create Project** (or verify existing).
+2. Platform: **Node.js** (Fastify / TypeScript).
+3. Project Slug: `buzer-backend` (Project ID: `4511950617641040`).
+4. In **Project Settings > Client Keys (DSN)**:
+   - Copy the DSN for use as `SENTRY_BACKEND_DSN`.
 5. In **Project Settings > Source Maps**:
    - Ensure JavaScript/TypeScript source map symbolication is enabled.
 
@@ -39,8 +40,8 @@
 
 ## 2. API & Auth Token Generation
 
-### 2.1 Release & Source Map Upload Token (`SENTRY_AUTH_TOKEN`)
-Used by Gradle (`sentry-android-gradle-plugin`) during Android APK builds and deploy scripts for source-map/ProGuard mapping uploads.
+### Release & Source Map Upload Token (`SENTRY_AUTH_TOKEN`)
+Used by Gradle (`sentry-android-gradle-plugin`) during Android release APK builds and deploy scripts for source-map/ProGuard mapping uploads.
 
 1. Navigate to **User Settings > Auth Tokens > Create New Token** (or **Org Settings > Developer Settings > Internal Integrations**).
 2. Name: `buzer-release-uploader`.
@@ -48,30 +49,28 @@ Used by Gradle (`sentry-android-gradle-plugin`) during Android APK builds and de
    - `project:read`
    - `project:releases`
    - `org:read`
-   - `event:read`
 4. Securely store the generated token in your password manager / CI secret store as `SENTRY_AUTH_TOKEN`.
    > **Note**: Never commit `SENTRY_AUTH_TOKEN` to git or bake it into production Docker images.
 
-### 2.2 Triage & Issue Sync Token
-Used by `tools/sentry-github-sync` and `.github/workflows/sentry-triage.yml` to query unresolved diagnostic issues and attachment metadata.
+---
 
-1. Navigate to **User Settings > Auth Tokens > Create New Token**.
-2. Name: `buzer-github-triage-sync`.
-3. Required Scopes:
-   - `event:read`
-   - `project:read`
-   - `org:read`
-   - `issue:read`
-   - `member:read`
-4. Save as GitHub Actions Secret `SENTRY_AUTH_TOKEN` in GitHub repository settings.
+## 3. Environment Variables Configuration
+
+| Variable | Location | Description |
+| :--- | :--- | :--- |
+| `SENTRY_ANDROID_DSN` | `client/local.properties` (dev) / Gradle build config | Client DSN for Android app |
+| `SENTRY_BACKEND_DSN` | VPS `/home/skclaw/buzer-app/.env` | Client DSN for backend Node service |
+| `SENTRY_ENVIRONMENT` | `local.properties` or `.env` | `development-device`, `production-device`, `development-vps`, `production-vps` |
+| `SENTRY_RELEASE` | Auto-resolved in Gradle / `.env` on VPS | Canonical release: `app.buzer@<version>+<sha>` |
+| `SENTRY_AUTH_TOKEN` | Local shell / CI environment variable | Only needed when uploading ProGuard mappings or source maps |
 
 ---
 
-## 3. Metric & Alert Rules Configuration
+## 4. Alert Rules Configuration
 
 Configure Sentry Alert Rules under **Alerts > Create Alert** for both projects:
 
-### 3.1 `buzer-android` Alerts
+### 4.1 `buzer-android` Alerts
 
 1. **Fatal App Crashes & ANRs (Immediate Paging)**:
    - **Type**: Issues
@@ -80,38 +79,32 @@ Configure Sentry Alert Rules under **Alerts > Create Alert** for both projects:
    - **Action**: Send notification to Email / Telegram / Mobile Push.
    - **Frequency**: Perform actions every time conditions are met.
 
-2. **Handled Non-Fatal Enforcement Failures**:
+2. **User Feedback & Bug Reports**:
    - **Type**: Issues
-   - **Condition**: When an event is captured with `enforcement_critical:true` or `data_consistency:true`.
-   - **Action**: High-priority alert notification.
+   - **Condition**: When a new User Feedback issue is submitted (via shake gesture or UI button).
+   - **Action**: Alert notification with feedback message and device metadata.
 
-3. **User Feedback & Bug Reports**:
-   - **Type**: Issues
-   - **Condition**: When an event is captured with tag `feedback_submitted:true` or `message:"buzer.android.manual_report"`.
-   - **Action**: Alert notification with feedback text and session ID.
-   - *Exclusion*: Filter out events with `feedback_submitted:false` (abandoned/cancelled report sessions) from paging.
+### 4.2 `buzer-backend` Alerts
 
-### 3.2 `buzer-backend` Alerts
-
-1. **Backend Server Exceptions & Unhandled Crashes**:
+1. **Backend 5xx Server Exceptions & Unhandled Crashes**:
    - **Type**: Issues
    - **Condition**: When a new issue is created with `level:fatal OR level:error`.
    - **Action**: Immediate alert notification.
 
-2. **Todoist Polling Failure Outage**:
-   - **Type**: Metric / Issues
-   - **Condition**: When `consecutive_failure_count >= 3` OR when poll failure persists for > 15 minutes.
+2. **Todoist Polling Outage**:
+   - **Type**: Issues / Metric
+   - **Condition**: When an event is captured with `marker:todoist_poller_error` and `consecutive_failure_count >= 3`.
    - **Fingerprint**: `["todoist-poller-failure"]`
-   - **Action**: Paging alert to operator.
+   - **Action**: High-priority alert to operator.
 
-3. **WhatsApp Escalation & Connection Failures**:
+3. **WhatsApp Escalation & Disconnection Failures**:
    - **Type**: Issues
-   - **Condition**: When an event is captured with `component:whatsapp AND (status:disconnect_timeout OR action:escalation_send_failure)`.
+   - **Condition**: When an event is captured with `marker:whatsapp_disconnect` or `marker:whatsapp_escalation_failure`.
    - **Action**: Immediate escalation alert.
 
 ---
 
-## 4. GitHub Integration Configuration
+## 5. GitHub Integration for Source Context
 
 1. Navigate to **Settings > Integrations > GitHub**.
 2. Install and authorize the Sentry GitHub App on repository `SvehlaJan/buzer-app`.
@@ -124,6 +117,6 @@ Configure Sentry Alert Rules under **Alerts > Create Alert** for both projects:
    - Branch: `master`
    - Android Stack Trace root: `client/androidApp/src/main/kotlin/` -> `client/androidApp/src/main/kotlin/`
    - Backend Stack Trace root: `backend/src/` -> `backend/src/`
-6. **Note on Issue Sync**:
-   - Do NOT enable Sentry's automated native GitHub issue creation plugin to avoid duplicate/unredacted issue spam.
-   - Deduplicated issue creation is handled exclusively by the curated repository tool `tools/sentry-github-sync`.
+6. **No Automated Issue Bot**:
+   - Sentry GitHub integration is used **exclusively for source context and stack trace linking**.
+   - Automated sync tools (`tools/sentry-github-sync`) have been removed. Triage is performed directly in the Sentry UI.

@@ -1,10 +1,13 @@
 # Final Handoff: Buzer Observability and Bug Reporting (Tasks 1–13)
 
-**Date:** 2026-08-22  
-**Implementation Plan:** `docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`  
-**Design Spec:** `docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md`  
-**ADR:** `docs/decisions/2026-08-21-hosted-sentry-observability.md`  
-**Status:** IMPLEMENTATION COMPLETE — LIVE ROLLOUT CANARY PENDING  
+> [!WARNING]
+> **SUPERSEDED (2026-08-22):** The paired-capsule and automated GitHub triage implementation described in this handoff has been superseded by the lean observability architecture (`docs/superpowers/specs/2026-08-22-lean-observability-design.md`, `docs/decisions/2026-08-22-lean-observability.md`, and `docs/superpowers/plans/2026-08-22-lean-observability.md`). This handoff is retained for historical provenance only.
+
+**Date:** 2026-08-22
+**Implementation Plan:** `docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md` (Superseded)
+**Design Spec:** `docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md` (Superseded)
+**ADR:** `docs/decisions/2026-08-21-hosted-sentry-observability.md` (Superseded)
+**Status:** SUPERSEDED BY LEAN OBSERVABILITY (2026-08-22)
 
 ---
 

@@ -1,214 +1,181 @@
-# Observability Operations & Architecture Specifications
+# Lean Observability Operations & Architecture Specifications
 
-**Date:** 2026-08-21
+**Date:** 2026-08-22
 **Status:** Approved & Implemented
-**Schema Version:** `1`
+**Supersedes:** 2026-08-21 Paired-Capsule Observability Architecture
 
-This document defines the operational parameters, data contracts, buffer specifications, budget ceilings, redaction guarantees, and external setup requirements for Buzer observability across Android client and backend VPS services.
+This document defines the operational architecture, runtime SDK configurations, correlation tag schemas, canonical release/environment identities, secret redaction policies, and retention rules for Buzer observability across the Android client and the backend VPS service.
 
 ---
 
-## 1. Schema Version 1 Definitions
+## 1. System Architecture Overview
 
-### 1.1 Android Diagnostic Capsule (`android-diagnostics-v1.json`)
-The Android diagnostic capsule encapsulates device, runtime, schedule, and state context at report time. Serialized as structured JSON alongside raw attachments:
+Buzer uses a **native-first, lean observability architecture** powered directly by hosted Sentry SaaS (`sentry.io`). There is no intermediate diagnostic capsule endpoint, no paired report state machine, no diagnostic SQLite table, and no automated triage bot.
 
-- **Identity & Metadata**:
-  - `schemaVersion`: `1` (integer)
-  - `reportSessionId`: UUID v4 string
-  - `androidDiagnosticEventId`: 32-character hexadecimal Sentry event ID
-  - `capturedAt`: ISO-8601 UTC timestamp
-  - `appVersion`: Semantic version string (e.g. `0.1.0-dev`)
-  - `versionCode`: Integer build number
-  - `gitSha`: 12-character commit SHA or `local`
-  - `environment`: Runtime environment tag (e.g. `development-device`, `production-device`)
-  - `deviceId`: Stable UUID persisted in Android preferences
-  - `processUptimeMs`: Milliseconds since application launch
-- **Device & OS Context**:
-  - `androidVersion`: Android OS release version (e.g. `14`, `15`)
-  - `sdkInt`: Android API level (e.g. `34`, `35`)
-  - `manufacturer`: Device manufacturer (e.g. `Google`)
-  - `model`: Device model identifier (e.g. `Pixel 8`)
-  - `locale`: Active device locale tag (e.g. `en-US`)
-  - `timezone`: IANA timezone ID (e.g. `Europe/Prague`)
-  - `display`: Screen resolution, density (dpi), and font scale
-  - `battery`: Level percentage, charging state, and battery saver status
-  - `network`: Transport type (`WIFI`, `CELLULAR`, `OFFLINE`) and meter status
-- **Application & Task State**:
-  - `currentActivity`: Canonical class name of active activity
-  - `foreground`: Boolean indicating application visibility
-  - `activeBlocker`: Active blocker state (`none`, `start`, `deadline`, `morning_review`)
-  - `cachedSnapshot`: Complete cached Buzer task snapshot (tasks, projects, sections, assignees)
-  - `scheduleVersion`: Monotonic integer schedule version
-  - `snapshotGeneration`: Authority generation counter
-  - `lastSyncTimestamp`: ISO-8601 instant of last successful sync
-  - `lastSyncResult`: Outcome code (`success`, `auth_error`, `network_error`, `rate_limited`)
-  - `pendingActions`: Array of queued offline action mutations
-- **Alarm & Readiness State**:
-  - `scheduledAlarms`: Array of registered alarms (trigger time, intent action, task ID, occurrence key)
-  - `readinessStatus`: Readiness checklist evaluation (exact alarm permission, overlay permission, notification permission, battery optimization ignore status)
-  - `morningReviewState`: Morning review schedule calculator status and local review state
-- **Attachments Manifest**:
-  - `android-diagnostics-v1.json`: Structured state document
-  - `android-app-log.txt`: Text dump of Kermit/AppLog ring buffer
-  - `android-network-history.json`: Serialized array of recent HTTP network exchanges
-  - `android-threads.txt`: Thread dump of all active threads in process
-  - `android-screenshot.webp` (or `.png`): Visual capture of the current window (when capturable)
+```text
+┌────────────────────────────────────────────────────────┐
+│                      Android Client                    │
+│                                                        │
+│  AppLog ──► Kermit / Logcat (local output)             │
+│       └───► Breadcrumb Sink (sanitized AppLog records) │
+│                                                        │
+│  Sentry Android SDK:                                   │
+│    • Unhandled Crashes & ANRs                          │
+│    • Error Replay (100% on error, 0% normal sessions)  │
+│    • Native Screenshots & View Hierarchy               │
+│    • Native Feedback Form (Shake gesture + UI buttons) │
+│    • Explicit Handled Exceptions (tagged)              │
+│    • Offline Envelope Caching                          │
+└──────────────────────────┬─────────────────────────────┘
+                           │ Direct Sentry Ingest
+                           ▼
+                 ┌───────────────────┐
+                 │   Hosted Sentry   │
+                 │     (sentry.io)   │
+                 │   Org: jans-gi    │
+                 └─────────▲─────────┘
+                           │ Direct Sentry Ingest
+┌──────────────────────────┴─────────────────────────────┐
+│                       Backend VPS                      │
+│                                                        │
+│  Pino / Fastify ──► stdout structured logging          │
+│                                                        │
+│  Sentry Node SDK:                                      │
+│    • Explicit 5xx Route Failures (Fastify onError hook)│
+│    • Background Service Failures (Poller, WhatsApp)    │
+│    • Process Failures (uncaught / unhandled)           │
+│    • Sanitized Breadcrumbs & Correlation Tags          │
+└────────────────────────────────────────────────────────┘
+```
 
-### 1.2 Backend Diagnostic Capsule (`backend-diagnostics-v1.json`)
-The backend diagnostic capsule captures server-side synchronization, database integrity, WhatsApp bridge, and log states:
+### Key Principles
+1. **Best-Effort Telemetry**: Observability must never block or degrade alarms, blocker overlays, boot recovery, Todoist sync, WhatsApp messaging, or UI rendering. Blank DSNs or network failures degrade cleanly to no-ops.
+2. **Sentry Native Primitives**: Sentry owns crash capture, ANR detection, replay recording, screenshot/view-hierarchy capture, offline delivery, and user feedback transport. Buzer provides only product-specific breadcrumbs, release metadata, and correlation tags.
+3. **Zero Custom Storage**: No diagnostic ring buffers, no report files, and no database tables exist. Local execution retains only ephemeral stdout/Logcat logs.
+4. **Manual Triage**: Sentry UI is the primary triage inbox. Issues are filtered by release, environment, and tags. Operators file GitHub issues manually for prioritized work.
 
-- **Identity & Metadata**:
-  - `schemaVersion`: `1` (integer)
-  - `reportSessionId`: UUID v4 string from client
-  - `backendDiagnosticEventId`: 32-character hexadecimal Sentry event ID
-  - `androidDiagnosticEventId`: Referent Android Sentry event ID
-  - `capturedAt`: ISO-8601 UTC timestamp
-  - `backendRelease`: Canonical release string (e.g. `buzer-backend@0.1.0+vps`)
-  - `nodeVersion`: Node.js runtime version
-  - `environment`: Runtime environment tag (e.g. `development-vps`, `production-vps`)
-  - `uptimeSeconds`: Process uptime in seconds
-  - `memoryUsage`: V8 heap total, heap used, external memory, and RSS bytes
-- **Database & Storage Context**:
-  - `sqliteSchemaVersion`: Database user_version PRAGMA
-  - `walStatus`: SQLite WAL checkpoint and page count
-  - `tableCounts`: Row counts for `tasks`, `commitments`, `action_journal`, `occurrences`, `diagnostic_reports`
-- **Todoist Sync Context**:
-  - `pollerState`: Active status (`idle`, `polling`, `backoff`, `stopped`)
-  - `lastPollStart`: ISO-8601 timestamp of last poll attempt
-  - `lastPollSuccess`: ISO-8601 timestamp of last successful Todoist sync
-  - `lastPollError`: Error classification of last failed poll (if any)
-  - `consecutiveFailureCount`: Integer count of consecutive polling errors
-  - `currentSnapshotGeneration`: Server authority generation ID
-- **WhatsApp Escalation Context**:
-  - `providerMode`: Active mode (`dry_run`, `live`)
-  - `clientStatus`: Connection status (`ready`, `authenticated`, `disconnected`, `qr_pending`)
-  - `lastDisconnect`: ISO-8601 timestamp of last disconnection
-  - `recentEscalations`: Bounded array of recent escalation attempt records
-- **Attachments Manifest**:
-  - `backend-diagnostics-v1.json`: Structured backend state document
-  - `backend-log.txt`: Text dump of backend ring buffer logs around report time
+---
 
-### 1.3 HTTP Contract: `POST /diagnostics/reports`
-- **Request Headers**:
-  - `Authorization: Bearer <ANDROID_API_TOKEN>`
-  - `Content-Type: application/json`
-  - `X-Request-ID: <UUID>`
-  - `traceparent` / `sentry-trace`: (Optional) W3C/Sentry distributed trace header
-  - `baggage`: (Optional) Distributed baggage header
-- **Request Body Schema**:
-  ```json
-  {
-    "schemaVersion": 1,
-    "reportSessionId": "550e8400-e29b-41d4-a716-446655440000",
-    "androidDiagnosticEventId": "9b1deb4d3b7d4bad9bdd2b0d7b3dcb6d",
-    "capturedAt": "2026-08-21T18:30:00.000Z",
-    "deviceId": "c39a3f2b-8664-4e4b-9f93-b6d1e4c92178",
-    "taskId": "optional-task-id",
-    "occurrenceKey": "optional-occurrence-key",
-    "actionId": "optional-action-id",
-    "requestIds": ["req-12345", "req-12346"],
-    "traceId": "optional-trace-id"
+## 2. Runtime SDK Configuration
+
+### 2.1 Android SDK Configuration (`client/androidApp/.../SentryAndroidObservability.kt`)
+
+Initialized in `BuzerApplication.onCreate()` before any Activity, Service, or Receiver runs:
+
+```kotlin
+options.isSendDefaultPii = false
+options.tracesSampleRate = null            // No performance tracing overhead
+options.sessionReplay.onErrorSampleRate = 1.0 // 100% error replay
+options.sessionReplay.sessionSampleRate = 0.0 // No continuous session replay
+options.isAnrEnabled = true                // Detect Application Not Responding
+options.isAttachScreenshot = true          // Native window capture on error/feedback
+options.isAttachViewHierarchy = true       // Compose/Android view hierarchy capture
+```
+
+- **User Feedback**: Native Sentry feedback is configured with `showName = false`, `showEmail = false`, `useSentryUser = false`, and `showBranding = false`.
+  - Accessible via **physical shake gesture**.
+  - Accessible via **Home screen bug report action**.
+  - Accessible via **Foreground Readiness gate secondary action**.
+- **Privacy Boundary**: `beforeSend` and `beforeBreadcrumb` explicitly nullify `event.request = null` and `event.user = null` before applying recursive string/map redaction on message, exceptions, tags, extras, contexts, and breadcrumbs.
+- **Logcat / Kermit**: `AppLog.installSink` forwards sanitized log records to Sentry breadcrumbs.
+
+### 2.2 Backend Node SDK Configuration (`backend/src/diagnostics/backendObservability.ts`)
+
+Initialized before Fastify server boot:
+
+```typescript
+Sentry.init({
+  dsn: SENTRY_BACKEND_DSN,
+  environment: SENTRY_ENVIRONMENT,
+  release: SENTRY_RELEASE,
+  sendDefaultPii: false,
+  tracesSampleRate: undefined,              // Tracing disabled (Fastify 5 unsupported)
+  beforeSend(event) {
+    event.request = undefined;              // Remove request headers/body/IP
+    event.user = undefined;                 // Remove user identifiers
+    return sanitizeSentryEvent(event);      // Recursive secret redaction
+  },
+  beforeBreadcrumb(breadcrumb) {
+    return sanitizeBreadcrumb(breadcrumb);  // Recursive secret redaction
   }
-  ```
-- **Response Status & Body**:
-  - `202 Accepted` (captured):
-    ```json
-    {
-      "schemaVersion": 1,
-      "reportSessionId": "550e8400-e29b-41d4-a716-446655440000",
-      "backendDiagnosticEventId": "e4d909c290d042c69d20d40d564b66f3",
-      "outcome": "captured"
-    }
-    ```
-  - `401 Unauthorized`: Invalid or missing bearer token.
-  - `400 Bad Request`: Validation failure on request body.
-  - `429 Too Many Requests`: Rate limit exceeded (> 6 reports/min per device).
-  - `503 Service Unavailable`: Observability uninitialized or backend collector failure.
+});
+```
+
+- **Request Failures**: Fastify `onError` hook captures route errors producing `5xx` responses, attaching `request_id`, HTTP `method`, `route`, and `status_code`. `4xx` client errors are ignored.
+- **Background Failures**: Poller sync failures (after threshold), WhatsApp disconnection/escalation failures, and startup/shutdown errors are captured explicitly with component tags.
+- **Process Integration**: Sentry SDK handles unhandled rejections and uncaught exceptions natively. Fastify and Node process signal handlers (`SIGTERM`, `SIGINT`) handle graceful shutdown and Sentry flush.
 
 ---
 
-## 2. Ring Buffer Specifications
+## 3. Standard Correlation Tag Schema
 
-| Buffer Target | Capacity (Count) | Time Window | Content Specification | Eviction Policy |
-| :--- | :--- | :--- | :--- | :--- |
-| **Android AppLog** | 1,000 log entries | 15 minutes | Timestamp, log level, tag (`Buzer.*`), thread ID, message, throwable stack trace | FIFO sliding window on count and timestamp |
-| **Android Network History** | 100 API exchanges | 15 minutes | Timestamp, method, URL path, HTTP status, durationMs, request ID, trace ID, action ID, content types, redacted bodies | FIFO sliding window on count and timestamp |
-| **Backend Structured Log** | 1,000 log entries | 15 minutes | Timestamp, level, component (`poller`, `routes`, `whatsapp`, `db`), message, metadata object | FIFO sliding window on count and timestamp |
+Events on both Android and backend carry standard, low-cardinality correlation tags:
 
-- **Sliding Window Enforcement**: Entries older than 15 minutes are evicted even if the count ceiling is not reached.
-- **Thread Safety**: All ring buffers are backed by thread-safe, non-blocking synchronized data structures.
-- **Memory Footprint**: Buffer operations allocate bounded memory; entries are pre-sanitized before insertion.
+| Tag | Runtime | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `marker` | Both | Category or operation marker | `todoist_poller_error`, `whatsapp_disconnect` |
+| `request_id` | Both | Unique request identifier (`X-Request-ID`) | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
+| `method` | Backend | HTTP method for failed request | `GET`, `POST`, `PATCH` |
+| `route` | Backend | Fastify route pattern (not raw URL) | `/api/tasks/:id` |
+| `status_code` | Backend | HTTP status code for 5xx errors | `500`, `503` |
+| `device_id` | Android | Stable anonymized device UUID | `c39a3f2b-8664-4e4b-9f93-b6d1e4c92178` |
+| `task_id` | Both | Todoist / Buzer task identifier | `task-123456` |
+| `occurrence_key` | Both | Recurring task occurrence key | `2026-08-22#task-123456` |
+| `action_id` | Both | Client offline action mutation ID | `act-789` |
+| `screen` | Android | Active screen identifier | `Home`, `TaskEditor`, `ReadinessGate` |
+| `blocker_type` | Android | Active enforcement blocker type | `start`, `deadline`, `morning_review`, `none` |
+| `app_section` | Android | UI application section | `task_list`, `editor`, `settings` |
 
----
-
-## 3. Budget Limits & Resource Ceilings
-
-To avoid network congestion, payload rejection, and memory bloat, strict size ceilings are enforced:
-
-| Resource | Maximum Ceiling | Truncation / Fallback Behavior |
-| :--- | :--- | :--- |
-| **Total Diagnostic Capsule** | 8.0 MiB (compressed) | Deterministic section truncation per priority rules |
-| **Screenshot Attachment** | 2.0 MiB | Scaled/compressed to WebP (quality 80) or omitted |
-| **Network Request/Response Body** | 64 KiB (per exchange) | Redacted and truncated with `[TRUNCATED: original N bytes]` marker |
-| **Process Thread Dump** | 512 KiB | Bounded to active application thread states |
-| **Log Buffer Attachment** | 2.0 MiB | Oldest entries dropped first to meet ceiling |
-
-### Deterministic Truncation Priority:
-When a diagnostic capsule exceeds the 8.0 MiB ceiling, sections are preserved in strict order of diagnostic value:
-1. **Report & Correlation Identity** (Session ID, Sentry Event IDs, Git SHA, Release, Environment)
-2. **Current State Snapshots** (Task snapshot, pending actions, alarm table, readiness state)
-3. **Error & Warning Logs** (`WARN` and `ERROR` log lines)
-4. **Failed & Slow Network Exchanges** (Non-2xx HTTP responses, timed-out requests)
-5. **Screenshot Attachment**
-6. **Info & Debug Log History**
-
-Every truncation event is explicitly recorded in `capsule.metadata.truncationWarnings`.
+> **Note on Trace Propagation:** Distributed trace headers (`sentry-trace`, `baggage`) are **not** propagated across HTTP boundaries in this iteration. Client and server events are correlated via `request_id` (`X-Request-ID`), `task_id`, `action_id`, `occurrence_key`, and timestamps.
 
 ---
 
-## 4. Rate Limits & Concurrency
+## 4. Release & Environment Identification
 
-- **Backend Ingestion Rate Limit**:
-  - 6 report submissions per 1 minute per device/IP address.
-  - Enforced via Fastify rate-limiter with memory storage.
-  - Exceeding the rate returns `429 Too Many Requests` with `Retry-After` header.
-- **Android Client Session Concurrency**:
-  - Exactly **1 in-flight manual report session** allowed at any given time.
-  - `ManualReportCoordinator` enforces a mutex state machine (`idle` -> `collecting` -> `submitting` -> `completed` / `failed`).
-  - Stale sessions (> 5 minutes inactive) are automatically invalidated and cleaned up.
-- **Execution Timeouts & Deadlines**:
-  - Android diagnostic collection deadline: **2.0 seconds** (proceeds with partial capsule on timeout).
-  - Android client HTTP backend request timeout: **5.0 seconds** (never blocks feedback completion).
-  - Backend diagnostic assembly deadline: **2.0 seconds**.
-  - Backend total endpoint response deadline: **3.0 seconds**.
+### 4.1 Canonical Release Format
+Both Android and Backend use the exact canonical release string:
+
+```text
+app.buzer@<VERSION_NAME>+<GIT_SHA_12>
+```
+
+- Production Android example: `app.buzer@0.1.0+a1b2c3d4e5f6`
+- Production VPS example: `app.buzer@0.1.0+a1b2c3d4e5f6` (or `app.buzer@0.1.0+vps`)
+- Local development fallback: `app.buzer@0.1.0+local`
+
+### 4.2 Canonical Runtime Environments
+- `development-device`: Android local debug / emulator builds
+- `production-device`: Android signed release APK installed on physical device
+- `development-vps`: Backend running locally during development
+- `production-vps`: Backend running on the production VPS
 
 ---
 
 ## 5. PII and Secret Redaction Guarantees
 
-### 5.1 Permitted Diagnostic Content (One-User Companion)
+### 5.1 Permitted Diagnostic Content (Personal Accountability Companion)
+For this single-user personal companion, capturing task-visible content is explicitly permitted to maximize debugging fidelity:
 - Task titles, task descriptions, notes, and checklist items.
-- Todoist project names, section names, and assignee display names / IDs.
+- Todoist project names, section names, and label names.
 - Cached schedule state, morning review parameters, and notification timings.
 - Screen names, UI component interaction breadcrumbs, and window screenshots.
 
-### 5.2 Strictly Prohibited Secrets & Sensitive Credentials
-The following values are **MANDATORY EXCLUSIONS** and must NEVER appear in logs, breadcrumbs, capsules, attachments, Sentry events, or GitHub issues:
-- `ANDROID_API_TOKEN` / Bearer authorization headers
+### 5.2 Strictly Prohibited Secrets & Credentials
+The following values are **MANDATORY EXCLUSIONS** and must NEVER appear in logs, breadcrumbs, Sentry events, or any external system:
+- `ANDROID_API_TOKEN` / Bearer authorization tokens
 - `TODOIST_API_TOKEN` / Todoist personal access tokens
 - `SENTRY_AUTH_TOKEN` / Sentry user/org API tokens
-- WhatsApp credentials: QR code strings, LocalAuth session keys, auth tokens, Chromium profile lock files
+- WhatsApp session keys, QR code strings, auth tokens, and Chromium profile files
 - HTTP sensitive headers: `Authorization`, `Cookie`, `Set-Cookie`, `Proxy-Authorization`, `X-Api-Key`
-- Environment dumps: Unfiltered `process.env` or Android `System.getenv()`
-- Private keys, PEM blocks, or certificate secrets
+- Raw environment dumps (`process.env`, `System.getenv()`)
+- Private keys, PEM blocks, certificates, or GitHub tokens
 
-### 5.3 Redaction Engine Guarantees
-- **Multi-Stage Sanitization**: Redaction occurs (1) before insertion into ring buffers and (2) during JSON serialization prior to transmission.
-- **Header Masking**: Sensitive headers are replaced with `[REDACTED]`.
-- **Bearer Token Patterns**: Regex matches for `Bearer [A-Za-z0-9_\-\.]{8,}` are replaced with `Bearer [REDACTED]`.
-- **Key-Value Sentinel Matching**: Keys matching `token`, `secret`, `password`, `auth`, `cookie`, `key`, `credential` (case-insensitive) have values replaced with `[REDACTED]`.
-- **Test Corpus Verification**: Regression test suites (`redaction.test.ts`, `SentryEventSanitizerTest.kt`) verify zero leaks against synthetic secret tokens.
+### 5.3 Multi-Stage Sanitization Engine
+- **Kotlin Shared Redactor (`DiagnosticRedactor.kt`)**: Redacts nested maps, lists, strings, and throwable messages. Used by `SentryAndroidObservability` for event and breadcrumb sanitization.
+- **TypeScript Backend Redactor (`redactor.ts`)**: Recursive sanitization of strings, objects, error stacks, breadcrumbs, tags, and extra metadata.
+- **Key-Value Sentinel Redaction**: Keys matching `token`, `secret`, `password`, `auth`, `cookie`, `key`, `credential` (case-insensitive) have values replaced with `[REDACTED]`.
+- **Pattern Matching**: Regex matches for `Bearer [A-Za-z0-9_\-\.]{8,}` are replaced with `Bearer [REDACTED]`.
+- **Nullified Request & User**: SDK-level `request` and `user` objects are always cleared to prevent inadvertent IP or header leaks.
 
 ---
 
@@ -216,45 +183,32 @@ The following values are **MANDATORY EXCLUSIONS** and must NEVER appear in logs,
 
 | Store | Data Type | Retention Duration | Cleanup Mechanism |
 | :--- | :--- | :--- | :--- |
-| **Sentry Cloud** | Crash/ANR events, handled exceptions, logs | 30 days | Sentry Cloud automatic retention policy |
-| **Sentry Cloud** | Session replays & attachments | 30 days | Sentry Cloud retention policy |
-| **Android In-Memory** | App logs & network history | 15 minutes / Process lifetime | Ring buffer FIFO eviction; cleared on app kill |
-| **Backend In-Memory** | Server logs & request history | 15 minutes / Process lifetime | Ring buffer FIFO eviction; cleared on server restart |
-| **Backend SQLite** | `diagnostic_reports` idempotency table | 7 days | Periodic vacuum / cleanup query |
+| **Sentry Cloud** | Crash/ANR events, handled exceptions, feedback | 30 days | Sentry Cloud automatic retention policy |
+| **Sentry Cloud** | Error replays & native screenshots | 30 days | Sentry Cloud automatic retention policy |
+| **Android In-Memory** | AppLog entries in Logcat | Process lifetime / OS ring | Cleared on process kill / OS logcat rotation |
+| **Backend In-Memory** | stdout logs via Pino | Process lifetime / Docker log | Docker log rotation (`max-size: 10m`) |
+
+*There is no persistent SQLite table or file storage for diagnostic reports.*
 
 ---
 
-## 7. Hosted Sentry Inventory & Configuration
+## 7. Hosted Sentry Inventory & Resources
 
-| Resource | Slug | Project ID | Platform |
+| Resource | Slug / Identifier | Project ID | Platform |
 | :--- | :--- | ---: | :--- |
-| **Organization** | `svehla` (or `jans-gi`) | — | Hosted Sentry Cloud |
-| **Android Project** | `buzer-android` | `4511950606172240` | Android (Kotlin/Java) |
-| **Backend Project** | `buzer-backend` | `4511950617641040` | Node.js / Fastify |
-
-### Canonical Runtime Environments
-- `development-device`: Android local debug / emulator / dev builds
-- `production-device`: Android signed release APK installed on physical device
-- `development-backend`: Backend running locally during development
-- `production-vps`: Backend running on production VPS (`docker-compose`)
-
-### Canonical Release Identity
-```text
-app.buzer@${VERSION_NAME}+${GIT_SHA_12}
-```
-Example: `app.buzer@0.1.0-dev+a1b2c3d4e5f6`
+| **Organization** | `jans-gi` | — | Hosted Sentry SaaS |
+| **Android Project** | `buzer-android` | `4511950606172240` | Android (Kotlin) |
+| **Backend Project** | `buzer-backend` | `4511950617641040` | Node.js (TypeScript) |
 
 ---
 
-## 8. External Setup Checklist
+## 8. Removed Legacy Components (Do Not Re-Implement)
 
-- [x] Sentry organization and projects created (`buzer-android`, `buzer-backend`).
-- [x] Android release mapping & ProGuard upload configured in `build.gradle.kts`.
-- [x] Backend Sentry SDK integration and Fastify error hooks implemented.
-- [x] Cross-process correlation contract implemented (`report_session_id`).
-- [x] Automated Sentry-to-GitHub triage tooling implemented (`tools/sentry-github-sync`).
-- [ ] Store `SENTRY_ANDROID_DSN` in local operator properties / CI secrets.
-- [ ] Store `SENTRY_BACKEND_DSN` in VPS `.env` file.
-- [ ] Configure `SENTRY_AUTH_TOKEN` in CI/build environments for symbol upload.
-- [ ] Link GitHub repository in Sentry project settings.
-- [ ] Configure Sentry alert rules for Fatal, ANR, Polling Failures, and User Feedback.
+The following components were removed during the lean observability simplification and must not be restored without a formal Architecture Decision Record:
+- **`DiagnosticContextStore` & Android Context Providers**: Replaced by direct tag passing at capture boundaries.
+- **Custom Android / Backend Ring Buffers**: Replaced by Sentry's native breadcrumb and envelope buffering.
+- **Capsule Collectors & Attachments**: `android-diagnostics-v1.json`, `backend-diagnostics-v1.json`, `android-app-log.txt`, `android-network-history.json`, and `android-threads.txt` are completely removed.
+- **`POST /diagnostics/reports`**: Removed HTTP diagnostic endpoint.
+- **`diagnostic_reports` SQLite Table**: Removed via database migration v6.
+- **Distributed Trace Propagation**: `sentry-trace` and `baggage` headers are not propagated.
+- **Automated Triage Bot (`tools/sentry-github-sync`)**: Removed in favor of direct Sentry UI triage.

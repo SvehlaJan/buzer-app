@@ -1,5 +1,8 @@
 # Observability And Bug Reporting Implementation Plan
 
+> [!WARNING]
+> **SUPERSEDED (2026-08-22):** This implementation plan has been superseded by `docs/superpowers/specs/2026-08-22-lean-observability-design.md`, `docs/decisions/2026-08-22-lean-observability.md`, and `docs/superpowers/plans/2026-08-22-lean-observability.md`. It is retained for historical provenance only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add durable, correlated Android and backend diagnostics through hosted Sentry, plus native shake/visible bug reporting and a deduplicated Sentry-to-GitHub triage loop, without making enforcement or user actions depend on telemetry.

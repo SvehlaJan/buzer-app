@@ -1,112 +1,129 @@
 # Observability Triage Runbook
 
-**Purpose:** Operational guide for triaging, investigating, and resolving bugs, crashes, ANRs, and manual user reports reported through Sentry and GitHub Issues.
+**Purpose:** Operational guide for triaging, investigating, and resolving bugs, crashes, ANRs, backend 5xx errors, and user feedback reported through Hosted Sentry.
 
 ---
 
 ## 1. Triage Workflow Overview
 
 ```text
-[ Sentry Issue Detected ]
-           │
-           ▼
-[ Automated GitHub Sync (tools/sentry-github-sync) ]
-           │
-           ├─► New Issue: Creates [Sentry][platform] Issue with correlation tags
-           ├─► Existing Issue: Appends comment with latest event context
-           └─► Regressed Issue: Reopens issue and comments with regression details
-           │
-           ▼
-[ Developer Investigation ]
-  1. Inspect Sentry Event & Stack Trace (ProGuard / Node Source Maps)
-  2. Locate Paired Android + Backend Reports using `report_session_id`
-  3. Download & Decode Diagnostic Capsules (`android-diagnostics-v1.json`, `backend-diagnostics-v1.json`)
-  4. Analyze Ring Buffer Logs & Network History
-  5. Watch Session Replay (for UI/Visual reports)
-           │
-           ▼
-[ Reproduction & Fix ]
-  1. Write failing regression test in local worktree
-  2. Implement scoped bugfix
-  3. Verify against full test suite
-           │
-           ▼
-[ Release & Verification ]
-  1. Deploy Backend / Build Android APK with new Git SHA release
-  2. Mark Sentry Issue "Resolved in next release"
-  3. Verify resolution in production canary
+┌────────────────────────────────────────────────────────┐
+│                   New Sentry Event                     │
+│  (Crash, ANR, 5xx, Background Failure, User Feedback)  │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                Inspect in Sentry UI                    │
+│  1. Check Release & Environment                        │
+│  2. Inspect Stack Trace (ProGuard / Node Source Maps)  │
+│  3. Watch Error Replay & Screenshot / View Hierarchy   │
+│  4. Read Breadcrumbs (AppLog, navigations, requests)   │
+│  5. Check Tags (request_id, task_id, action_id)        │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                 Correlate & Reproduce                  │
+│  • Search cross-project events by request_id / task_id │
+│  • Write failing test (JVM unit, Vitest, or e2e)       │
+│  • (Optional) Create GitHub issue if work is queued    │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                  Fix & Resolve                         │
+│  1. Implement and verify scoped fix                    │
+│  2. Commit and deploy release                          │
+│  3. Mark Sentry Issue "Resolved in next release"       │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Investigating Correlated Bug Reports
+## 2. Investigating Issues in Sentry
 
-Manual bug reports submit correlated telemetry across both Android and backend systems.
+When an alert triggers or during regular triage, open the issue in [Sentry Cloud](https://sentry.io/organizations/jans-gi/issues/):
 
-### 2.1 Locating Paired Reports
-1. In the GitHub Issue or Sentry Issue, locate the `report_session_id` tag (e.g. `report_session_id:550e8400-e29b-41d4-a716-446655440000`).
-2. In Sentry:
-   - Search across projects: `report_session_id:550e8400-e29b-41d4-a716-446655440000`
-   - You will see two linked events:
-     - **Android Project (`buzer-android`)**: `message:buzer.android.manual_report`
-     - **Backend Project (`buzer-backend`)**: `message:buzer.backend.manual_report`
-3. Cross-Reference IDs:
-   - The Android event contains `backend_diagnostic_event_id` (if backend was reachable).
-   - The Backend event contains `android_diagnostic_event_id` and tags matching `taskId`, `occurrenceKey`, and `actionId`.
+### 2.1 Stack Trace & Source Context
+- **Android**: Release builds are de-obfuscated using uploaded ProGuard mappings. Verify the line number and function names. Source context will show surrounding code when GitHub integration is active.
+  - If stack frames appear obfuscated (e.g. `a.b.c(SourceFile:1)`), check that the release mapping was uploaded via Gradle `uploadSentryProguardMappingsRelease`.
+- **Backend**: Node.js stack traces are symbolicated with TypeScript source maps.
 
-### 2.2 Inspecting Diagnostic Capsules & Attachments
-In Sentry, navigate to the event's **Attachments** tab:
+### 2.2 Error Replay & Visual Evidence
+- **Error Replay**: For Android errors and feedback submissions, Sentry captures a session replay up to the moment of failure. Click the **Replays** tab on the issue to view user interactions, screen transitions, and UI state leading to the issue.
+- **Screenshots & View Hierarchy**: If captured, inspect the native window screenshot and view hierarchy attached to the event.
 
-1. **`android-diagnostics-v1.json`**:
-   - Check `currentActivity`, `foreground`, `activeBlocker`.
-   - Inspect `cachedSnapshot` for task state discrepancies.
-   - Inspect `scheduledAlarms` to verify if alarm triggers were missed or suppressed.
-   - Check `readinessStatus` for permission revocations (Exact Alarms, Overlays).
-2. **`android-app-log.txt`**:
-   - Contains the last 1,000 log messages from Kermit/AppLog (15-minute window).
-   - Look for `ERROR` and `WARN` lines preceding the incident.
-3. **`android-network-history.json`**:
-   - Contains recent HTTP exchanges with the backend.
-   - Check for HTTP 4xx/5xx status codes, request durations, and timeout errors.
-4. **`android-threads.txt`**:
-   - Thread dump for diagnosing ANRs, lock contention, or background worker stalls.
-5. **`android-screenshot.webp` & Session Replay**:
-   - View visual UI state and user interaction breadcrumbs leading up to the report.
-6. **`backend-diagnostics-v1.json` & `backend-log.txt`**:
-   - Check Todoist sync status (`consecutiveFailureCount`, `lastPollSuccess`).
-   - Check WhatsApp bridge status (`providerMode`, `clientStatus`).
-   - Check SQLite database status and recent action journal executions.
+### 2.3 Breadcrumbs Timeline
+- Review the chronological breadcrumb trail:
+  - `AppLog` entries (debug, info, warning, error) converted into breadcrumbs.
+  - UI navigation breadcrumbs (screen changes, blocker activity launches).
+  - HTTP network breadcrumbs (method, URL, status code, duration).
+  - System lifecycle events (background/foreground transitions).
+
+### 2.4 Correlation Tags
+Inspect standard tags to pinpoint context:
+- `request_id`: The HTTP `X-Request-ID` header. Search across `buzer-android` and `buzer-backend` with `request_id:<id>` to correlate client-server interactions.
+- `task_id` / `occurrence_key`: The Todoist / Buzer task identity involved in the failure.
+- `action_id`: The client-side offline action mutation ID.
+- `screen` / `app_section`: The UI location where the error occurred.
+- `blocker_type`: The active enforcement blocker (`start`, `deadline`, `morning_review`, `none`).
+- `marker`: Component marker (e.g. `todoist_poller_error`, `whatsapp_disconnect`).
 
 ---
 
-## 3. Stack Trace Demangling & Source Maps
+## 3. Investigating User Feedback Submissions
 
-### 3.1 Android ProGuard Demangling
-- Android release builds are obfuscated via R8/ProGuard.
-- Mapping files are automatically uploaded during CI/release builds when `SENTRY_AUTH_TOKEN` is present.
-- If stack frames appear obfuscated (e.g. `a.b.c(SourceFile:1)`):
-  1. Verify the release version in Sentry matches `app.buzer@<version>+<sha>`.
-  2. Check **Project Settings > ProGuard & Native** for uploaded mapping files matching the build's UUID.
-  3. To upload manually if CI upload failed:
-     ```bash
-     cd client
-     ./gradlew :androidApp:uploadSentryProguardMappingsRelease
-     ```
+When user feedback is submitted (via shake gesture, Home screen button, or Readiness Gate):
 
-### 3.2 Backend Source Maps
-- TypeScript build artifacts in `backend/dist` include inline or external `.map` files.
-- Sentry Node SDK automatically maps stack frames when Node source maps are available or when debug IDs match the release artifacts.
+1. Navigate to **User Feedback** in the `buzer-android` project.
+2. Read the user's description in the feedback issue.
+3. Review the attached **Error Replay** and **Breadcrumbs** to see what actions the user took prior to submitting feedback.
+4. If an associated error or crash occurred, follow the link to the related Sentry issue.
+5. Check correlation tags (`screen`, `task_id`, `request_id`) to identify the relevant task or UI state.
 
 ---
 
-## 4. Issue Resolution & Regression Detection
+## 4. Cross-System Correlation
 
-1. **Resolving Sentry Issues**:
-   - When a bug fix is committed and merged to master, note the commit SHA.
-   - In Sentry, click **Resolve** -> **Resolved in next release** (or specify release `app.buzer@0.1.0-dev+<commit-sha>`).
-2. **Automated Regression Detection**:
-   - If the same error signature recurs in a subsequent release or build:
-     - Sentry marks the issue as **Regressed**.
-     - `tools/sentry-github-sync` detects the regression status, automatically reopens the corresponding GitHub issue, and posts a comment with the new event link, release ID, and stack trace.
-3. **Closing GitHub Issues**:
-   - Only close GitHub issues after the fix has been verified via the canary deployment or test suite.
+Because there is no custom paired capsule or distributed trace header, client and server events are correlated cleanly via standard identifiers:
+
+1. **By Request ID**:
+   - If an Android event shows a failed API call with `X-Request-ID: req-abc-123`, search `buzer-backend` for `request_id:req-abc-123` to find the exact 5xx backend exception.
+2. **By Task ID / Occurrence Key**:
+   - Search either project for `task_id:<id>` or `occurrence_key:<key>` to find all related frontend actions, backend polling updates, or WhatsApp escalation events.
+3. **By Timestamp & Release**:
+   - Filter events within a 5-minute window matching the release identifier `app.buzer@<version>+<sha>`.
+
+---
+
+## 5. Reproduction & Local Testing
+
+Before implementing a fix, write a focused reproduction test:
+
+- **Shared / Client Logic**:
+  ```bash
+  cd client
+  ANDROID_HOME=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest --tests '*YourTest*'
+  ```
+- **Android UI / Enforcement**:
+  ```bash
+  ANDROID_TEST_CLASS=app.buzer.android.YourScreenTest scripts/e2e-real-backend.sh
+  ```
+- **Backend Service / Route**:
+  ```bash
+  cd backend
+  npm test -- --run yourTest
+  ```
+
+---
+
+## 6. Resolving Sentry Issues
+
+1. **Mark as Resolved in Next Release**:
+   - After merging the fix, click **Resolve** -> **Resolved in next release** in Sentry.
+   - Or specify the specific release string: `app.buzer@<version>+<sha>`.
+2. **Regression Tracking**:
+   - If the same error signature occurs in a newer release, Sentry will automatically mark the issue as **Regressed** and trigger the regression alert.
+3. **Manual GitHub Issues**:
+   - For bugs requiring substantial work or tracking across sessions, create a GitHub issue manually on `SvehlaJan/buzer-app` with the Sentry issue link.

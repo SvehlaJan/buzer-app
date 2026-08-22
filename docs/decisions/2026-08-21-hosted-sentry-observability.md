@@ -1,9 +1,8 @@
 # Architecture Decision: Hosted Sentry Observability & Bug Reporting
 
-**Date:** 2026-08-21  
-**Status:** Approved  
-**Supersedes:** None  
-**Superseded by:** Newer architecture decision records if approved in the future.
+**Date:** 2026-08-21
+**Status:** Superseded
+**Superseded by:** `docs/decisions/2026-08-22-lean-observability.md`
 
 ---
 
