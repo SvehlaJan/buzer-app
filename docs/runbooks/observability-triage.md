@@ -103,7 +103,7 @@ In Sentry, navigate to the event's **Attachments** tab:
 
 1. **Resolving Sentry Issues**:
    - When a bug fix is committed and merged to master, note the commit SHA.
-   - In Sentry, click **Resolve** -> **Resolved in next release** (or specify release `app.buzer@0.1.0+<commit-sha>`).
+   - In Sentry, click **Resolve** -> **Resolved in next release** (or specify release `app.buzer@0.1.0-dev+<commit-sha>`).
 2. **Automated Regression Detection**:
    - If the same error signature recurs in a subsequent release or build:
      - Sentry marks the issue as **Regressed**.

@@ -26,9 +26,9 @@ for attempt in $(seq 1 "$health_max_attempts"); do
     echo "Buzer backend is healthy at $health_url"
     if [ -n "${SENTRY_AUTH_TOKEN:-}" ]; then
       echo "Uploading backend source maps to Sentry for release $SENTRY_RELEASE..."
-      (cd backend && npm run sentry:sourcemaps) || echo "Warning: Sentry source map upload failed"
+      (cd backend && npm run build && npm run sentry:sourcemaps) || echo "Warning: Sentry source map upload failed"
     else
-      echo "SENTRY_AUTH_TOKEN not set; skipping Sentry source map upload (SKIPPED)"
+      echo "SENTRY_AUTH_TOKEN not set; skipping source map upload."
     fi
     exit 0
   fi
