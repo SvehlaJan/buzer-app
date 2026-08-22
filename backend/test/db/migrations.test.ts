@@ -96,7 +96,6 @@ describe("migrate", () => {
     expect(tables.map((row) => row.name)).toEqual([
       "commitment_states",
       "devices",
-      "diagnostic_reports",
       "schema_migrations",
       "snapshot_generations",
       "task_action_commands",
@@ -129,21 +128,45 @@ describe("migrate", () => {
     ]);
   });
 
-  it("applies the diagnostic reports migration to an existing v4 database", () => {
+  it("applies the diagnostic reports migration to an existing v4 database and drops it in v6", () => {
     const db = new Database(":memory:");
     migrate(db);
     db.exec(`
-      drop table diagnostic_reports;
-      delete from schema_migrations where version = 5;
+      drop table if exists diagnostic_reports;
+      delete from schema_migrations where version in (5, 6);
     `);
 
     migrate(db);
 
     expect(db.prepare("select version from schema_migrations where version = 5").get()).toEqual({ version: 5 });
+    expect(db.prepare("select version from schema_migrations where version = 6").get()).toEqual({ version: 6 });
     const tables = db.prepare("select name from sqlite_master where type = 'table' and name = 'diagnostic_reports'").all();
-    expect(tables).toEqual([{ name: "diagnostic_reports" }]);
-    const indexes = db.prepare("pragma index_list(diagnostic_reports)").all() as Array<{ name: string }>;
-    expect(indexes.map((idx) => idx.name)).toContain("diagnostic_reports_device_created");
+    expect(tables).toEqual([]);
+  });
+
+  it("applies tombstone migration v6 dropping diagnostic_reports from an existing v5 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      create table if not exists diagnostic_reports (
+        report_session_id text primary key,
+        android_diagnostic_event_id text not null,
+        backend_diagnostic_event_id text not null,
+        device_id text not null,
+        captured_at text not null,
+        response_json text not null,
+        created_at text not null
+      );
+      create index if not exists diagnostic_reports_device_created
+        on diagnostic_reports(device_id, created_at);
+      delete from schema_migrations where version = 6;
+    `);
+
+    migrate(db);
+
+    expect(db.prepare("select version from schema_migrations where version = 6").get()).toEqual({ version: 6 });
+    const tables = db.prepare("select name from sqlite_master where type = 'table' and name = 'diagnostic_reports'").all();
+    expect(tables).toEqual([]);
   });
 
   it("adds project mirror, commitment owner, and task description columns to an existing database", () => {
@@ -553,7 +576,8 @@ describe("migrate", () => {
       { version: 2 },
       { version: 3 },
       { version: 4 },
-      { version: 5 }
+      { version: 5 },
+      { version: 6 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;

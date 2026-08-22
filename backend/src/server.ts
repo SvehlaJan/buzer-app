@@ -8,7 +8,6 @@ import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
 import { CollaboratorRepository } from "./repositories/collaboratorRepository.js";
-import { DiagnosticReportRepository } from "./repositories/diagnosticReportRepository.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
@@ -25,7 +24,6 @@ import {
   backendObservability,
   backendObservabilityRuntime
 } from "./diagnostics/backendObservability.js";
-import { DiagnosticReportService } from "./diagnostics/diagnosticReportService.js";
 
 export interface BuildServerOptions {
   db: Database.Database;
@@ -94,14 +92,6 @@ export function buildServer(options: BuildServerOptions) {
   const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
-  const diagnosticReports = new DiagnosticReportRepository(options.db);
-  const diagnostics = new DiagnosticReportService(
-    options.db,
-    observability,
-    synchronizer,
-    options.escalationService,
-    diagnosticReports
-  );
   const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
   const actions = new TaskActionService(
     options.db,
@@ -125,7 +115,7 @@ export function buildServer(options: BuildServerOptions) {
     }
   );
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer, diagnostics });
+    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {

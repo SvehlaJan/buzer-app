@@ -39,6 +39,11 @@ export function migrate(db: Database.Database): void {
       migrateToVersionFive(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(5, new Date().toISOString());
     }
+    const migrationSixApplied = db.prepare("select 1 from schema_migrations where version = 6").get() !== undefined;
+    if (!migrationSixApplied) {
+      migrateToVersionSix(db);
+      db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(6, new Date().toISOString());
+    }
   });
 
   tx();
@@ -186,6 +191,10 @@ function migrateToVersionFive(db: Database.Database): void {
     create index if not exists diagnostic_reports_device_created
       on diagnostic_reports(device_id, created_at);
   `);
+}
+
+function migrateToVersionSix(db: Database.Database): void {
+  db.exec("drop table if exists diagnostic_reports");
 }
 
 function backfillOccurrences(db: Database.Database): void {

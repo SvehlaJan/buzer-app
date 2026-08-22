@@ -131,16 +131,3 @@ create table if not exists task_action_commands (
   updated_at text not null,
   primary key (action_id, step_key)
 );
-
-create table if not exists diagnostic_reports (
-  report_session_id text primary key,
-  android_diagnostic_event_id text not null,
-  backend_diagnostic_event_id text not null,
-  device_id text not null,
-  captured_at text not null,
-  response_json text not null,
-  created_at text not null
-);
-
-create index if not exists diagnostic_reports_device_created
-  on diagnostic_reports(device_id, created_at);
