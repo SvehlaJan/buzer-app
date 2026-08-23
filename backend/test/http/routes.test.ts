@@ -6,8 +6,12 @@ import { CollaboratorRepository } from "../../src/repositories/collaboratorRepos
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
-import { buildServer } from "../../src/server.js";
+import { buildServer as createServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
+
+function buildServer(options: Parameters<typeof createServer>[0]) {
+  return createServer({ ...options, logger: false });
+}
 
 describe("HTTP routes", () => {
   it("returns trimmed health without auth token", async () => {

@@ -61,6 +61,7 @@ describe("Redaction Parity Engine", () => {
 
   it("correctly identifies credential keys", () => {
     expect(isCredentialKey("authorization")).toBe(true);
+    expect(isCredentialKey("auth")).toBe(true);
     expect(isCredentialKey("Authorization")).toBe(true);
     expect(isCredentialKey("cookie")).toBe(true);
     expect(isCredentialKey("Set-Cookie")).toBe(true);
@@ -78,6 +79,7 @@ describe("Redaction Parity Engine", () => {
     expect(isCredentialKey("qr_code")).toBe(true);
     expect(isCredentialKey("session_token")).toBe(true);
     expect(isCredentialKey("auth_token")).toBe(true);
+    expect(isCredentialKey("arbitrary_suffix_cookie")).toBe(true);
 
     // Non-credential keys must not be redacted
     expect(isCredentialKey("reportSessionId")).toBe(false);

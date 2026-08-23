@@ -1,4 +1,4 @@
-import { readdirSync, rmSync, statSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import qrcode from "qrcode-terminal";
 import whatsappWeb from "whatsapp-web.js";
@@ -17,6 +17,7 @@ export interface WhatsAppWebSenderOptions {
 }
 
 const chromiumSingletonFiles = new Set(["SingletonLock", "SingletonSocket", "SingletonCookie"]);
+const qrArtifactFileName = "whatsapp-qr.txt";
 
 export function removeStaleChromiumSingletonLocks(sessionPath: string): string[] {
   const removed: string[] = [];
@@ -58,16 +59,15 @@ export function removeStaleChromiumSingletonLocks(sessionPath: string): string[]
 export class WhatsAppWebSender implements AccountabilitySender {
   private readonly client: InstanceType<typeof Client>;
   private readonly observability: BackendObservability;
+  private readonly qrArtifactPath: string;
   private ready = false;
   private lastDetail = "not initialized";
 
   constructor(options: WhatsAppWebSenderOptions) {
     this.observability = options.observability ?? backendObservability;
+    this.qrArtifactPath = join(options.sessionPath, qrArtifactFileName);
 
-    const removedLocks = removeStaleChromiumSingletonLocks(options.sessionPath);
-    if (removedLocks.length > 0) {
-      console.warn(`Removed ${removedLocks.length} stale WhatsApp Chromium profile lock file(s)`);
-    }
+    removeStaleChromiumSingletonLocks(options.sessionPath);
 
     this.client = options.client ?? new Client({
       authStrategy: new LocalAuth({
@@ -83,35 +83,39 @@ export class WhatsAppWebSender implements AccountabilitySender {
     this.client.on("qr", (qr: string) => {
       this.ready = false;
       this.lastDetail = "qr required";
-      console.log("WhatsApp authentication QR required");
-      qrcode.generate(qr, { small: true });
+      qrcode.generate(qr, { small: true }, (graphic) => {
+        mkdirSync(options.sessionPath, { recursive: true, mode: 0o700 });
+        writeFileSync(this.qrArtifactPath, graphic, { mode: 0o600 });
+        chmodSync(this.qrArtifactPath, 0o600);
+        console.info(`WhatsApp authentication QR required; scan local artifact at ${this.qrArtifactPath}`);
+      });
     });
     this.client.on("authenticated", () => {
       this.ready = false;
       this.lastDetail = "authenticated";
-      console.log("WhatsApp authenticated");
+      this.clearQrArtifact();
     });
     this.client.on("ready", () => {
       this.ready = true;
       this.lastDetail = "ready";
-      console.log("WhatsApp ready");
+      this.clearQrArtifact();
     });
-    this.client.on("auth_failure", (message: string) => {
+    this.client.on("auth_failure", (_message: string) => {
       this.ready = false;
-      this.lastDetail = `auth failure: ${message}`;
-      console.error(`WhatsApp auth failure: ${message}`);
+      this.lastDetail = "auth failure";
+      this.clearQrArtifact();
       this.observability.captureBackgroundFailure(
         "buzer.backend.whatsapp_auth_failure",
-        new Error(message)
+        new Error("WhatsApp authentication failed")
       );
     });
-    this.client.on("disconnected", (reason: string) => {
+    this.client.on("disconnected", (_reason: string) => {
       this.ready = false;
-      this.lastDetail = `disconnected: ${reason}`;
-      console.warn(`WhatsApp disconnected: ${reason}`);
+      this.lastDetail = "disconnected";
+      this.clearQrArtifact();
       this.observability.captureBackgroundFailure(
         "buzer.backend.whatsapp_disconnected",
-        new Error(reason)
+        new Error("WhatsApp disconnected")
       );
     });
   }
@@ -123,6 +127,7 @@ export class WhatsAppWebSender implements AccountabilitySender {
 
   async destroy(): Promise<void> {
     await this.client.destroy();
+    this.clearQrArtifact();
     this.ready = false;
     this.lastDetail = "destroyed";
   }
@@ -137,5 +142,9 @@ export class WhatsAppWebSender implements AccountabilitySender {
 
   async getHealth(): Promise<{ connected: boolean; detail: string }> {
     return { connected: this.ready, detail: this.lastDetail };
+  }
+
+  private clearQrArtifact(): void {
+    rmSync(this.qrArtifactPath, { force: true });
   }
 }

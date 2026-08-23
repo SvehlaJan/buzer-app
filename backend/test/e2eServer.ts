@@ -71,7 +71,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
     todoist: adapter,
     escalationService,
     rateLimit: { max: 100_000, timeWindowMs: 60_000 },
-    observability
+    observability,
+    logger: false
   });
 
   const calls: RecordedCall[] = [];

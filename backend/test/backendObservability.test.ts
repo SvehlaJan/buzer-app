@@ -252,6 +252,22 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     expect(sentryMockState.capturedExceptions[0]).toBe(error);
   });
 
+  it("captureRequestFailure ignores expected client failures outside Fastify", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    const eventId = obs.captureRequestFailure(new Error("Invalid request"), {
+      method: "POST",
+      route: "/tasks",
+      statusCode: 422
+    });
+
+    expect(eventId).toBeUndefined();
+    expect(sentryMockState.capturedExceptions).toHaveLength(0);
+    expect(sentryMockState.capturedMessages).toHaveLength(0);
+  });
+
   it("captureBackgroundFailure sets marker and custom tags", () => {
     const obs = new SentryBackendObservability({
       dsn: "https://public@sentry.example.com/1"
@@ -303,6 +319,77 @@ describe("Fastify Telemetry & Request Hooks", () => {
       values (1, 'ready-token', 2, '2026-07-15T10:00:00Z')
     `).run();
     recordingObs = new RecordingBackendObservability();
+  });
+
+  it("uses structured logging by default and lets test servers disable it explicitly", () => {
+    const runtimeApp = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs
+    });
+    const quietTestApp = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs,
+      logger: false
+    });
+
+    expect(runtimeApp.log.level).toBe("info");
+    expect(quietTestApp.log.level).toBeUndefined();
+  });
+
+  it("redacts credential-bearing request URLs from runtime log records", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const app = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/tasks/snapshot?auth=SECRET_AUTH_123",
+        headers: { authorization: "Bearer secret-token" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const logs = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+      expect(logs).not.toContain("SECRET_AUTH_123");
+      expect(logs).not.toContain("secret-token");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("does not emit credential-bearing error messages in runtime log records", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const app = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs
+    });
+    app.get("/test/credential-error", async () => {
+      throw new Error("Bearer SECRET_ANDROID_123");
+    });
+
+    try {
+      const response = await app.inject({ method: "GET", url: "/test/credential-error" });
+
+      expect(response.statusCode).toBe(500);
+      const logs = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+      expect(logs).not.toContain("SECRET_ANDROID_123");
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it("propagates existing X-Request-ID and returns it in response header", async () => {

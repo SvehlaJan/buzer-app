@@ -121,6 +121,9 @@ export class SentryBackendObservability implements BackendObservability {
 
   captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
     if (!this.enabled) return undefined;
+    if (context.statusCode !== undefined && context.statusCode >= 400 && context.statusCode < 500) {
+      return undefined;
+    }
     let eventId: string | undefined;
     Sentry.withScope((scope) => {
       scope.setLevel("error");

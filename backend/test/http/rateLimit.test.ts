@@ -2,8 +2,12 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
-import { buildServer } from "../../src/server.js";
+import { buildServer as createServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
+
+function buildServer(options: Parameters<typeof createServer>[0]) {
+  return createServer({ ...options, logger: false });
+}
 
 function createApp() {
   const db = new Database(":memory:");

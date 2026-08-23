@@ -4,6 +4,7 @@ import "dotenv/config";
 import { DryRunSender } from "./accountability/dryRunSender.js";
 import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
+import type { FastifyError, FastifyRequest } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
 import { registerRoutes } from "./http/routes.js";
@@ -24,6 +25,7 @@ import {
   backendObservability,
   backendObservabilityRuntime
 } from "./diagnostics/backendObservability.js";
+import { redactString } from "./diagnostics/redaction.js";
 
 export interface BuildServerOptions {
   db: Database.Database;
@@ -34,13 +36,28 @@ export interface BuildServerOptions {
   escalationService?: EscalationService | null | undefined;
   rateLimit?: { max: number; timeWindowMs: number } | undefined;
   observability?: BackendObservability | undefined;
+  logger?: boolean | undefined;
 }
 
 export function buildServer(options: BuildServerOptions) {
   const observability = options.observability ?? backendObservability;
 
   const app = Fastify({
-    logger: false,
+    logger: options.logger === false ? false : {
+      redact: ["msg"],
+      serializers: {
+        req: (request: FastifyRequest) => ({
+          method: request.method,
+          url: redactString(request.url)
+        }),
+        res: (reply) => ({ statusCode: reply.statusCode }),
+        err: (error: FastifyError) => ({
+          type: error.name,
+          message: redactString(error.message),
+          stack: ""
+        })
+      }
+    },
     requestIdHeader: "x-request-id",
     genReqId: (req) => {
       const incoming = (req.headers["x-request-id"] ?? req.headers["request-id"]) as string | undefined;
@@ -202,7 +219,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const handleSignal = async () => {
     try {
       await app.close();
-      await backendObservability.flush(2000);
     } finally {
       process.exit(0);
     }
