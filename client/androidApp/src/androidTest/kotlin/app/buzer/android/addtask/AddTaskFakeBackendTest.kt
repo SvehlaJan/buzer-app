@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -289,9 +290,12 @@ class AddTaskFakeBackendTest {
             waitForContentDescription("Schedule: No schedule")
             openNotes()
             composeRule.onNodeWithContentDescription("Notes").performTextInput("draft note")
+            closeSoftKeyboard()
+            composeRule.waitForIdle()
             openChecklist()
             composeRule.onAllNodesWithContentDescription("Notes").assertCountEquals(0)
-            composeRule.onNodeWithText("Add checklist item").performClick()
+            waitForChecklistAddItem()
+            composeRule.onNodeWithTag("addChecklistItem").performClick()
             assertNoRecordedCall("/tasks")
         } finally {
             scenario.close()
@@ -347,6 +351,8 @@ class AddTaskFakeBackendTest {
 
     private fun selectProject(label: String) {
         waitForContentDescription("Project: Choose project")
+        waitForTextToDisappear("Loading projects...")
+        composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Project: Choose project").performClick()
         waitForText(label)
         composeRule.onNodeWithText(label).performClick()
@@ -402,7 +408,17 @@ class AddTaskFakeBackendTest {
         composeRule.onNodeWithContentDescription("Checklist: Checklist · 0/0 done")
             .performScrollTo()
             .performClick()
-        waitForScrollableText("Add checklist item")
+        waitForChecklistAddItem()
+    }
+
+    private fun waitForChecklistAddItem() {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.onAllNodesWithTag("addChecklistItem").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("addChecklistItem")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsEnabled()
     }
 
     private fun verifyCustomDialogCanCancelAndApply(contentDescription: String, title: String) {
