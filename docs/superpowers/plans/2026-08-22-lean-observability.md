@@ -29,7 +29,7 @@ All custom capsule collectors, context stores, ring buffers, report DTOs, report
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientDiagnosticsTest.kt`
 - Delete: `client/shared/src/androidHostTest/kotlin/app/buzer/shared/diagnostics/RedactionCorpusParityTest.kt` only if it exclusively asserts removed capsule payloads; otherwise retain its general redaction assertions.
 
-- [ ] **Step 1: Rewrite the API diagnostics test to assert the lean HTTP contract**
+- [x] **Step 1: Rewrite the API diagnostics test to assert the lean HTTP contract**
 
 Keep tests proving every request gets `X-Request-ID`, but delete expectations for captured request/response bodies, `NetworkDiagnosticSink`, `sentry-trace`, `baggage`, `TraceHeaders`, and `/diagnostics/reports`. Add a negative assertion:
 
@@ -39,13 +39,13 @@ assertNull(request.headers["baggage"])
 assertEquals("request-123", request.headers["X-Request-ID"])
 ```
 
-- [ ] **Step 2: Run the focused shared test and verify it fails**
+- [x] **Step 2: Run the focused shared test and verify it fails**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest --tests '*BuzerApiClientDiagnosticsTest*'`
 
 Expected: FAIL because the current client still emits trace headers and exposes removed diagnostic hooks.
 
-- [ ] **Step 3: Remove the report/network/trace types and simplify the client**
+- [x] **Step 3: Remove the report/network/trace types and simplify the client**
 
 `DiagnosticModels.kt` retains only `DiagnosticCorrelation` and `DiagnosticLogRecord`. Remove `traceId` and `reportSessionId` from correlation. In `BuzerApiClient`, remove `NetworkDiagnosticSink`, `TraceHeaders`, body serialization/redaction/history capture, `createDiagnosticReport`, and diagnostic-only constructor arguments. Generate and send `X-Request-ID` inside `execute`:
 
@@ -63,13 +63,13 @@ val response = httpClient.request("$baseUrl$path") {
 
 Keep existing status/error decoding, timeouts, bearer authentication, and header-only Ktor logging unchanged.
 
-- [ ] **Step 4: Run shared tests**
+- [x] **Step 4: Run shared tests**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the shared simplification**
+- [x] **Step 5: Commit the shared simplification**
 
 ```bash
 git add client/shared
@@ -90,7 +90,7 @@ git commit -m "refactor: remove client diagnostic transport"
 - Delete: `client/androidApp/src/main/kotlin/app/buzer/android/observability/ManualReportCoordinator.kt`
 - Delete their five corresponding JVM test files plus `AndroidContextWiringTest.kt`.
 
-- [ ] **Step 1: Add failing privacy-boundary tests**
+- [x] **Step 1: Add failing privacy-boundary tests**
 
 Extend `SentryEventSanitizerTest` with a `SentryEvent` containing a URL/query/header in `event.request` and an id/email/IP in `event.user`. Assert the sanitizer removes the request and user entirely:
 
@@ -102,13 +102,13 @@ assertNull(sanitized.user)
 
 Update config tests to assert `isSendDefaultPii == false`, no trace sampling, error-only replay, screenshots/view hierarchy enabled, and shake/native feedback enabled.
 
-- [ ] **Step 2: Run focused Android JVM tests and verify they fail**
+- [x] **Step 2: Run focused Android JVM tests and verify they fail**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*SentryEventSanitizerTest*' --tests '*AndroidObservabilityConfigTest*'`
 
 Expected: FAIL because the current sanitizer retains request/user and initialization sends default PII.
 
-- [ ] **Step 3: Replace the interface with the lean contract**
+- [x] **Step 3: Replace the interface with the lean contract**
 
 The interface becomes:
 
@@ -124,7 +124,7 @@ interface AndroidObservability {
 
 Update no-op and recording implementations to match. Remove attachment/event/session APIs and mutable global coordinator state.
 
-- [ ] **Step 4: Implement safe Sentry initialization and event capture**
+- [x] **Step 4: Implement safe Sentry initialization and event capture**
 
 In `SentryAndroidObservability.kt`:
 
@@ -140,17 +140,17 @@ options.isAttachViewHierarchy = true
 
 `sanitizeEvent` must set `event.request = null` and `event.user = null` before redacting message, exception values, tags, extras, contexts, fingerprints, and breadcrumbs. `AppLog.installSink` continues forwarding sanitized records as breadcrumbs. `captureHandled` creates one exception event with marker plus only nonblank `device_id`, `task_id`, `occurrence_key`, `action_id`, `request_id`, `screen`, `blocker_type`, and `app_section` tags. `showFeedback()` calls `Sentry.feedback().show()`; configure shake and hide name/email/branding.
 
-- [ ] **Step 5: Delete custom capsule code and obsolete tests**
+- [x] **Step 5: Delete custom capsule code and obsolete tests**
 
 Delete the five custom implementation files and tests listed above. Do not replace them with wrappers. Keep `CurrentActivityTracker` only if the installed Sentry feedback integration requires it; otherwise delete it and remove its application hook.
 
-- [ ] **Step 6: Run focused Android JVM tests**
+- [x] **Step 6: Run focused Android JVM tests**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest`
 
 Expected: compilation succeeds and all Android JVM tests PASS.
 
-- [ ] **Step 7: Commit the Android observability core**
+- [x] **Step 7: Commit the Android observability core**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/observability client/androidApp/src/test/kotlin/app/buzer/android/observability
@@ -166,7 +166,7 @@ git commit -m "refactor: use native Android Sentry reporting"
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/observability/BugReportFlowInstrumentationTest.kt`
 - Modify: `client/androidApp/src/androidTest/kotlin/app/buzer/android/readiness/ForegroundReadinessScreenTest.kt`
 
-- [ ] **Step 1: Add a failing readiness-gate feedback test**
+- [x] **Step 1: Add a failing readiness-gate feedback test**
 
 Render a blocking `ForegroundReadinessGate`, click the control tagged `readiness-report-bug`, and assert the callback count increments:
 
@@ -177,13 +177,13 @@ assertEquals(1, reportCount)
 
 Rewrite `BugReportFlowInstrumentationTest` to assert Home feedback and blocking-gate feedback each call `RecordingAndroidObservability.showFeedback()` once. Remove all capsule/session/attachment assertions.
 
-- [ ] **Step 2: Run focused instrumentation and verify the new test fails**
+- [x] **Step 2: Run focused instrumentation and verify the new test fails**
 
 Run: `ANDROID_TEST_CLASS=app.buzer.android.readiness.ForegroundReadinessScreenTest scripts/e2e-real-backend.sh`
 
 Expected: FAIL because the readiness dialog currently has no feedback control.
 
-- [ ] **Step 3: Add a secondary report action to the gate**
+- [x] **Step 3: Add a secondary report action to the gate**
 
 Add `onReportBug: () -> Unit` to `ForegroundReadinessGate` and render a full-width `TextButton` after the primary button:
 
@@ -196,11 +196,11 @@ TextButton(
 
 Pass `{ ObservabilityRuntime.instance.showFeedback() }` from `MainActivity`. Keep the gate non-dismissible and preserve primary-action semantics.
 
-- [ ] **Step 4: Remove context/ring/network plumbing from Android call sites**
+- [x] **Step 4: Remove context/ring/network plumbing from Android call sites**
 
 Delete all imports and calls to the removed context store/ring buffer and remove diagnostic constructor arguments. For meaningful handled failures, pass `DiagnosticCorrelation(...)` directly at the capture site; otherwise retain the existing `AppLog` entry and avoid a new abstraction.
 
-- [ ] **Step 5: Run JVM, compile, and focused instrumentation checks**
+- [x] **Step 5: Run JVM, compile, and focused instrumentation checks**
 
 Run:
 
@@ -211,7 +211,7 @@ ANDROID_TEST_CLASS=app.buzer.android.observability.BugReportFlowInstrumentationT
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Android wiring and UI**
+- [x] **Step 6: Commit Android wiring and UI**
 
 ```bash
 git add client/androidApp client/shared
@@ -229,11 +229,11 @@ git commit -m "feat: keep Sentry feedback globally reachable"
 - Delete: `backend/src/diagnostics/ringBuffer.ts`
 - Delete their dedicated test files.
 
-- [ ] **Step 1: Add failing sanitization/config tests**
+- [x] **Step 1: Add failing sanitization/config tests**
 
 Assert Sentry initialization passes `sendDefaultPii: false`, no tracing sample rate, and a `beforeSend` function that removes `request` and `user` while recursively sanitizing message, exception, tags, extra, contexts, and breadcrumbs. Also assert `captureRequestFailure` ignores 4xx and reports 5xx with `request_id`, method, route, and status.
 
-- [ ] **Step 2: Run the focused backend test and verify it fails**
+- [x] **Step 2: Run the focused backend test and verify it fails**
 
 Run: `npm test -- --run backendObservability`
 
@@ -241,7 +241,7 @@ Working directory: `backend`
 
 Expected: FAIL because current initialization enables PII/tracing and retains custom diagnostic state.
 
-- [ ] **Step 3: Replace the backend adapter with a narrow interface**
+- [x] **Step 3: Replace the backend adapter with a narrow interface**
 
 Retain only:
 
@@ -257,15 +257,15 @@ export interface BackendObservability {
 
 Keep a no-op implementation and a Sentry implementation. Use `Sentry.captureException` with an event scope containing only the approved tags. Do not maintain request/body/log rings, recent state, attachments, synthetic trace IDs, or a global context object.
 
-- [ ] **Step 4: Use Fastify hooks for explicit request failure capture**
+- [x] **Step 4: Use Fastify hooks for explicit request failure capture**
 
 Keep `X-Request-ID` generation/echo. In `onError`, call `captureRequestFailure` only for 5xx responses. Continue logging through Fastify/Pino stdout. Keep explicit background capture in the poller, WhatsApp lifecycle, and escalation service; remove context-update calls and diagnostic collectors.
 
-- [ ] **Step 5: Remove duplicate process-level handlers**
+- [x] **Step 5: Remove duplicate process-level handlers**
 
 The Sentry SDK owns uncaught exception/unhandled rejection integration. Remove hand-written `process.on("unhandledRejection")` and `process.on("uncaughtException")` capture/exit handlers, retaining graceful `SIGTERM`/`SIGINT` close and flush.
 
-- [ ] **Step 6: Run backend unit tests, typecheck, and build**
+- [x] **Step 6: Run backend unit tests, typecheck, and build**
 
 Run:
 
@@ -279,7 +279,7 @@ Working directory: `backend`
 
 Expected: all PASS.
 
-- [ ] **Step 7: Commit backend signal simplification**
+- [x] **Step 7: Commit backend signal simplification**
 
 ```bash
 git add backend/src/diagnostics backend/src/server.ts backend/test
@@ -298,7 +298,7 @@ git commit -m "refactor: simplify backend Sentry reporting"
 - Delete: `backend/src/repositories/diagnosticReportRepository.ts`
 - Delete their dedicated test files.
 
-- [ ] **Step 1: Replace the endpoint test with a failing absence contract**
+- [x] **Step 1: Replace the endpoint test with a failing absence contract**
 
 Build the server, inject `POST /diagnostics/reports`, and assert:
 
@@ -308,7 +308,7 @@ expect(response.statusCode).toBe(404);
 
 Add a migration test that starts from a version-5 database containing `diagnostic_reports`, runs `migrate`, and asserts `sqlite_master` no longer contains the table and migration version 6 exists.
 
-- [ ] **Step 2: Run the two focused tests and verify they fail**
+- [x] **Step 2: Run the two focused tests and verify they fail**
 
 Run: `npm test -- --run diagnosticEndpoint migrations`
 
@@ -316,11 +316,11 @@ Working directory: `backend`
 
 Expected: endpoint test receives the current route response and migration test still finds the table.
 
-- [ ] **Step 3: Remove route, service, and repository**
+- [x] **Step 3: Remove route, service, and repository**
 
 Delete route registration and the two files. Remove the report table/index from `schema.sql`.
 
-- [ ] **Step 4: Add migration 6 as a tombstone migration**
+- [x] **Step 4: Add migration 6 as a tombstone migration**
 
 Preserve migration 5 so existing databases have an auditable version history, then add:
 
@@ -332,13 +332,13 @@ function migrateToVersionSix(db: Database.Database): void {
 
 Apply/version it after migration 5. Fresh databases briefly execute v5 then v6 in the same transaction and finish without the table; deployed v5 databases safely drop it.
 
-- [ ] **Step 5: Run backend tests, typecheck, and build**
+- [x] **Step 5: Run backend tests, typecheck, and build**
 
 Run: `npm test && npm run typecheck && npm run build` as three separate commands in `backend`.
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit endpoint removal**
+- [x] **Step 6: Commit endpoint removal**
 
 ```bash
 git add backend
@@ -356,15 +356,15 @@ git commit -m "refactor: remove diagnostic report endpoint"
 - Modify: `backend/package.json`
 - Modify: Android build/release configuration found by `rg -n 'SENTRY_ORG|SENTRY_PROJECT|SENTRY_RELEASE|svehla|buzer-backend@' client backend scripts .github`
 
-- [ ] **Step 1: Remove the automation and its CI job**
+- [x] **Step 1: Remove the automation and its CI job**
 
 Delete the tool, wrapper, scheduled workflow, and `sentry-github-sync` job in `ci.yml`. Remove no-longer-used scripts/dependencies without changing unrelated CI jobs.
 
-- [ ] **Step 2: Use canonical organization/project/release defaults**
+- [x] **Step 2: Use canonical organization/project/release defaults**
 
 Set source upload defaults to organization `jans-gi`, Android project `buzer-android`, and backend project `buzer-backend`. Both runtime events and uploaded artifacts use `app.buzer@<version>+<git-sha>`; local fallback may use `app.buzer@<version>+local`, but must never use `buzer-backend@...` or org `svehla`.
 
-- [ ] **Step 3: Verify manifests, lockfiles, and workflow syntax**
+- [x] **Step 3: Verify manifests, lockfiles, and workflow syntax**
 
 Run:
 
@@ -380,7 +380,7 @@ Working directory for npm commands: `backend`.
 
 Expected: PASS and no references to the removed tool/workflow remain.
 
-- [ ] **Step 4: Commit automation/config cleanup**
+- [x] **Step 4: Commit automation/config cleanup**
 
 ```bash
 git add .github backend client scripts tools
@@ -398,7 +398,7 @@ git commit -m "chore: remove custom Sentry triage automation"
 - Modify: `docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`
 - Modify observability handoffs dated `2026-08-21` with a short superseded banner where they otherwise look current.
 
-- [ ] **Step 1: Rewrite the docs around the surviving system**
+- [x] **Step 1: Rewrite the docs around the surviving system**
 
 Document, without relying on chat history:
 
@@ -411,11 +411,11 @@ Document, without relying on chat history:
 - Alert creation and live-canary checklist.
 - Explicit removed-system list so future agents do not rebuild capsules, the diagnostic endpoint, trace headers, or the sync bot without a new decision.
 
-- [ ] **Step 2: Mark historical implementation material superseded**
+- [x] **Step 2: Mark historical implementation material superseded**
 
 Add a prominent banner linking the 2026-08-22 design and this plan to the old plan and observability handoffs. Do not rewrite historical command/results content.
 
-- [ ] **Step 3: Self-review documentation completeness**
+- [x] **Step 3: Self-review documentation completeness**
 
 Run:
 
@@ -426,7 +426,7 @@ rg -n 'jans-gi|4511950606172240|4511950617641040|app\.buzer@' docs/runbooks docs
 
 Expected: the first command finds removed concepts only in explicit “removed/do not restore” text; the second finds all fixed identifiers and canonical release guidance.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```bash
 git add AGENTS.md docs
@@ -439,7 +439,7 @@ git commit -m "docs: document lean observability operations"
 - Modify: `docs/superpowers/plans/2026-08-22-lean-observability.md`
 - Create: `docs/handoffs/2026-08-22-lean-observability.md`
 
-- [ ] **Step 1: Run all local automated gates**
+- [x] **Step 1: Run all local automated gates**
 
 Run separately:
 
@@ -454,7 +454,7 @@ git diff --check
 
 The npm commands run in `backend`; all others run at repository root. Expected: every command PASS, including the full unfiltered instrumentation suite. If an unrelated pre-existing test fails, rerun it once in isolation, record both results, and do not mark the gate complete until the full suite is green or the user explicitly accepts the documented failure.
 
-- [ ] **Step 2: Run static removal checks**
+- [x] **Step 2: Run static removal checks**
 
 Run:
 
@@ -466,7 +466,7 @@ rg -n 'sendDefaultPii|isSendDefaultPii|tracesSampleRate' client backend
 
 Expected: the first two return no production references; the third shows default PII disabled and no positive trace sample rate.
 
-- [ ] **Step 3: Perform live Sentry canaries**
+- [x] **Step 3: Perform live Sentry canaries**
 
 With real DSNs configured, perform one controlled Android handled exception/feedback submission and one controlled backend 5xx/background exception. Verify in Sentry:
 
@@ -478,15 +478,15 @@ With real DSNs configured, perform one controlled Android handled exception/feed
 
 If credentials or a deployed environment are unavailable, mark these checks `SKIPPED`, name the exact missing prerequisite, and leave rollout explicitly incomplete.
 
-- [ ] **Step 4: Review the complete diff for scope and accidental deletion**
+- [x] **Step 4: Review the complete diff for scope and accidental deletion**
 
 Run: `git diff 025b104...HEAD --stat`, `git diff 025b104...HEAD --check`, and inspect every changed file. Confirm unrelated product behavior is unchanged and the net code change is materially negative.
 
-- [ ] **Step 5: Update this plan and create the handoff**
+- [x] **Step 5: Update this plan and create the handoff**
 
 Check completed boxes. The handoff must list the plan/task status, files changed, every exact command and PASS/FAIL/SKIPPED evidence, manual verification, assumptions, known failures, and next deployment step.
 
-- [ ] **Step 6: Commit verification documentation**
+- [x] **Step 6: Commit verification documentation**
 
 ```bash
 git add docs/superpowers/plans/2026-08-22-lean-observability.md docs/handoffs/2026-08-22-lean-observability.md
