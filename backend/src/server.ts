@@ -70,7 +70,7 @@ export function buildServer(options: BuildServerOptions) {
     },
     genReqId: (req) => {
       const incoming = (req.headers["x-request-id"] ?? req.headers["request-id"]) as string | undefined;
-      return incoming && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(incoming) && !/(auth|token|secret|password|cookie)/i.test(incoming)
+      return incoming && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(incoming)
         ? incoming
         : crypto.randomUUID();
     },

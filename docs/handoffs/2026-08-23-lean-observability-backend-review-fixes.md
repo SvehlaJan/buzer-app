@@ -96,3 +96,15 @@ Verification:
 - Command: `npm run build`
   Result: PASS
   Evidence: exited 0.
+
+## Request-ID P1 follow-up (commit pending)
+
+- Incoming `X-Request-ID` values now propagate only when they match the canonical UUID format emitted by the production client; all opaque values, including JWT-like strings without credential keywords, are replaced by a server UUID.
+
+Verification:
+- Command: `npm test`
+  Result: PASS
+  Evidence: 38 files passed, 450 tests passed.
+- Command: `npm run typecheck && npm run build && git diff --check`
+  Result: PASS
+  Evidence: all commands exited 0.

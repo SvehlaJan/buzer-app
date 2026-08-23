@@ -396,6 +396,27 @@ describe("Fastify Telemetry & Request Hooks", () => {
     }
   });
 
+  it("replaces opaque credential-like request IDs that lack blacklist keywords", async () => {
+    const app = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs
+    });
+    const opaqueToken = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvcGFxdWUtc2VjcmV0In0.signature";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot",
+      headers: { authorization: "Bearer secret-token", "x-request-id": opaqueToken }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["x-request-id"]).not.toBe(opaqueToken);
+    expect(response.headers["x-request-id"]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it("preserves safe semantic Pino messages", async () => {
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const app = buildServer({ db, currentUserId: "user-test", androidApiToken: "secret-token", todoist: new FakeTodoistAdapter() });
@@ -441,7 +462,7 @@ describe("Fastify Telemetry & Request Hooks", () => {
       observability: recordingObs
     });
 
-    const customRequestId = "custom-req-id-12345";
+    const customRequestId = "123e4567-e89b-42d3-a456-426614174000";
     const res = await app.inject({
       method: "GET",
       url: "/tasks/snapshot",
@@ -529,7 +550,7 @@ describe("Fastify Telemetry & Request Hooks", () => {
       url: "/test/unhandled-error",
       headers: {
         authorization: "Bearer secret-token",
-        "x-request-id": "req-fail-500"
+        "x-request-id": "123e4567-e89b-42d3-a456-426614174001"
       }
     });
     expect(errRes.statusCode).toBe(500);
@@ -537,7 +558,7 @@ describe("Fastify Telemetry & Request Hooks", () => {
     const failure = recordingObs.requestFailures[0];
     expect((failure?.error as Error)?.message).toBe("Unexpected database explosion");
     expect(failure?.context).toMatchObject({
-      requestId: "req-fail-500",
+      requestId: "123e4567-e89b-42d3-a456-426614174001",
       method: "GET",
       route: "/test/unhandled-error",
       statusCode: 500
