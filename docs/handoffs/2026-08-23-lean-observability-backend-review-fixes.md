@@ -76,3 +76,23 @@ SKIPPED. The QR artifact behavior is unit-tested with a real temporary filesyste
 ## Next recommended step
 
 Root agent should integrate the scoped commit with the other review-fix commits, then run branch-level verification if other worktree changes are merged.
+
+## Follow-up review fixes (commit pending)
+
+- Client request IDs now accept only bounded identifier-safe values and reject credential-like values; all other inputs receive a generated UUID.
+- Runtime URL logging uses the same credential-key contract as structured redaction, including arbitrary `*token`, `*secret`, `*password`, and `*cookie` query keys. Pino message hooks retain safe semantic messages while redacting unsafe content.
+- QR writes use a no-follow file descriptor, set mode `0600` before truncate/write, clear stale artifacts during construction, and clean up even when `destroy()` rejects. The server `onClose` flush is protected by an outer `finally`.
+
+Verification:
+- Command: `npm test -- backendObservability.test.ts accountability/whatsappDiagnostics.test.ts redaction.test.ts`
+  Result: PASS
+  Evidence: 3 files passed, 32 tests passed.
+- Command: `npm test`
+  Result: PASS
+  Evidence: 38 files passed, 449 tests passed.
+- Command: `npm run typecheck`
+  Result: PASS
+  Evidence: exited 0.
+- Command: `npm run build`
+  Result: PASS
+  Evidence: exited 0.

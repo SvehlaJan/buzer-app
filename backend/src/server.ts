@@ -25,7 +25,7 @@ import {
   backendObservability,
   backendObservabilityRuntime
 } from "./diagnostics/backendObservability.js";
-import { redactString } from "./diagnostics/redaction.js";
+import { redactString, redactUrl } from "./diagnostics/redaction.js";
 
 export interface BuildServerOptions {
   db: Database.Database;
@@ -44,11 +44,21 @@ export function buildServer(options: BuildServerOptions) {
 
   const app = Fastify({
     logger: options.logger === false ? false : {
-      redact: ["msg"],
+      hooks: {
+        logMethod(args, method) {
+          for (let index = 0; index < args.length; index += 1) {
+            const arg = args[index];
+            if (typeof arg === "string") {
+              args[index] = redactString(arg);
+            }
+          }
+          return method.apply(this, args);
+        }
+      },
       serializers: {
         req: (request: FastifyRequest) => ({
           method: request.method,
-          url: redactString(request.url)
+          url: redactUrl(request.url)
         }),
         res: (reply) => ({ statusCode: reply.statusCode }),
         err: (error: FastifyError) => ({
@@ -58,10 +68,11 @@ export function buildServer(options: BuildServerOptions) {
         })
       }
     },
-    requestIdHeader: "x-request-id",
     genReqId: (req) => {
       const incoming = (req.headers["x-request-id"] ?? req.headers["request-id"]) as string | undefined;
-      return incoming && incoming.trim() !== "" ? incoming : crypto.randomUUID();
+      return incoming && /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(incoming) && !/(auth|token|secret|password|cookie)/i.test(incoming)
+        ? incoming
+        : crypto.randomUUID();
     },
     // Trust only loopback and the compose network (pinned to 172.28.0.0/16 in
     // docker-compose.yml) so X-Forwarded-For set by tailscaled is honored while
@@ -210,10 +221,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   );
   app.addHook("onClose", async () => {
     poller.stop();
-    if (whatsappSender instanceof WhatsAppWebSender) {
-      await whatsappSender.destroy();
+    try {
+      if (whatsappSender instanceof WhatsAppWebSender) {
+        await whatsappSender.destroy();
+      }
+    } finally {
+      await backendObservability.flush(2000);
     }
-    await backendObservability.flush(2000);
   });
 
   const handleSignal = async () => {

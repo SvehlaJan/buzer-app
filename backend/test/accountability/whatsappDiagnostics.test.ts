@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import qrcode from "qrcode-terminal";
@@ -62,6 +62,48 @@ describe("WhatsAppWebSender Diagnostics", () => {
       consoleInfo.mockRestore();
       consoleLog.mockRestore();
       consoleError.mockRestore();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses QR artifact symlinks and repairs pre-existing file permissions before writing", () => {
+    const root = mkdtempSync(join(tmpdir(), "buzer-whatsapp-session-"));
+    const target = join(root, "outside.txt");
+    const artifactPath = join(root, "whatsapp-qr.txt");
+    const mockClient = new EventEmitter() as any;
+    vi.mocked(qrcode.generate).mockImplementation((_input, _options, callback) => callback?.("QR GRAPHIC"));
+
+    try {
+      writeFileSync(target, "outside");
+      new WhatsAppWebSender({ sessionPath: root, clientId: "test-client", client: mockClient });
+      symlinkSync(target, artifactPath);
+      expect(() => mockClient.emit("qr", "raw-qr")).toThrow();
+      expect(readFileSync(target, "utf8")).toBe("outside");
+
+      rmSync(artifactPath);
+      writeFileSync(artifactPath, "old", { mode: 0o644 });
+      mockClient.emit("qr", "raw-qr");
+      expect(statSync(artifactPath).mode & 0o777).toBe(0o600);
+      expect(readFileSync(artifactPath, "utf8")).toBe("QR GRAPHIC");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("clears stale QR artifacts on construction and when destroy rejects", async () => {
+    const root = mkdtempSync(join(tmpdir(), "buzer-whatsapp-session-"));
+    const artifactPath = join(root, "whatsapp-qr.txt");
+    const mockClient = Object.assign(new EventEmitter(), { destroy: vi.fn().mockRejectedValue(new Error("destroy failed")) }) as any;
+
+    try {
+      writeFileSync(artifactPath, "stale");
+      const sender = new WhatsAppWebSender({ sessionPath: root, clientId: "test-client", client: mockClient });
+      expect(() => statSync(artifactPath)).toThrow();
+
+      writeFileSync(artifactPath, "current");
+      await expect(sender.destroy()).rejects.toThrow("destroy failed");
+      expect(() => statSync(artifactPath)).toThrow();
+    } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });

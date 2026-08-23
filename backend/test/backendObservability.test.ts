@@ -368,6 +368,46 @@ describe("Fastify Telemetry & Request Hooks", () => {
     }
   });
 
+  it("replaces unsafe request IDs and redacts arbitrary credential-suffix query keys in log records", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const app = buildServer({
+      db,
+      currentUserId: "user-test",
+      androidApiToken: "secret-token",
+      todoist: new FakeTodoistAdapter(),
+      observability: recordingObs
+    });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/tasks/snapshot?custom_secret=SECRET_SENTRY_123&safe=value",
+        headers: { authorization: "Bearer secret-token", "x-request-id": "SECRET_ANDROID_123" }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["x-request-id"]).not.toContain("SECRET_ANDROID_123");
+      const logs = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+      expect(logs).not.toContain("SECRET_ANDROID_123");
+      expect(logs).not.toContain("SECRET_SENTRY_123");
+      expect(logs).toContain("custom_secret=[REDACTED]");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("preserves safe semantic Pino messages", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const app = buildServer({ db, currentUserId: "user-test", androidApiToken: "secret-token", todoist: new FakeTodoistAdapter() });
+
+    try {
+      await app.inject({ method: "GET", url: "/health" });
+      expect(write.mock.calls.map(([chunk]) => String(chunk)).join("")).toContain("incoming request");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it("does not emit credential-bearing error messages in runtime log records", async () => {
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const app = buildServer({

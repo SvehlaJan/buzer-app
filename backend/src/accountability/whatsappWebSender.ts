@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fchmodSync, ftruncateSync, mkdirSync, openSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import qrcode from "qrcode-terminal";
 import whatsappWeb from "whatsapp-web.js";
@@ -67,6 +67,7 @@ export class WhatsAppWebSender implements AccountabilitySender {
     this.observability = options.observability ?? backendObservability;
     this.qrArtifactPath = join(options.sessionPath, qrArtifactFileName);
 
+    this.clearQrArtifact();
     removeStaleChromiumSingletonLocks(options.sessionPath);
 
     this.client = options.client ?? new Client({
@@ -85,8 +86,7 @@ export class WhatsAppWebSender implements AccountabilitySender {
       this.lastDetail = "qr required";
       qrcode.generate(qr, { small: true }, (graphic) => {
         mkdirSync(options.sessionPath, { recursive: true, mode: 0o700 });
-        writeFileSync(this.qrArtifactPath, graphic, { mode: 0o600 });
-        chmodSync(this.qrArtifactPath, 0o600);
+        this.writeQrArtifact(graphic);
         console.info(`WhatsApp authentication QR required; scan local artifact at ${this.qrArtifactPath}`);
       });
     });
@@ -126,10 +126,13 @@ export class WhatsAppWebSender implements AccountabilitySender {
   }
 
   async destroy(): Promise<void> {
-    await this.client.destroy();
-    this.clearQrArtifact();
-    this.ready = false;
-    this.lastDetail = "destroyed";
+    try {
+      await this.client.destroy();
+    } finally {
+      this.clearQrArtifact();
+      this.ready = false;
+      this.lastDetail = "destroyed";
+    }
   }
 
   async sendEscalation(input: EscalationInput): Promise<void> {
@@ -146,5 +149,16 @@ export class WhatsAppWebSender implements AccountabilitySender {
 
   private clearQrArtifact(): void {
     rmSync(this.qrArtifactPath, { force: true });
+  }
+
+  private writeQrArtifact(graphic: string): void {
+    const fd = openSync(this.qrArtifactPath, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+    try {
+      fchmodSync(fd, 0o600);
+      ftruncateSync(fd, 0);
+      writeFileSync(fd, graphic);
+    } finally {
+      closeSync(fd);
+    }
   }
 }

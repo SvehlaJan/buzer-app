@@ -74,6 +74,27 @@ export function isCredentialKey(rawKey: string): boolean {
   return false;
 }
 
+export function redactUrl(input: string): string {
+  const queryStart = input.indexOf("?");
+  if (queryStart === -1) return input;
+
+  const path = input.slice(0, queryStart);
+  const query = input.slice(queryStart + 1);
+  const redactedQuery = query.split("&").map((part) => {
+    const separator = part.indexOf("=");
+    const rawKey = separator === -1 ? part : part.slice(0, separator);
+    let key = rawKey;
+    try {
+      key = decodeURIComponent(rawKey.replace(/\+/g, " "));
+    } catch {
+      // Preserve malformed query components while applying the conservative string redactor.
+    }
+    if (!isCredentialKey(key)) return redactString(part);
+    return `${rawKey}=[REDACTED]`;
+  });
+  return `${path}?${redactedQuery.join("&")}`;
+}
+
 export function redactString(input: string): string {
   if (input.length === 0) return input;
   if (
