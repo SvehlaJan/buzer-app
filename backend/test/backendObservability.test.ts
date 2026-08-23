@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as Sentry from "@sentry/node";
 import { openDatabase } from "../src/db/connection.js";
 import { migrate } from "../src/db/migrations.js";
 import { buildServer } from "../src/server.js";
@@ -118,11 +117,9 @@ vi.mock("@sentry/node", () => ({
   }),
   captureException: vi.fn((err: unknown) => {
     sentryMockState.capturedExceptions.push(err);
-    return "uuid-1234-5678-90ab-cdef";
   }),
   captureMessage: vi.fn((msg: string) => {
     sentryMockState.capturedMessages.push(msg);
-    return "msg-uuid-1234-5678";
   }),
   flush: vi.fn(async (timeoutMs?: number) => {
     sentryMockState.flushCalls.push(timeoutMs ?? 2000);
@@ -140,7 +137,7 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
   });
 
   it("initializes Sentry with sendDefaultPii=false, canonical release, and without tracing", () => {
-    const obs = new SentryBackendObservability({
+    new SentryBackendObservability({
       dsn: "https://public@sentry.example.com/1",
       environment: "staging-vps",
       release: "app.buzer@0.1.0+gitsha"

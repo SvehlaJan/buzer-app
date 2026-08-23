@@ -71,3 +71,8 @@ SKIPPED. This is an adapter-surface deletion; the static launcher test and focus
 ## Next recommended step
 
 Root agent can review and integrate the scoped commit with the remaining lean-observability changes.
+
+## Follow-up quality cleanup
+
+- Removed stale test-only Sentry import, an unused initialization binding, and mock capture-ID return values; capture-side-effect assertions remain unchanged.
+- Focused observability test, backend typecheck, and whitespace validation were rerun after this mechanical cleanup.
