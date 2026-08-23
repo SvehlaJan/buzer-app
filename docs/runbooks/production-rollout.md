@@ -2,7 +2,7 @@
 
 **Purpose:** Step-by-step procedure for deploying, verifying, and rolling out the Buzer Lean Observability system to production VPS and Android devices.
 
-**Gate status:** This runbook is an operator checklist. Project provisioning, secrets, alert delivery, and the live canary are not assumed complete until an operator records the evidence in the rollout handoff.
+**Gate status:** The organization and projects listed below were provisioned per `docs/handoffs/2026-08-21-sentry-project-provisioning.md`. Credentials, GitHub integration, alert delivery, deployment, and the live canary remain operator-owned and pending until an operator records evidence in the rollout handoff.
 
 ---
 
@@ -15,7 +15,7 @@ Phase 1: Sentry Cloud Provisioning & Secrets Setup
 Phase 2: Backend Production VPS Deployment
    │
    ▼
-Phase 3: Android Release APK Build & ProGuard Mapping Upload
+Phase 3: Android Release APK Build
    │
    ▼
 Phase 4: Live Canary Smoke Verification (Device + VPS)
@@ -69,23 +69,18 @@ Phase 4: Live Canary Smoke Verification (Device + VPS)
 
 ---
 
-### Phase 3: Android Release APK Build & ProGuard Upload
-1. Set the Sentry auth token and SDK root in your local build environment:
+### Phase 3: Android Release APK Build
+1. Set the SDK root in your local build environment:
    ```bash
-   export SENTRY_AUTH_TOKEN="<your-sentry-auth-token>"
    export ANDROID_HOME=/Users/svehla/Library/Android/sdk
    ```
-2. Build the Android release APK with ProGuard obfuscation and mapping upload:
+2. Build the Android release APK:
    ```bash
    cd client
    ./gradlew :androidApp:assembleRelease
    ```
-3. If ProGuard mappings were not uploaded automatically (e.g. offline build), upload manually:
-   ```bash
-   ./gradlew :androidApp:uploadSentryProguardMappingsRelease
-   ```
-4. Verify in Sentry dashboard (**Settings > Projects > buzer-android > ProGuard & Native**) that mapping files are present for the build.
-5. Install the release APK onto the target physical Android device:
+3. The current release build does not enable R8/minification, so no ProGuard mapping is produced or required. If a future release enables minification, set `SENTRY_AUTH_TOKEN`, upload the matching mapping, and verify symbolication before rollout.
+4. Install the release APK onto the target physical Android device:
    ```bash
    adb install -r androidApp/build/outputs/apk/release/androidApp-release.apk
    ```
@@ -108,7 +103,7 @@ Perform the following smoke tests on the physical device and VPS:
      - Environment matches `production-device`.
      - Error Replay and native screenshot / view hierarchy are attached.
      - Breadcrumbs show recent `AppLog` lines and UI events.
-     - ProGuard stack frames are properly symbolicated.
+     - If the build was minified, stack frames are properly symbolicated using the matching uploaded mapping.
      - **Zero secret leaks** (no bearer tokens, no API tokens, no cookies).
 
 3. **Backend 5xx & Background Error Verification**:

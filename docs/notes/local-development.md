@@ -147,12 +147,13 @@ Do not commit real values. If either value is blank, the Android app shows a loc
 ## Observability & Sentry Configuration
 
 ### Android Sentry Configuration
-The Android app reads Sentry configuration from `client/local.properties` (for local development) or Gradle properties:
+The Android app resolves Sentry configuration from a Gradle property, then
+`client/local.properties`, then the environment. Use the latter two for local development:
 
 ```properties
 SENTRY_ANDROID_DSN=https://<key>@<org>.ingest.sentry.io/<project-id>
 SENTRY_ENVIRONMENT=development-device
-SENTRY_ORG=svehla
+SENTRY_ORG=jans-gi
 SENTRY_PROJECT=buzer-android
 ```
 

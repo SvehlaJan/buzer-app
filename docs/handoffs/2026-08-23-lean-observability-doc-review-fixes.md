@@ -62,3 +62,22 @@ SKIPPED. This is documentation-only; no production DSNs, tokens, device, VPS dep
 ## Next recommended step
 
 An authorized operator should provision hosted Sentry credentials/alerts and complete the physical-device plus deployed-VPS canary using `docs/runbooks/production-rollout.md`, then record the evidence before calling rollout complete.
+
+## Follow-up review corrections
+
+- Removed static `SENTRY_RELEASE` assignments from root and backend example environment files; both now preserve deploy/build SHA derivation unless an operator deliberately overrides it.
+- Corrected Android local configuration precedence and the `jans-gi` organization in local-development guidance.
+- Added the same prominent supersession banner to every historical 2026-08-21 observability task handoff without changing its original evidence.
+- Clarified that the Sentry organization/projects are already provisioned, while credentials, integration, alerts, deployment, and canaries remain pending.
+- Removed the unsupported claim that the current release build is minified or requires ProGuard mappings; mapping upload/symbolication is now conditional on a future minified build.
+
+Verification:
+- Command: `rg -n '^SENTRY_RELEASE=' .env.example backend/.env.example`
+  Result: PASS
+  Evidence: no static release assignment remains.
+- Command: `rg -l '^> \\[!WARNING\\]' docs/handoffs/2026-08-21-observability-task-*.md | wc -l`
+  Result: PASS
+  Evidence: `13`, matching all historical task handoffs.
+- Command: `git -c core.fsmonitor=false diff --check`
+  Result: PASS
+  Evidence: exited 0 before final staged verification.

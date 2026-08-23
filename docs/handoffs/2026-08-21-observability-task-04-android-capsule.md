@@ -1,5 +1,8 @@
 # Handoff: Observability Task 4 - Build Android Context, Capsule, And Attachment Collectors
 
+> [!WARNING]
+> **SUPERSEDED (2026-08-22):** The endpoint, trace/capsule, and GitHub-sync material below is historical evidence only. Use the lean plan (`docs/superpowers/plans/2026-08-22-lean-observability.md`) and current runbooks (`docs/runbooks/`) for active operations.
+
 **Date:** 2026-08-21  
 **Plan:** `docs/superpowers/plans/2026-08-21-observability-and-bug-reporting.md`  
 **Task:** Task 4: Build Android Context, Capsule, And Attachment Collectors  
