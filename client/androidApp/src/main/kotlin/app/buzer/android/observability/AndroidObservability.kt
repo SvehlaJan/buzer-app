@@ -63,4 +63,3 @@ class RecordingAndroidObservability : AndroidObservability {
         flushCount = 0
     }
 }
-

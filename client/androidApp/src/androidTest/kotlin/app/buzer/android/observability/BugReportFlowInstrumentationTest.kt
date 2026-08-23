@@ -44,4 +44,3 @@ class BugReportFlowInstrumentationTest {
         assertEquals(1, fakeObservability.feedbackShowCount)
     }
 }
-

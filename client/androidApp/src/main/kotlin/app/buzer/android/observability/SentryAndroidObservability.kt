@@ -235,4 +235,3 @@ object ObservabilityRuntime {
         }
     }
 }
-
