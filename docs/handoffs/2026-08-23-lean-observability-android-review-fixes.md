@@ -32,7 +32,7 @@ Task: Android/shared review fixes assigned by the root agent
 - `BuzerApiException` now retains the request ID generated for an HTTP request. The error AppLog record includes only `request_id`, and `BlockerErrorReporter` copies that ID to `DiagnosticCorrelation` for handled server errors. No response body, request body, `sentry-trace`, or `baggage` observability capture was introduced.
 - Kotlin redaction now treats exact `auth` and normalized suffix `cookie` keys as credentials, including in text assignments. The shared corpus adds corresponding string and JSON cases.
 - Follow-up review fix: the Sentry Gradle extension now receives the already-resolved `SENTRY_AUTH_TOKEN` through `authToken.set(...)`, so Gradle-property and `local.properties` values can reach `sentry-cli` without being logged.
-- Follow-up review fix: non-cancellation transport, response-body, and successful-response decode failures now become a body-free `BuzerApiException` with status `0` and the generated request ID. The non-2xx decoder remains unchanged and `CancellationException` is rethrown.
+- Follow-up review fix: non-cancellation transport, response-body, and successful-response decode failures retain their original throwable type/message and receive a request-ID-only suppressed marker. `BlockerErrorReporter` reads that marker into `DiagnosticCorrelation`; the non-2xx decoder remains unchanged and `CancellationException` is rethrown without a marker.
 
 ## Verification
 
@@ -51,6 +51,22 @@ Task: Android/shared review fixes assigned by the root agent
 - Command: `BUZER_BACKEND_BASE_URL=http://env.test ./gradlew :androidApp:generateDebugBuildConfig --console=plain`, then `rg -n 'BUZER_BACKEND_BASE_URL|BUZER_GIT_SHA|SENTRY_RELEASE' androidApp/build/generated/source/buildConfig/debug/app/buzer/android/BuildConfig.java`
   Result: PASS
   Evidence: environment value resolved; `BUZER_GIT_SHA` and `SENTRY_RELEASE` both contained `fb7cd1bea239`.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; 74 actionable tasks completed.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest --tests '*BuzerApiClientErrorTest*' --tests '*BuzerApiClientTimeoutTest*' --console=plain`
+  Result: FAIL (expected RED)
+  Evidence: transport, timeout, and successful-decode regressions received the prior `BuzerApiException` wrapper rather than their original throwable types.
+
+- Command: same focused shared API command after preserving original throwables
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; MockEngine transport, timeout, decode, and cancellation contracts passed.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:testDebugUnitTest --tests '*BlockerErrorReporterTest*' --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; original API-failure marker reached blocker handled-error correlation.
 
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
   Result: PASS

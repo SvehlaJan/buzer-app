@@ -48,6 +48,8 @@ class BuzerApiException(
     message: String? = null
 ) : Exception(message ?: code ?: "Buzer API request failed with HTTP $status")
 
+class BuzerApiRequestCorrelation(val requestId: String) : Exception("request_id=$requestId")
+
 @Serializable
 private data class BuzerApiErrorBody(
     val code: String? = null,
@@ -192,18 +194,13 @@ private fun String.toBuzerApiException(
     )
 }
 
-private fun Throwable.toRequestFailure(requestId: String): BuzerApiException {
+private fun Throwable.toRequestFailure(requestId: String): Throwable {
     if (this is CancellationException) throw this
-    return BuzerApiException(
-        status = 0,
-        code = null,
-        retryAfterSeconds = null,
-        snapshot = null,
-        requestId = requestId,
-        message = "Buzer API request failed before receiving a usable response"
-    ).also { exception ->
-        AppLog.error("api request_failure request_id=$requestId", exception)
+    if (suppressedExceptions.none { it is BuzerApiRequestCorrelation && it.requestId == requestId }) {
+        addSuppressed(BuzerApiRequestCorrelation(requestId))
     }
+    AppLog.error("api request_failure request_id=$requestId")
+    return this
 }
 
 private const val DEFAULT_TIMEOUT_MILLIS = 5_000L

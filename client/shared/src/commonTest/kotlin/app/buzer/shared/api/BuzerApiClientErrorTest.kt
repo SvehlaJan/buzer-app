@@ -11,6 +11,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.http.content.TextContent
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -160,7 +161,7 @@ class BuzerApiClientErrorTest {
     }
 
     @Test
-    fun transportFailurePreservesRequestIdInExceptionAndErrorBreadcrumb() = runBlocking {
+    fun transportFailurePreservesOriginalExceptionAndRequestIdBreadcrumb() = runBlocking {
         val breadcrumbs = mutableListOf<String>()
         AppLog.installSink { record, _ -> breadcrumbs += record.message }
         try {
@@ -174,14 +175,55 @@ class BuzerApiClientErrorTest {
                 requestIdProvider = { "request-transport-123" }
             )
 
-            val error = assertFailsWith<BuzerApiException> { client.getSnapshot() }
+            val error = assertFailsWith<IllegalStateException> { client.getSnapshot() }
 
-            assertEquals(0, error.status)
-            assertEquals("request-transport-123", error.requestId)
+            assertEquals("connection lost", error.message)
+            assertEquals("request_id=request-transport-123", error.suppressedExceptions.single().message)
             assertTrue(breadcrumbs.any { it.contains("request_id=request-transport-123") })
         } finally {
             AppLog.resetSinkForTests()
         }
+    }
+
+    @Test
+    fun successfulResponseDecodeFailurePreservesOriginalExceptionAndRequestId() = runBlocking {
+        val client = BuzerApiClient(
+            baseUrl = "https://fake.invalid",
+            token = "test-token",
+            httpClient = defaultHttpClient(
+                token = "test-token",
+                engine = MockEngine {
+                    respond(
+                        content = ByteReadChannel("not-json"),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json")
+                    )
+                }
+            ),
+            requestIdProvider = { "request-decode-123" }
+        )
+
+        val error = assertFailsWith<SerializationException> { client.getSnapshot() }
+
+        assertEquals("request_id=request-decode-123", error.suppressedExceptions.single().message)
+    }
+
+    @Test
+    fun cancellationFailureRethrowsWithoutRequestCorrelationMarker() = runBlocking {
+        val client = BuzerApiClient(
+            baseUrl = "https://fake.invalid",
+            token = "test-token",
+            httpClient = defaultHttpClient(
+                token = "test-token",
+                engine = MockEngine { throw CancellationException("cancelled") }
+            ),
+            requestIdProvider = { "request-cancel-123" }
+        )
+
+        val error = assertFailsWith<CancellationException> { client.getSnapshot() }
+
+        assertEquals("cancelled", error.message)
+        assertTrue(error.suppressedExceptions.isEmpty())
     }
 
     @Test

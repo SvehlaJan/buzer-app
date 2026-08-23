@@ -6,6 +6,7 @@ import android.content.Context
 import app.buzer.android.observability.AndroidObservability
 import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.api.BuzerApiRequestCorrelation
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import java.io.File
@@ -74,7 +75,7 @@ class BlockerErrorReporter(
     ) {
         val correlation = DiagnosticCorrelation(
             taskId = taskId,
-            requestId = (throwable as? BuzerApiException)?.requestId,
+            requestId = throwable.requestId(),
             appSection = "Enforcement"
         )
         if (isCaptureWorthyNonFatal(action, message, throwable)) {
@@ -146,6 +147,12 @@ class BlockerErrorReporter(
     }
 
     private fun String.singleLine(): String = replace('\n', ' ').replace('\r', ' ')
+
+    private fun Throwable?.requestId(): String? = when (this) {
+        is BuzerApiException -> requestId
+        null -> null
+        else -> suppressedExceptions.filterIsInstance<BuzerApiRequestCorrelation>().firstOrNull()?.requestId
+    }
 
     companion object {
         const val ERROR_NOTIFICATION_ID = 9417

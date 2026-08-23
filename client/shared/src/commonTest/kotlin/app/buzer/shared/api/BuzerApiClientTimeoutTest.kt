@@ -2,6 +2,7 @@ package app.buzer.shared.api
 
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.http.HttpHeaders
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
@@ -13,7 +14,7 @@ import kotlin.test.assertFailsWith
 
 class BuzerApiClientTimeoutTest {
     @Test
-    fun getSnapshotTimeoutPreservesRequestCorrelation() {
+    fun getSnapshotTimeoutPreservesOriginalExceptionAndRequestCorrelation() {
         runBlocking {
             val engine = MockEngine { _ ->
                 delay(300)
@@ -29,12 +30,11 @@ class BuzerApiClientTimeoutTest {
                 requestIdProvider = { "request-timeout-123" }
             )
 
-            val error = assertFailsWith<BuzerApiException> {
+            val error = assertFailsWith<HttpRequestTimeoutException> {
                 client.getSnapshot()
             }
 
-            assertEquals(0, error.status)
-            assertEquals("request-timeout-123", error.requestId)
+            assertEquals("request_id=request-timeout-123", error.suppressedExceptions.single().message)
         }
     }
 }

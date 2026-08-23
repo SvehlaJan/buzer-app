@@ -4,6 +4,7 @@ import app.buzer.android.observability.AndroidObservability
 import app.buzer.android.observability.NoOpAndroidObservability
 import app.buzer.android.observability.RecordingAndroidObservability
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.api.BuzerApiRequestCorrelation
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import java.io.File
 import java.nio.file.Files
@@ -82,6 +83,25 @@ class BlockerErrorReporterTest {
         )
 
         assertEquals("request-123", recordingObservability.handledExceptions.single().context.requestId)
+    }
+
+    @Test
+    fun preservesRequestIdFromOriginalApiFailureInHandledErrorCorrelation() {
+        val recordingObservability = RecordingAndroidObservability()
+        val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
+        val failure = IllegalStateException("connection lost").apply {
+            addSuppressed(BuzerApiRequestCorrelation("request-transport-123"))
+        }
+
+        reporter.report(
+            action = BlockerAction.START_TASK,
+            taskId = "task-123",
+            message = "Start task failed",
+            showNotification = false,
+            throwable = failure
+        )
+
+        assertEquals("request-transport-123", recordingObservability.handledExceptions.single().context.requestId)
     }
 
     @Test
