@@ -15,11 +15,22 @@ val localProperties = Properties().apply {
     }
 }
 
-fun backendConfigValue(name: String): String {
+fun configValue(name: String): String {
     return providers.gradleProperty(name).orNull
         ?: localProperties.getProperty(name)
+        ?: providers.environmentVariable(name).orNull
         ?: ""
 }
+
+val gitSha = providers.environmentVariable("GITHUB_SHA").orNull
+    ?.trim()
+    ?.take(12)
+    ?.takeIf { it.isNotEmpty() }
+    ?: runCatching {
+        providers.exec {
+            commandLine("git", "rev-parse", "--short=12", "HEAD")
+        }.standardOutput.asText.get().trim().take(12)
+    }.getOrNull().orEmpty().ifBlank { "local" }
 
 android {
     namespace = "app.buzer.android"
@@ -33,16 +44,16 @@ android {
         versionName = "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["FAKE_BACKEND_BASE_URL"] =
-            providers.gradleProperty("FAKE_BACKEND_BASE_URL").orNull ?: "http://10.0.2.2:18433"
+            configValue("FAKE_BACKEND_BASE_URL").ifBlank { "http://10.0.2.2:18433" }
 
-        buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${backendConfigValue("BUZER_BACKEND_BASE_URL")}\"")
-        buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${backendConfigValue("BUZER_BACKEND_TOKEN")}\"")
-        buildConfigField("String", "BUZER_ASSIGNEE_ME_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_ME_ID")}\"")
-        buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${backendConfigValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
-        buildConfigField("String", "SENTRY_ANDROID_DSN", "\"${backendConfigValue("SENTRY_ANDROID_DSN")}\"")
-        buildConfigField("String", "SENTRY_ENVIRONMENT", "\"${backendConfigValue("SENTRY_ENVIRONMENT").ifBlank { "development-device" }}\"")
-        buildConfigField("String", "BUZER_GIT_SHA", "\"${providers.environmentVariable("GITHUB_SHA").orNull?.take(12) ?: "local"}\"")
-        buildConfigField("String", "SENTRY_RELEASE", "\"app.buzer@${versionName}+${providers.environmentVariable("GITHUB_SHA").orNull?.take(12) ?: "local"}\"")
+        buildConfigField("String", "BUZER_BACKEND_BASE_URL", "\"${configValue("BUZER_BACKEND_BASE_URL")}\"")
+        buildConfigField("String", "BUZER_BACKEND_TOKEN", "\"${configValue("BUZER_BACKEND_TOKEN")}\"")
+        buildConfigField("String", "BUZER_ASSIGNEE_ME_ID", "\"${configValue("BUZER_ASSIGNEE_ME_ID")}\"")
+        buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${configValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
+        buildConfigField("String", "SENTRY_ANDROID_DSN", "\"${configValue("SENTRY_ANDROID_DSN")}\"")
+        buildConfigField("String", "SENTRY_ENVIRONMENT", "\"${configValue("SENTRY_ENVIRONMENT").ifBlank { "development-device" }}\"")
+        buildConfigField("String", "BUZER_GIT_SHA", "\"$gitSha\"")
+        buildConfigField("String", "SENTRY_RELEASE", "\"app.buzer@$versionName+$gitSha\"")
     }
 
     buildFeatures {
@@ -69,15 +80,15 @@ android {
 }
 
 sentry {
-    org.set(providers.gradleProperty("SENTRY_ORG").orNull ?: "jans-gi")
-    projectName.set(providers.gradleProperty("SENTRY_PROJECT").orNull ?: "buzer-android")
+    org.set(configValue("SENTRY_ORG").ifBlank { "jans-gi" })
+    projectName.set(configValue("SENTRY_PROJECT").ifBlank { "buzer-android" })
     includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent || localProperties.getProperty("SENTRY_AUTH_TOKEN") != null)
+    autoUploadProguardMapping.set(configValue("SENTRY_AUTH_TOKEN").isNotBlank())
     uploadNativeSymbols.set(false)
     autoUploadNativeSymbols.set(false)
     includeNativeSources.set(false)
     includeSourceContext.set(true)
-    autoUploadSourceContext.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent || localProperties.getProperty("SENTRY_AUTH_TOKEN") != null)
+    autoUploadSourceContext.set(configValue("SENTRY_AUTH_TOKEN").isNotBlank())
     autoInstallation {
         enabled.set(false)
     }

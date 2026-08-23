@@ -43,6 +43,7 @@ class BuzerApiException(
     val code: String?,
     val retryAfterSeconds: Long?,
     val snapshot: TasksSnapshotResponse?,
+    val requestId: String? = null,
     message: String? = null
 ) : Exception(message ?: code ?: "Buzer API request failed with HTTP $status")
 
@@ -140,9 +141,10 @@ class BuzerApiClient(
 
         val error = responseText.toBuzerApiException(
             response.status.value,
-            response.headers[HttpHeaders.RetryAfter]
+            response.headers[HttpHeaders.RetryAfter],
+            requestId
         )
-        AppLog.error("api http_error status=${error.status} code=${error.code}")
+        AppLog.error("api http_error status=${error.status} code=${error.code} request_id=$requestId")
         throw error
     }
 }
@@ -150,7 +152,11 @@ class BuzerApiClient(
 @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
 private fun generateUuid(): String = kotlin.uuid.Uuid.random().toString()
 
-private fun String.toBuzerApiException(status: Int, retryAfterHeader: String?): BuzerApiException {
+private fun String.toBuzerApiException(
+    status: Int,
+    retryAfterHeader: String?,
+    requestId: String
+): BuzerApiException {
     val decoded = runCatching { buzerApiJson.decodeFromString<BuzerApiErrorBody>(this) }
     if (decoded.isFailure) {
         val containsSnapshot = runCatching {
@@ -168,6 +174,7 @@ private fun String.toBuzerApiException(status: Int, retryAfterHeader: String?): 
         code = parsed?.code,
         retryAfterSeconds = retryAfterHeader?.trim()?.toLongOrNull(),
         snapshot = parsed?.snapshot,
+        requestId = requestId,
         message = parsed?.message
     )
 }

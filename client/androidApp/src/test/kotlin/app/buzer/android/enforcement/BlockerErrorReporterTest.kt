@@ -62,6 +62,29 @@ class BlockerErrorReporterTest {
     }
 
     @Test
+    fun preservesApiRequestIdInHandledErrorCorrelation() {
+        val recordingObservability = RecordingAndroidObservability()
+        val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
+        val failure = BuzerApiException(
+            status = 500,
+            code = "server_error",
+            retryAfterSeconds = null,
+            snapshot = null,
+            requestId = "request-123"
+        )
+
+        reporter.report(
+            action = BlockerAction.START_TASK,
+            taskId = "task-123",
+            message = "Start task failed",
+            showNotification = false,
+            throwable = failure
+        )
+
+        assertEquals("request-123", recordingObservability.handledExceptions.single().context.requestId)
+    }
+
+    @Test
     fun routesValidationFailureToLogOnly() {
         val recordingObservability = RecordingAndroidObservability()
         val reporter = BlockerErrorReporter(directory, observability = recordingObservability)

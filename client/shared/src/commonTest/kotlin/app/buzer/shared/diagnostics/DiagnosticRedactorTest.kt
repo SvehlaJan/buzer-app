@@ -195,4 +195,20 @@ class DiagnosticRedactorTest {
         }
         assertTrue(serializedJson.contains("[REDACTED]"))
     }
+
+    @Test
+    fun redactsGenericAuthAndSuffixCookieKeys() {
+        assertEquals("auth=[REDACTED]", redactor.redactString("auth=SECRET_AUTH_123"))
+        assertEquals("session_cookie=[REDACTED]", redactor.redactString("session_cookie=SECRET_COOKIE_789"))
+
+        val redacted = redactor.redactMap(
+            mapOf(
+                "auth" to "SECRET_AUTH_123",
+                "session_cookie" to "SECRET_COOKIE_789"
+            )
+        )
+
+        assertEquals("[REDACTED]", redacted["auth"])
+        assertEquals("[REDACTED]", redacted["session_cookie"])
+    }
 }

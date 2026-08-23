@@ -172,14 +172,14 @@ class DiagnosticRedactor {
         )
 
         private val KEY_VALUE_PATTERN = Regex(
-            """(?i)(["']?)\b(password|passwd|pwd|secret|secret_token|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|id_token|todoist_token|sentry_auth_token|sentry_token|devicetoken|device_token|session_token|session_key|credentials|credential|private_key|api_key|token|cookie|set-cookie|set_cookie)\1\s*([:=])\s*(?:(["'])(?!\[REDACTED\]\4)([^\r\n]*?)\4|(?!\[REDACTED\])([^\s,;"'\r\n]+))"""
+            """(?i)(["']?)\b(password|passwd|pwd|secret|secret_token|client_secret|app_secret|shared_secret|api_secret|api_token|access_token|refresh_token|auth_token|auth|id_token|todoist_token|sentry_auth_token|sentry_token|devicetoken|device_token|session_token|session_key|credentials|credential|private_key|api_key|token|[a-z0-9_-]*cookie)\1\s*([:=])\s*(?:(["'])(?!\[REDACTED\]\4)([^\r\n]*?)\4|(?!\[REDACTED\])([^\s,;"'\r\n]+))"""
         )
 
         private val EXACT_CREDENTIAL_KEYS = setOf(
             "authorization", "proxyauthorization", "cookie", "setcookie",
             "password", "passwd", "pwd", "secret", "privatekey", "credentials",
             "credential", "apikey", "apitoken", "accesstoken", "refreshtoken",
-            "authtoken", "idtoken", "token", "todoisttoken", "sentryauthtoken",
+            "auth", "authtoken", "idtoken", "token", "todoisttoken", "sentryauthtoken",
             "sentrytoken", "devicetoken", "clientsecret", "appsecret", "sharedsecret",
             "apisecret", "sessiontoken", "sessionkey", "whatsappsession",
             "qrcode", "qrcontent", "qrstring", "sessiondata"
@@ -199,7 +199,8 @@ class DiagnosticRedactor {
                 normalized.endsWith("secret") ||
                 normalized.endsWith("password") ||
                 normalized.endsWith("privatekey") ||
-                normalized.endsWith("apikey")
+                normalized.endsWith("apikey") ||
+                normalized.endsWith("cookie")
             ) {
                 return true
             }

@@ -2,6 +2,7 @@ package app.buzer.shared.api
 
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.TaskActionRequest
+import app.buzer.shared.diagnostics.AppLog
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.utils.io.ByteReadChannel
@@ -17,6 +18,7 @@ import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class BuzerApiClientErrorTest {
     @Test
@@ -125,6 +127,36 @@ class BuzerApiClientErrorTest {
         assertEquals(500, error.status)
         assertNull(error.code)
         assertNull(error.snapshot)
+    }
+
+    @Test
+    fun failedRequestPreservesRequestIdInExceptionAndErrorBreadcrumb() = runBlocking {
+        val breadcrumbs = mutableListOf<String>()
+        AppLog.installSink { record, _ -> breadcrumbs += record.message }
+        try {
+            val client = BuzerApiClient(
+                baseUrl = "https://fake.invalid",
+                token = "test-token",
+                httpClient = defaultHttpClient(
+                    token = "test-token",
+                    engine = MockEngine {
+                        respond(
+                            content = ByteReadChannel("{\"code\":\"server_error\"}"),
+                            status = HttpStatusCode.InternalServerError,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json")
+                        )
+                    }
+                ),
+                requestIdProvider = { "request-123" }
+            )
+
+            val error = assertFailsWith<BuzerApiException> { client.getSnapshot() }
+
+            assertEquals("request-123", error.requestId)
+            assertTrue(breadcrumbs.any { it.contains("request_id=request-123") })
+        } finally {
+            AppLog.resetSinkForTests()
+        }
     }
 
     @Test

@@ -107,6 +107,16 @@
       "expected": "Set-Cookie: [REDACTED]"
     },
     {
+      "name": "key_value_in_log_generic_auth",
+      "input": "auth=SECRET_AUTH_123",
+      "expected": "auth=[REDACTED]"
+    },
+    {
+      "name": "key_value_in_log_suffix_cookie",
+      "input": "session_cookie=SECRET_COOKIE_789",
+      "expected": "session_cookie=[REDACTED]"
+    },
+    {
       "name": "whatsapp_qr_raw_string",
       "input": "qr_code: 1@SECRET_WHATSAPP_123,abc,xyz",
       "expected": "qr_code: [REDACTED]"
@@ -134,6 +144,8 @@
         "authorization": "Bearer SECRET_ANDROID_123",
         "cookie": "session=SECRET_COOKIE_789",
         "set-cookie": "auth=SECRET_COOKIE_789",
+        "auth": "SECRET_AUTH_123",
+        "session_cookie": "SECRET_COOKIE_789",
         "token": "SECRET_ANDROID_123",
         "api_token": "SECRET_ANDROID_123",
         "access_token": "SECRET_ANDROID_123",
@@ -167,6 +179,8 @@
         "authorization": "[REDACTED]",
         "cookie": "[REDACTED]",
         "set-cookie": "[REDACTED]",
+        "auth": "[REDACTED]",
+        "session_cookie": "[REDACTED]",
         "token": "[REDACTED]",
         "api_token": "[REDACTED]",
         "access_token": "[REDACTED]",

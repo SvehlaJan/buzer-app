@@ -74,6 +74,7 @@ class BlockerErrorReporter(
     ) {
         val correlation = DiagnosticCorrelation(
             taskId = taskId,
+            requestId = (throwable as? BuzerApiException)?.requestId,
             appSection = "Enforcement"
         )
         if (isCaptureWorthyNonFatal(action, message, throwable)) {
