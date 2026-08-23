@@ -22,8 +22,7 @@ import type { TodoistAdapter } from "./todoist/todoistAdapter.js";
 import { CONFIG } from "./config.js";
 import {
   type BackendObservability,
-  backendObservability,
-  backendObservabilityRuntime
+  backendObservability
 } from "./diagnostics/backendObservability.js";
 import { redactString, redactUrl } from "./diagnostics/redaction.js";
 
@@ -154,12 +153,6 @@ export function buildServer(options: BuildServerOptions) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  backendObservabilityRuntime.initialize(
-    CONFIG.SENTRY_BACKEND_DSN,
-    CONFIG.SENTRY_ENVIRONMENT,
-    CONFIG.SENTRY_RELEASE
-  );
-
   const dbPath = CONFIG.DATABASE_PATH;
   const currentUserId = CONFIG.TODOIST_USER_ID;
   const androidApiToken = CONFIG.ANDROID_API_TOKEN;

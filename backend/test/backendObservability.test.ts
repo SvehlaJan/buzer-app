@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import * as Sentry from "@sentry/node";
 import { openDatabase } from "../src/db/connection.js";
 import { migrate } from "../src/db/migrations.js";
@@ -14,18 +16,14 @@ import {
 } from "../src/diagnostics/backendObservability.js";
 
 describe("NoOpBackendObservability", () => {
-  it("is disabled, returns undefined for captures, and flushes successfully", async () => {
+  it("has no capture side effects and awaits flush", async () => {
     const noop = new NoOpBackendObservability();
-    expect(noop.isEnabled()).toBe(false);
 
     expect(noop.captureRequestFailure(new Error("boom"), { method: "GET", route: "/tasks" })).toBeUndefined();
     expect(noop.captureBackgroundFailure("test.marker", new Error("boom"), { key: "val" })).toBeUndefined();
 
-    // Should not throw
-    noop.addBreadcrumb("category", "message", { data: "test" });
-
     const flushResult = await noop.flush();
-    expect(flushResult).toBe(true);
+    expect(flushResult).toBeUndefined();
   });
 });
 
@@ -36,18 +34,15 @@ describe("BackendObservabilityRuntime", () => {
 
   it("initializes NoOp for blank/empty DSN and is idempotent", () => {
     const obs = backendObservabilityRuntime.initialize("");
-    expect(obs.isEnabled()).toBe(false);
     expect(obs).toBeInstanceOf(NoOpBackendObservability);
 
     const obsWhitespace = backendObservabilityRuntime.initialize("   ");
     expect(obsWhitespace).toBe(obs);
-    expect(obsWhitespace.isEnabled()).toBe(false);
   });
 
   it("is idempotent on multiple initialize calls", () => {
     const runtime = new BackendObservabilityRuntime();
     const obs1 = runtime.initialize("https://public@sentry.example.com/1", "test-env", "app.buzer@0.1.0+test");
-    expect(obs1.isEnabled()).toBe(true);
     expect(obs1).toBeInstanceOf(SentryBackendObservability);
 
     const obs2 = runtime.initialize("https://other@sentry.example.com/2");
@@ -57,40 +52,41 @@ describe("BackendObservabilityRuntime", () => {
   it("resets to NoOpBackendObservability on reset()", () => {
     const runtime = new BackendObservabilityRuntime();
     runtime.initialize("https://public@sentry.example.com/1");
-    expect(runtime.getInstance().isEnabled()).toBe(true);
-
     runtime.reset();
-    expect(runtime.getInstance().isEnabled()).toBe(false);
     expect(runtime.getInstance()).toBeInstanceOf(NoOpBackendObservability);
   });
 
-  it("exported backendObservability proxy delegates to the runtime instance", async () => {
+  it("exported backendObservability proxy delegates capture and flush to the runtime instance", async () => {
     const fake = new RecordingBackendObservability();
     backendObservabilityRuntime.setInstance(fake);
 
-    expect(backendObservability.isEnabled()).toBe(true);
-
-    backendObservability.addBreadcrumb("test", "msg", { k: "v" });
-    expect(fake.breadcrumbs).toHaveLength(1);
-    expect(fake.breadcrumbs[0]?.message).toBe("msg");
-
-    const reqId = backendObservability.captureRequestFailure(new Error("err"), { method: "POST" });
-    expect(reqId).toBeDefined();
+    expect(backendObservability.captureRequestFailure(new Error("err"), { method: "POST" })).toBeUndefined();
     expect(fake.requestFailures).toHaveLength(1);
 
-    const bgId = backendObservability.captureBackgroundFailure("marker", new Error("bg"));
-    expect(bgId).toBeDefined();
+    expect(backendObservability.captureBackgroundFailure("marker", new Error("bg"))).toBeUndefined();
     expect(fake.backgroundFailures).toHaveLength(1);
 
-    const flushed = await backendObservability.flush();
-    expect(flushed).toBe(true);
+    expect(await backendObservability.flush()).toBeUndefined();
+  });
+});
+
+describe("backend startup", () => {
+  it("preloads instrumentation in every supported server launcher while server only consumes the runtime", () => {
+    const backendRoot = fileURLToPath(new URL("..", import.meta.url));
+    const packageJson = JSON.parse(readFileSync(`${backendRoot}/package.json`, "utf8")) as { scripts: Record<string, string> };
+    const dockerfile = readFileSync(`${backendRoot}/../Dockerfile`, "utf8");
+    const serverSource = readFileSync(`${backendRoot}/src/server.ts`, "utf8");
+
+    expect(packageJson.scripts.start).toContain("--import ./dist/instrument.js");
+    expect(packageJson.scripts.dev).toContain("--import ./src/instrument.ts");
+    expect(dockerfile).toContain('CMD ["node", "--import", "./dist/instrument.js", "./dist/server.js"]');
+    expect(serverSource).not.toContain("backendObservabilityRuntime.initialize(");
   });
 });
 
 const sentryMockState = {
   initOptions: null as any,
   lastScope: null as any,
-  breadcrumbCalls: [] as any[],
   capturedExceptions: [] as any[],
   capturedMessages: [] as any[],
   flushCalls: [] as number[]
@@ -128,9 +124,6 @@ vi.mock("@sentry/node", () => ({
     sentryMockState.capturedMessages.push(msg);
     return "msg-uuid-1234-5678";
   }),
-  addBreadcrumb: vi.fn((breadcrumb: any) => {
-    sentryMockState.breadcrumbCalls.push(breadcrumb);
-  }),
   flush: vi.fn(async (timeoutMs?: number) => {
     sentryMockState.flushCalls.push(timeoutMs ?? 2000);
     return true;
@@ -141,7 +134,6 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
   beforeEach(() => {
     sentryMockState.initOptions = null;
     sentryMockState.lastScope = null;
-    sentryMockState.breadcrumbCalls = [];
     sentryMockState.capturedExceptions = [];
     sentryMockState.capturedMessages = [];
     sentryMockState.flushCalls = [];
@@ -154,7 +146,6 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
       release: "app.buzer@0.1.0+gitsha"
     });
 
-    expect(obs.isEnabled()).toBe(true);
     expect(sentryMockState.initOptions).toBeDefined();
     expect(sentryMockState.initOptions.dsn).toBe("https://public@sentry.example.com/1");
     expect(sentryMockState.initOptions.environment).toBe("staging-vps");
@@ -236,14 +227,13 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     });
 
     const error = new Error("Database query failed");
-    const eventId = obs.captureRequestFailure(error, {
+    expect(obs.captureRequestFailure(error, {
       requestId: "req-xyz-1",
       method: "POST",
       route: "/tasks",
       statusCode: 500
-    });
+    })).toBeUndefined();
 
-    expect(eventId).toBe("uuid1234567890abcdef");
     expect(sentryMockState.lastScope.level).toBe("error");
     expect(sentryMockState.lastScope.tags.request_id).toBe("req-xyz-1");
     expect(sentryMockState.lastScope.tags.method).toBe("POST");
@@ -257,13 +247,12 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
       dsn: "https://public@sentry.example.com/1"
     });
 
-    const eventId = obs.captureRequestFailure(new Error("Invalid request"), {
+    expect(obs.captureRequestFailure(new Error("Invalid request"), {
       method: "POST",
       route: "/tasks",
       statusCode: 422
-    });
+    })).toBeUndefined();
 
-    expect(eventId).toBeUndefined();
     expect(sentryMockState.capturedExceptions).toHaveLength(0);
     expect(sentryMockState.capturedMessages).toHaveLength(0);
   });
@@ -274,12 +263,11 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     });
 
     const error = new Error("Background task failed");
-    const eventId = obs.captureBackgroundFailure("buzer.backend.test_marker", error, {
+    expect(obs.captureBackgroundFailure("buzer.backend.test_marker", error, {
       consecutive_failure_count: "3",
       undefined_key: undefined
-    });
+    })).toBeUndefined();
 
-    expect(eventId).toBe("uuid1234567890abcdef");
     expect(sentryMockState.lastScope.level).toBe("error");
     expect(sentryMockState.lastScope.tags.marker).toBe("buzer.backend.test_marker");
     expect(sentryMockState.lastScope.tags.consecutive_failure_count).toBe("3");
@@ -287,22 +275,12 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     expect(sentryMockState.capturedExceptions[0]).toBe(error);
   });
 
-  it("addBreadcrumb and flush call Sentry primitives", async () => {
+  it("flushes Sentry with the supplied timeout", async () => {
     const obs = new SentryBackendObservability({
       dsn: "https://public@sentry.example.com/1"
     });
 
-    obs.addBreadcrumb("network", "HTTP request to Todoist", { url: "/sync" });
-    expect(sentryMockState.breadcrumbCalls).toHaveLength(1);
-    expect(sentryMockState.breadcrumbCalls[0]).toEqual({
-      category: "network",
-      message: "HTTP request to Todoist",
-      data: { url: "/sync" },
-      level: "info"
-    });
-
-    const flushed = await obs.flush(1500);
-    expect(flushed).toBe(true);
+    expect(await obs.flush(1500)).toBeUndefined();
     expect(sentryMockState.flushCalls).toContain(1500);
   });
 });

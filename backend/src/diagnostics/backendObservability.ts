@@ -9,31 +9,17 @@ export interface RequestFailureContext {
 }
 
 export interface BackendObservability {
-  isEnabled(): boolean;
-  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void;
-  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined;
-  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined;
-  flush(timeoutMillis?: number): Promise<boolean>;
+  captureRequestFailure(error: unknown, context: RequestFailureContext): void;
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): void;
+  flush(timeoutMillis?: number): Promise<void>;
 }
 
 export class NoOpBackendObservability implements BackendObservability {
-  isEnabled(): boolean {
-    return false;
-  }
+  captureRequestFailure(_error: unknown, _context: RequestFailureContext): void {}
 
-  addBreadcrumb(_category: string, _message: string, _data?: Record<string, unknown>): void {}
+  captureBackgroundFailure(_marker: string, _error: unknown, _tags?: Record<string, string | undefined>): void {}
 
-  captureRequestFailure(_error: unknown, _context: RequestFailureContext): string | undefined {
-    return undefined;
-  }
-
-  captureBackgroundFailure(_marker: string, _error: unknown, _tags?: Record<string, string | undefined>): string | undefined {
-    return undefined;
-  }
-
-  async flush(_timeoutMillis: number = 2000): Promise<boolean> {
-    return true;
-  }
+  async flush(_timeoutMillis: number = 2000): Promise<void> {}
 }
 
 export interface SentryObservabilityOptions {
@@ -103,28 +89,11 @@ export class SentryBackendObservability implements BackendObservability {
     });
   }
 
-  isEnabled(): boolean {
-    return this.enabled;
-  }
-
-  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void {
+  captureRequestFailure(error: unknown, context: RequestFailureContext): void {
     if (!this.enabled) return;
-    const sanitizedMessage = redactString(message);
-    const sanitizedData = data !== undefined ? redactObject(data) : undefined;
-    Sentry.addBreadcrumb({
-      category,
-      message: sanitizedMessage,
-      ...(sanitizedData !== undefined ? { data: sanitizedData as Record<string, any> } : {}),
-      level: "info"
-    });
-  }
-
-  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
-    if (!this.enabled) return undefined;
     if (context.statusCode !== undefined && context.statusCode >= 400 && context.statusCode < 500) {
-      return undefined;
+      return;
     }
-    let eventId: string | undefined;
     Sentry.withScope((scope) => {
       scope.setLevel("error");
       if (context.requestId) {
@@ -140,17 +109,15 @@ export class SentryBackendObservability implements BackendObservability {
         scope.setTag("status_code", String(context.statusCode));
       }
       if (error instanceof Error) {
-        eventId = Sentry.captureException(error);
+        Sentry.captureException(error);
       } else {
-        eventId = Sentry.captureMessage(redactString(String(error)));
+        Sentry.captureMessage(redactString(String(error)));
       }
     });
-    return eventId ? eventId.replace(/-/g, "").toLowerCase() : undefined;
   }
 
-  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined {
-    if (!this.enabled) return undefined;
-    let eventId: string | undefined;
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): void {
+    if (!this.enabled) return;
     Sentry.withScope((scope) => {
       scope.setLevel("error");
       scope.setTag("marker", marker);
@@ -162,17 +129,17 @@ export class SentryBackendObservability implements BackendObservability {
         }
       }
       if (error instanceof Error) {
-        eventId = Sentry.captureException(error);
+        Sentry.captureException(error);
       } else {
-        eventId = Sentry.captureMessage(redactString(String(error)));
+        Sentry.captureMessage(redactString(String(error)));
       }
     });
-    return eventId ? eventId.replace(/-/g, "").toLowerCase() : undefined;
   }
 
-  async flush(timeoutMillis: number = 2000): Promise<boolean> {
-    if (!this.enabled) return true;
-    return Sentry.flush(timeoutMillis);
+  async flush(timeoutMillis: number = 2000): Promise<void> {
+    if (this.enabled) {
+      await Sentry.flush(timeoutMillis);
+    }
   }
 }
 
@@ -215,19 +182,13 @@ export class BackendObservabilityRuntime {
 export const backendObservabilityRuntime = new BackendObservabilityRuntime();
 
 export const backendObservability: BackendObservability = {
-  isEnabled(): boolean {
-    return backendObservabilityRuntime.getInstance().isEnabled();
+  captureRequestFailure(error: unknown, context: RequestFailureContext): void {
+    backendObservabilityRuntime.getInstance().captureRequestFailure(error, context);
   },
-  addBreadcrumb(category: string, message: string, data?: Record<string, unknown>): void {
-    backendObservabilityRuntime.getInstance().addBreadcrumb(category, message, data);
+  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): void {
+    backendObservabilityRuntime.getInstance().captureBackgroundFailure(marker, error, tags);
   },
-  captureRequestFailure(error: unknown, context: RequestFailureContext): string | undefined {
-    return backendObservabilityRuntime.getInstance().captureRequestFailure(error, context);
-  },
-  captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): string | undefined {
-    return backendObservabilityRuntime.getInstance().captureBackgroundFailure(marker, error, tags);
-  },
-  flush(timeoutMillis?: number): Promise<boolean> {
+  flush(timeoutMillis?: number): Promise<void> {
     return backendObservabilityRuntime.getInstance().flush(timeoutMillis);
   }
 };

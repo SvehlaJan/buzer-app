@@ -276,8 +276,7 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
   app.get("/__calls/full", async () => ({ calls: fullCalls }));
   app.get("/__sentry/events", async () => ({
     requestFailures: observability.requestFailures,
-    backgroundFailures: observability.backgroundFailures,
-    breadcrumbs: observability.breadcrumbs
+    backgroundFailures: observability.backgroundFailures
   }));
   app.post("/__fail-actions", async (request) => ({
     failActions: controls.failActions = (request.body as { enabled?: unknown } | null)?.enabled === true
