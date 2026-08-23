@@ -32,6 +32,8 @@ val gitSha = providers.environmentVariable("GITHUB_SHA").orNull
         }.standardOutput.asText.get().trim().take(12)
     }.getOrNull().orEmpty().ifBlank { "local" }
 
+val sentryAuthToken = configValue("SENTRY_AUTH_TOKEN")
+
 android {
     namespace = "app.buzer.android"
     compileSdk = 36
@@ -82,13 +84,14 @@ android {
 sentry {
     org.set(configValue("SENTRY_ORG").ifBlank { "jans-gi" })
     projectName.set(configValue("SENTRY_PROJECT").ifBlank { "buzer-android" })
+    authToken.set(sentryAuthToken)
     includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(configValue("SENTRY_AUTH_TOKEN").isNotBlank())
+    autoUploadProguardMapping.set(sentryAuthToken.isNotBlank())
     uploadNativeSymbols.set(false)
     autoUploadNativeSymbols.set(false)
     includeNativeSources.set(false)
     includeSourceContext.set(true)
-    autoUploadSourceContext.set(configValue("SENTRY_AUTH_TOKEN").isNotBlank())
+    autoUploadSourceContext.set(sentryAuthToken.isNotBlank())
     autoInstallation {
         enabled.set(false)
     }

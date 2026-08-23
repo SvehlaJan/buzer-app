@@ -31,6 +31,7 @@ Task: Android/shared review fixes assigned by the root agent
 - Build configuration now checks Gradle property, local property, then environment for configuration values. It never logs resolved values. The canonical local Git SHA is resolved with `git rev-parse --short=12 HEAD` when `GITHUB_SHA` is absent; both BuildConfig fields use that single value.
 - `BuzerApiException` now retains the request ID generated for an HTTP request. The error AppLog record includes only `request_id`, and `BlockerErrorReporter` copies that ID to `DiagnosticCorrelation` for handled server errors. No response body, request body, `sentry-trace`, or `baggage` observability capture was introduced.
 - Kotlin redaction now treats exact `auth` and normalized suffix `cookie` keys as credentials, including in text assignments. The shared corpus adds corresponding string and JSON cases.
+- Follow-up review fix: the Sentry Gradle extension now receives the already-resolved `SENTRY_AUTH_TOKEN` through `authToken.set(...)`, so Gradle-property and `local.properties` values can reach `sentry-cli` without being logged.
 
 ## Verification
 
@@ -57,6 +58,14 @@ Task: Android/shared review fixes assigned by the root agent
 - Command: `jq empty test-fixtures/observability/redaction-corpus.json` and `git diff --check`
   Result: PASS
   Evidence: valid corpus JSON and no whitespace errors.
+
+- Command: `./gradlew :androidApp:generateDebugBuildConfig -PSENTRY_AUTH_TOKEN=test-token --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; the Sentry extension accepted the Gradle-property token configuration and did not print the token.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:assembleDebug --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; 53 actionable tasks completed.
 
 ## Manual verification
 
