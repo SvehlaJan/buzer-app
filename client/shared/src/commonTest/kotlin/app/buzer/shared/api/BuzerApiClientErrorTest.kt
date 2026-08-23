@@ -160,6 +160,31 @@ class BuzerApiClientErrorTest {
     }
 
     @Test
+    fun transportFailurePreservesRequestIdInExceptionAndErrorBreadcrumb() = runBlocking {
+        val breadcrumbs = mutableListOf<String>()
+        AppLog.installSink { record, _ -> breadcrumbs += record.message }
+        try {
+            val client = BuzerApiClient(
+                baseUrl = "https://fake.invalid",
+                token = "test-token",
+                httpClient = defaultHttpClient(
+                    token = "test-token",
+                    engine = MockEngine { throw IllegalStateException("connection lost") }
+                ),
+                requestIdProvider = { "request-transport-123" }
+            )
+
+            val error = assertFailsWith<BuzerApiException> { client.getSnapshot() }
+
+            assertEquals(0, error.status)
+            assertEquals("request-transport-123", error.requestId)
+            assertTrue(breadcrumbs.any { it.contains("request_id=request-transport-123") })
+        } finally {
+            AppLog.resetSinkForTests()
+        }
+    }
+
+    @Test
     fun malformedNonSnapshotErrorObjectStillProducesTypedError() = runBlocking {
         val client = clientResponding(HttpStatusCode.InternalServerError, """{"code":123}""")
 

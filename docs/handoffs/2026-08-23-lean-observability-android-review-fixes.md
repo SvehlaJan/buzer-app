@@ -32,6 +32,7 @@ Task: Android/shared review fixes assigned by the root agent
 - `BuzerApiException` now retains the request ID generated for an HTTP request. The error AppLog record includes only `request_id`, and `BlockerErrorReporter` copies that ID to `DiagnosticCorrelation` for handled server errors. No response body, request body, `sentry-trace`, or `baggage` observability capture was introduced.
 - Kotlin redaction now treats exact `auth` and normalized suffix `cookie` keys as credentials, including in text assignments. The shared corpus adds corresponding string and JSON cases.
 - Follow-up review fix: the Sentry Gradle extension now receives the already-resolved `SENTRY_AUTH_TOKEN` through `authToken.set(...)`, so Gradle-property and `local.properties` values can reach `sentry-cli` without being logged.
+- Follow-up review fix: non-cancellation transport, response-body, and successful-response decode failures now become a body-free `BuzerApiException` with status `0` and the generated request ID. The non-2xx decoder remains unchanged and `CancellationException` is rethrown.
 
 ## Verification
 
@@ -66,6 +67,18 @@ Task: Android/shared review fixes assigned by the root agent
 - Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:assembleDebug --console=plain`
   Result: PASS
   Evidence: `BUILD SUCCESSFUL`; 53 actionable tasks completed.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest --tests '*BuzerApiClientErrorTest*' --console=plain`
+  Result: FAIL (expected RED)
+  Evidence: `transportFailurePreservesRequestIdInExceptionAndErrorBreadcrumb` received the raw MockEngine `IllegalStateException` before the correlation boundary was added.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest --tests '*BuzerApiClientErrorTest*' --tests '*BuzerApiClientTimeoutTest*' --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; MockEngine transport and timeout correlation regressions passed.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug --console=plain`
+  Result: PASS
+  Evidence: `BUILD SUCCESSFUL`; 74 actionable tasks completed.
 
 ## Manual verification
 

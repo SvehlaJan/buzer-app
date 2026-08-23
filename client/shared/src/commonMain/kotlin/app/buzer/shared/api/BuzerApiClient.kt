@@ -37,6 +37,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.coroutines.CancellationException
 
 class BuzerApiException(
     val status: Int,
@@ -125,18 +126,30 @@ class BuzerApiClient(
         body: Any? = null
     ): T {
         val requestId = requestIdProvider()
-        val response = httpClient.request("$baseUrl$path") {
-            method = httpMethod
-            header("X-Request-ID", requestId)
-            if (body != null) {
-                contentType(ContentType.Application.Json)
-                setBody(body)
+        val response = try {
+            httpClient.request("$baseUrl$path") {
+                method = httpMethod
+                header("X-Request-ID", requestId)
+                if (body != null) {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             }
+        } catch (throwable: Throwable) {
+            throw throwable.toRequestFailure(requestId)
         }
-        val responseText = response.bodyAsText()
+        val responseText = try {
+            response.bodyAsText()
+        } catch (throwable: Throwable) {
+            throw throwable.toRequestFailure(requestId)
+        }
 
         if (response.status.isSuccess()) {
-            return buzerApiJson.decodeFromString(responseText)
+            return try {
+                buzerApiJson.decodeFromString(responseText)
+            } catch (throwable: Throwable) {
+                throw throwable.toRequestFailure(requestId)
+            }
         }
 
         val error = responseText.toBuzerApiException(
@@ -177,6 +190,20 @@ private fun String.toBuzerApiException(
         requestId = requestId,
         message = parsed?.message
     )
+}
+
+private fun Throwable.toRequestFailure(requestId: String): BuzerApiException {
+    if (this is CancellationException) throw this
+    return BuzerApiException(
+        status = 0,
+        code = null,
+        retryAfterSeconds = null,
+        snapshot = null,
+        requestId = requestId,
+        message = "Buzer API request failed before receiving a usable response"
+    ).also { exception ->
+        AppLog.error("api request_failure request_id=$requestId", exception)
+    }
 }
 
 private const val DEFAULT_TIMEOUT_MILLIS = 5_000L
