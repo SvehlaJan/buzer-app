@@ -1,8 +1,5 @@
 package app.buzer.shared.diagnostics
 
-import kotlinx.serialization.Serializable
-
-@Serializable
 data class DiagnosticCorrelation(
     val deviceId: String? = null,
     val taskId: String? = null,
@@ -14,9 +11,7 @@ data class DiagnosticCorrelation(
     val appSection: String? = null
 )
 
-@Serializable
 data class DiagnosticLogRecord(
-    val capturedAt: String,
     val severity: String,
     val tag: String,
     val message: String,

@@ -126,7 +126,7 @@ class BlockerErrorReporterTest {
 
         assertTrue(recordingObservability.handledExceptions.isEmpty())
         assertEquals(1, recordingObservability.logs.size)
-        val log = recordingObservability.logs.single().first
+        val log = recordingObservability.logs.single()
         assertEquals("warning", log.severity)
         assertEquals("BlockerError", log.tag)
         assertTrue(log.message.contains("action=UPDATE_TASK"))
@@ -188,7 +188,7 @@ class BlockerErrorReporterTest {
     @Test
     fun isolatesObserverFailures() {
         val faultyObservability = object : AndroidObservability by NoOpAndroidObservability {
-            override fun captureHandled(marker: String, throwable: Throwable, context: DiagnosticCorrelation): String? {
+            override fun captureHandled(marker: String, throwable: Throwable, context: DiagnosticCorrelation) {
                 throw IllegalStateException("Sentry service crashed")
             }
         }

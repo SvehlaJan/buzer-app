@@ -29,7 +29,7 @@ class AndroidObservabilityConfigTest {
     }
 
     @Test
-    fun blankDsnInitializesNoOpInstanceAndDisablesObservability() {
+    fun blankDsnInitializesNoOpInstance() {
         val dummyContext = DummyContext()
         val instance = ObservabilityRuntime.initialize(
             context = dummyContext,
@@ -39,22 +39,18 @@ class AndroidObservabilityConfigTest {
         )
 
         assertSame(NoOpAndroidObservability, instance)
-        assertFalse(instance.isEnabled())
         assertSame(NoOpAndroidObservability, ObservabilityRuntime.instance)
 
         // Verify NoOp methods behave safely
         instance.addLog(
             DiagnosticLogRecord(
-                capturedAt = "2026-08-21T12:00:00Z",
                 severity = "info",
                 tag = "Buzer",
                 message = "Test message"
-            ),
-            null
+            )
         )
-        assertNull(instance.captureHandled("test.marker", RuntimeException("Boom")))
+        instance.captureHandled("test.marker", RuntimeException("Boom"))
         instance.showFeedback()
-        assertTrue(instance.flush(1000L))
     }
 
     @Test
@@ -62,17 +58,16 @@ class AndroidObservabilityConfigTest {
         val recording = RecordingAndroidObservability()
         ObservabilityRuntime.resetForTests(recording)
 
-        assertTrue(recording.isEnabled())
-
         // 1. addLog via AppLog
         AppLog.info("Info log message")
         AppLog.error("Error log message", IllegalStateException("Error detail"))
         assertEquals(2, recording.logs.size)
-        assertEquals("Info log message", recording.logs[0].first.message)
-        assertEquals("info", recording.logs[0].first.severity)
-        assertEquals("Error log message", recording.logs[1].first.message)
-        assertEquals("error", recording.logs[1].first.severity)
-        assertNotNull(recording.logs[1].second)
+        assertEquals("Info log message", recording.logs[0].message)
+        assertEquals("info", recording.logs[0].severity)
+        assertEquals("Error log message", recording.logs[1].message)
+        assertEquals("error", recording.logs[1].severity)
+        assertEquals("IllegalStateException", recording.logs[1].throwableType)
+        assertEquals("Error detail", recording.logs[1].throwableMessage)
 
         // 2. captureHandled
         val correlation = DiagnosticCorrelation(
@@ -86,8 +81,7 @@ class AndroidObservabilityConfigTest {
             appSection = "timeline"
         )
         val ex = RuntimeException("Handled exception")
-        val handledId = recording.captureHandled("sync.error", ex, correlation)
-        assertNotNull(handledId)
+        recording.captureHandled("sync.error", ex, correlation)
         assertEquals(1, recording.handledExceptions.size)
         assertEquals("sync.error", recording.handledExceptions.single().marker)
         assertSame(ex, recording.handledExceptions.single().throwable)
@@ -97,16 +91,11 @@ class AndroidObservabilityConfigTest {
         recording.showFeedback()
         assertEquals(1, recording.feedbackShowCount)
 
-        // 4. flush
-        assertTrue(recording.flush(2000L))
-        assertEquals(1, recording.flushCount)
-
-        // 5. reset
+        // 4. reset
         recording.reset()
         assertEquals(0, recording.logs.size)
         assertEquals(0, recording.handledExceptions.size)
         assertEquals(0, recording.feedbackShowCount)
-        assertEquals(0, recording.flushCount)
     }
 
     @Test

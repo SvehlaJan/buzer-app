@@ -4,7 +4,7 @@ import co.touchlab.kermit.Logger
 import kotlin.concurrent.Volatile
 
 fun interface DiagnosticLogSink {
-    fun record(record: DiagnosticLogRecord, throwable: Throwable?)
+    fun record(record: DiagnosticLogRecord)
 }
 
 object AppLog {
@@ -38,14 +38,12 @@ object AppLog {
         runCatching {
             sink?.record(
                 DiagnosticLogRecord(
-                    capturedAt = kotlin.time.Clock.System.now().toString(),
                     severity = severity,
                     tag = "Buzer",
                     message = message,
                     throwableType = throwable?.let { it::class.simpleName },
                     throwableMessage = throwable?.message
-                ),
-                throwable
+                )
             )
         }
     }

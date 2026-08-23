@@ -14,7 +14,6 @@ import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.core.SentryAndroidOptions
 import io.sentry.protocol.Contexts
-import io.sentry.protocol.SentryId
 
 object SentryEventSanitizer {
     private val redactor = DiagnosticRedactor()
@@ -97,15 +96,10 @@ object SentryEventSanitizer {
         return breadcrumb
     }
 
-    fun formatSentryId(sentryId: SentryId): String {
-        return sentryId.toString().replace("-", "").lowercase()
-    }
 }
 
 class SentryAndroidObservability : AndroidObservability {
-    override fun isEnabled(): Boolean = Sentry.isEnabled()
-
-    override fun addLog(record: DiagnosticLogRecord, throwable: Throwable?) {
+    override fun addLog(record: DiagnosticLogRecord) {
         val breadcrumb = Breadcrumb().apply {
             category = record.tag
             message = record.message
@@ -126,7 +120,7 @@ class SentryAndroidObservability : AndroidObservability {
         marker: String,
         throwable: Throwable,
         context: DiagnosticCorrelation
-    ): String? {
+    ) {
         val event = SentryEvent(throwable).apply {
             level = SentryLevel.ERROR
             setTag("marker", marker)
@@ -139,20 +133,13 @@ class SentryAndroidObservability : AndroidObservability {
             context.blockerType?.takeIf { it.isNotBlank() }?.let { setTag("blocker_type", it) }
             context.appSection?.takeIf { it.isNotBlank() }?.let { setTag("app_section", it) }
         }
-        val sentryId = Sentry.captureEvent(event)
-        return if (sentryId != SentryId.EMPTY_ID) SentryEventSanitizer.formatSentryId(sentryId) else null
+        Sentry.captureEvent(event)
     }
 
     override fun showFeedback() {
         Sentry.feedback().show()
     }
 
-    override fun flush(timeoutMillis: Long): Boolean {
-        return runCatching {
-            Sentry.flush(timeoutMillis)
-            true
-        }.getOrDefault(false)
-    }
 }
 
 object ObservabilityRuntime {
@@ -206,8 +193,8 @@ object ObservabilityRuntime {
         if (dsn.isBlank()) {
             val noOp = NoOpAndroidObservability
             instance = noOp
-            AppLog.installSink { record, throwable ->
-                instance.addLog(record, throwable)
+            AppLog.installSink { record ->
+                instance.addLog(record)
             }
             return noOp
         }
@@ -218,20 +205,16 @@ object ObservabilityRuntime {
 
         val sentryObservability = SentryAndroidObservability()
         instance = sentryObservability
-        AppLog.installSink { record, throwable ->
-            instance.addLog(record, throwable)
+        AppLog.installSink { record ->
+            instance.addLog(record)
         }
         return sentryObservability
     }
 
-    fun showFeedback() {
-        instance.showFeedback()
-    }
-
     internal fun resetForTests(newAdapter: AndroidObservability = NoOpAndroidObservability) {
         instance = newAdapter
-        AppLog.installSink { record, throwable ->
-            instance.addLog(record, throwable)
+        AppLog.installSink { record ->
+            instance.addLog(record)
         }
     }
 }

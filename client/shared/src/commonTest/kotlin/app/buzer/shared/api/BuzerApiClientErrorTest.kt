@@ -133,7 +133,7 @@ class BuzerApiClientErrorTest {
     @Test
     fun failedRequestPreservesRequestIdInExceptionAndErrorBreadcrumb() = runBlocking {
         val breadcrumbs = mutableListOf<String>()
-        AppLog.installSink { record, _ -> breadcrumbs += record.message }
+        AppLog.installSink { record -> breadcrumbs += record.message }
         try {
             val client = BuzerApiClient(
                 baseUrl = "https://fake.invalid",
@@ -163,7 +163,7 @@ class BuzerApiClientErrorTest {
     @Test
     fun transportFailurePreservesOriginalExceptionAndRequestIdBreadcrumb() = runBlocking {
         val breadcrumbs = mutableListOf<String>()
-        AppLog.installSink { record, _ -> breadcrumbs += record.message }
+        AppLog.installSink { record -> breadcrumbs += record.message }
         try {
             val client = BuzerApiClient(
                 baseUrl = "https://fake.invalid",

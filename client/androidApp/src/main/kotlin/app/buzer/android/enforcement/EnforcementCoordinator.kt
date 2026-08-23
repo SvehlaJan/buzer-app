@@ -17,8 +17,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-import app.buzer.android.observability.AndroidObservability
-import app.buzer.android.observability.ObservabilityRuntime
 
 sealed interface CoordinatorActionResult {
     data object Success : CoordinatorActionResult
@@ -46,8 +44,7 @@ class EnforcementCoordinator(
     private val errorReporter: BlockerErrorReporting,
     private val blockerNotificationCleaner: BlockerNotificationCleaner = NoOpBlockerNotificationCleaner,
     private val nowProvider: () -> String = { Instant.now().toString() },
-    private val logger: (String) -> Unit = {},
-    private val observability: AndroidObservability = ObservabilityRuntime.instance
+    private val logger: (String) -> Unit = {}
 ) {
     private val childActionMutex = Mutex()
     private val inFlightChildren = mutableSetOf<Pair<String, String>>()

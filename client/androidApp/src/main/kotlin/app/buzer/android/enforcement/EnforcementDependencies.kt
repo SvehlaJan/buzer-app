@@ -23,9 +23,7 @@ object EnforcementDependencies {
         return null
     }
 
-    fun buzerApiClient(
-        observability: AndroidObservability = ObservabilityRuntime.instance
-    ): BuzerApiClient {
+    fun buzerApiClient(): BuzerApiClient {
         val error = configError()
         require(error == null) { error.orEmpty() }
         return BuzerApiClient(
@@ -38,7 +36,7 @@ object EnforcementDependencies {
         context: Context,
         observability: AndroidObservability = ObservabilityRuntime.instance
     ): EnforcementCoordinator {
-        val client = buzerApiClient(observability)
+        val client = buzerApiClient()
         return EnforcementCoordinator(
             api = BuzerEnforcementApi(client),
             snapshotStore = SnapshotStore(context),
@@ -46,8 +44,7 @@ object EnforcementDependencies {
             scheduledAlarmRegistry = ScheduledAlarmRegistry.fromContext(context),
             errorReporter = BlockerErrorReporter(context, observability = observability),
             blockerNotificationCleaner = AndroidBlockerNotificationCleaner(context),
-            logger = AppLog::debug,
-            observability = observability
+            logger = AppLog::debug
         )
     }
 }

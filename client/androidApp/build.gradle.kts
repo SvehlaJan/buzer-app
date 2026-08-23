@@ -54,7 +54,6 @@ android {
         buildConfigField("String", "BUZER_ASSIGNEE_WIFE_ID", "\"${configValue("BUZER_ASSIGNEE_WIFE_ID")}\"")
         buildConfigField("String", "SENTRY_ANDROID_DSN", "\"${configValue("SENTRY_ANDROID_DSN")}\"")
         buildConfigField("String", "SENTRY_ENVIRONMENT", "\"${configValue("SENTRY_ENVIRONMENT").ifBlank { "development-device" }}\"")
-        buildConfigField("String", "BUZER_GIT_SHA", "\"$gitSha\"")
         buildConfigField("String", "SENTRY_RELEASE", "\"app.buzer@$versionName+$gitSha\"")
     }
 

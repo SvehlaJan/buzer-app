@@ -87,14 +87,12 @@ class BlockerErrorReporter(
         } else {
             observability.addLog(
                 DiagnosticLogRecord(
-                    capturedAt = Instant.now().toString(),
                     severity = "warning",
                     tag = "BlockerError",
                     message = "action=${action.name} taskId=${taskId.orEmpty()} message=$message",
                     throwableType = throwable?.let { it::class.simpleName },
                     throwableMessage = throwable?.message
-                ),
-                throwable
+                )
             )
         }
     }

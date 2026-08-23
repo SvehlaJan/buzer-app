@@ -6,7 +6,6 @@ import io.sentry.SentryLevel
 import io.sentry.protocol.Message
 import io.sentry.protocol.Request
 import io.sentry.protocol.SentryException
-import io.sentry.protocol.SentryId
 import io.sentry.protocol.User
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -206,14 +205,4 @@ class SentryEventSanitizerTest {
         assertEquals("[REDACTED]", nestedObj["token"])
     }
 
-    @Test
-    fun formatsSentryIdAs32CharacterLowercaseHexStringWithoutHyphens() {
-        val sentryId = SentryId("467107bf-463e-439e-92d5-12795fc71e0b")
-        val formatted = SentryEventSanitizer.formatSentryId(sentryId)
-
-        assertEquals(32, formatted.length)
-        assertFalse(formatted.contains("-"))
-        assertEquals("467107bf463e439e92d512795fc71e0b", formatted)
-        assertEquals(formatted.lowercase(), formatted)
-    }
 }
