@@ -466,7 +466,7 @@ rg -n 'sendDefaultPii|isSendDefaultPii|tracesSampleRate' client backend
 
 Expected: the first two return no production references; the third shows default PII disabled and no positive trace sample rate.
 
-- [x] **Step 3: Perform live Sentry canaries**
+- [ ] **Step 3: Perform live Sentry canaries (SKIPPED — production DSNs, upload token, and deployed physical-device/VPS environment were unavailable; rollout remains incomplete)**
 
 With real DSNs configured, perform one controlled Android handled exception/feedback submission and one controlled backend 5xx/background exception. Verify in Sentry:
 
@@ -492,4 +492,3 @@ Check completed boxes. The handoff must list the plan/task status, files changed
 git add docs/superpowers/plans/2026-08-22-lean-observability.md docs/handoffs/2026-08-22-lean-observability.md
 git commit -m "docs: hand off lean observability implementation"
 ```
-

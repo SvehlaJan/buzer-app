@@ -2,6 +2,8 @@
 
 **Purpose:** Step-by-step procedure for deploying, verifying, and rolling out the Buzer Lean Observability system to production VPS and Android devices.
 
+**Gate status:** This runbook is an operator checklist. Project provisioning, secrets, alert delivery, and the live canary are not assumed complete until an operator records the evidence in the rollout handoff.
+
 ---
 
 ## 1. Staged Rollout Overview
@@ -33,9 +35,10 @@ Phase 4: Live Canary Smoke Verification (Device + VPS)
    - `SENTRY_BACKEND_DSN`: Client Keys under `buzer-backend` settings.
    - `SENTRY_AUTH_TOKEN`: Created under Org/User Settings with scopes `project:read`, `project:releases`, `org:read`.
 3. **Configure Secrets**:
-   - **Android Local Build**: Add `SENTRY_ANDROID_DSN=<dsn>` to `client/local.properties` (or export in environment).
+   - **Android Local Build**: Add `SENTRY_ANDROID_DSN=<dsn>` to `client/local.properties`, pass it as a Gradle property, or export it in the environment. Gradle resolves those sources in that order; the same order applies to `SENTRY_ENVIRONMENT` and `SENTRY_AUTH_TOKEN`.
    - **VPS Environment**: Add `SENTRY_BACKEND_DSN=<dsn>` to `/home/skclaw/buzer-app/.env`.
    - **CI / Local Release Environment**: Set `SENTRY_AUTH_TOKEN` in environment for ProGuard mapping and source map uploads.
+   - Do not set `SENTRY_RELEASE` in `local.properties` or the VPS `.env`: Android derives it from its version and Git SHA, and the VPS deployment script derives it after checkout.
 
 ---
 
@@ -45,12 +48,12 @@ Phase 4: Live Canary Smoke Verification (Device + VPS)
    ssh skclaw@<vps-ip>
    cd /home/skclaw/buzer-app
    ```
-2. Verify `.env` contains:
+2. Verify `.env` contains only the backend Sentry connection and environment settings:
    ```dotenv
    SENTRY_BACKEND_DSN=https://<key>@<org>.ingest.sentry.io/4511950617641040
    SENTRY_ENVIRONMENT=production-vps
-   SENTRY_RELEASE=app.buzer@0.1.0+vps
    ```
+   Do **not** add `SENTRY_RELEASE` here. After checkout, `scripts/deploy-vps.sh` exports `app.buzer@0.1.0+<git-sha-12>` and Docker Compose passes that exported value to the backend. A `SENTRY_RELEASE` already exported in the deploy shell takes precedence by design, so leave it unset for normal SHA-derived deployments.
 3. Deploy the latest release using the deployment script:
    ```bash
    scripts/deploy-vps.sh
@@ -111,7 +114,7 @@ Perform the following smoke tests on the physical device and VPS:
 3. **Backend 5xx & Background Error Verification**:
    - Trigger a controlled 5xx route error or observe normal operation.
    - In Sentry `buzer-backend`, verify:
-     - Release tag matches `app.buzer@0.1.0+vps`.
+     - Release tag matches the SHA-derived `app.buzer@0.1.0+<git-sha-12>` printed by the deployment script.
      - Environment matches `production-vps`.
      - Tags include `request_id`, `route`, and `status_code`.
      - Request body, cookies, and user fields are absent/null.

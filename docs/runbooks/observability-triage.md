@@ -68,7 +68,7 @@ Inspect standard tags to pinpoint context:
 - `action_id`: The client-side offline action mutation ID.
 - `screen` / `app_section`: The UI location where the error occurred.
 - `blocker_type`: The active enforcement blocker (`start`, `deadline`, `morning_review`, `none`).
-- `marker`: Component marker (e.g. `todoist_poller_error`, `whatsapp_disconnect`).
+- `marker`: Backend background-failure marker. Current emitted values are `buzer.backend.todoist_poll_failure` (after three consecutive failures), `buzer.backend.whatsapp_auth_failure`, `buzer.backend.whatsapp_disconnected`, and `buzer.backend.escalation_delivery_failure`.
 
 ---
 

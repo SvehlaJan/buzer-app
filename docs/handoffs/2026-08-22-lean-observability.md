@@ -19,7 +19,7 @@
 | **Task 5** | Remove diagnostic report endpoint & database persistence | **DONE** | `e9e4ca0` |
 | **Task 6** | Delete Sentry-to-GitHub sync & align release identifiers | **DONE** | `652bbf0`, `a05d9d5` |
 | **Task 7** | Update operational runbooks, decisions, & system documentation | **DONE** | `7568ca5` |
-| **Task 8** | Full automated verification, negative scan, and handoff | **DONE** | Current |
+| **Task 8** | Full automated verification, negative scan, and handoff | **PARTIAL** — automated gates recorded; live hosted-Sentry canary remains pending | Current |
 
 ---
 

@@ -164,11 +164,15 @@ The backend loads Sentry configuration from environment variables or `backend/.e
 
 ```dotenv
 SENTRY_BACKEND_DSN=https://<key>@<org>.ingest.sentry.io/<project-id>
-SENTRY_ENVIRONMENT=development-backend
-SENTRY_RELEASE=buzer-backend@0.1.0+local
-SENTRY_ORG=svehla
+SENTRY_ENVIRONMENT=development-vps
+SENTRY_ORG=jans-gi
 SENTRY_PROJECT=buzer-backend
 ```
+
+Leave `SENTRY_RELEASE` unset for ordinary local backend work so the backend uses its
+`app.buzer@0.1.0+local` fallback. Android release values are always derived by Gradle from
+its version name and `GITHUB_SHA` or the local Git SHA; setting `SENTRY_RELEASE` does not
+change an Android build.
 
 - When `SENTRY_BACKEND_DSN` is empty, backend Sentry initialization is a safe no-op.
 - See `docs/notes/observability-operations.md` and `docs/runbooks/sentry-setup.md` for full operations specifications.

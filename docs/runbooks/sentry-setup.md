@@ -58,11 +58,13 @@ Used by Gradle (`sentry-android-gradle-plugin`) during Android release APK build
 
 | Variable | Location | Description |
 | :--- | :--- | :--- |
-| `SENTRY_ANDROID_DSN` | `client/local.properties` (dev) / Gradle build config | Client DSN for Android app |
+| `SENTRY_ANDROID_DSN` | Gradle property, `client/local.properties`, or environment (in that order) | Client DSN for Android app |
 | `SENTRY_BACKEND_DSN` | VPS `/home/skclaw/buzer-app/.env` | Client DSN for backend Node service |
-| `SENTRY_ENVIRONMENT` | `local.properties` or `.env` | `development-device`, `production-device`, `development-vps`, `production-vps` |
-| `SENTRY_RELEASE` | Auto-resolved in Gradle / `.env` on VPS | Canonical release: `app.buzer@<version>+<sha>` |
-| `SENTRY_AUTH_TOKEN` | Local shell / CI environment variable | Only needed when uploading ProGuard mappings or source maps |
+| `SENTRY_ENVIRONMENT` | Android Gradle property / `local.properties` / environment, or VPS `.env` | `development-device`, `production-device`, `development-vps`, `production-vps` |
+| `SENTRY_RELEASE` | Derived; do not configure as a static value | Android: `app.buzer@<versionName>+<git-sha-12>` from `GITHUB_SHA` or local Git. VPS: `app.buzer@0.1.0+<git-sha-12>` from `scripts/deploy-vps.sh` after checkout. |
+| `SENTRY_AUTH_TOKEN` | Android Gradle property / `local.properties` / environment; deploy shell / CI environment for source maps | Only needed when uploading ProGuard mappings or source maps; never commit it. |
+
+For the VPS, leave `SENTRY_RELEASE` out of `.env`. The deploy script exports the post-checkout SHA-derived value before invoking Docker Compose. An explicitly exported deploy-shell value overrides that default; use no override for normal deployments.
 
 ---
 
@@ -93,13 +95,12 @@ Configure Sentry Alert Rules under **Alerts > Create Alert** for both projects:
 
 2. **Todoist Polling Outage**:
    - **Type**: Issues / Metric
-   - **Condition**: When an event is captured with `marker:todoist_poller_error` and `consecutive_failure_count >= 3`.
-   - **Fingerprint**: `["todoist-poller-failure"]`
+   - **Condition**: When an event is captured with `marker:buzer.backend.todoist_poll_failure` and `consecutive_failure_count >= 3`.
    - **Action**: High-priority alert to operator.
 
 3. **WhatsApp Escalation & Disconnection Failures**:
    - **Type**: Issues
-   - **Condition**: When an event is captured with `marker:whatsapp_disconnect` or `marker:whatsapp_escalation_failure`.
+   - **Condition**: When an event is captured with any emitted marker: `buzer.backend.whatsapp_auth_failure`, `buzer.backend.whatsapp_disconnected`, or `buzer.backend.escalation_delivery_failure`.
    - **Action**: Immediate escalation alert.
 
 ---

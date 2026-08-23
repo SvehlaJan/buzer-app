@@ -1,7 +1,7 @@
 # Lean Observability Operations & Architecture Specifications
 
 **Date:** 2026-08-22
-**Status:** Approved & Implemented
+**Status:** Approved; implementation is complete locally, while hosted-Sentry provisioning and the live physical-device/VPS canary remain operator-owned and incomplete.
 **Supersedes:** 2026-08-21 Paired-Capsule Observability Architecture
 
 This document defines the operational architecture, runtime SDK configurations, correlation tag schemas, canonical release/environment identities, secret redaction policies, and retention rules for Buzer observability across the Android client and the backend VPS service.
@@ -113,7 +113,7 @@ Events on both Android and backend carry standard, low-cardinality correlation t
 
 | Tag | Runtime | Description | Example |
 | :--- | :--- | :--- | :--- |
-| `marker` | Both | Category or operation marker | `todoist_poller_error`, `whatsapp_disconnect` |
+| `marker` | Backend background failures | Category or operation marker | `buzer.backend.todoist_poll_failure`, `buzer.backend.whatsapp_disconnected` |
 | `request_id` | Both | Unique request identifier (`X-Request-ID`) | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
 | `method` | Backend | HTTP method for failed request | `GET`, `POST`, `PATCH` |
 | `route` | Backend | Fastify route pattern (not raw URL) | `/api/tasks/:id` |
@@ -132,16 +132,18 @@ Events on both Android and backend carry standard, low-cardinality correlation t
 
 ## 4. Release & Environment Identification
 
-### 4.1 Canonical Release Format
-Both Android and Backend use the exact canonical release string:
+### 4.1 Canonical Release Format and Source
+Both runtimes use the canonical release shape:
 
 ```text
 app.buzer@<VERSION_NAME>+<GIT_SHA_12>
 ```
 
-- Production Android example: `app.buzer@0.1.0+a1b2c3d4e5f6`
-- Production VPS example: `app.buzer@0.1.0+a1b2c3d4e5f6` (or `app.buzer@0.1.0+vps`)
-- Local development fallback: `app.buzer@0.1.0+local`
+- Android derives `app.buzer@<versionName>+<git-sha-12>` at Gradle configuration time. It takes the first 12 characters of `GITHUB_SHA`, otherwise runs `git rev-parse --short=12 HEAD`, otherwise uses `local`. It does not read `SENTRY_RELEASE` from Gradle properties, `local.properties`, or the environment.
+- The VPS deploy script derives `app.buzer@0.1.0+<git-sha-12>` from the checked-out commit immediately before Docker Compose starts. Leave `SENTRY_RELEASE` out of the VPS `.env`; an explicitly exported deploy-shell `SENTRY_RELEASE` overrides the script default and is for exceptional operator use only.
+- Local backend development falls back to `app.buzer@0.1.0+local` when no release is supplied.
+
+Current backend background markers are `buzer.backend.todoist_poll_failure`, `buzer.backend.whatsapp_auth_failure`, `buzer.backend.whatsapp_disconnected`, and `buzer.backend.escalation_delivery_failure`. The poller emits its marker only after three consecutive failures.
 
 ### 4.2 Canonical Runtime Environments
 - `development-device`: Android local debug / emulator builds

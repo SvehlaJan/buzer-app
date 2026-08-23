@@ -47,8 +47,12 @@ WHATSAPP_SESSION_PATH=./whatsapp-sessions
 WHATSAPP_CLIENT_ID=buzer
 SENTRY_BACKEND_DSN=
 SENTRY_ENVIRONMENT=production-vps
-SENTRY_RELEASE=buzer-backend@0.1.0+vps
 ```
+
+Do not add `SENTRY_RELEASE` to this `.env`. `scripts/deploy-vps.sh` derives
+`app.buzer@0.1.0+<git-sha-12>` from the post-checkout commit and exports it before Docker
+Compose starts. A value already exported by the deploy shell overrides that default; leave
+it unset during normal deployments.
 
 Use a long random Android API token:
 
