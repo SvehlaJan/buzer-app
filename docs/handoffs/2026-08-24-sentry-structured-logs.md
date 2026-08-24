@@ -86,11 +86,23 @@ Branch/worktree:
   changes telemetry transport and callbacks. Existing native form entry-point coverage
   remains unchanged.
 
+- Command: `ANDROID_SERIAL=56061FDCR005J0 ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ./gradlew :androidApp:installDebug --console=plain`
+  Result: PASS
+  Evidence: Gradle installed `androidApp-debug.apk` on the connected Pixel 10. The
+  installed build uses release `app.buzer@0.1.0-dev+b1b0cd202dcf` and the locally
+  configured Android DSN/environment; no configuration value was printed.
+
+- Command: `BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh install`
+  Result: PASS
+  Evidence: the repository verification helper confirmed the debug build on device
+  `56061FDCR005J0`.
+
 ## Manual Verification
 
-SKIPPED. After integration, install the new build and submit a fresh report. In the
-`buzer-android` Logs view, filter by the report release/environment and timestamp; verify
-`bug_report_form_opened`, `bug_report_submitted`, and preceding application records.
+PARTIAL. The merged build was installed on the physical Pixel 10. A fresh report has not
+yet been submitted from that build. After submission, filter the `buzer-android` Logs
+view by release/environment and timestamp; verify `bug_report_form_opened`,
+`bug_report_submitted`, and preceding application records.
 
 ## Assumptions And Limitations
 
@@ -104,6 +116,5 @@ SKIPPED. After integration, install the new build and submit a fresh report. In 
 
 ## Next Step
 
-Integrate the branch, install the resulting Android build, submit a fresh physical-device
-report, and complete Task 2 Step 4 only after the two markers and nearby logs are visible
-in hosted Sentry.
+Submit a fresh physical-device report and complete Task 2 Step 4 only after the two
+markers and nearby logs are visible in hosted Sentry.
