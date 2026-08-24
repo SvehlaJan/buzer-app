@@ -61,6 +61,10 @@ When an alert triggers or during regular triage, open the issue in [Sentry Cloud
   - HTTP network breadcrumbs (method, URL, status code, duration).
   - System lifecycle events (background/foreground transitions).
 
+For standalone native feedback, breadcrumbs may not be embedded in the feedback event.
+Open the project's **Logs** view and search the matching release/environment and a narrow
+timestamp window instead.
+
 ### 2.4 Correlation Tags
 Inspect standard tags to pinpoint context:
 - `request_id`: The HTTP `X-Request-ID` header. Search across `buzer-android` and `buzer-backend` with `request_id:<id>` to correlate client-server interactions.
@@ -78,9 +82,16 @@ When user feedback is submitted (via shake gesture, Home screen button, or Readi
 
 1. Navigate to **User Feedback** in the `buzer-android` project.
 2. Read the user's description in the feedback issue.
-3. Review the attached **Error Replay** and **Breadcrumbs** to see what actions the user took prior to submitting feedback.
-4. If an associated error or crash occurred, follow the link to the related Sentry issue.
-5. Check correlation tags (`screen`, `task_id`, `request_id`) to identify the relevant task or UI state.
+3. Review the attached **Error Replay** to see what actions preceded the report.
+4. Open **Logs**, filter to the feedback's release/environment and a narrow timestamp
+   window, and locate `bug_report_submitted`. Read the preceding `AppLog` records; use
+   `bug_report_form_opened` as the beginning of the report interaction.
+5. If an associated error or crash occurred, follow the related Sentry issue and inspect
+   its breadcrumbs and correlation tags (`screen`, `task_id`, `request_id`).
+
+There is deliberately no report-session ID or associated diagnostic event. Timestamp,
+release, environment, and the two stable markers are the complete manual correlation
+contract.
 
 ---
 

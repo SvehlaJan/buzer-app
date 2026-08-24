@@ -2,7 +2,8 @@
 
 Date: 2026-08-22
 
-Status: Approved direction from the 2026-08-22 implementation review; pending written-spec confirmation before implementation.
+Status: Approved and implemented. The 2026-08-24 structured-logs amendment is defined
+in `docs/superpowers/specs/2026-08-24-sentry-structured-logs-design.md`.
 
 Supersedes: `docs/superpowers/specs/2026-08-21-observability-and-bug-reporting-design.md`
 
@@ -57,7 +58,7 @@ complexity is still larger than its likely diagnostic value.
 ```text
 Android app                                      Backend VPS
 -----------                                      -----------
-AppLog -> Logcat + sanitized breadcrumbs         local stdout + sanitized breadcrumbs
+AppLog -> Logcat + breadcrumbs + Sentry Logs     local stdout + sanitized breadcrumbs
        -> selected handled exceptions            selected handled exceptions
 
 Sentry Android SDK                               Sentry Node SDK
@@ -79,7 +80,7 @@ Keep a narrow Android observability boundary with only these responsibilities:
 - configure DSN, environment, release, crashes, ANRs, error replay, native screenshots,
   view hierarchy, and native feedback;
 - expose `showFeedback()` for UI surfaces;
-- convert sanitized `AppLog` entries to breadcrumbs;
+- convert sanitized `AppLog` entries to breadcrumbs and searchable Sentry Logs;
 - capture explicitly classified enforcement-critical handled exceptions;
 - attach small event-specific tags such as `screen`, `task_id`, `occurrence_key`,
   `action_id`, and `request_id`.
@@ -101,7 +102,11 @@ The readiness gate must not hide the only visible fallback.
 ### Android Logging
 
 `AppLog` remains the application-facing API and continues writing through Kermit/Logcat.
-Its optional sink forwards sanitized records to Sentry breadcrumbs. A sink failure is
+Its optional sink forwards sanitized records to both Sentry breadcrumbs and structured
+Sentry Logs. Breadcrumbs remain attached to crashes and handled events; structured logs
+are searched independently around native feedback timestamps. Opening and successfully
+submitting the native form emit `bug_report_form_opened` and `bug_report_submitted`
+markers. Logs are not associated with feedback through an event ID. A sink failure is
 contained and never affects application work. Plain log strings do not create Sentry
 issues; selected call sites capture a throwable once at the owning error boundary.
 

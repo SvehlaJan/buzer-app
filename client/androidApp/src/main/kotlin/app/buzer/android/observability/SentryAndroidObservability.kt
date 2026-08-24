@@ -9,7 +9,10 @@ import app.buzer.shared.diagnostics.DiagnosticRedactor
 import io.sentry.Breadcrumb
 import io.sentry.Sentry
 import io.sentry.SentryEvent
+import io.sentry.SentryFeedbackOptions
 import io.sentry.SentryLevel
+import io.sentry.SentryLogEvent
+import io.sentry.SentryLogEventAttributeValue
 import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.core.SentryAndroidOptions
@@ -96,6 +99,20 @@ object SentryEventSanitizer {
         return breadcrumb
     }
 
+    fun sanitizeLog(event: SentryLogEvent): SentryLogEvent {
+        event.body = redactor.redactString(event.body)
+
+        event.attributes?.toMap().orEmpty().forEach { (key, attribute) ->
+            val value = if (DiagnosticRedactor.isCredentialKey(key)) {
+                "[REDACTED]"
+            } else {
+                redactor.redactAny(attribute.value)
+            }
+            event.setAttribute(key, SentryLogEventAttributeValue(attribute.type, value))
+        }
+        return event
+    }
+
 }
 
 class SentryAndroidObservability : AndroidObservability {
@@ -114,6 +131,18 @@ class SentryAndroidObservability : AndroidObservability {
             record.throwableMessage?.let { setData("throwable_message", it) }
         }
         Sentry.addBreadcrumb(breadcrumb)
+
+        val message = buildString {
+            append(record.message)
+            record.throwableType?.let { append(" throwable_type=").append(it) }
+            record.throwableMessage?.let { append(" throwable_message=").append(it) }
+        }
+        when (record.severity.lowercase()) {
+            "error" -> Sentry.logger().error(message)
+            "warn", "warning" -> Sentry.logger().warn(message)
+            "debug" -> Sentry.logger().debug(message)
+            else -> Sentry.logger().info(message)
+        }
     }
 
     override fun captureHandled(
@@ -170,6 +199,10 @@ object ObservabilityRuntime {
         options.beforeBreadcrumb = SentryOptions.BeforeBreadcrumbCallback { breadcrumb, _ ->
             SentryEventSanitizer.sanitizeBreadcrumb(breadcrumb)
         }
+        options.logs.isEnabled = true
+        options.logs.beforeSend = SentryOptions.Logs.BeforeSendLogCallback { event ->
+            SentryEventSanitizer.sanitizeLog(event)
+        }
         options.feedbackOptions.apply {
             isUseShakeGesture = true
             isUseSentryUser = false
@@ -181,6 +214,10 @@ object ObservabilityRuntime {
             messagePlaceholder = "What did you expect, and what happened?"
             submitButtonLabel = "Send report"
             successMessageText = "Report sent. Thank you."
+            onFormOpen = Runnable { AppLog.info("bug_report_form_opened") }
+            onSubmitSuccess = SentryFeedbackOptions.SentryFeedbackCallback {
+                AppLog.info("bug_report_submitted")
+            }
         }
     }
 
