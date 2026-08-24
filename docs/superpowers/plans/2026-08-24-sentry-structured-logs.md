@@ -14,6 +14,7 @@
 
 - `client/androidApp/src/main/kotlin/app/buzer/android/observability/SentryAndroidObservability.kt`: enable and sanitize structured logs, mirror `AppLog` records, and configure feedback callbacks.
 - `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidObservabilityConfigTest.kt`: retain only lightweight configuration assertions.
+- `AGENTS.md`: route future observability work to this structured-logs amendment.
 - `docs/superpowers/specs/2026-08-22-lean-observability-design.md`: record structured logs as the approved Android log destination.
 - `docs/notes/observability-operations.md`: document runtime behavior and manual triage.
 - `docs/runbooks/observability-triage.md`: explain timestamp-based feedback/log lookup.
@@ -25,7 +26,7 @@
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/observability/SentryAndroidObservability.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidObservabilityConfigTest.kt`
 
-- [ ] **Step 1: Add minimal configuration assertions**
+- [x] **Step 1: Add minimal configuration assertions**
 
 Extend `sentryOptionsConfiguresPrivacySecurityAndFeedbackDefaults` with:
 
@@ -36,7 +37,7 @@ assertNotNull(feedback.onFormOpen)
 assertNotNull(feedback.onSubmitSuccess)
 ```
 
-- [ ] **Step 2: Run the focused test and verify it fails**
+- [x] **Step 2: Run the focused test and verify it fails**
 
 Run from `client/`:
 
@@ -46,7 +47,7 @@ ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Li
 
 Expected: FAIL because structured logs and feedback lifecycle callbacks are not configured.
 
-- [ ] **Step 3: Add log sanitization and delivery**
+- [x] **Step 3: Add log sanitization and delivery**
 
 Add `sanitizeLogEvent(event: SentryLogEvent)` beside the existing event and breadcrumb sanitizers. Redact the log body with `DiagnosticRedactor.redactString`. Replace each attribute whose key is credential-like with `[REDACTED]`; redact every other attribute value with `redactAny` while preserving its Sentry attribute type.
 
@@ -54,7 +55,7 @@ In `configureSentryOptions`, enable `options.logs.isEnabled` and assign its `bef
 
 In `SentryAndroidObservability.addLog`, retain the current breadcrumb and also send the sanitized record through `Sentry.logger()` at the corresponding debug/info/warn/error level. Build one bounded message from `record.message`, `throwableType`, and `throwableMessage`; do not add event IDs or custom correlation state.
 
-- [ ] **Step 4: Add native-feedback lifecycle markers**
+- [x] **Step 4: Add native-feedback lifecycle markers**
 
 Configure the existing native feedback options with:
 
@@ -67,7 +68,7 @@ onSubmitSuccess = SentryFeedbackOptions.SentryFeedbackCallback {
 
 Do not change `showFeedback()`: it remains `Sentry.feedback().show()`.
 
-- [ ] **Step 5: Run the focused test and Android regression build**
+- [x] **Step 5: Run the focused test and Android regression build**
 
 Run from `client/`:
 
@@ -78,7 +79,7 @@ ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Li
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the runtime change**
+- [x] **Step 6: Commit the runtime change**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/observability/SentryAndroidObservability.kt client/androidApp/src/test/kotlin/app/buzer/android/observability/AndroidObservabilityConfigTest.kt
@@ -88,17 +89,18 @@ git commit -m "feat: send Android diagnostics to Sentry Logs"
 ### Task 2: Document and verify the operational flow
 
 **Files:**
+- Modify: `AGENTS.md`
 - Modify: `docs/superpowers/specs/2026-08-22-lean-observability-design.md`
 - Modify: `docs/notes/observability-operations.md`
 - Modify: `docs/runbooks/observability-triage.md`
 - Modify: `docs/superpowers/plans/2026-08-24-sentry-structured-logs.md`
 - Create: `docs/handoffs/2026-08-24-sentry-structured-logs.md`
 
-- [ ] **Step 1: Update self-contained project documentation**
+- [x] **Step 1: Update self-contained project documentation**
 
 Document that Android `AppLog` records go to both breadcrumbs and structured Sentry Logs, feedback emits open/submitted markers, and operators correlate feedback with logs by timestamp, release, and environment. Explicitly state that logs are not embedded in feedback issues and no event-ID association exists.
 
-- [ ] **Step 2: Run formatting and secret scans**
+- [x] **Step 2: Run formatting and secret scans**
 
 ```bash
 git -c core.fsmonitor=false diff --check
@@ -107,12 +109,12 @@ git grep -n -E 'sntryu_|SENTRY_AUTH_TOKEN=.+|https://[a-f0-9]+@.*ingest.*sentry.
 
 Expected: whitespace check passes and the secret scan reports no committed credential values (synthetic test DSNs may be reviewed separately).
 
-- [ ] **Step 3: Write the required handoff and commit documentation**
+- [x] **Step 3: Write the required handoff and commit documentation**
 
 Record files changed, commands and results, manual verification status, assumptions, and the remaining physical-device Sentry Logs canary. Mark all completed plan checkboxes.
 
 ```bash
-git add docs/superpowers/specs/2026-08-22-lean-observability-design.md docs/notes/observability-operations.md docs/runbooks/observability-triage.md docs/superpowers/plans/2026-08-24-sentry-structured-logs.md docs/handoffs/2026-08-24-sentry-structured-logs.md
+git add AGENTS.md docs/superpowers/specs/2026-08-22-lean-observability-design.md docs/notes/observability-operations.md docs/runbooks/observability-triage.md docs/superpowers/plans/2026-08-24-sentry-structured-logs.md docs/handoffs/2026-08-24-sentry-structured-logs.md
 git commit -m "docs: document Sentry Logs feedback triage"
 ```
 

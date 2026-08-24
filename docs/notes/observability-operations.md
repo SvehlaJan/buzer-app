@@ -1,7 +1,9 @@
 # Lean Observability Operations & Architecture Specifications
 
-**Date:** 2026-08-22
-**Status:** Approved; implementation is complete locally, while hosted-Sentry provisioning and the live physical-device/VPS canary remain operator-owned and incomplete.
+**Date:** 2026-08-24
+**Status:** Approved and implemented. Hosted projects and native Android feedback/replay
+have been verified; the structured-logs Android canary and backend production canary
+remain operator-owned and incomplete.
 **Supersedes:** 2026-08-21 Paired-Capsule Observability Architecture
 
 This document defines the operational architecture, runtime SDK configurations, correlation tag schemas, canonical release/environment identities, secret redaction policies, and retention rules for Buzer observability across the Android client and the backend VPS service.
@@ -17,7 +19,7 @@ Buzer uses a **native-first, lean observability architecture** powered directly 
 │                      Android Client                    │
 │                                                        │
 │  AppLog ──► Kermit / Logcat (local output)             │
-│       └───► Breadcrumb Sink (sanitized AppLog records) │
+│       └───► Breadcrumbs + Sentry Logs (sanitized)      │
 │                                                        │
 │  Sentry Android SDK:                                   │
 │    • Unhandled Crashes & ANRs                          │
@@ -50,7 +52,7 @@ Buzer uses a **native-first, lean observability architecture** powered directly 
 
 ### Key Principles
 1. **Best-Effort Telemetry**: Observability must never block or degrade alarms, blocker overlays, boot recovery, Todoist sync, WhatsApp messaging, or UI rendering. Blank DSNs or network failures degrade cleanly to no-ops.
-2. **Sentry Native Primitives**: Sentry owns crash capture, ANR detection, replay recording, screenshot/view-hierarchy capture, offline delivery, and user feedback transport. Buzer provides only product-specific breadcrumbs, release metadata, and correlation tags.
+2. **Sentry Native Primitives**: Sentry owns crash capture, ANR detection, replay recording, screenshot/view-hierarchy capture, offline delivery, user feedback transport, and structured log transport. Buzer provides only product-specific breadcrumbs/logs, release metadata, and correlation tags.
 3. **Zero Custom Storage**: No diagnostic ring buffers, no report files, and no database tables exist. Local execution retains only ephemeral stdout/Logcat logs.
 4. **Manual Triage**: Sentry UI is the primary triage inbox. Issues are filtered by release, environment, and tags. Operators file GitHub issues manually for prioritized work.
 
@@ -70,14 +72,17 @@ options.sessionReplay.sessionSampleRate = 0.0 // No continuous session replay
 options.isAnrEnabled = true                // Detect Application Not Responding
 options.isAttachScreenshot = true          // Native window capture on error/feedback
 options.isAttachViewHierarchy = true       // Compose/Android view hierarchy capture
+options.logs.isEnabled = true              // Searchable structured Sentry Logs
 ```
 
 - **User Feedback**: Native Sentry feedback is configured with `showName = false`, `showEmail = false`, `useSentryUser = false`, and `showBranding = false`.
   - Accessible via **physical shake gesture**.
   - Accessible via **Home screen bug report action**.
   - Accessible via **Foreground Readiness gate secondary action**.
-- **Privacy Boundary**: `beforeSend` and `beforeBreadcrumb` explicitly nullify `event.request = null` and `event.user = null` before applying recursive string/map redaction on message, exceptions, tags, extras, contexts, and breadcrumbs.
-- **Logcat / Kermit**: `AppLog.installSink` forwards sanitized log records to Sentry breadcrumbs.
+  - Emits `bug_report_form_opened` and `bug_report_submitted` through `AppLog`.
+- **Privacy Boundary**: `beforeSend` nullifies `event.request = null` and `event.user = null`; `beforeSend`, `beforeBreadcrumb`, and `logs.beforeSend` apply recursive credential redaction before transport.
+- **Logcat / Kermit**: `AppLog.installSink` forwards each record to both Sentry breadcrumbs and structured Sentry Logs. The same sink remains a no-op when the DSN is blank.
+- **Feedback/log lookup**: Native feedback is not linked to logs through a custom event ID. Use the feedback timestamp, release, and environment to inspect nearby records in Sentry's **Logs** view.
 
 ### 2.2 Backend Node SDK Configuration (`backend/src/diagnostics/backendObservability.ts`)
 
@@ -173,7 +178,7 @@ The following values are **MANDATORY EXCLUSIONS** and must NEVER appear in logs,
 - Private keys, PEM blocks, certificates, or GitHub tokens
 
 ### 5.3 Multi-Stage Sanitization Engine
-- **Kotlin Shared Redactor (`DiagnosticRedactor.kt`)**: Redacts nested maps, lists, strings, and throwable messages. Used by `SentryAndroidObservability` for event and breadcrumb sanitization.
+- **Kotlin Shared Redactor (`DiagnosticRedactor.kt`)**: Redacts nested maps, lists, strings, and throwable messages. Used by `SentryAndroidObservability` for event, breadcrumb, and structured-log sanitization.
 - **TypeScript Backend Redactor (`redactor.ts`)**: Recursive sanitization of strings, objects, error stacks, breadcrumbs, tags, and extra metadata.
 - **Key-Value Sentinel Redaction**: Keys matching `token`, `secret`, `password`, `auth`, `cookie`, `key`, `credential` (case-insensitive) have values replaced with `[REDACTED]`.
 - **Pattern Matching**: Regex matches for `Bearer [A-Za-z0-9_\-\.]{8,}` are replaced with `Bearer [REDACTED]`.
@@ -186,6 +191,7 @@ The following values are **MANDATORY EXCLUSIONS** and must NEVER appear in logs,
 | Store | Data Type | Retention Duration | Cleanup Mechanism |
 | :--- | :--- | :--- | :--- |
 | **Sentry Cloud** | Crash/ANR events, handled exceptions, feedback | 30 days | Sentry Cloud automatic retention policy |
+| **Sentry Cloud** | Android structured logs | Hosted-plan policy | Sentry Cloud automatic retention policy |
 | **Sentry Cloud** | Error replays & native screenshots | 30 days | Sentry Cloud automatic retention policy |
 | **Android In-Memory** | AppLog entries in Logcat | Process lifetime / OS ring | Cleared on process kill / OS logcat rotation |
 | **Backend In-Memory** | stdout logs via Pino | Process lifetime / Docker log | Docker log rotation (`max-size: 10m`) |
