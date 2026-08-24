@@ -86,6 +86,8 @@ When user feedback is submitted (via shake gesture, Home screen button, or Readi
 4. Open **Logs**, filter to the feedback's release/environment and a narrow timestamp
    window, and locate `bug_report_submitted`. Read the preceding `AppLog` records; use
    `bug_report_form_opened` as the beginning of the report interaction.
+   If Sentry assigned the same native trace ID to the feedback and logs, use that trace
+   as a narrower pivot; do not depend on it as an app-owned contract.
 5. If an associated error or crash occurred, follow the related Sentry issue and inspect
    its breadcrumbs and correlation tags (`screen`, `task_id`, `request_id`).
 

@@ -1,9 +1,9 @@
 # Lean Observability Operations & Architecture Specifications
 
 **Date:** 2026-08-24
-**Status:** Approved and implemented. Hosted projects and native Android feedback/replay
-have been verified; the structured-logs Android canary and backend production canary
-remain operator-owned and incomplete.
+**Status:** Approved and implemented. Hosted projects plus native Android
+feedback/replay/structured logs have been verified; the backend production canary
+remains operator-owned and incomplete.
 **Supersedes:** 2026-08-21 Paired-Capsule Observability Architecture
 
 This document defines the operational architecture, runtime SDK configurations, correlation tag schemas, canonical release/environment identities, secret redaction policies, and retention rules for Buzer observability across the Android client and the backend VPS service.
@@ -82,7 +82,7 @@ options.logs.isEnabled = true              // Searchable structured Sentry Logs
   - Emits `bug_report_form_opened` and `bug_report_submitted` through `AppLog`.
 - **Privacy Boundary**: `beforeSend` nullifies `event.request = null` and `event.user = null`; `beforeSend`, `beforeBreadcrumb`, and `logs.beforeSend` apply recursive credential redaction before transport.
 - **Logcat / Kermit**: `AppLog.installSink` forwards each record to both Sentry breadcrumbs and structured Sentry Logs. The same sink remains a no-op when the DSN is blank.
-- **Feedback/log lookup**: Native feedback is not linked to logs through a custom event ID. Use the feedback timestamp, release, and environment to inspect nearby records in Sentry's **Logs** view.
+- **Feedback/log lookup**: Native feedback is not linked to logs through a custom event ID. Use the feedback timestamp, release, and environment to inspect nearby records in Sentry's **Logs** view. The 2026-08-24 canary also showed the feedback and surrounding logs sharing an SDK-provided trace ID, which can be used as an additional pivot when present.
 
 ### 2.2 Backend Node SDK Configuration (`backend/src/diagnostics/backendObservability.ts`)
 

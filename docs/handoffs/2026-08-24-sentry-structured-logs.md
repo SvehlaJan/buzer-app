@@ -6,9 +6,8 @@ Plan: `docs/superpowers/plans/2026-08-24-sentry-structured-logs.md`
 
 ## Scope And Status
 
-Implemented Tasks 1 and 2 Steps 1-3 from the plan. Task 2 Step 4, the hosted-Sentry
-physical-device log canary, remains unchecked until a build containing this commit is
-installed and a fresh report is observed in Sentry Logs.
+Implemented all Tasks 1 and 2 steps from the plan, including the hosted-Sentry
+physical-device feedback/log canary.
 
 Starting commit: `0ab2f075d668`
 
@@ -99,10 +98,18 @@ Branch/worktree:
 
 ## Manual Verification
 
-PARTIAL. The merged build was installed on the physical Pixel 10. A fresh report has not
-yet been submitted from that build. After submission, filter the `buzer-android` Logs
-view by release/environment and timestamp; verify `bug_report_form_opened`,
-`bug_report_submitted`, and preceding application records.
+PASS. The merged build was installed on the physical Pixel 10 and a fresh report was
+submitted:
+
+- Feedback: `BUZER-ANDROID-4`, event `be2ae9a1b14b43dda10d3ac513af4710`.
+- Release/environment: `app.buzer@0.1.0-dev+b1b0cd202dcf`, `production-device`.
+- Replay: `cb60122626864f04aabbe5fe479edfe1`.
+- `bug_report_form_opened`: received at `2026-08-24T21:04:20Z`.
+- `bug_report_submitted`: received at `2026-08-24T21:04:50Z`.
+- Nearby application logs were searchable, including refresh, snapshot, reconciliation,
+  and request-ID evidence.
+- Feedback and nearby logs shared SDK-provided trace ID
+  `487cad564f20484692756fda5282731d`; no app-owned event ID was used.
 
 ## Assumptions And Limitations
 
@@ -116,5 +123,6 @@ view by release/environment and timestamp; verify `bug_report_form_opened`,
 
 ## Next Step
 
-Submit a fresh physical-device report and complete Task 2 Step 4 only after the two
-markers and nearby logs are visible in hosted Sentry.
+Use the captured feedback/replay/log timeline to investigate `BUZER-ANDROID-4`. The
+remaining observability rollout gap is the backend production canary documented in the
+main lean-observability plan.

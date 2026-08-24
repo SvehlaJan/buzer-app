@@ -118,9 +118,15 @@ git add AGENTS.md docs/superpowers/specs/2026-08-22-lean-observability-design.md
 git commit -m "docs: document Sentry Logs feedback triage"
 ```
 
-- [ ] **Step 4: Physical-device canary**
+- [x] **Step 4: Physical-device canary**
 
 Install the resulting Android build, submit a report using shake or the visible action,
 and verify `bug_report_form_opened`, `bug_report_submitted`, and nearby `AppLog` records
 are searchable in the `buzer-android` Logs view for the same release/environment and
-timestamp. This manual step remains unchecked until observed in hosted Sentry.
+timestamp.
+
+Result: PASS on 2026-08-24. Feedback issue `BUZER-ANDROID-4`, replay
+`cb60122626864f04aabbe5fe479edfe1`, and both lifecycle markers were received for release
+`app.buzer@0.1.0-dev+b1b0cd202dcf` in `production-device`. Sentry also assigned the
+feedback and nearby logs the same native trace ID; no custom event-ID association was
+required.
