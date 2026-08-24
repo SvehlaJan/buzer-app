@@ -121,6 +121,8 @@ class AndroidObservabilityConfigTest {
         assertTrue(options.isAttachViewHierarchy)
         assertNotNull(options.beforeSend)
         assertNotNull(options.beforeBreadcrumb)
+        assertTrue(options.logs.isEnabled)
+        assertNotNull(options.logs.beforeSend)
 
         val feedback = options.feedbackOptions
         assertTrue(feedback.isUseShakeGesture)
@@ -133,5 +135,7 @@ class AndroidObservabilityConfigTest {
         assertEquals("What did you expect, and what happened?", feedback.messagePlaceholder)
         assertEquals("Send report", feedback.submitButtonLabel)
         assertEquals("Report sent. Thank you.", feedback.successMessageText)
+        assertNotNull(feedback.onFormOpen)
+        assertNotNull(feedback.onSubmitSuccess)
     }
 }
