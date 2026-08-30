@@ -2,6 +2,30 @@
 
 Date: 2026-06-13
 
+## Todoist Webhook Invalidation
+
+Added: 2026-08-30 during Level 1 mutation simplification. Priority: after the Level 1
+release is stable in production.
+
+The one-minute poll is the accepted near-term freshness mechanism. Add Todoist webhooks
+later to reduce the delay between Todoist-side changes and Buzer's SQLite mirror without
+adding a realtime client data layer.
+
+Candidate scope:
+
+- Treat webhook delivery as an invalidation hint, not authoritative task state.
+- Authenticate/validate the webhook according to current Todoist documentation.
+- Deduplicate redelivery cheaply, then enqueue one ordinary sync through the same
+  process-wide Todoist FIFO.
+- Keep the one-minute poll as loss recovery and the source of eventual convergence.
+- Start without FCM, Supabase/Firebase realtime, or direct Android push invalidation.
+- Add bounded structured logs for accepted, rejected, deduplicated, synced, and failed
+  webhook handling without task titles or payload bodies.
+
+Before implementation, confirm Todoist's current webhook availability, event contract,
+signature/authentication requirements, retry policy, and account/app constraints using
+official documentation.
+
 ## Show Current In-Progress Task
 
 The Buzer home screen should show the currently started/in-progress task after the user taps
