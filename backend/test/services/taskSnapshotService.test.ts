@@ -426,7 +426,7 @@ describe("TaskSnapshotService", () => {
     }));
     repo.upsertTodoistTask(childTask({ id: "child-b", todoistTaskId: "todoist-child-b", title: "Second", childOrder: 2, completedAt: null }));
     repo.upsertTodoistTask(childTask({ id: "child-a", todoistTaskId: "todoist-child-a", title: "First", childOrder: 1, completedAt: "2026-07-15T10:00:00Z" }));
-    db.prepare("update commitment_states set occurrence_key = ?, reconciliation_status = 'pending' where task_id = ?")
+    db.prepare("update commitment_states set occurrence_key = ? where task_id = ?")
       .run("occurrence-opaque", "root");
 
     const snapshot = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self").getSnapshot("2026-07-15T10:00:00Z");
@@ -437,7 +437,6 @@ describe("TaskSnapshotService", () => {
       description: "User notes",
       taskRevision: "r:1",
       occurrenceKey: "occurrence-opaque",
-      reconciliationStatus: "pending",
       recurrence: {
         kind: "supported",
         preset: "daily",

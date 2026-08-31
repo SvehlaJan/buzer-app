@@ -452,7 +452,6 @@ describe("TodoistSyncService", () => {
       lastSnoozedAt: null,
       escalationSentAt: null,
       occurrenceDueDatetime: "2026-07-15T10:00:00Z",
-      reconciliationStatus: "confirmed",
       scheduleVersion: (before?.scheduleVersion ?? 0) + 1
     });
     expect(tasks.getById("local-one-time")?.occurrenceKey).not.toBe(before?.occurrenceKey);
@@ -534,7 +533,6 @@ describe("TodoistSyncService", () => {
     // Root occurrence is rotated immediately to the new date
     expect(tasks.getById("recurring-root")).toMatchObject({
       occurrenceDueDatetime: "2026-07-16T09:00:00Z",
-      reconciliationStatus: "confirmed",
       state: "planned"
     });
     expect(tasks.getById("recurring-root")?.occurrenceKey).not.toBe("old-recurring-key");
@@ -618,7 +616,6 @@ describe("TodoistSyncService", () => {
 
     expect(tasks.getById("project-return-root")).toMatchObject({
       occurrenceDueDatetime: "2026-07-15T09:00:00Z",
-      reconciliationStatus: "confirmed",
       state: "planned"
     });
     expect(tasks.getById("project-return-root")?.occurrenceKey).not.toBe("unowned-project-key");
@@ -682,7 +679,6 @@ describe("TodoistSyncService", () => {
 
     expect(tasks.getById("returning-root")).toMatchObject({
       occurrenceDueDatetime: "2026-07-15T09:00:00Z",
-      reconciliationStatus: "confirmed",
       state: "planned"
     });
     expect(tasks.getById("returning-root")?.occurrenceKey).not.toBe("unowned-key");
@@ -719,8 +715,7 @@ describe("TodoistSyncService", () => {
 
     expect(tasks.getByTodoistTaskId("personal-root")).toMatchObject({
       commitmentOwnerId: null,
-      occurrenceDueDatetime: "2026-07-15T09:00:00Z",
-      reconciliationStatus: "confirmed"
+      occurrenceDueDatetime: "2026-07-15T09:00:00Z"
     });
     expect(tasks.getByTodoistTaskId("personal-root")?.occurrenceKey).not.toBeNull();
   });

@@ -125,8 +125,7 @@ export class TaskSnapshotService {
       checkedCount: hierarchy.checkedCount,
       totalCount: hierarchy.totalCount,
       hierarchyStatus: hierarchy.classification === "UNSUPPORTED_HIERARCHY" ? "unsupported" : "valid",
-      hierarchyViolation: hierarchy.violation,
-      reconciliationStatus: task.reconciliationStatus
+      hierarchyViolation: hierarchy.violation
     };
   }
 

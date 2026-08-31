@@ -115,8 +115,6 @@ export async function buildE2EServer(): Promise<E2EServer> {
           incrementScheduleVersion: true,
           updatedAt: nowIso
         });
-      } else {
-        tasks.markOccurrenceReconciliationPending(nudge.id, nowIso);
       }
     }
 
@@ -135,8 +133,6 @@ export async function buildE2EServer(): Promise<E2EServer> {
     }
     db.transaction(() => {
       for (const table of [
-        "task_action_commands",
-        "task_action_journal",
         "whatsapp_escalations",
         "devices",
         "commitment_states",

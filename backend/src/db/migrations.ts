@@ -22,7 +22,6 @@ export function migrate(db: Database.Database): void {
       migrateToVersionTwo(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(2, new Date().toISOString());
     }
-    ensureActionJournalGuards(db);
     backfillOccurrences(db);
     const migrationThreeApplied = db.prepare("select 1 from schema_migrations where version = 3").get() !== undefined;
     if (!migrationThreeApplied) {
@@ -44,6 +43,11 @@ export function migrate(db: Database.Database): void {
       migrateToVersionSix(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(6, new Date().toISOString());
     }
+    const migrationSevenApplied = db.prepare("select 1 from schema_migrations where version = 7").get() !== undefined;
+    if (!migrationSevenApplied) {
+      migrateToVersionSeven(db);
+      db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(7, new Date().toISOString());
+    }
   });
 
   tx();
@@ -53,6 +57,13 @@ function ensureColumn(db: Database.Database, table: string, column: string, defi
   const columns = db.prepare(`pragma table_info(${table})`).all() as Array<{ name: string }>;
   if (!columns.some((entry) => entry.name === column)) {
     db.exec(`alter table ${table} add column ${column} ${definition}`);
+  }
+}
+
+function dropColumnIfExists(db: Database.Database, table: string, column: string): void {
+  const columns = db.prepare(`pragma table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === column)) {
+    db.exec(`alter table ${table} drop column ${column}`);
   }
 }
 
@@ -111,16 +122,7 @@ function migrateToVersionTwo(db: Database.Database): void {
   db.prepare("delete from todoist_sync_state").run();
 }
 
-function ensureActionJournalGuards(db: Database.Database): void {
-  db.exec(`
-    create trigger if not exists task_action_journal_require_action_id
-    before insert on task_action_journal
-    when new.action_id is null
-    begin
-      select raise(abort, 'task_action_journal.action_id must not be null');
-    end
-  `);
-}
+
 
 /**
  * The snapshot endpoint projects these three tables.  SQLite trigger bodies run
@@ -195,6 +197,12 @@ function migrateToVersionFive(db: Database.Database): void {
 
 function migrateToVersionSix(db: Database.Database): void {
   db.exec("drop table if exists diagnostic_reports");
+}
+
+function migrateToVersionSeven(db: Database.Database): void {
+  db.exec("drop table if exists task_action_commands");
+  db.exec("drop table if exists task_action_journal");
+  dropColumnIfExists(db, "commitment_states", "reconciliation_status");
 }
 
 function backfillOccurrences(db: Database.Database): void {

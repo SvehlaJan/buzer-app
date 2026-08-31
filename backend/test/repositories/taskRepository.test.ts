@@ -84,8 +84,7 @@ describe("TaskRepository", () => {
       set
         occurrence_key = 'opaque-occurrence-key',
         occurrence_due_datetime = '2026-07-17T16:00:00',
-        occurrence_recurrence_fingerprint = 'opaque-fingerprint',
-        reconciliation_status = 'pending'
+        occurrence_recurrence_fingerprint = 'opaque-fingerprint'
       where task_id = 'local-recurring-root'
     `).run();
 
@@ -104,8 +103,7 @@ describe("TaskRepository", () => {
       mirrorRevision: 1,
       occurrenceKey: "opaque-occurrence-key",
       occurrenceDueDatetime: "2026-07-17T16:00:00",
-      occurrenceRecurrenceFingerprint: "opaque-fingerprint",
-      reconciliationStatus: "pending"
+      occurrenceRecurrenceFingerprint: "opaque-fingerprint"
     });
     expect(typeof repo.getByTodoistTaskId("todoist-recurring-root")?.isRecurring).toBe("boolean");
   });
@@ -270,20 +268,6 @@ describe("TaskRepository", () => {
     expect(repo.getById("completion-local")).toMatchObject({
       completedAt: "2026-07-15T10:21:00Z",
       mirrorRevision: 3
-    });
-  });
-
-  it("confirms a root after an action reconciliation retry", () => {
-    const db = new Database(":memory:");
-    migrate(db);
-    const repo = new TaskRepository(db);
-    repo.upsertTodoistTask(taskUpsert({ id: "pending-local", todoistTaskId: "pending-todoist" }));
-    repo.markOccurrenceReconciliationPending("pending-local", "2026-07-15T10:30:00Z");
-
-    repo.confirmOccurrenceReconciliation("pending-local", "2026-07-15T10:31:00Z");
-
-    expect(repo.getById("pending-local")).toMatchObject({
-      reconciliationStatus: "confirmed"
     });
   });
 });

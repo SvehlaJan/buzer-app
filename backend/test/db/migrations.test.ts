@@ -98,8 +98,6 @@ describe("migrate", () => {
       "devices",
       "schema_migrations",
       "snapshot_generations",
-      "task_action_commands",
-      "task_action_journal",
       "todoist_collaborators",
       "todoist_project_collaborators",
       "todoist_projects",
@@ -107,6 +105,189 @@ describe("migrate", () => {
       "todoist_tasks",
       "whatsapp_escalations"
     ]);
+  });
+
+  it("applies tombstone migration v7 dropping action journal tables and reconciliation_status column from an existing v6 database", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      create table if not exists task_action_journal (
+        action_id text not null primary key,
+        device_id text not null,
+        root_task_id text,
+        expected_occurrence_key text,
+        action_type text not null,
+        request_fingerprint text not null,
+        status text not null check (status in ('processing', 'completed', 'failed', 'reconciliation_pending')),
+        response_json text,
+        error_json text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create table if not exists task_action_commands (
+        action_id text not null references task_action_journal(action_id) on delete cascade,
+        step_key text not null,
+        command_uuid text not null unique,
+        temp_id text,
+        status text not null check (status in ('reserved', 'sent', 'confirmed', 'failed')),
+        result_json text,
+        updated_at text not null,
+        primary key (action_id, step_key)
+      );
+    `);
+    const commitmentCols = db.prepare("pragma table_info(commitment_states)").all() as Array<{ name: string }>;
+    if (!commitmentCols.some((c) => c.name === "reconciliation_status")) {
+      db.exec("alter table commitment_states add column reconciliation_status text not null default 'confirmed' check (reconciliation_status in ('confirmed', 'pending'))");
+    }
+
+    db.prepare(`
+      insert into todoist_tasks (
+        id, todoist_task_id, title, description, project_id, assignee_id, creator_id,
+        due_datetime, duration_minutes, completed_at, deleted_at, raw_json, updated_at
+      ) values (
+        'task-v6', 'todoist-v6', 'V6 Task', 'Desc', 'proj-1', 'user-1', 'user-1',
+        '2026-07-15T12:00:00Z', 30, null, null, '{}', '2026-07-15T10:00:00Z'
+      )
+    `).run();
+    db.prepare(`
+      insert into commitment_states (
+        task_id, state, started_at, commitment_owner_id, start_dismiss_count,
+        deadline_extension_count, last_snoozed_at, escalation_sent_at, schedule_version,
+        occurrence_key, occurrence_due_datetime, occurrence_recurrence_fingerprint,
+        reconciliation_status, updated_at
+      ) values (
+        'task-v6', 'started', '2026-07-15T10:30:00Z', 'user-1', 1,
+        2, '2026-07-15T10:15:00Z', '2026-07-15T10:45:00Z', 3,
+        'occ-v6', '2026-07-15T12:00:00Z', '{"isRecurring":false}',
+        'pending', '2026-07-15T10:45:00Z'
+      )
+    `).run();
+    db.prepare(`
+      insert into task_action_journal (
+        action_id, device_id, root_task_id, expected_occurrence_key, action_type,
+        request_fingerprint, status, created_at, updated_at
+      ) values (
+        'action-v6', 'device-1', 'task-v6', 'occ-v6', 'complete_task',
+        'fp-v6', 'processing', '2026-07-15T10:00:00Z', '2026-07-15T10:00:00Z'
+      )
+    `).run();
+    db.prepare(`
+      insert into task_action_commands (
+        action_id, step_key, command_uuid, temp_id, status, updated_at
+      ) values (
+        'action-v6', 'step-1', 'cmd-v6', null, 'sent', '2026-07-15T10:00:00Z'
+      )
+    `).run();
+    db.prepare(`
+      insert into whatsapp_escalations (
+        id, task_id, occurrence_key, recipient_id, message, status, created_at
+      ) values (
+        'esc-v6', 'task-v6', 'occ-v6', 'recipient-1', 'Message', 'sent', '2026-07-15T10:45:00Z'
+      )
+    `).run();
+
+    db.prepare("delete from schema_migrations where version = 7").run();
+
+    migrate(db);
+
+    expect(db.prepare("select version from schema_migrations where version = 7").get()).toEqual({ version: 7 });
+
+    const journalTables = db.prepare("select name from sqlite_master where type = 'table' and name in ('task_action_journal', 'task_action_commands')").all();
+    expect(journalTables).toEqual([]);
+
+    const commitmentColumns = tableColumns(db, "commitment_states");
+    expect(commitmentColumns).not.toContain("reconciliation_status");
+    expect(commitmentColumns).toEqual(expect.arrayContaining([
+      "task_id",
+      "state",
+      "started_at",
+      "commitment_owner_id",
+      "start_dismiss_count",
+      "deadline_extension_count",
+      "last_snoozed_at",
+      "escalation_sent_at",
+      "schedule_version",
+      "occurrence_key",
+      "occurrence_due_datetime",
+      "occurrence_recurrence_fingerprint",
+      "updated_at"
+    ]));
+
+    const taskRow = db.prepare("select id, todoist_task_id as todoistTaskId, title, description, project_id as projectId from todoist_tasks where id = 'task-v6'").get();
+    expect(taskRow).toEqual({
+      id: "task-v6",
+      todoistTaskId: "todoist-v6",
+      title: "V6 Task",
+      description: "Desc",
+      projectId: "proj-1"
+    });
+
+    const commitmentRow = db.prepare(`
+      select
+        task_id as taskId,
+        state,
+        started_at as startedAt,
+        commitment_owner_id as commitmentOwnerId,
+        start_dismiss_count as startDismissCount,
+        deadline_extension_count as deadlineExtensionCount,
+        last_snoozed_at as lastSnoozedAt,
+        escalation_sent_at as escalationSentAt,
+        schedule_version as scheduleVersion,
+        occurrence_key as occurrenceKey,
+        occurrence_due_datetime as occurrenceDueDatetime,
+        occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint,
+        updated_at as updatedAt
+      from commitment_states
+      where task_id = 'task-v6'
+    `).get();
+    expect(commitmentRow).toEqual({
+      taskId: "task-v6",
+      state: "started",
+      startedAt: "2026-07-15T10:30:00Z",
+      commitmentOwnerId: "user-1",
+      startDismissCount: 1,
+      deadlineExtensionCount: 2,
+      lastSnoozedAt: "2026-07-15T10:15:00Z",
+      escalationSentAt: "2026-07-15T10:45:00Z",
+      scheduleVersion: 3,
+      occurrenceKey: "occ-v6",
+      occurrenceDueDatetime: "2026-07-15T12:00:00Z",
+      occurrenceRecurrenceFingerprint: '{"isRecurring":false}',
+      updatedAt: "2026-07-15T10:45:00Z"
+    });
+
+    const escalationRow = db.prepare("select id, task_id as taskId, occurrence_key as occurrenceKey, recipient_id as recipientId, message, status from whatsapp_escalations where id = 'esc-v6'").get();
+    expect(escalationRow).toEqual({
+      id: "esc-v6",
+      taskId: "task-v6",
+      occurrenceKey: "occ-v6",
+      recipientId: "recipient-1",
+      message: "Message",
+      status: "sent"
+    });
+  });
+
+  it("creates a fresh v7 database from schema.sql without journal tables or reconciliation_status", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+
+    expect(db.prepare("select version from schema_migrations order by version").all()).toEqual([
+      { version: 1 },
+      { version: 2 },
+      { version: 3 },
+      { version: 4 },
+      { version: 5 },
+      { version: 6 },
+      { version: 7 }
+    ]);
+
+    const tables = db.prepare("select name from sqlite_master where type = 'table' order by name").all() as Array<{ name: string }>;
+    const tableNames = tables.map((r) => r.name);
+    expect(tableNames).not.toContain("task_action_journal");
+    expect(tableNames).not.toContain("task_action_commands");
+
+    const commitmentColumns = tableColumns(db, "commitment_states");
+    expect(commitmentColumns).not.toContain("reconciliation_status");
   });
 
   it("applies the collaborator mirror migration to an existing v3 database", () => {
@@ -232,45 +413,6 @@ describe("migrate", () => {
     `).run()).toThrow(/UNIQUE constraint failed/);
   });
 
-  it("declares fresh action journal IDs non-null", () => {
-    const db = new Database(":memory:");
-    migrate(db);
-
-    const actionIdColumn = (db.prepare("pragma table_info(task_action_journal)").all() as Array<{
-      name: string;
-      notnull: number;
-    }>).find((column) => column.name === "action_id");
-    expect(actionIdColumn?.notnull).toBe(1);
-    expect(() => insertNullActionId(db)).toThrow(/(?:NOT NULL constraint failed|action_id must not be null)/);
-  });
-
-  it("guards action journal IDs in databases that already recorded migration v2", () => {
-    const db = new Database(":memory:");
-    db.exec(`
-      create table schema_migrations (version integer primary key, applied_at text not null);
-      insert into schema_migrations (version, applied_at) values
-        (1, '2026-07-15T10:00:00Z'),
-        (2, '2026-07-15T10:01:00Z');
-      create table task_action_journal (
-        action_id text primary key,
-        device_id text not null,
-        root_task_id text,
-        expected_occurrence_key text,
-        action_type text not null,
-        request_fingerprint text not null,
-        status text not null check (status in ('processing', 'completed', 'failed', 'reconciliation_pending')),
-        response_json text,
-        error_json text,
-        created_at text not null,
-        updated_at text not null
-      );
-    `);
-
-    migrate(db);
-
-    expect(() => insertNullActionId(db)).toThrow(/task_action_journal.action_id must not be null/);
-  });
-
   it("fills missing occurrence anchors independently in an already-v2 database", () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -357,7 +499,7 @@ describe("migrate", () => {
     });
   });
 
-  it("migrates legacy commitments to typed mirrors, occurrences, and durable journals", () => {
+  it("migrates legacy commitments to typed mirrors and occurrences", () => {
     const db = new Database(":memory:");
     db.pragma("foreign_keys = ON");
     db.exec(`
@@ -455,9 +597,9 @@ describe("migrate", () => {
     expect(tableColumns(db, "commitment_states")).toEqual(expect.arrayContaining([
       "occurrence_key",
       "occurrence_due_datetime",
-      "occurrence_recurrence_fingerprint",
-      "reconciliation_status"
+      "occurrence_recurrence_fingerprint"
     ]));
+    expect(tableColumns(db, "commitment_states")).not.toContain("reconciliation_status");
     expect(tableColumns(db, "todoist_sync_state")).toContain("mirror_contract_version");
     expect(tableColumns(db, "whatsapp_escalations")).toContain("occurrence_key");
 
@@ -466,8 +608,7 @@ describe("migrate", () => {
         task_id as taskId,
         occurrence_key as occurrenceKey,
         occurrence_due_datetime as occurrenceDueDatetime,
-        occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint,
-        reconciliation_status as reconciliationStatus
+        occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint
       from commitment_states
       order by task_id
     `).all() as Array<{
@@ -475,12 +616,10 @@ describe("migrate", () => {
       occurrenceKey: string;
       occurrenceDueDatetime: string;
       occurrenceRecurrenceFingerprint: string;
-      reconciliationStatus: string;
     }>;
     expect(occurrences).toHaveLength(2);
     for (const occurrence of occurrences) {
       expect(occurrence.occurrenceKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-      expect(occurrence.reconciliationStatus).toBe("confirmed");
     }
     expect(occurrences[0]?.occurrenceDueDatetime).toBe("2026-07-15T12:00:00Z");
     expect(occurrences[0]?.occurrenceRecurrenceFingerprint).toBe(
@@ -548,28 +687,8 @@ describe("migrate", () => {
       "2026-07-15T10:31:00Z"
     )).not.toThrow();
 
-    expect(tableColumns(db, "task_action_journal")).toEqual([
-      "action_id",
-      "device_id",
-      "root_task_id",
-      "expected_occurrence_key",
-      "action_type",
-      "request_fingerprint",
-      "status",
-      "response_json",
-      "error_json",
-      "created_at",
-      "updated_at"
-    ]);
-    expect(tableColumns(db, "task_action_commands")).toEqual([
-      "action_id",
-      "step_key",
-      "command_uuid",
-      "temp_id",
-      "status",
-      "result_json",
-      "updated_at"
-    ]);
+    const journalTables = db.prepare("select name from sqlite_master where type = 'table' and name in ('task_action_journal', 'task_action_commands')").all();
+    expect(journalTables).toEqual([]);
     expect(db.prepare("select * from todoist_sync_state").all()).toEqual([]);
     expect(db.prepare("select version from schema_migrations order by version").all()).toEqual([
       { version: 1 },
@@ -577,7 +696,8 @@ describe("migrate", () => {
       { version: 3 },
       { version: 4 },
       { version: 5 },
-      { version: 6 }
+      { version: 6 },
+      { version: 7 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;
@@ -598,18 +718,4 @@ describe("migrate", () => {
 
 function tableColumns(db: Database.Database, table: string): string[] {
   return (db.prepare(`pragma table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name);
-}
-
-function insertNullActionId(db: Database.Database): void {
-  db.prepare(`
-    insert into task_action_journal (
-      action_id,
-      device_id,
-      action_type,
-      request_fingerprint,
-      status,
-      created_at,
-      updated_at
-    ) values (null, 'device-1', 'test', 'fingerprint', 'processing', '2026-07-15T11:00:00Z', '2026-07-15T11:00:00Z')
-  `).run();
 }

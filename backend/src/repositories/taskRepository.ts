@@ -49,7 +49,6 @@ export interface TaskWithCommitment extends TodoistTaskUpsert {
   occurrenceKey: string | null;
   occurrenceDueDatetime: string | null;
   occurrenceRecurrenceFingerprint: string | null;
-  reconciliationStatus: "confirmed" | "pending";
 }
 
 const taskWithCommitmentSelect = `
@@ -87,8 +86,7 @@ const taskWithCommitmentSelect = `
     c.schedule_version as scheduleVersion,
     c.occurrence_key as occurrenceKey,
     c.occurrence_due_datetime as occurrenceDueDatetime,
-    c.occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint,
-    c.reconciliation_status as reconciliationStatus
+    c.occurrence_recurrence_fingerprint as occurrenceRecurrenceFingerprint
   from todoist_tasks t
   join commitment_states c on c.task_id = t.id
 `;
@@ -309,27 +307,10 @@ export class TaskRepository {
         occurrence_key = @occurrenceKey,
         occurrence_due_datetime = @occurrenceDueDatetime,
         occurrence_recurrence_fingerprint = @occurrenceRecurrenceFingerprint,
-        reconciliation_status = 'confirmed',
         schedule_version = schedule_version + 1,
         updated_at = @updatedAt
       where task_id = @id
     `).run({ id, ...values });
-  }
-
-  markOccurrenceReconciliationPending(id: string, updatedAt: string): void {
-    this.db.prepare(`
-      update commitment_states
-      set reconciliation_status = 'pending', updated_at = @updatedAt
-      where task_id = @id
-    `).run({ id, updatedAt });
-  }
-
-  confirmOccurrenceReconciliation(id: string, updatedAt: string): void {
-    this.db.prepare(`
-      update commitment_states
-      set reconciliation_status = 'confirmed', updated_at = @updatedAt
-      where task_id = @id
-    `).run({ id, updatedAt });
   }
 
   leaveOccurrenceOwnership(id: string, updatedAt: string): void {
@@ -342,7 +323,6 @@ export class TaskRepository {
         deadline_extension_count = 0,
         last_snoozed_at = null,
         escalation_sent_at = null,
-        reconciliation_status = 'confirmed',
         schedule_version = schedule_version + 1,
         updated_at = @updatedAt
       where task_id = @id

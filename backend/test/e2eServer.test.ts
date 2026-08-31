@@ -56,7 +56,6 @@ describe("seeding", () => {
       expect(byId.get("task-recurring-all-checked").recurrence.preset).toBe("daily");
       expect(byId.get("task-recurring-all-checked").checkedCount).toBe(2);
       expect(byId.get("task-recurring-all-checked").totalCount).toBe(2);
-      expect(byId.get("task-reconciliation-pending").reconciliationStatus).toBe("pending");
       expect(byId.has("task-assigned-other")).toBe(false);
       expect(byId.get("task-unassigned-root")).toMatchObject({
         assigneeId: null,
