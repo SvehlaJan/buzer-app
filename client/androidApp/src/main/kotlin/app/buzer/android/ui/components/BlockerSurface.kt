@@ -26,6 +26,8 @@ fun BlockerSurface(
     model: BlockerUiModel,
     warningMessage: String?,
     checking: Boolean,
+    onRefresh: (() -> Unit)? = null,
+    onOpenTodoist: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     actions: @Composable ColumnScope.() -> Unit
 ) {
@@ -71,8 +73,19 @@ fun BlockerSurface(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            warningMessage?.let { WarningStatus(it) }
-            if (checking) {
+            warningMessage?.let { msg ->
+                if (onRefresh != null && onOpenTodoist != null) {
+                    SessionWarningBanner(
+                        message = msg,
+                        onRefresh = onRefresh,
+                        onOpenTodoist = onOpenTodoist,
+                        refreshing = checking
+                    )
+                } else {
+                    WarningStatus(msg)
+                }
+            }
+            if (checking && (warningMessage == null || onRefresh == null)) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,

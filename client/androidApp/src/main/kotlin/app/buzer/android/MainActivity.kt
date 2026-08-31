@@ -38,6 +38,7 @@ import app.buzer.android.readiness.SharedPreferencesNotificationPermissionReques
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.ui.HomeDoneActionHandler
 import app.buzer.android.ui.agenda.selectOwnerAgenda
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.ForegroundReadinessGate
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.observability.ObservabilityRuntime
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
     private var snapshotViewState by mutableStateOf<SnapshotViewState?>(null)
     private var homeRefreshInFlight by mutableStateOf(false)
+    private var homeInteractionInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
     private var homeActionStatusMessage by mutableStateOf<String?>(null)
     private var morningReviewAvailability by mutableStateOf<MorningReviewAvailability?>(null)
@@ -123,6 +125,7 @@ class MainActivity : ComponentActivity() {
             },
             setStatusMessage = { homeActionStatusMessage = it },
             setRefreshInFlight = { homeRefreshInFlight = it },
+            setInteractionInFlight = { homeInteractionInFlight = it },
             clearRefreshFailure = { homeRefreshError = null },
             reportRefreshFailure = ::reportRefreshFailure
         )
@@ -152,10 +155,12 @@ class MainActivity : ComponentActivity() {
                     openAddTask = openAddTask,
                     snapshot = snapshotViewState,
                     homeRefreshInFlight = homeRefreshInFlight,
+                    homeInteractionInFlight = homeInteractionInFlight,
                     homeRefreshError = homeRefreshError,
                     homeActionStatusMessage = homeActionStatusMessage,
                     onRetryHomeRefresh = ::forceRefreshEnforcement,
                     onPullToRefresh = ::forceRefreshEnforcement,
+                    onOpenTodoist = { ExternalTodoistLauncher.launchToday(this@MainActivity) },
                     onDoneTask = ::completeHomeTask,
                     onDoneCurrentTask = ::completeHomeTask,
                     onTaskCreated = { returnedSnapshot ->

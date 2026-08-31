@@ -207,7 +207,8 @@ internal fun TaskEditorScaffold(
     primaryActionInProgress: Boolean = false,
     primaryActionInProgressLabel: String = "Saving...",
     titleModifier: Modifier = Modifier,
-) = TaskEditorScaffoldContent(
+    warningBanner: (@Composable () -> Unit)? = null
+): Unit = TaskEditorScaffoldContent(
     screenTitle = presentation.screenTitle,
     contextMessage = presentation.contextMessage,
     draft = draft,
@@ -239,7 +240,8 @@ internal fun TaskEditorScaffold(
     checklistError = null,
     recurrenceValue = recurrenceValueFor(draft),
     selectedRecurrencePreset = draft.recurrencePreset,
-    unavailableFields = validation.unavailableFields
+    unavailableFields = validation.unavailableFields,
+    warningBanner = warningBanner
 )
 
 @Composable
@@ -275,7 +277,8 @@ private fun TaskEditorScaffoldContent(
     checklistError: String?,
     recurrenceValue: String,
     selectedRecurrencePreset: RecurrencePreset?,
-    unavailableFields: Set<TaskEditorField>
+    unavailableFields: Set<TaskEditorField>,
+    warningBanner: (@Composable () -> Unit)? = null
 ) {
     var state by remember { mutableStateOf(TaskEditorScaffoldState()) }
     LaunchedEffect(scheduleValidation.focusSection) {
@@ -314,6 +317,9 @@ private fun TaskEditorScaffoldContent(
                 }
                 Text(screenTitle, style = MaterialTheme.typography.titleLarge)
             }
+
+            warningBanner?.let { it() }
+
             BorderlessTitleField(
                 title = draft.title,
                 onTitleChange = { onDraftChange(draft.copy(title = it)) },

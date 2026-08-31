@@ -13,12 +13,11 @@ import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.DeadlineBlockerScreen
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
@@ -27,7 +26,6 @@ import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.blockers.BlockerKind
 import app.buzer.shared.ui.blockers.buildBlockerUiModel
 import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -42,7 +40,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
     private var blockerModel by mutableStateOf(buildBlockerUiModel(BlockerKind.Deadline, null))
     private var actionState by mutableStateOf<BlockerActionState>(BlockerActionState.Idle)
     private var errorMessage by mutableStateOf<String?>(null)
-    private var lastAction: (suspend () -> CoordinatorActionResult)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,10 +60,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
 
         val coordinator = createCoordinator() ?: return
         prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
     }
 
     private fun createCoordinator(): EnforcementCoordinator? {
@@ -155,6 +148,36 @@ class DeadlineBlockerActivity : ComponentActivity() {
         }
     }
 
+    private fun forceRefreshBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
+        checking = true
+        lifecycleScope.launch {
+            try {
+                val snapshot = coordinator.forceSyncAndReconcile()
+                updateModelFromSnapshot(snapshot, taskId, occurrenceKey, snapshotConfirmed = true)
+                if (
+                    BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                        snapshot,
+                        taskId,
+                        occurrenceKey,
+                        AlarmKind.DEADLINE_BLOCKER
+                    )
+                ) {
+                    finish()
+                    return@launch
+                }
+                warningMessage = null
+                errorMessage = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AppLog.error("deadline_blocker force refresh failed", error)
+                warningMessage = "Refresh failed"
+            } finally {
+                checking = false
+            }
+        }
+    }
+
     private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
         AppLog.debug("deadline_blocker show taskId=$taskId occurrence=$occurrenceKey")
         setBuzerContent {
@@ -171,7 +194,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     AppLog.info("deadline_blocker extend_clicked taskId=$taskId occurrence=$occurrenceKey")
                     val expectedTaskRevision = deadlineTask?.taskRevision
                     if (expectedTaskRevision.isNullOrBlank()) {
-                        errorMessage = "Task details are unavailable. Refresh and try again."
+                        warningMessage = "Task details are unavailable. Refresh and try again."
                     } else {
                         val request = extendRequest(occurrenceKey, expectedTaskRevision)
                         runActionOnce("Extending...", occurrenceKey) { coordinator.extendTask(taskId, request) }
@@ -196,6 +219,9 @@ class DeadlineBlockerActivity : ComponentActivity() {
                         else coordinator.uncheckChild(taskId, child.id, request)
                     }
                 },
+                onOpenTodoist = {
+                    ExternalTodoistLauncher.launchTask(this, deadlineTask?.todoistTaskId ?: taskId)
+                },
                 task = deadlineTask,
                 onUpdate = { request ->
                     val currentTask = deadlineTask
@@ -207,7 +233,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     }
                 },
                 onUpdateSuccess = { finish() },
-                onRefreshTask = { prepareAndShowBlocker(coordinator, taskId, occurrenceKey) },
+                onRefreshTask = { forceRefreshBlocker(coordinator, taskId, occurrenceKey) },
                 occurrenceKey = occurrenceKey,
                 snapshotConfirmed = fullSnapshotConfirmed,
                 onBack = { finish() },
@@ -221,8 +247,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     finish()
                 },
                 onRetryAction = {
-                    errorMessage = null
-                    lastAction?.let { retry -> runActionOnce("Retrying...", occurrenceKey) { retry() } }
+                    forceRefreshBlocker(coordinator, taskId, occurrenceKey)
                 }
             )
         }
@@ -257,7 +282,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
         }
         actionInFlight = true
         actionState = BlockerActionState.Loading(label)
-        lastAction = action
         lifecycleScope.launch {
             try {
                 when (val result = action()) {
@@ -266,39 +290,31 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     }
                     is CoordinatorActionResult.Warning -> {
                         onAppliedSnapshot?.invoke()
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.Conflict -> {
                         onAppliedSnapshot?.invoke()
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.TransportFailure -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.LocalReconciliationFailed -> {
                         onAppliedSnapshot?.invoke()
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     CoordinatorActionResult.ChildActionInFlight -> {
-                        errorMessage = "Checklist update is already in progress"
-                        actionState = BlockerActionState.Failed("Checklist update is already in progress")
+                        warningMessage = "Checklist update is already in progress"
                     }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 val message = error.message ?: "Action failed"
-                errorMessage = message
-                actionState = BlockerActionState.Failed(message)
+                warningMessage = message
             } finally {
                 actionInFlight = false
-                if (actionState is BlockerActionState.Loading) {
-                    actionState = BlockerActionState.Idle
-                }
+                actionState = BlockerActionState.Idle
             }
         }
     }

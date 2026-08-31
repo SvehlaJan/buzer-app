@@ -67,6 +67,8 @@ fun StartBlockerScreen(
     onBack: () -> Unit,
     onStart: () -> Unit = {},
     onPostpone: () -> Unit = {},
+    onRefreshTask: () -> Unit = {},
+    onOpenTodoist: () -> Unit = {},
     model: BlockerUiModel = buildBlockerUiModel(BlockerKind.Start, null),
     showBack: Boolean = true,
     checking: Boolean = false,
@@ -80,10 +82,14 @@ fun StartBlockerScreen(
         // Production full-screen blockers must stay open until a blocker action resolves them.
     }
 
+    val effectiveWarning = warningMessage ?: errorMessage
+
     BlockerSurface(
         model = model,
-        warningMessage = warningMessage,
-        checking = checking
+        warningMessage = effectiveWarning,
+        checking = checking,
+        onRefresh = onRefreshTask,
+        onOpenTodoist = onOpenTodoist
     ) {
         if (checking) return@BlockerSurface
         if (model.totalCount > 0) {
@@ -116,14 +122,13 @@ fun StartBlockerScreen(
         }
     }
 
-    errorMessage?.let { message ->
+    if (errorMessage != null && warningMessage == null) {
         ErrorAlertDialog(
             title = "Action failed",
-            message = message,
+            message = errorMessage,
             onDismiss = onDismissError,
-            retryLabel = "Retry",
-            onRetry = onRetryAction,
-            dismissLabel = null
+            retryLabel = null,
+            dismissLabel = "Dismiss"
         )
     }
 }
@@ -134,6 +139,7 @@ fun DeadlineBlockerScreen(
     onDone: () -> Unit = {},
     onExtend: () -> Unit = {},
     onToggleChild: (ChecklistItem, Boolean) -> Unit = { _, _ -> },
+    onOpenTodoist: () -> Unit = {},
     task: TaskSnapshotItem? = null,
     onUpdate: suspend (UpdateTaskRequest) -> CoordinatorActionResult = {
         CoordinatorActionResult.Warning("unavailable", "Reschedule is unavailable", null)
@@ -215,6 +221,8 @@ fun DeadlineBlockerScreen(
         }
     }
 
+    val effectiveWarning = warningMessage ?: errorMessage
+
     when (recovery) {
         DeadlineBlockerRecoveryState.Actions -> DeadlineBlockerActions(
             model = model,
@@ -222,10 +230,12 @@ fun DeadlineBlockerScreen(
             onExtend = onExtend,
             onOpenReschedule = { rescheduleRequested = true },
             onToggleChild = onToggleChild,
+            onRefreshTask = onRefreshTask,
+            onOpenTodoist = onOpenTodoist,
             onBack = onBack,
             showBack = showBack,
             checking = checking,
-            warningMessage = warningMessage,
+            warningMessage = effectiveWarning,
             actionState = actionState
         )
         is DeadlineBlockerRecoveryState.Editor -> {
@@ -245,20 +255,19 @@ fun DeadlineBlockerScreen(
         DeadlineBlockerRecoveryState.RefreshRequired -> DeadlineBlockerRefreshRequired(
             model = model,
             checking = checking,
-            warningMessage = warningMessage,
+            warningMessage = effectiveWarning,
             onRefresh = onRefreshTask,
             onCancel = { rescheduleRequested = false }
         )
     }
 
-    errorMessage?.let { message ->
+    if (errorMessage != null && warningMessage == null) {
         ErrorAlertDialog(
             title = "Action failed",
-            message = message,
+            message = errorMessage,
             onDismiss = onDismissError,
-            retryLabel = "Retry",
-            onRetry = onRetryAction,
-            dismissLabel = null
+            retryLabel = null,
+            dismissLabel = "Dismiss"
         )
     }
 }
@@ -303,6 +312,8 @@ private fun DeadlineBlockerActions(
     onExtend: () -> Unit,
     onOpenReschedule: () -> Unit,
     onToggleChild: (ChecklistItem, Boolean) -> Unit,
+    onRefreshTask: () -> Unit,
+    onOpenTodoist: () -> Unit,
     onBack: () -> Unit,
     showBack: Boolean,
     checking: Boolean,
@@ -312,7 +323,9 @@ private fun DeadlineBlockerActions(
     BlockerSurface(
         model = model,
         warningMessage = warningMessage,
-        checking = checking
+        checking = checking,
+        onRefresh = onRefreshTask,
+        onOpenTodoist = onOpenTodoist
     ) {
         if (checking) return@BlockerSurface
         ChecklistProgress(

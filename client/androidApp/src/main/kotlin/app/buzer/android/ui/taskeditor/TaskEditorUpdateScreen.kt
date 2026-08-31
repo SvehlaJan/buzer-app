@@ -342,6 +342,7 @@ internal fun TaskEditorUpdateScreen(
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var state by remember(task.id) { mutableStateOf(initialTaskEditorUpdateState(task, choices)) }
     val currentContentValidation = contentValidation()
@@ -435,7 +436,18 @@ internal fun TaskEditorUpdateScreen(
         validation = validation,
         modifier = modifier,
         enabled = state.editingEnabled,
-        primaryActionInProgress = state.submitting
+        primaryActionInProgress = state.submitting,
+        warningBanner = state.resultMessage?.let { msg ->
+            {
+                app.buzer.android.ui.components.SessionWarningBanner(
+                    message = msg,
+                    onRefresh = onRetryChoices,
+                    onOpenTodoist = {
+                        app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchTask(context, task.todoistTaskId)
+                    }
+                )
+            }
+        }
     )
 
     if (state.pendingConfirmation) {
@@ -445,16 +457,6 @@ internal fun TaskEditorUpdateScreen(
             text = { Text(TASK_EDITOR_UPDATE_PENDING_MESSAGE) },
             confirmButton = {}
         )
-    } else {
-        state.resultMessage?.let { message ->
-        ErrorAlertDialog(
-            title = "Task update",
-            message = message,
-            onDismiss = { state = state.copy(resultMessage = null) },
-            retryLabel = "Retry".takeUnless { state.pendingConfirmation },
-            onRetry = ::submit
-        )
-        }
     }
     if (state.discardConfirmationVisible) {
         AlertDialog(

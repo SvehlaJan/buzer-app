@@ -13,19 +13,17 @@ import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.BlockerActionState
 import app.buzer.android.ui.screens.StartBlockerScreen
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.blockers.BlockerKind
 import app.buzer.shared.ui.blockers.buildBlockerUiModel
 import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -35,10 +33,10 @@ class StartBlockerActivity : ComponentActivity() {
     private var actionInFlight = false
     private var checking by mutableStateOf(true)
     private var warningMessage by mutableStateOf<String?>(null)
+    private var startTask by mutableStateOf<TaskSnapshotItem?>(null)
     private var blockerModel by mutableStateOf(buildBlockerUiModel(BlockerKind.Start, null))
     private var actionState by mutableStateOf<BlockerActionState>(BlockerActionState.Idle)
     private var errorMessage by mutableStateOf<String?>(null)
-    private var lastAction: (suspend () -> CoordinatorActionResult)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,10 +57,6 @@ class StartBlockerActivity : ComponentActivity() {
 
         val coordinator = createCoordinator() ?: return
         prepareAndShowBlocker(coordinator, taskId, occurrenceKey)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
     }
 
     private fun createCoordinator(): EnforcementCoordinator? {
@@ -146,6 +140,36 @@ class StartBlockerActivity : ComponentActivity() {
         }
     }
 
+    private fun forceRefreshBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
+        checking = true
+        lifecycleScope.launch {
+            try {
+                val snapshot = coordinator.forceSyncAndReconcile()
+                updateModelFromSnapshot(snapshot, taskId)
+                if (
+                    BlockerTaskSnapshotGate.shouldHideAfterRefresh(
+                        snapshot,
+                        taskId,
+                        occurrenceKey,
+                        AlarmKind.START_BLOCKER
+                    )
+                ) {
+                    finish()
+                    return@launch
+                }
+                warningMessage = null
+                errorMessage = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AppLog.error("start_blocker force refresh failed", error)
+                warningMessage = "Refresh failed"
+            } finally {
+                checking = false
+            }
+        }
+    }
+
     private fun showBlocker(coordinator: EnforcementCoordinator, taskId: String, occurrenceKey: String) {
         AppLog.debug("start_blocker show taskId=$taskId occurrence=$occurrenceKey")
         setBuzerContent {
@@ -161,6 +185,10 @@ class StartBlockerActivity : ComponentActivity() {
                     val request = actionRequest(occurrenceKey)
                     runActionOnce("Postponing...", occurrenceKey) { coordinator.postponeStart(taskId, request) }
                 },
+                onRefreshTask = { forceRefreshBlocker(coordinator, taskId, occurrenceKey) },
+                onOpenTodoist = {
+                    ExternalTodoistLauncher.launchTask(this, startTask?.todoistTaskId ?: taskId)
+                },
                 onBack = { finish() },
                 showBack = false,
                 checking = checking,
@@ -172,8 +200,7 @@ class StartBlockerActivity : ComponentActivity() {
                     finish()
                 },
                 onRetryAction = {
-                    errorMessage = null
-                    lastAction?.let { retry -> runActionOnce("Retrying...", occurrenceKey) { retry() } }
+                    forceRefreshBlocker(coordinator, taskId, occurrenceKey)
                 }
             )
         }
@@ -181,6 +208,7 @@ class StartBlockerActivity : ComponentActivity() {
 
     private fun updateModelFromSnapshot(snapshot: TasksSnapshotResponse, taskId: String) {
         val task = snapshot.findTask(taskId)
+        startTask = task
         blockerModel = buildBlockerUiModel(
             kind = BlockerKind.Start,
             task = task,
@@ -199,43 +227,34 @@ class StartBlockerActivity : ComponentActivity() {
         }
         actionInFlight = true
         actionState = BlockerActionState.Loading(label)
-        lastAction = action
         lifecycleScope.launch {
             try {
                 when (val result = action()) {
                     CoordinatorActionResult.Success -> finish()
                     is CoordinatorActionResult.Warning -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.Conflict -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.TransportFailure -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     is CoordinatorActionResult.LocalReconciliationFailed -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
+                        warningMessage = result.message
                     }
                     CoordinatorActionResult.ChildActionInFlight -> {
-                        errorMessage = "Action already in progress"
-                        actionState = BlockerActionState.Failed(errorMessage!!)
+                        warningMessage = "Action already in progress"
                     }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 val message = error.message ?: "Action failed"
-                errorMessage = message
-                actionState = BlockerActionState.Failed(message)
+                warningMessage = message
             } finally {
                 actionInFlight = false
-                if (actionState is BlockerActionState.Loading) {
-                    actionState = BlockerActionState.Idle
-                }
+                actionState = BlockerActionState.Idle
             }
         }
     }

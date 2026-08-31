@@ -500,7 +500,18 @@ fun AddTaskScreen(
             enabled = editorState.editingEnabled,
             primaryActionInProgress = submitting,
             titleModifier = Modifier.testTag("titleInput"),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            warningBanner = submitDialogMessage?.let { msg ->
+                {
+                    app.buzer.android.ui.components.SessionWarningBanner(
+                        message = msg,
+                        onRefresh = ::retryProjects,
+                        onOpenTodoist = {
+                            app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchToday(context)
+                        }
+                    )
+                }
+            }
         )
 
         TaskEditorProjectLoadStatus(

@@ -15,62 +15,60 @@ class HomeDoneActionHandler(
     private val applySnapshot: (SnapshotViewState) -> Unit,
     private val setStatusMessage: (String?) -> Unit = {},
     private val setRefreshInFlight: (Boolean) -> Unit = {},
+    private val setInteractionInFlight: (Boolean) -> Unit = {},
     private val clearRefreshFailure: () -> Unit = {},
     private val reportRefreshFailure: (Throwable) -> Unit = {}
 ) {
     private val mutex = Mutex()
-    private var retryCurrentAction: (suspend () -> CoordinatorActionResult)? = null
 
     suspend fun refresh(forceTodoist: Boolean = false) {
         mutex.withLock {
             setRefreshInFlight(true)
+            setInteractionInFlight(true)
             clearRefreshFailure()
             try {
                 applySnapshot(refreshSnapshot(forceTodoist))
+                setStatusMessage(null)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
                 reportRefreshFailure(error)
+                if (forceTodoist) {
+                    setStatusMessage(error.message ?: "Refresh failed")
+                }
             } finally {
                 setRefreshInFlight(false)
+                setInteractionInFlight(false)
             }
         }
     }
 
-    /** The request is created by the UI once. */
+    /** The request is created by the UI once. Screen locks during execution and unlocks immediately on completion. */
     suspend fun completeTask(taskId: String, request: TaskActionRequest) {
         mutex.withLock {
-            val result = completeTask.invoke(taskId, request)
-            if (result is CoordinatorActionResult.TransportFailure) {
-                retryCurrentAction = { completeTask.invoke(taskId, request) }
+            setInteractionInFlight(true)
+            try {
+                val result = completeTask.invoke(taskId, request)
+                handleCompletionResult(result)
+            } finally {
+                setInteractionInFlight(false)
             }
-            handleCompletionResult(result)
-        }
-    }
-
-    suspend fun retryCompletion() {
-        mutex.withLock {
-            val retry = retryCurrentAction ?: return
-            handleCompletionResult(retry())
         }
     }
 
     private fun handleCompletionResult(result: CoordinatorActionResult) {
         when (result) {
             CoordinatorActionResult.Success -> {
-                retryCurrentAction = null
                 latestSnapshot()?.let(applySnapshot)
                 setStatusMessage(null)
             }
 
             is CoordinatorActionResult.Warning -> {
-                retryCurrentAction = null
                 result.snapshot?.let { applySnapshot(SnapshotReducer.reduce(it)) } ?: latestSnapshot()?.let(applySnapshot)
                 setStatusMessage(result.message)
             }
 
             is CoordinatorActionResult.Conflict -> {
-                retryCurrentAction = null
                 applySnapshot(SnapshotReducer.reduce(result.snapshot))
                 setStatusMessage(result.message)
             }
@@ -80,7 +78,6 @@ class HomeDoneActionHandler(
             }
 
             is CoordinatorActionResult.LocalReconciliationFailed -> {
-                retryCurrentAction = null
                 applySnapshot(SnapshotReducer.reduce(result.snapshot))
                 setStatusMessage("Action accepted; local alarm reconciliation failed: ${result.message}")
             }

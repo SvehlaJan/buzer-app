@@ -87,6 +87,7 @@ fun MorningReviewScreen(
     onOverdueEdit: (String) -> Unit = {},
     onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
+    onOpenTodoist: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
@@ -184,7 +185,16 @@ fun MorningReviewScreen(
         }
         item("date") { Text(screenState.absoluteDateLabel, modifier = Modifier.semantics { heading() }) }
         if (screenState.refreshing) item("refreshing") { Text("Refreshing…") }
-        screenState.warning?.let { warning -> item("warning") { WarningStatus(warning) } }
+        screenState.warning?.let { warning ->
+            item("warning") {
+                app.buzer.android.ui.components.SessionWarningBanner(
+                    message = warning,
+                    onRefresh = onRetryRefresh,
+                    onOpenTodoist = onOpenTodoist,
+                    refreshing = screenState.refreshing
+                )
+            }
+        }
         items(screenState.retryNotices, key = { "retry-${it.target}" }) { notice ->
             TextButton(
                 onClick = if (notice.target == MorningReviewRetryTarget.Refresh) onRetryRefresh else onRetryAction,

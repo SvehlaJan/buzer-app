@@ -50,11 +50,11 @@ import app.buzer.android.ui.components.ChecklistProgress
 import app.buzer.android.ui.components.IconFabAction
 import app.buzer.android.ui.components.IconFabStack
 import app.buzer.android.ui.components.PrimaryActionButton
+import app.buzer.android.ui.components.SessionWarningBanner
 import app.buzer.android.ui.components.TaskDetailsBlock
 import app.buzer.android.ui.status.BlockingErrorState
 import app.buzer.android.ui.status.BlockingLoadingState
 import app.buzer.android.ui.status.InlineLoadingStatus
-import app.buzer.android.ui.status.WarningStatus
 import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.ui.home.HomeAgendaRow
 import app.buzer.shared.ui.home.HomeAgendaRowState
@@ -67,6 +67,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     state: HomeScreenState,
     onRefreshTasks: () -> Unit = {},
+    onOpenTodoist: () -> Unit = {},
     onAddTask: () -> Unit = {},
     onEditTask: (String) -> Unit = {},
     onDoneTask: (String) -> Unit = {},
@@ -85,6 +86,8 @@ fun HomeScreen(
         var idx = 0
         // header:title
         idx += 1
+        // banner:session_warning
+        if (state.effectiveWarning != null) idx += 1
         // attention:review
         if (state.reviewAttention != null) idx += 1
         // attention:refresh
@@ -144,10 +147,22 @@ fun HomeScreen(
             ) {
                 // 1. Title/updated header
                 item(key = "header:title") {
-                    HomeTitleHeader(state = state, onRetryRefresh = onRefreshTasks)
+                    HomeTitleHeader(state = state)
                 }
 
-                // 2. Attention banners (review attention, refresh attention)
+                // 2. Session Warning Banner
+                state.effectiveWarning?.let { warningMessage ->
+                    item(key = "banner:session_warning") {
+                        SessionWarningBanner(
+                            message = warningMessage,
+                            onRefresh = onRefreshTasks,
+                            onOpenTodoist = onOpenTodoist,
+                            refreshing = state.refreshInFlight
+                        )
+                    }
+                }
+
+                // 3. Attention banners (review attention, refresh attention)
                 state.reviewAttention?.let { attention ->
                     item(key = "attention:review") {
                         AttentionStrip(
@@ -155,7 +170,7 @@ fun HomeScreen(
                                 message = attention.message,
                                 actionLabel = "Review"
                             ),
-                            onAction = onOpenMorningReview
+                            onAction = if (!state.interactionInFlight) onOpenMorningReview else null
                         )
                     }
                 }
@@ -189,32 +204,36 @@ fun HomeScreen(
                     }
 
                     HomeContentState.Ready -> {
-                        // 3. Hero block (currentBlock)
+                        // 4. Hero block (currentBlock)
                         state.currentBlock?.let { hero ->
                             item(key = "hero:${hero.taskId}") {
                                 CurrentBlockHero(
                                     currentBlock = hero,
                                     overlappingCount = state.overlappingCurrentRows.size,
-                                    onDone = { onDoneTask(hero.taskId) },
-                                    onEdit = { onEditTask(hero.taskId) },
-                                    onToggleChecklistItem = { itemId -> onToggleChecklistItem(hero.taskId, itemId) }
+                                    onDone = { if (!state.interactionInFlight) onDoneTask(hero.taskId) },
+                                    onEdit = { if (!state.interactionInFlight) onEditTask(hero.taskId) },
+                                    onToggleChecklistItem = { itemId ->
+                                        if (!state.interactionInFlight) onToggleChecklistItem(hero.taskId, itemId)
+                                    },
+                                    actionsEnabled = !state.interactionInFlight && !state.refreshInFlight
                                 )
                             }
                         }
 
-                        // 4. Overlapping current rows
+                        // 5. Overlapping current rows
                         items(
                             items = state.overlappingCurrentRows,
                             key = { row -> "overlap:${row.taskId}" }
                         ) { row ->
                             AgendaRow(
                                 row = row,
-                                onEdit = { onEditTask(row.taskId) },
-                                onDone = { onDoneTask(row.taskId) }
+                                onEdit = { if (!state.interactionInFlight) onEditTask(row.taskId) },
+                                onDone = { if (!state.interactionInFlight) onDoneTask(row.taskId) },
+                                actionsEnabled = !state.interactionInFlight && !state.refreshInFlight
                             )
                         }
 
-                        // 5. Overdue section
+                        // 6. Overdue section
                         if (state.overdue.totalCount > 0) {
                             item(key = "overdue:header") {
                                 SectionHeader(
@@ -232,13 +251,14 @@ fun HomeScreen(
                             ) { row ->
                                 AgendaRow(
                                     row = row,
-                                    onEdit = { onEditTask(row.taskId) },
-                                    onDone = { onDoneTask(row.taskId) }
+                                    onEdit = { if (!state.interactionInFlight) onEditTask(row.taskId) },
+                                    onDone = { if (!state.interactionInFlight) onDoneTask(row.taskId) },
+                                    actionsEnabled = !state.interactionInFlight && !state.refreshInFlight
                                 )
                             }
                         }
 
-                        // 6. Unassigned section
+                        // 7. Unassigned section
                         if (state.unassigned.totalCount > 0) {
                             item(key = "unassigned:header") {
                                 SectionHeader(
@@ -254,13 +274,14 @@ fun HomeScreen(
                             ) { row ->
                                 AgendaRow(
                                     row = row,
-                                    onEdit = { onEditTask(row.taskId) },
-                                    onAssign = { onEditTask(row.taskId) }
+                                    onEdit = { if (!state.interactionInFlight) onEditTask(row.taskId) },
+                                    onAssign = { if (!state.interactionInFlight) onEditTask(row.taskId) },
+                                    actionsEnabled = !state.interactionInFlight && !state.refreshInFlight
                                 )
                             }
                         }
 
-                        // 7. Future date groups with sticky headers
+                        // 8. Future date groups with sticky headers
                         state.futureGroups.forEach { group ->
                             stickyHeader(key = "future:header:${group.date}") {
                                 DateGroupHeader(
@@ -274,12 +295,13 @@ fun HomeScreen(
                             ) { row ->
                                 AgendaRow(
                                     row = row,
-                                    onEdit = { onEditTask(row.taskId) }
+                                    onEdit = { if (!state.interactionInFlight) onEditTask(row.taskId) },
+                                    actionsEnabled = !state.interactionInFlight && !state.refreshInFlight
                                 )
                             }
                         }
 
-                        // 8. All-Clear state
+                        // 9. All-Clear state
                         if (state.allClear) {
                             item(key = "allclear") {
                                 Box(
@@ -339,7 +361,7 @@ fun HomeScreen(
             IconFabStack(
                 primaryAction = IconFabAction(
                     contentDescription = "Add task",
-                    onClick = onAddTask,
+                    onClick = { if (!state.interactionInFlight) onAddTask() },
                     icon = { Text("+", style = MaterialTheme.typography.headlineSmall) }
                 ),
                 secondaryActions = listOf(
@@ -356,8 +378,7 @@ fun HomeScreen(
 
 @Composable
 private fun HomeTitleHeader(
-    state: HomeScreenState,
-    onRetryRefresh: () -> Unit
+    state: HomeScreenState
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Text(
@@ -383,12 +404,8 @@ private fun HomeTitleHeader(
                 )
             }
         }
-        state.statusMessage?.let { message ->
-            if (message == "Refreshing...") {
-                InlineLoadingStatus(message)
-            } else {
-                WarningStatus(message = message, onRetry = onRetryRefresh)
-            }
+        if (state.refreshInFlight) {
+            InlineLoadingStatus("Refreshing...")
         }
     }
 }
@@ -444,7 +461,8 @@ private fun CurrentBlockHero(
     overlappingCount: Int,
     onDone: () -> Unit,
     onEdit: () -> Unit,
-    onToggleChecklistItem: (String) -> Unit
+    onToggleChecklistItem: (String) -> Unit,
+    actionsEnabled: Boolean = true
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -482,6 +500,7 @@ private fun CurrentBlockHero(
             ChecklistProgress(
                 items = currentBlock.checklistItems,
                 interactive = true,
+                enabled = actionsEnabled,
                 onCheckedChange = { item, _ -> onToggleChecklistItem(item.id) }
             )
             Row(
@@ -490,6 +509,7 @@ private fun CurrentBlockHero(
             ) {
                 OutlinedButton(
                     onClick = onEdit,
+                    enabled = actionsEnabled,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Edit")
@@ -497,7 +517,7 @@ private fun CurrentBlockHero(
                 PrimaryActionButton(
                     label = "Done",
                     onClick = onDone,
-                    enabled = currentBlock.doneEnabled,
+                    enabled = currentBlock.doneEnabled && actionsEnabled,
                     modifier = Modifier
                         .weight(1f)
                         .semantics { contentDescription = currentBlock.doneContentDescription }
@@ -512,7 +532,8 @@ private fun AgendaRow(
     row: HomeAgendaRow,
     onEdit: () -> Unit,
     onDone: (() -> Unit)? = null,
-    onAssign: (() -> Unit)? = null
+    onAssign: (() -> Unit)? = null,
+    actionsEnabled: Boolean = true
 ) {
     val stateColor = when (row.state) {
         HomeAgendaRowState.Overdue -> MaterialTheme.colorScheme.error
@@ -526,7 +547,7 @@ private fun AgendaRow(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("home-row:${row.taskId}")
-            .clickable(onClick = onEdit),
+            .clickable(enabled = actionsEnabled, onClick = onEdit),
         color = MaterialTheme.colorScheme.surface
     ) {
         Row(
@@ -578,12 +599,13 @@ private fun AgendaRow(
                 PrimaryActionButton(
                     label = "Done",
                     onClick = onDone,
-                    enabled = row.doneEnabled,
+                    enabled = row.doneEnabled && actionsEnabled,
                     modifier = Modifier.testTag("home-done:${row.taskId}")
                 )
             } else if (onAssign != null) {
                 OutlinedButton(
                     onClick = onAssign,
+                    enabled = actionsEnabled,
                     modifier = Modifier.testTag("home-assign:${row.taskId}")
                 ) {
                     Text("Assign")

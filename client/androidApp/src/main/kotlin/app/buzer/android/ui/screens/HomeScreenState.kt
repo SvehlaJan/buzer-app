@@ -44,7 +44,9 @@ data class HomeScreenState(
     val updatedLabel: String?,
     val contentState: HomeContentState,
     val refreshInFlight: Boolean,
+    val interactionInFlight: Boolean = false,
     val actionStatusMessage: String?,
+    val sessionWarning: String? = null,
     val reviewAttention: HomeAttention?,
     val refreshAttention: HomeAttention?,
     val currentBlock: HomeCurrentBlock?,
@@ -54,9 +56,10 @@ data class HomeScreenState(
     val futureGroups: List<HomeDateGroup>,
     val allClear: Boolean
 ) {
-    val canOpenMorningReview: Boolean get() = reviewAttention != null
+    val canOpenMorningReview: Boolean get() = reviewAttention != null && !interactionInFlight
     val attention: HomeAttention? get() = reviewAttention ?: refreshAttention
-    val statusMessage: String? get() = actionStatusMessage ?: if (refreshInFlight) "Refreshing..." else null
+    val statusMessage: String? get() = sessionWarning ?: actionStatusMessage ?: if (refreshInFlight) "Refreshing..." else null
+    val effectiveWarning: String? get() = sessionWarning ?: actionStatusMessage
     val agendaRows: List<HomeAgendaRow>
         get() = overdue.rows +
             overlappingCurrentRows +
@@ -67,8 +70,10 @@ data class HomeScreenState(
 fun buildHomeScreenState(
     snapshot: SnapshotViewState?,
     refreshInFlight: Boolean = false,
+    interactionInFlight: Boolean = false,
     refreshError: String? = null,
     actionStatusMessage: String? = null,
+    sessionWarning: String? = null,
     morningReviewBannerVisible: Boolean = false,
     ownerBlockingCount: Int? = null,
     now: Instant,
@@ -80,6 +85,8 @@ fun buildHomeScreenState(
     val nowDate = nowZoned.toLocalDate()
     val weekdayLabel = DateTimeFormatter.ofPattern("EEEE", Locale.US).format(nowZoned)
     val dateLabel = DateTimeFormatter.ofPattern("MMMM d", Locale.US).format(nowZoned)
+    val effectiveSessionWarning = sessionWarning ?: actionStatusMessage
+    val actionsDisabled = interactionInFlight || refreshInFlight
 
     if (snapshot == null) {
         val content = if (refreshError != null) {
@@ -93,7 +100,9 @@ fun buildHomeScreenState(
             updatedLabel = null,
             contentState = content,
             refreshInFlight = refreshInFlight,
+            interactionInFlight = interactionInFlight,
             actionStatusMessage = actionStatusMessage,
+            sessionWarning = effectiveSessionWarning,
             reviewAttention = if (morningReviewBannerVisible) {
                 HomeAttention("Morning review ready", HomeAttentionAction.OpenMorningReview)
             } else {
@@ -127,8 +136,6 @@ fun buildHomeScreenState(
         }
 
     val ownerAgenda = selectOwnerAgenda(snapshot, now, zoneId)
-    // Home omits unsupported hierarchy roots; Morning Review still exposes their
-    // authoritative invalid projection through the shared selector for repair.
     val reviewTasks = ownerAgenda.blocking.filter { it.hierarchyStatus != HierarchyStatus.unsupported }
     val reviewIds = reviewTasks.map { it.id }.toSet()
     val blockingCount = ownerBlockingCount ?: reviewTasks.size
@@ -170,9 +177,9 @@ fun buildHomeScreenState(
             checkedCount = progress.checkedCount,
             totalCount = progress.totalCount,
             nextUncheckedChildTitle = progress.nextUncheckedChildTitle,
-            doneEnabled = progress.doneEnabled,
+            doneEnabled = progress.doneEnabled && !actionsDisabled,
             pendingLabel = null,
-            actionAvailable = true
+            actionAvailable = !actionsDisabled
         )
     }
     val unassignedSection = HomeExpandableSection(
@@ -196,9 +203,9 @@ fun buildHomeScreenState(
             checkedCount = progress.checkedCount,
             totalCount = progress.totalCount,
             nextUncheckedChildTitle = progress.nextUncheckedChildTitle,
-            doneEnabled = progress.doneEnabled,
+            doneEnabled = progress.doneEnabled && !actionsDisabled,
             pendingLabel = null,
-            actionAvailable = true
+            actionAvailable = !actionsDisabled
         )
     }
     val overdueSection = HomeExpandableSection(
@@ -228,8 +235,8 @@ fun buildHomeScreenState(
             totalCount = progress.totalCount,
             nextUncheckedChildTitle = progress.nextUncheckedChildTitle,
             checklistItems = item.task.checklistItems,
-            doneEnabled = progress.doneEnabled,
-            extendEnabled = progress.extendEnabled
+            doneEnabled = progress.doneEnabled && !actionsDisabled,
+            extendEnabled = progress.extendEnabled && !actionsDisabled
         )
     }
 
@@ -251,9 +258,9 @@ fun buildHomeScreenState(
                     checkedCount = progress.checkedCount,
                     totalCount = progress.totalCount,
                     nextUncheckedChildTitle = progress.nextUncheckedChildTitle,
-                    doneEnabled = progress.doneEnabled,
+                    doneEnabled = progress.doneEnabled && !actionsDisabled,
                     pendingLabel = null,
-                    actionAvailable = true
+                    actionAvailable = !actionsDisabled
                 )
             }
     } else {
@@ -282,9 +289,9 @@ fun buildHomeScreenState(
                     checkedCount = progress.checkedCount,
                     totalCount = progress.totalCount,
                     nextUncheckedChildTitle = progress.nextUncheckedChildTitle,
-                    doneEnabled = progress.doneEnabled,
+                    doneEnabled = progress.doneEnabled && !actionsDisabled,
                     pendingLabel = null,
-                    actionAvailable = true
+                    actionAvailable = !actionsDisabled
                 )
             }
             HomeDateGroup(date = date, heading = heading, rows = rows)
@@ -303,7 +310,9 @@ fun buildHomeScreenState(
         updatedLabel = updatedLabel,
         contentState = HomeContentState.Ready,
         refreshInFlight = refreshInFlight,
+        interactionInFlight = interactionInFlight,
         actionStatusMessage = actionStatusMessage,
+        sessionWarning = effectiveSessionWarning,
         reviewAttention = reviewAttention,
         refreshAttention = refreshAttention,
         currentBlock = heroBlock,

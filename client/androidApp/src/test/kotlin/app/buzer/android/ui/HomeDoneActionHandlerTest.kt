@@ -1,7 +1,6 @@
 package app.buzer.android.ui
 
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.state.SnapshotViewState
@@ -11,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -177,7 +177,7 @@ class HomeDoneActionHandlerTest {
         assertNull(appliedSnapshot)
         assertEquals("Network error", reportedError?.message)
         assertEquals(listOf(true, false), inFlightStates)
-        assertEquals("Existing action status", actionStatus)
+        assertEquals("Network error", actionStatus)
     }
 
     @Test
@@ -218,70 +218,19 @@ class HomeDoneActionHandlerTest {
     }
 
     @Test
-    fun retryCompletionReinvokesCompleteTaskOnTransportFailureAndDoesNothingWhenCleared() = runBlocking {
-        var completeCount = 0
-        var shouldFail = true
-        val appliedSnapshots = mutableListOf<SnapshotViewState>()
-        var statusMessage: String? = null
-        val refreshedSnapshot = emptySnapshot(scheduleVersion = 50)
-
+    fun completeTaskLocksInteractionsDuringExecutionAndUnlocksImmediatelyOnResult() = runBlocking {
+        val interactionStates = mutableListOf<Boolean>()
         val handler = HomeDoneActionHandler(
-            refreshSnapshot = { _ -> emptySnapshot() },
-            completeTask = { _, _ ->
-                completeCount += 1
-                if (shouldFail) {
-                    CoordinatorActionResult.TransportFailure(false, "503 Service Unavailable")
-                } else {
-                    CoordinatorActionResult.Success
-                }
-            },
-            latestSnapshot = { refreshedSnapshot },
-            applySnapshot = appliedSnapshots::add,
-            setStatusMessage = { statusMessage = it }
-        )
-
-        // 1. Initial completeTask fails with TransportFailure
-        handler.completeTask("task-1", action())
-        assertEquals(1, completeCount)
-        assertEquals("503 Service Unavailable", statusMessage)
-        assertEquals(0, appliedSnapshots.size)
-
-        // 2. retryCompletion() retries completeTask while failing
-        handler.retryCompletion()
-        assertEquals(2, completeCount)
-        assertEquals("503 Service Unavailable", statusMessage)
-        assertEquals(0, appliedSnapshots.size)
-
-        // 3. retryCompletion() succeeds when backend recovers
-        shouldFail = false
-        handler.retryCompletion()
-        assertEquals(3, completeCount)
-        assertNull(statusMessage)
-        assertEquals(listOf(refreshedSnapshot), appliedSnapshots)
-
-        // 4. retryCompletion() does nothing once cleared on Success
-        handler.retryCompletion()
-        assertEquals(3, completeCount)
-    }
-
-    @Test
-    fun retryCompletionDoesNothingIfNoTransportFailureOccurred() = runBlocking {
-        var completeCount = 0
-        val handler = HomeDoneActionHandler(
-            refreshSnapshot = { _ -> emptySnapshot() },
-            completeTask = { _, _ ->
-                completeCount += 1
-                CoordinatorActionResult.Success
-            },
+            refreshSnapshot = { emptySnapshot() },
+            completeTask = { _, _ -> CoordinatorActionResult.Warning("error", "Failed", null) },
             latestSnapshot = { emptySnapshot() },
-            applySnapshot = {}
+            applySnapshot = {},
+            setInteractionInFlight = { interactionStates.add(it) }
         )
 
         handler.completeTask("task-1", action())
-        assertEquals(1, completeCount)
 
-        handler.retryCompletion()
-        assertEquals(1, completeCount)
+        assertEquals(listOf(true, false), interactionStates)
     }
 
     private fun emptySnapshot(scheduleVersion: Long = 1): SnapshotViewState =

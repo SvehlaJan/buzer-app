@@ -12,6 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.EditTaskScreen
 import app.buzer.android.ui.screens.HomeScreen
@@ -35,10 +36,12 @@ fun BuzerApp(
     openAddTask: Boolean = false,
     snapshot: SnapshotViewState? = null,
     homeRefreshInFlight: Boolean = false,
+    homeInteractionInFlight: Boolean = false,
     homeRefreshError: String? = null,
     homeActionStatusMessage: String? = null,
     onRetryHomeRefresh: () -> Unit = {},
     onPullToRefresh: () -> Unit = {},
+    onOpenTodoist: () -> Unit = {},
     onDoneTask: (String) -> Unit = {},
     onDoneCurrentTask: (String) -> Unit = onDoneTask,
     onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
@@ -64,6 +67,7 @@ fun BuzerApp(
         val homeState = buildBuzerHomeState(
             snapshot = snapshot,
             homeRefreshInFlight = homeRefreshInFlight,
+            homeInteractionInFlight = homeInteractionInFlight,
             homeRefreshError = homeRefreshError,
             homeActionStatusMessage = homeActionStatusMessage,
             now = nowProvider(),
@@ -78,6 +82,7 @@ fun BuzerApp(
                 AppSection.Home -> HomeScreen(
                     state = homeState,
                     onRefreshTasks = onPullToRefresh,
+                    onOpenTodoist = onOpenTodoist,
                     onAddTask = {
                         AppLog.debug("ui navigate section=Add source=home")
                         section = AppSection.Add
@@ -132,6 +137,7 @@ fun BuzerApp(
 internal fun buildBuzerHomeState(
     snapshot: SnapshotViewState?,
     homeRefreshInFlight: Boolean,
+    homeInteractionInFlight: Boolean = false,
     homeRefreshError: String?,
     homeActionStatusMessage: String? = null,
     morningReviewBannerVisible: Boolean = false,
@@ -144,8 +150,10 @@ internal fun buildBuzerHomeState(
     buildHomeScreenState(
         snapshot = snapshot,
         refreshInFlight = homeRefreshInFlight,
+        interactionInFlight = homeInteractionInFlight,
         refreshError = homeRefreshError,
         actionStatusMessage = homeActionStatusMessage,
+        sessionWarning = homeActionStatusMessage,
         morningReviewBannerVisible = morningReviewBannerVisible,
         ownerBlockingCount = ownerBlockingCount,
         now = now,
