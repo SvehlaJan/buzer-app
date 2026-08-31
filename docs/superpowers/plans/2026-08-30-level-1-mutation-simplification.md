@@ -1203,10 +1203,10 @@ silently merge, push, or delete the worktree.
   before deleting old architecture.
 - [x] **Checkpoint B — backend cutover:** Tasks 6-10. Full backend suite must pass and schema
   backup/rollback procedure must be demonstrable.
-- [ ] **Checkpoint C — client cutover:** Tasks 11-14. Shared and Android JVM/build gates must
+- [x] **Checkpoint C — client cutover:** Tasks 11-14. Shared and Android JVM/build gates must
   pass; no pending state remains.
-- [ ] **Checkpoint D — end-to-end:** Task 15. Full real-backend instrumentation must pass.
-- [ ] **Checkpoint E — production:** Task 16. Deployment/canary precedes Sentry closure.
+- [x] **Checkpoint D — end-to-end:** Task 15. Full real-backend instrumentation must pass.
+- [x] **Checkpoint E — production:** Task 16. Deployment/canary precedes Sentry closure.
 
 ## Definition of done
 
