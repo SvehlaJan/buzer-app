@@ -66,8 +66,7 @@ data class TaskSnapshotItem(
     val checkedCount: Int = 0,
     val totalCount: Int = 0,
     val hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-    val hierarchyViolation: String? = null,
-    val reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
+    val hierarchyViolation: String? = null
 )
 
 @Serializable
@@ -78,9 +77,6 @@ enum class RecurrencePreset { never, daily, weekdays, weekly, monthly, yearly }
 
 @Serializable
 enum class HierarchyStatus { valid, unsupported }
-
-@Serializable
-enum class ReconciliationStatus { none, pending, confirmed }
 
 @Serializable
 data class TaskRecurrence(
@@ -150,15 +146,13 @@ data class CreateTaskRequest(
     val assigneeId: String? = null,
     val dueDatetime: String? = null,
     val durationMinutes: Int? = null,
-    val actionId: String,
-    val deviceId: String,
     val recurrencePreset: RecurrencePreset = RecurrencePreset.never,
     val timeZone: String? = null,
     val checklistDrafts: List<ChecklistDraft> = emptyList()
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
+        requireNonBlank("title", title)
+        requireNonBlank("projectId", projectId)
     }
 }
 
@@ -170,8 +164,6 @@ object CreateTaskRequestSerializer : KSerializer<CreateTaskRequest> {
         element<String?>("assigneeId", isOptional = true)
         element<String?>("dueDatetime")
         element<Int?>("durationMinutes")
-        element<String>("actionId")
-        element<String>("deviceId")
         element<String>("recurrencePreset", isOptional = true)
         element<String?>("timeZone", isOptional = true)
         element("checklistDrafts", ListSerializer(ChecklistDraft.serializer()).descriptor, isOptional = true)
@@ -187,8 +179,6 @@ object CreateTaskRequestSerializer : KSerializer<CreateTaskRequest> {
             value.assigneeId?.let { put("assigneeId", it) }
             put("dueDatetime", value.dueDatetime?.let(::JsonPrimitive) ?: JsonNull)
             put("durationMinutes", value.durationMinutes?.let(::JsonPrimitive) ?: JsonNull)
-            put("actionId", value.actionId)
-            put("deviceId", value.deviceId)
             if (value.recurrencePreset != RecurrencePreset.never) {
                 put("recurrencePreset", value.recurrencePreset.name)
             }
@@ -218,8 +208,6 @@ object CreateTaskRequestSerializer : KSerializer<CreateTaskRequest> {
             durationMinutes = element["durationMinutes"]?.let {
                 if (it is JsonNull) null else it.jsonPrimitive.int
             },
-            actionId = requiredString(element, "actionId"),
-            deviceId = requiredString(element, "deviceId"),
             recurrencePreset = element["recurrencePreset"]?.jsonPrimitive?.contentOrNull
                 ?.let(RecurrencePreset::valueOf) ?: RecurrencePreset.never,
             timeZone = element["timeZone"]?.jsonPrimitive?.contentOrNull,
@@ -236,17 +224,13 @@ object CreateTaskRequestSerializer : KSerializer<CreateTaskRequest> {
 
 @Serializable
 data class UpdateTaskRequest(
-    val actionId: String,
-    val deviceId: String,
-    val expectedOccurrenceKey: String,
+    val expectedOccurrenceKey: String? = null,
     val rootPatch: RootTaskPatch? = null,
     @EncodeDefault
     val childMutations: List<ChecklistMutation> = emptyList()
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
-        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
+        expectedOccurrenceKey?.let { requireNonBlank("expectedOccurrenceKey", it) }
     }
 }
 
@@ -258,6 +242,7 @@ data class ChecklistDraft(
 ) {
     init {
         requireNonBlank("clientMutationId", clientMutationId)
+        requireNonBlank("title", title)
     }
 }
 
@@ -371,6 +356,7 @@ sealed class ChecklistMutation {
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("title", title)
         }
     }
 
@@ -385,6 +371,7 @@ sealed class ChecklistMutation {
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("childId", childId)
             requireNonBlank("expectedChildRevision", expectedChildRevision)
             requireNonBlank("title", title)
         }
@@ -399,6 +386,7 @@ sealed class ChecklistMutation {
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("childId", childId)
             requireNonBlank("expectedChildRevision", expectedChildRevision)
         }
     }
@@ -412,6 +400,7 @@ sealed class ChecklistMutation {
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("childId", childId)
             requireNonBlank("expectedChildRevision", expectedChildRevision)
         }
     }
@@ -425,6 +414,7 @@ sealed class ChecklistMutation {
     ) : ChecklistMutation() {
         init {
             requireNonBlank("clientMutationId", clientMutationId)
+            requireNonBlank("childId", childId)
             requireNonBlank("expectedChildRevision", expectedChildRevision)
         }
     }
@@ -432,14 +422,10 @@ sealed class ChecklistMutation {
 
 @Serializable
 data class TaskActionRequest(
-    val actionId: String,
-    val deviceId: String,
     val expectedOccurrenceKey: String,
     val expectedTaskRevision: String? = null
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         expectedTaskRevision?.let { requireNonBlank("expectedTaskRevision", it) }
     }
@@ -447,14 +433,10 @@ data class TaskActionRequest(
 
 @Serializable
 data class ExtendTaskRequest(
-    val actionId: String,
-    val deviceId: String,
     val expectedOccurrenceKey: String,
     val expectedTaskRevision: String
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         requireNonBlank("expectedTaskRevision", expectedTaskRevision)
     }
@@ -462,33 +444,26 @@ data class ExtendTaskRequest(
 
 @Serializable
 data class AddChecklistItemRequest(
-    val actionId: String,
-    val deviceId: String,
     val expectedOccurrenceKey: String,
     val clientMutationId: String,
     val title: String,
     val description: String? = null
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         requireNonBlank("clientMutationId", clientMutationId)
+        requireNonBlank("title", title)
     }
 }
 
 @Serializable
 data class UpdateChecklistItemRequest(
-    val actionId: String,
-    val deviceId: String,
     val expectedOccurrenceKey: String,
     val expectedChildRevision: String,
     val title: String,
     val description: String? = null
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         requireNonBlank("expectedChildRevision", expectedChildRevision)
         requireNonBlank("title", title)
@@ -497,26 +472,24 @@ data class UpdateChecklistItemRequest(
 
 @Serializable
 data class FocusedChecklistMutationRequest(
-    val actionId: String,
-    val deviceId: String,
     val expectedOccurrenceKey: String,
     val expectedChildRevision: String
 ) {
     init {
-        requireNonBlank("actionId", actionId)
-        requireNonBlank("deviceId", deviceId)
         requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
         requireNonBlank("expectedChildRevision", expectedChildRevision)
     }
 }
 
-@Serializable
-enum class MutationOutcome { completed, reconciliation_pending }
+sealed interface MutationOutcome {
+    data class Success(val snapshot: TasksSnapshotResponse, val snoozedUntil: String? = null) : MutationOutcome
+    data class Warning(val code: String, val message: String, val snapshot: TasksSnapshotResponse?) : MutationOutcome
+    data class Conflict(val code: String, val message: String, val snapshot: TasksSnapshotResponse) : MutationOutcome
+    data class TransportFailure(val isConnected: Boolean, val message: String) : MutationOutcome
+}
 
 @Serializable
 data class MutationResponse(
-    val actionId: String,
-    val outcome: MutationOutcome,
     val snapshot: TasksSnapshotResponse,
     val snoozedUntil: String? = null
 )

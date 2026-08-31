@@ -4,7 +4,6 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
@@ -32,7 +31,7 @@ class SnapshotDiagnosticsTest {
         val description = SnapshotDiagnostics.describe(snapshot)
 
         assertEquals(
-            "scheduleVersion=7 serverTime=2026-06-02T20:20:00Z tasks=3 visible=2 invalid=2 active=0 startingToday=1 completed=1 deleted=0 unsupported=1 pending=0 healthWarnings=1",
+            "scheduleVersion=7 serverTime=2026-06-02T20:20:00Z tasks=3 visible=2 invalid=2 active=0 startingToday=1 completed=1 deleted=0 unsupported=1 healthWarnings=1",
             description
         )
         assertFalse(description.contains("Private"))
@@ -43,8 +42,7 @@ class SnapshotDiagnosticsTest {
         title: String,
         state: CommitmentState,
         isCompleted: Boolean = false,
-        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -67,7 +65,6 @@ class SnapshotDiagnosticsTest {
             deadlineExtensionCount = 0,
             escalationSentAt = null,
             updatedAt = "2026-06-02T20:00:00Z",
-            hierarchyStatus = hierarchyStatus,
-            reconciliationStatus = reconciliationStatus
+            hierarchyStatus = hierarchyStatus
         )
 }

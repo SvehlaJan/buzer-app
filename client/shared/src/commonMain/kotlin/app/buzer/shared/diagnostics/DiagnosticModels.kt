@@ -16,5 +16,6 @@ data class DiagnosticLogRecord(
     val tag: String,
     val message: String,
     val throwableType: String? = null,
-    val throwableMessage: String? = null
+    val throwableMessage: String? = null,
+    val attributes: Map<String, String> = emptyMap()
 )

@@ -4,7 +4,6 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
@@ -54,17 +53,6 @@ class AlarmPlanCalculatorTest {
 
         assertEquals(oldPlan.alarms.map { it.triggerAtIso }, nextPlan.alarms.map { it.triggerAtIso })
         assertTrue(oldPlan.alarms.zip(nextPlan.alarms).all { (old, next) -> old.occurrenceKey != next.occurrenceKey })
-    }
-
-    @Test
-    fun pendingRootCreatesNoAlarmsAndRequestsCancellation() {
-        val plan = AlarmPlanCalculator.calculate(
-            snapshot(task(id = "pending", reconciliationStatus = ReconciliationStatus.pending)),
-            nowIso = "2026-05-28T09:30:00Z"
-        )
-
-        assertTrue(plan.alarms.isEmpty())
-        assertEquals(setOf("pending"), plan.cancelTaskIds)
     }
 
     @Test
@@ -333,8 +321,7 @@ class AlarmPlanCalculatorTest {
         validationErrors: List<String> = emptyList(),
         startedAt: String? = null,
         occurrenceKey: String = "occurrence-$id",
-        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -358,7 +345,6 @@ class AlarmPlanCalculatorTest {
             escalationSentAt = null,
             updatedAt = "2026-05-28T09:00:00Z",
             occurrenceKey = occurrenceKey,
-            hierarchyStatus = hierarchyStatus,
-            reconciliationStatus = reconciliationStatus
+            hierarchyStatus = hierarchyStatus
         )
 }

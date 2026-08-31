@@ -22,9 +22,7 @@ class BuzerApiClientJsonTest {
                 projectId = "project-personal",
                 assigneeId = null,
                 dueDatetime = "2026-06-13T12:00:00Z",
-                durationMinutes = 30,
-                actionId = "action-create-1",
-                deviceId = "device-1"
+                durationMinutes = 30
             )
         )
 
@@ -40,9 +38,7 @@ class BuzerApiClientJsonTest {
                 projectId = "project-family",
                 assigneeId = "user-wife",
                 dueDatetime = null,
-                durationMinutes = null,
-                actionId = "action-create-unscheduled",
-                deviceId = "device-1"
+                durationMinutes = null
             )
         )
 
@@ -54,8 +50,6 @@ class BuzerApiClientJsonTest {
     fun updateTaskRequestEncodesAllEditableTodoistFields() {
         val body = buzerApiJson.encodeToString(
             UpdateTaskRequest(
-                actionId = "action-edit-1",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 rootPatch = RootTaskPatch(
                     expectedTaskRevision = "r:3",
@@ -81,8 +75,6 @@ class BuzerApiClientJsonTest {
     fun rootTaskPatchDistinguishesScheduleClearFromAbsence() {
         val clearBody = buzerApiJson.encodeToString(
             UpdateTaskRequest(
-                actionId = "action-clear-schedule",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 rootPatch = RootTaskPatch(
                     expectedTaskRevision = "r:3",
@@ -93,8 +85,6 @@ class BuzerApiClientJsonTest {
         )
         val unchangedBody = buzerApiJson.encodeToString(
             UpdateTaskRequest(
-                actionId = "action-leave-schedule",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 rootPatch = RootTaskPatch(expectedTaskRevision = "r:3")
             )
@@ -110,8 +100,6 @@ class BuzerApiClientJsonTest {
     fun rootOnlyUpdateTaskRequestEncodesEmptyChildMutations() {
         val body = buzerApiJson.encodeToString(
             UpdateTaskRequest(
-                actionId = "action-edit-root-only",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 rootPatch = RootTaskPatch(expectedTaskRevision = "r:3", title = "Edited task")
             )

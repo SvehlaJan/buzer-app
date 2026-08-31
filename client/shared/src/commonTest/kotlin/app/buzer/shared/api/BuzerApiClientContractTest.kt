@@ -6,7 +6,6 @@ import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.CreateTaskRequest
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.NullablePatch
 import app.buzer.shared.model.RecurrenceKind
@@ -24,6 +23,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
+import io.ktor.http.fullPath
 import io.ktor.http.headersOf
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.runBlocking
@@ -32,10 +32,11 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class BuzerApiClientContractTest {
     @Test
-    fun forceSyncPostsEmptyObjectAndReturnsSnapshot() = runBlocking {
+    fun getSnapshotWithoutForceRefreshGetsSnapshotRoute() = runBlocking {
         val snapshotResponseJson = """
             {
               "scheduleVersion": 10,
@@ -47,9 +48,8 @@ class BuzerApiClientContractTest {
         """.trimIndent()
 
         var capturedMethod: HttpMethod? = null
-        var capturedPath: String? = null
+        var capturedFullPath: String? = null
         var capturedAuth: String? = null
-        var capturedContentType: String? = null
         var capturedBodyText: String? = null
 
         val client = BuzerApiClient(
@@ -59,9 +59,8 @@ class BuzerApiClientContractTest {
                 token = "test-token",
                 engine = MockEngine { request ->
                     capturedMethod = request.method
-                    capturedPath = request.url.encodedPath
+                    capturedFullPath = request.url.fullPath
                     capturedAuth = request.headers[HttpHeaders.Authorization]
-                    capturedContentType = request.body.contentType?.toString()
                     capturedBodyText = (request.body as? TextContent)?.text
                     respond(
                         content = ByteReadChannel(snapshotResponseJson),
@@ -72,13 +71,55 @@ class BuzerApiClientContractTest {
             )
         )
 
-        val result = client.forceSync()
+        val result = client.getSnapshot(forceRefresh = false)
 
-        assertEquals(HttpMethod.Post, capturedMethod)
-        assertEquals("/tasks/sync", capturedPath)
+        assertEquals(HttpMethod.Get, capturedMethod)
+        assertEquals("/tasks/snapshot", capturedFullPath)
         assertEquals("Bearer test-token", capturedAuth)
-        assertEquals("application/json", capturedContentType)
-        assertEquals("{}", capturedBodyText)
+        assertNull(capturedBodyText)
+        assertEquals(10, result.scheduleVersion)
+        assertEquals(5, result.snapshotGeneration)
+    }
+
+    @Test
+    fun getSnapshotWithForceRefreshAppendsQueryParam() = runBlocking {
+        val snapshotResponseJson = """
+            {
+              "scheduleVersion": 10,
+              "snapshotGeneration": 5,
+              "serverTime": "2026-07-16T10:00:00Z",
+              "health": [],
+              "tasks": []
+            }
+        """.trimIndent()
+
+        var capturedMethod: HttpMethod? = null
+        var capturedFullPath: String? = null
+        var capturedAuth: String? = null
+
+        val client = BuzerApiClient(
+            baseUrl = "https://fake.invalid",
+            token = "test-token",
+            httpClient = defaultHttpClient(
+                token = "test-token",
+                engine = MockEngine { request ->
+                    capturedMethod = request.method
+                    capturedFullPath = request.url.fullPath
+                    capturedAuth = request.headers[HttpHeaders.Authorization]
+                    respond(
+                        content = ByteReadChannel(snapshotResponseJson),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    )
+                }
+            )
+        )
+
+        val result = client.getSnapshot(forceRefresh = true)
+
+        assertEquals(HttpMethod.Get, capturedMethod)
+        assertEquals("/tasks/snapshot?forceRefresh=true", capturedFullPath)
+        assertEquals("Bearer test-token", capturedAuth)
         assertEquals(10, result.scheduleVersion)
         assertEquals(5, result.snapshotGeneration)
     }
@@ -104,8 +145,7 @@ class BuzerApiClientContractTest {
                 "activityLogEntries": [{"timestamp":"2026-07-16 18:05","timeZone":"Europe/Bratislava","message":"Extended +30 min (60 → 90 min)"}],
                 "recurrence": {"kind":"supported","preset":"weekly","rule":"every Monday at 18:00","language":"en","timeZone":"Europe/Bratislava","displayLabel":"Every Monday"},
                 "checklistItems": [{"id":"child-1","title":"Confirm notes","description":null,"checked":true,"order":1,"childRevision":"r:4"}],
-                "checkedCount": 1, "totalCount": 1, "hierarchyStatus": "valid", "hierarchyViolation": null,
-                "reconciliationStatus": "confirmed"
+                "checkedCount": 1, "totalCount": 1, "hierarchyStatus": "valid", "hierarchyViolation": null
               }]
             }
             """.trimIndent()
@@ -142,7 +182,7 @@ class BuzerApiClientContractTest {
     }
 
     @Test
-    fun createRequestSerializesActionMetadataRecurrenceAndDrafts() {
+    fun createRequestSerializesRecurrenceAndDrafts() {
         val body = buzerApiJson.encodeToString(
             CreateTaskRequest(
                 title = "Prepare release",
@@ -150,16 +190,14 @@ class BuzerApiClientContractTest {
                 assigneeId = "user-1",
                 dueDatetime = "2026-07-16T18:00:00Z",
                 durationMinutes = 60,
-                actionId = "action-create-1",
-                deviceId = "device-1",
                 recurrencePreset = RecurrencePreset.weekly,
                 timeZone = "Europe/Bratislava",
                 checklistDrafts = listOf(ChecklistDraft("draft-1", "Confirm notes", null))
             )
         )
 
-        assertContains(body, "\"actionId\":\"action-create-1\"")
-        assertContains(body, "\"deviceId\":\"device-1\"")
+        assertFalse(body.contains("actionId"))
+        assertFalse(body.contains("deviceId"))
         assertContains(body, "\"recurrencePreset\":\"weekly\"")
         assertContains(body, "\"clientMutationId\":\"draft-1\"")
     }
@@ -168,8 +206,6 @@ class BuzerApiClientContractTest {
     fun updateRequestSerializesExplicitRootAndChildRevisionsIncludingNullAssignee() {
         val body = buzerApiJson.encodeToString(
             UpdateTaskRequest(
-                actionId = "action-edit-1",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 rootPatch = RootTaskPatch(
                     expectedTaskRevision = "r:5",
@@ -200,53 +236,44 @@ class BuzerApiClientContractTest {
     }
 
     @Test
-    fun mutationResponseDecodesCompletedAuthority() {
+    fun mutationResponseDecodesSnapshotAndSnoozedUntil() {
         val response = buzerApiJson.decodeFromString<MutationResponse>(
             """
             {
-              "actionId": "action-create-1", "outcome": "completed",
-              "snapshot": {"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}
+              "snapshot": {"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]},
+              "snoozedUntil": "2026-07-16T11:00:00Z"
             }
             """.trimIndent()
         )
 
-        assertEquals(MutationOutcome.completed, response.outcome)
         assertEquals(1, response.snapshot.snapshotGeneration)
+        assertEquals("2026-07-16T11:00:00Z", response.snoozedUntil)
     }
 
     @Test
-    fun mutationResponseRejectsPartialTransportOutcomes() {
-        assertFailsWith<Exception> {
-            buzerApiJson.decodeFromString<MutationResponse>(
-                """{"actionId":"action-edit-1","outcome":"partial","snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
+    fun fixedMutationRequestsRejectBlankMetadata() {
+        assertFailsWith<IllegalArgumentException> {
+            CreateTaskRequest(
+                title = " ",
+                projectId = "project-1",
+                dueDatetime = "2026-07-16T18:00:00Z",
+                durationMinutes = 60
             )
         }
-    }
-
-    @Test
-    fun fixedMutationRequestsRejectBlankActionMetadata() {
         assertFailsWith<IllegalArgumentException> {
             CreateTaskRequest(
                 title = "Prepare release",
-                projectId = "project-1",
-                dueDatetime = "2026-07-16T18:00:00Z",
-                durationMinutes = 60,
-                actionId = " ",
-                deviceId = "device-1"
+                projectId = " "
             )
         }
         assertFailsWith<IllegalArgumentException> {
             TaskActionRequest(
-                actionId = "action-start-1",
-                deviceId = "device-1",
                 expectedOccurrenceKey = " "
             )
         }
         assertFailsWith<IllegalArgumentException> {
             UpdateTaskRequest(
-                actionId = "action-edit-1",
-                deviceId = " ",
-                expectedOccurrenceKey = "occurrence-1"
+                expectedOccurrenceKey = " "
             )
         }
     }
@@ -318,8 +345,6 @@ class BuzerApiClientContractTest {
         }
         assertFailsWith<IllegalArgumentException> {
             UpdateChecklistItemRequest(
-                actionId = "action-edit-1",
-                deviceId = "device-1",
                 expectedOccurrenceKey = "occurrence-1",
                 expectedChildRevision = "r:2",
                 title = " "
@@ -328,20 +353,19 @@ class BuzerApiClientContractTest {
     }
 
     @Test
-    fun focusedChecklistRequestSerializesReusableActionAndChildRevision() {
+    fun focusedChecklistRequestSerializesOccurrenceKeyAndChildRevision() {
         val request = FocusedChecklistMutationRequest(
-            actionId = "action-check-1",
-            deviceId = "device-1",
             expectedOccurrenceKey = "occurrence-1",
             expectedChildRevision = "r:8"
         )
 
         val body = buzerApiJson.encodeToString(request)
 
-        assertContains(body, "\"actionId\":\"action-check-1\"")
+        assertContains(body, "\"expectedOccurrenceKey\":\"occurrence-1\"")
         assertContains(body, "\"expectedChildRevision\":\"r:8\"")
         assertFalse(body.contains("checked"))
         assertFalse(body.contains("buzer"))
+        assertFalse(body.contains("actionId"))
+        assertFalse(body.contains("deviceId"))
     }
-
 }

@@ -1,24 +1,25 @@
 package app.buzer.shared.api
 
+import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.TaskActionRequest
-import app.buzer.shared.diagnostics.AppLog
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
-import io.ktor.utils.io.ByteReadChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import io.ktor.http.content.TextContent
-import kotlinx.coroutines.runBlocking
+import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNull
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BuzerApiClientErrorTest {
@@ -37,7 +38,7 @@ class BuzerApiClientErrorTest {
         val client = clientResponding(
             status = HttpStatusCode.OK,
             body = """
-                {"actionId":"action-start-1","outcome":"completed","snapshot":{
+                {"snapshot":{
                   "scheduleVersion":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]
                 }}
             """.trimIndent()
@@ -46,7 +47,7 @@ class BuzerApiClientErrorTest {
         assertFails {
             client.startTask(
                 "task-1",
-                TaskActionRequest("action-start-1", "device-1", "occurrence-1")
+                TaskActionRequest("occurrence-1")
             )
         }
     }
@@ -132,8 +133,8 @@ class BuzerApiClientErrorTest {
 
     @Test
     fun failedRequestPreservesRequestIdInExceptionAndErrorBreadcrumb() = runBlocking {
-        val breadcrumbs = mutableListOf<String>()
-        AppLog.installSink { record -> breadcrumbs += record.message }
+        val records = mutableListOf<DiagnosticLogRecord>()
+        AppLog.installSink { record -> records += record }
         try {
             val client = BuzerApiClient(
                 baseUrl = "https://fake.invalid",
@@ -154,7 +155,7 @@ class BuzerApiClientErrorTest {
             val error = assertFailsWith<BuzerApiException> { client.getSnapshot() }
 
             assertEquals("request-123", error.requestId)
-            assertTrue(breadcrumbs.any { it.contains("request_id=request-123") })
+            assertTrue(records.any { it.attributes["request_id"] == "request-123" })
         } finally {
             AppLog.resetSinkForTests()
         }
@@ -162,8 +163,8 @@ class BuzerApiClientErrorTest {
 
     @Test
     fun transportFailurePreservesOriginalExceptionAndRequestIdBreadcrumb() = runBlocking {
-        val breadcrumbs = mutableListOf<String>()
-        AppLog.installSink { record -> breadcrumbs += record.message }
+        val records = mutableListOf<DiagnosticLogRecord>()
+        AppLog.installSink { record -> records += record }
         try {
             val client = BuzerApiClient(
                 baseUrl = "https://fake.invalid",
@@ -179,7 +180,7 @@ class BuzerApiClientErrorTest {
 
             assertEquals("connection lost", error.message)
             assertEquals("request_id=request-transport-123", error.suppressedExceptions.single().message)
-            assertTrue(breadcrumbs.any { it.contains("request_id=request-transport-123") })
+            assertTrue(records.any { it.attributes["request_id"] == "request-transport-123" })
         } finally {
             AppLog.resetSinkForTests()
         }
@@ -249,7 +250,7 @@ class BuzerApiClientErrorTest {
                     requests += request.url.encodedPath to (request.body as TextContent).text
                     respond(
                         content = ByteReadChannel(
-                            """{"actionId":"action-check-1","outcome":"completed","snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
+                            """{"snapshot":{"scheduleVersion":1,"snapshotGeneration":1,"serverTime":"2026-07-16T10:00:00Z","health":[],"tasks":[]}}"""
                         ),
                         headers = headersOf(HttpHeaders.ContentType, "application/json")
                     )
@@ -257,14 +258,12 @@ class BuzerApiClientErrorTest {
             )
         )
         val request = FocusedChecklistMutationRequest(
-            actionId = "action-check-1",
-            deviceId = "device-1",
             expectedOccurrenceKey = "occurrence-1",
             expectedChildRevision = "r:2"
         )
 
         client.checkChecklistItem("task-1", "child-1", request)
-        client.uncheckChecklistItem("task-1", "child-1", request.copy(actionId = "action-uncheck-1"))
+        client.uncheckChecklistItem("task-1", "child-1", request)
 
         assertEquals("/tasks/task-1/checklist/child-1/check", requests[0].first)
         assertEquals("/tasks/task-1/checklist/child-1/uncheck", requests[1].first)

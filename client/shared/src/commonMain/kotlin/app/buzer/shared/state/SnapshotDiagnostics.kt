@@ -2,7 +2,6 @@ package app.buzer.shared.state
 
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 
 object SnapshotDiagnostics {
     fun describe(snapshot: TasksSnapshotResponse): String {
@@ -11,7 +10,6 @@ object SnapshotDiagnostics {
         val deleted = snapshot.tasks.count { it.isDeleted }
         val visible = snapshot.tasks.size - completed - deleted
         val unsupported = snapshot.tasks.count { it.hierarchyStatus == HierarchyStatus.unsupported }
-        val pending = snapshot.tasks.count { it.reconciliationStatus == ReconciliationStatus.pending }
 
         return listOf(
             "scheduleVersion=${snapshot.scheduleVersion}",
@@ -24,7 +22,6 @@ object SnapshotDiagnostics {
             "completed=$completed",
             "deleted=$deleted",
             "unsupported=$unsupported",
-            "pending=$pending",
             "healthWarnings=${reduced.healthWarnings.size}"
         ).joinToString(" ")
     }

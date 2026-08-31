@@ -2,7 +2,6 @@ package app.buzer.shared.enforcement
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.time.Duration.Companion.hours
@@ -76,8 +75,7 @@ object AlarmPlanCalculator {
         isCompleted ||
             isDeleted ||
             state == CommitmentState.completed ||
-            state == CommitmentState.deleted ||
-            reconciliationStatus == ReconciliationStatus.pending
+            state == CommitmentState.deleted
 
     private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm> {
         val startAt = task.startAt?.let(Instant::parse)

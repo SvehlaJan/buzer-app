@@ -4,7 +4,6 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 
@@ -22,7 +21,7 @@ data class SnapshotViewState(
             inProgressTasks +
             startingToday
         ).distinctBy { it.id }
-    )
+)
 
 data class SnapshotWithCallerDraft<D>(
     val viewState: SnapshotViewState,
@@ -40,8 +39,7 @@ object SnapshotReducer {
             invalidTasks = visibleTasks.filter {
                 it.state == CommitmentState.invalid ||
                     it.validationErrors.isNotEmpty() ||
-                    it.hierarchyStatus == HierarchyStatus.unsupported ||
-                    it.reconciliationStatus == ReconciliationStatus.pending
+                    it.hierarchyStatus == HierarchyStatus.unsupported
             },
             activeBlockers = visibleTasks.filter {
                 it.state == CommitmentState.start_blocker_active ||

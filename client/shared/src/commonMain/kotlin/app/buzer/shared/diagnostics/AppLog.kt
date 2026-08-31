@@ -21,17 +21,47 @@ object AppLog {
         sink = null
     }
 
-    fun debug(message: String) = emit("debug", message, null) { logger.d { message } }
-    fun info(message: String) = emit("info", message, null) { logger.i { message } }
-    fun warn(message: String, throwable: Throwable? = null) =
-        emit("warning", message, throwable) { logger.w(throwable) { message } }
-    fun error(message: String, throwable: Throwable? = null) =
-        emit("error", message, throwable) { logger.e(throwable) { message } }
+    fun debug(message: String, attributes: Map<String, String> = emptyMap()) =
+        emit("debug", message, null, attributes) { logger.d { formatLog(message, attributes) } }
+
+    fun info(message: String, attributes: Map<String, String> = emptyMap()) =
+        emit("info", message, null, attributes) { logger.i { formatLog(message, attributes) } }
+
+    fun warn(
+        message: String,
+        throwable: Throwable? = null,
+        attributes: Map<String, String> = emptyMap()
+    ) = emit("warning", message, throwable, attributes) { logger.w(throwable) { formatLog(message, attributes) } }
+
+    fun warn(
+        message: String,
+        attributes: Map<String, String>
+    ) = warn(message, null, attributes)
+
+    fun error(
+        message: String,
+        throwable: Throwable? = null,
+        attributes: Map<String, String> = emptyMap()
+    ) = emit("error", message, throwable, attributes) { logger.e(throwable) { formatLog(message, attributes) } }
+
+    fun error(
+        message: String,
+        attributes: Map<String, String>
+    ) = error(message, null, attributes)
+
+    private fun formatLog(message: String, attributes: Map<String, String>): String =
+        if (attributes.isEmpty()) {
+            message
+        } else {
+            val formattedAttrs = attributes.entries.joinToString(" ") { "${it.key}=${it.value}" }
+            "$message $formattedAttrs"
+        }
 
     private inline fun emit(
         severity: String,
         message: String,
         throwable: Throwable?,
+        attributes: Map<String, String>,
         local: () -> Unit
     ) {
         local()
@@ -42,7 +72,8 @@ object AppLog {
                     tag = "Buzer",
                     message = message,
                     throwableType = throwable?.let { it::class.simpleName },
-                    throwableMessage = throwable?.message
+                    throwableMessage = throwable?.message,
+                    attributes = attributes
                 )
             )
         }

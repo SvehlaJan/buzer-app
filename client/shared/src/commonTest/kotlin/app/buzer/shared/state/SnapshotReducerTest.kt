@@ -5,7 +5,6 @@ import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
@@ -43,13 +42,12 @@ class SnapshotReducerTest {
     }
 
     @Test
-    fun morningReviewIncludesUnsupportedAndReconciliationPendingRoots() {
+    fun morningReviewIncludesUnsupportedRoots() {
         val snapshot = TasksSnapshotResponse(
             scheduleVersion = 8,
             serverTime = "2026-05-08T07:00:00Z",
             tasks = listOf(
-                task("unsupported", CommitmentState.planned, hierarchyStatus = HierarchyStatus.unsupported),
-                task("pending", CommitmentState.planned, reconciliationStatus = ReconciliationStatus.pending)
+                task("unsupported", CommitmentState.planned, hierarchyStatus = HierarchyStatus.unsupported)
             ),
             health = emptyList(),
             snapshotGeneration = 1
@@ -57,7 +55,7 @@ class SnapshotReducerTest {
 
         val result = SnapshotReducer.reduce(snapshot)
 
-        assertEquals(listOf("unsupported", "pending"), result.invalidTasks.map { it.id })
+        assertEquals(listOf("unsupported"), result.invalidTasks.map { it.id })
     }
 
     @Test
@@ -125,7 +123,6 @@ class SnapshotReducerTest {
         startAt: String? = "2026-05-08T06:30:00Z",
         validationErrors: List<String> = emptyList(),
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
         occurrenceKey: String = ""
     ): TaskSnapshotItem =
         TaskSnapshotItem(
@@ -150,7 +147,6 @@ class SnapshotReducerTest {
             escalationSentAt = null,
             updatedAt = "2026-05-08T06:00:00Z",
             hierarchyStatus = hierarchyStatus,
-            reconciliationStatus = reconciliationStatus,
             occurrenceKey = occurrenceKey
         )
 
