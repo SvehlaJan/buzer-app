@@ -195,10 +195,8 @@ class MorningReviewActivity : ComponentActivity() {
                 onRepairSuccess = { _ -> coordinator?.let(::reloadCached) },
                 onStart = ::acknowledge,
                 onSnooze = ::snooze,
-                onPendingRetry = ::runForcedRefresh,
                 onOverdueDone = ::runOverdueDone,
                 onOverdueEdit = {},
-                onRetryAction = { lifecycleScope.launch { session.retryAction() } },
                 onRetryRefresh = ::runForcedRefresh,
                 onOpenTodoist = { app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchToday(this@MorningReviewActivity) }
             )

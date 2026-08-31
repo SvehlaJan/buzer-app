@@ -82,10 +82,8 @@ fun MorningReviewScreen(
     onRepairSuccess: (String) -> Unit = {},
     onStart: () -> Unit = {},
     onSnooze: () -> Unit = {},
-    onPendingRetry: () -> Unit = {},
     onOverdueDone: (String) -> Unit = {},
     onOverdueEdit: (String) -> Unit = {},
-    onRetryAction: () -> Unit = {},
     onRetryRefresh: () -> Unit = {},
     onOpenTodoist: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -195,13 +193,6 @@ fun MorningReviewScreen(
                 )
             }
         }
-        items(screenState.retryNotices, key = { "retry-${it.target}" }) { notice ->
-            TextButton(
-                onClick = if (notice.target == MorningReviewRetryTarget.Refresh) onRetryRefresh else onRetryAction,
-                enabled = !screenState.actionInFlight,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (notice.target == MorningReviewRetryTarget.Refresh) "Retry refresh" else "Retry action") }
-        }
         if (screenState.phase == MorningReviewPhase.Loading) item("loading") { Text("Loading morning review…") }
         items(screenState.blockingCards, key = { "blocking-${it.taskId}" }) { card ->
             Card(modifier = Modifier.fillMaxWidth().testTag("morning-blocking-${card.taskId}")) {
@@ -221,14 +212,6 @@ fun MorningReviewScreen(
                                     .testTag("morning-repair-${card.taskId}")
                                     .semantics { contentDescription = "Repair ${card.title}" }
                             ) { Text("Repair") }
-                        }
-                        is MorningReviewBlockingCard.SyncPending -> {
-                            Text(card.statusText)
-                            TextButton(
-                                onClick = onPendingRetry,
-                                enabled = !screenState.actionInFlight,
-                                modifier = Modifier.semantics { contentDescription = "Retry sync for ${card.title}" }
-                            ) { Text("Retry") }
                         }
                     }
                 }

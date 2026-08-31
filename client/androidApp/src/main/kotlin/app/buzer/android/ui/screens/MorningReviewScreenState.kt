@@ -28,12 +28,6 @@ sealed interface MorningReviewBlockingCard {
         val problemText: String,
         val description: String?
     ) : MorningReviewBlockingCard
-
-    data class SyncPending(
-        override val taskId: String,
-        override val title: String,
-        val statusText: String = "Sync pending"
-    ) : MorningReviewBlockingCard
 }
 
 data class MorningReviewAgendaRow(
@@ -44,19 +38,11 @@ data class MorningReviewAgendaRow(
     val doneEnabled: Boolean
 )
 
-enum class MorningReviewRetryTarget { Refresh, Action }
-
-data class MorningReviewRetryNotice(
-    val target: MorningReviewRetryTarget,
-    val message: String
-)
-
 data class MorningReviewScreenState(
     val phase: MorningReviewPhase,
     val headerText: String,
     val absoluteDateLabel: String,
     val warning: String?,
-    val retryNotices: List<MorningReviewRetryNotice>,
     val refreshing: Boolean,
     val blockingCards: List<MorningReviewBlockingCard>,
     val overdueRows: List<MorningReviewAgendaRow>,
@@ -81,24 +67,20 @@ fun buildMorningReviewScreenState(
 ): MorningReviewScreenState {
     val dateLabel = DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy", Locale.US)
         .format(now.atZone(zoneId))
-    val retryNotices = buildList {
+    val warning = buildList {
         refreshError?.let {
             add(
-                MorningReviewRetryNotice(
-                    target = MorningReviewRetryTarget.Refresh,
-                    message = if (snapshot == null) {
-                        "Refresh failed. Task data is unavailable: $it"
-                    } else {
-                        "Refresh failed. Showing last known tasks: $it"
-                    }
-                )
+                if (snapshot == null) {
+                    "Refresh failed. Task data is unavailable: $it"
+                } else {
+                    "Refresh failed. Showing last known tasks: $it"
+                }
             )
         }
         actionError?.let {
-            add(MorningReviewRetryNotice(MorningReviewRetryTarget.Action, "Action failed: $it"))
+            add("Action failed: $it")
         }
-    }
-    val warning = retryNotices.joinToString(" ") { it.message }.ifEmpty { null }
+    }.joinToString(" ").ifEmpty { null }
 
     if (snapshot == null) {
         if (loading || refreshInFlight) {
@@ -107,7 +89,6 @@ fun buildMorningReviewScreenState(
                 headerText = "Loading morning review",
                 absoluteDateLabel = dateLabel,
                 warning = warning,
-                retryNotices = retryNotices,
                 refreshing = refreshInFlight,
                 showBack = showBack,
                 actionInFlight = actionInFlight
@@ -118,7 +99,6 @@ fun buildMorningReviewScreenState(
             headerText = "Task data unavailable",
             absoluteDateLabel = dateLabel,
             warning = warning,
-            retryNotices = retryNotices,
             refreshing = false,
             startDayLabel = "Start day without data",
             startDayEnabled = !actionInFlight,
@@ -136,7 +116,6 @@ fun buildMorningReviewScreenState(
             headerText = "${blockingCards.size} ${if (blockingCards.size == 1) "task needs" else "tasks need"} attention",
             absoluteDateLabel = dateLabel,
             warning = warning,
-            retryNotices = retryNotices,
             refreshing = refreshInFlight,
             blockingCards = blockingCards,
             startDayEnabled = false,
@@ -159,7 +138,6 @@ fun buildMorningReviewScreenState(
         headerText = "Morning review",
         absoluteDateLabel = dateLabel,
         warning = warning,
-        retryNotices = retryNotices,
         refreshing = refreshInFlight,
         overdueRows = agenda.overdue.map { it.toReviewRow(zoneId, "Overdue", actionInFlight) },
         todayRows = todayEntries.map { it.toReviewRow(zoneId, "Today", actionInFlight) },
@@ -175,7 +153,6 @@ private fun screenState(
     headerText: String,
     absoluteDateLabel: String,
     warning: String?,
-    retryNotices: List<MorningReviewRetryNotice>,
     refreshing: Boolean,
     blockingCards: List<MorningReviewBlockingCard> = emptyList(),
     overdueRows: List<MorningReviewAgendaRow> = emptyList(),
@@ -190,7 +167,6 @@ private fun screenState(
     headerText = headerText,
     absoluteDateLabel = absoluteDateLabel,
     warning = warning,
-    retryNotices = retryNotices,
     refreshing = refreshing,
     blockingCards = blockingCards,
     overdueRows = overdueRows,

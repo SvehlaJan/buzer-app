@@ -43,31 +43,27 @@ class MorningReviewRepairHostTest {
     fun blockingReviewShowsHeadingsCardsBeforeGlobalActionsAndOnlyOneSnooze() {
         setScreen(blockingState())
 
-        composeRule.onNodeWithText("2 tasks need attention").assertHeading()
+        composeRule.onNodeWithText("1 task needs attention").assertHeading()
         composeRule.onNodeWithText("Friday, July 24, 2026").assertHeading()
         composeRule.onNodeWithText("Repair me").assertIsDisplayed()
-        composeRule.onNodeWithText("Waiting for sync").assertIsDisplayed()
         composeRule.onNodeWithText("Start day").assertIsNotEnabled()
         composeRule.onAllNodesWithText("Snooze 5 min").assertCountEquals(1)
         composeRule.onNodeWithTag("morning-snooze-repair", useUnmergedTree = true).assertDoesNotExist()
         assertVerticallyBefore("morning-blocking-repair", "morning-start-day")
-        assertVerticallyBefore("morning-blocking-pending", "morning-start-day")
         assertVerticallyBefore("morning-start-day", "morning-snooze")
     }
 
     @Test
     fun repeatedActionDescriptionsSelectTheCorrectTaskCallbacks() {
-        var syncRetries = 0
         val first = task("first", "First repair")
         val showingSummary = mutableStateOf(false)
         val done = mutableListOf<String>()
         val edited = mutableListOf<String>()
         setScreenState(
             state = { if (showingSummary.value) multiOverdueState() else blockingState(cards = listOf(
-                repairCard(first), MorningReviewBlockingCard.SyncPending("pending", "Waiting for sync")
+                repairCard(first)
             )) },
             taskLookup = { taskId -> first.takeIf { taskId == first.id } },
-            onPendingRetry = { syncRetries++ },
             onOverdueDone = { done += it },
             onOverdueEdit = { edited += it }
         )
@@ -75,8 +71,6 @@ class MorningReviewRepairHostTest {
         composeRule.onNodeWithContentDescription("Repair First repair").performClick()
         composeRule.onNodeWithText("Repair task").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Back").performClick()
-        composeRule.onNodeWithContentDescription("Retry sync for Waiting for sync").performClick()
-        assertEquals(1, syncRetries)
 
         showingSummary.value = true
         composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("First late task"))
@@ -153,7 +147,7 @@ class MorningReviewRepairHostTest {
         var snoozes = 0
         setScreen(noDataState(), onRetryRefresh = { refreshes++ }, onStart = { starts++ }, onSnooze = { snoozes++ })
 
-        composeRule.onNodeWithText("Retry refresh").performClick()
+        composeRule.onNodeWithText("Refresh").performClick()
         composeRule.onNodeWithText("Start day without data").performClick()
         composeRule.onNodeWithText("Snooze 5 min").performClick()
         assertEquals(1, refreshes)
@@ -194,9 +188,8 @@ class MorningReviewRepairHostTest {
         onSnooze: () -> Unit = {},
         onOverdueDone: (String) -> Unit = {},
         onOverdueEdit: (String) -> Unit = {},
-        onPendingRetry: () -> Unit = {},
         onRetryRefresh: () -> Unit = {}
-    ) = setScreenState({ state }, taskLookup, onRepairSuccess, onStart, onSnooze, onOverdueDone, onOverdueEdit, onPendingRetry, onRetryRefresh)
+    ) = setScreenState({ state }, taskLookup, onRepairSuccess, onStart, onSnooze, onOverdueDone, onOverdueEdit, onRetryRefresh)
 
     private fun setScreenState(
         state: () -> MorningReviewScreenState,
@@ -206,7 +199,6 @@ class MorningReviewRepairHostTest {
         onSnooze: () -> Unit = {},
         onOverdueDone: (String) -> Unit = {},
         onOverdueEdit: (String) -> Unit = {},
-        onPendingRetry: () -> Unit = {},
         onRetryRefresh: () -> Unit = {}
     ) = composeRule.setContent {
         BuzerTheme {
@@ -220,7 +212,6 @@ class MorningReviewRepairHostTest {
                 onSnooze = onSnooze,
                 onOverdueDone = onOverdueDone,
                 onOverdueEdit = onOverdueEdit,
-                onPendingRetry = onPendingRetry,
                 onRetryRefresh = onRetryRefresh,
                 loadProjects = { listOf(project) },
                 refreshProjects = { listOf(project) },
@@ -230,9 +221,8 @@ class MorningReviewRepairHostTest {
     }
 
     private fun blockingState(cards: List<MorningReviewBlockingCard> = listOf(
-        repairCard(task("repair", "Repair me")),
-        MorningReviewBlockingCard.SyncPending("pending", "Waiting for sync")
-    )) = baseState(MorningReviewPhase.Blocking, "2 tasks need attention").copy(
+        repairCard(task("repair", "Repair me"))
+    )) = baseState(MorningReviewPhase.Blocking, "${cards.size} task${if (cards.size == 1) " needs" else "s need"} attention").copy(
         blockingCards = cards,
         startDayEnabled = false
     )
@@ -244,7 +234,7 @@ class MorningReviewRepairHostTest {
     )
 
     private fun noDataState() = baseState(MorningReviewPhase.NoData, "Task data unavailable").copy(
-        retryNotices = listOf(MorningReviewRetryNotice(MorningReviewRetryTarget.Refresh, "Refresh failed")),
+        warning = "Refresh failed",
         startDayLabel = "Start day without data"
     )
 
@@ -257,7 +247,7 @@ class MorningReviewRepairHostTest {
 
     private fun baseState(phase: MorningReviewPhase, header: String) = MorningReviewScreenState(
         phase = phase, headerText = header, absoluteDateLabel = "Friday, July 24, 2026", warning = null,
-        retryNotices = emptyList(), refreshing = false, blockingCards = emptyList(), overdueRows = emptyList(), todayRows = emptyList(),
+        refreshing = false, blockingCards = emptyList(), overdueRows = emptyList(), todayRows = emptyList(),
         startDayLabel = "Start day", startDayEnabled = true, snoozeEnabled = true, showBack = true, actionInFlight = false
     )
 

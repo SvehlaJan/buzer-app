@@ -113,7 +113,6 @@ class TaskEditorUpdateScreenStateTest {
         assertEquals("Keep this edit", failed.draft.title)
         assertEquals(GENERIC_TASK_EDITOR_UPDATE_ERROR, failed.resultMessage)
         assertFalse(failed.submitting)
-        assertFalse(failed.pendingConfirmation)
     }
 
     @Test

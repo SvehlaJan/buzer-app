@@ -26,12 +26,9 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal const val GENERIC_TASK_EDITOR_UPDATE_ERROR = "Task update failed. Your draft is still here; retry."
-internal const val TASK_EDITOR_UPDATE_PENDING_MESSAGE = "Saved; waiting for confirmation"
-private const val PENDING_CONFIRMATION_RETRY_DELAY_MILLIS = 5_000L
 
 /**
  * Choice data remains host-owned because each caller has its own loader and retry boundary.
@@ -73,8 +70,6 @@ internal data class TaskEditorUpdateState(
     val draft: TaskEditorDraft,
     val choices: TaskEditorUpdateChoices,
     val submitting: Boolean = false,
-    val pendingConfirmation: Boolean = false,
-    val confirmationAttempt: Int = 0,
     val resultMessage: String? = null,
     val successDelivered: Boolean = false,
     val discardConfirmationVisible: Boolean = false
@@ -101,24 +96,21 @@ internal data class TaskEditorUpdateState(
         )
 
     val canSubmit: Boolean
-        get() = !choices.loading && !submitting && !pendingConfirmation && validation.canSubmit
+        get() = !choices.loading && !submitting && validation.canSubmit
 
     val editingEnabled: Boolean
-        get() = !submitting && !pendingConfirmation
+        get() = !submitting
 
     fun withDraft(next: TaskEditorDraft): TaskEditorUpdateState {
         val normalizedNext = normalizeTaskEditorUpdateDraft(previous = draft, next = next)
         return if (normalizedNext == draft) this else copy(
             draft = normalizedNext,
-            pendingConfirmation = false,
-            confirmationAttempt = 0,
             resultMessage = null,
             discardConfirmationVisible = false
         )
     }
 
     fun withChoices(next: TaskEditorUpdateChoices): TaskEditorUpdateState {
-        if (pendingConfirmation) return copy(choices = next)
         val reconciledDraft = reconcileTaskEditorUpdateMembership(
             draft = draft,
             choices = next
@@ -128,7 +120,6 @@ internal data class TaskEditorUpdateState(
         return copy(
             draft = reconciledDraft,
             choices = next,
-            pendingConfirmation = pendingConfirmation && !selectionChanged,
             resultMessage = resultMessage.takeUnless { selectionChanged },
             discardConfirmationVisible = discardConfirmationVisible && !selectionChanged
         )
@@ -137,8 +128,6 @@ internal data class TaskEditorUpdateState(
     fun beginSubmission(): TaskEditorUpdateState = if (canSubmit) {
         copy(
             submitting = true,
-            pendingConfirmation = false,
-            confirmationAttempt = 0,
             resultMessage = null,
             discardConfirmationVisible = false
         )
@@ -160,7 +149,7 @@ internal fun taskEditorUpdateCancelRequest(
     state: TaskEditorUpdateState,
     isDirty: Boolean
 ): TaskEditorUpdateCancelRequest = when {
-    state.submitting || state.pendingConfirmation -> TaskEditorUpdateCancelRequest.Ignore
+    state.submitting -> TaskEditorUpdateCancelRequest.Ignore
     isDirty -> TaskEditorUpdateCancelRequest.ConfirmDiscard
     else -> TaskEditorUpdateCancelRequest.Cancel
 }
@@ -284,7 +273,6 @@ internal fun reduceTaskEditorUpdateResult(
     CoordinatorActionResult.Success -> TaskEditorUpdateTransition(
         state = state.copy(
             submitting = false,
-            pendingConfirmation = false,
             resultMessage = null,
             successDelivered = true
         ),
@@ -297,8 +285,6 @@ internal fun reduceTaskEditorUpdateResult(
     CoordinatorActionResult.ChildActionInFlight -> TaskEditorUpdateTransition(
         state = state.copy(
             submitting = false,
-            pendingConfirmation = false,
-            confirmationAttempt = 0,
             resultMessage = when (result) {
                 is CoordinatorActionResult.Warning -> result.message
                 is CoordinatorActionResult.Conflict -> result.message
@@ -313,8 +299,6 @@ internal fun reduceTaskEditorUpdateResult(
 
 internal fun failTaskEditorUpdateSubmission(state: TaskEditorUpdateState): TaskEditorUpdateState = state.copy(
     submitting = false,
-    pendingConfirmation = false,
-    confirmationAttempt = 0,
     resultMessage = GENERIC_TASK_EDITOR_UPDATE_ERROR
 )
 
@@ -351,7 +335,6 @@ internal fun TaskEditorUpdateScreen(
     LaunchedEffect(task.id, choices) {
         val pristine = state.draft == initialTaskEditorUpdateDraft(task) &&
             !state.submitting &&
-            !state.pendingConfirmation &&
             state.resultMessage == null &&
             !state.discardConfirmationVisible
         state = if (pristine) {
@@ -400,25 +383,6 @@ internal fun TaskEditorUpdateScreen(
         requestCancel()
     }
 
-    LaunchedEffect(state.pendingConfirmation, state.confirmationAttempt) {
-        if (!state.pendingConfirmation) return@LaunchedEffect
-        delay(PENDING_CONFIRMATION_RETRY_DELAY_MILLIS)
-        if (!state.pendingConfirmation) return@LaunchedEffect
-        try {
-            val transition = reduceTaskEditorUpdateResult(state, onUpdate(state.draft))
-            state = transition.state
-            if (transition.shouldInvokeSuccess) onSuccess()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            AppLog.error(
-                "task_editor_update confirmation_failed type=${error::class.simpleName} message=${error.message}",
-                error
-            )
-            state = failTaskEditorUpdateSubmission(state)
-        }
-    }
-
     TaskEditorScaffold(
         presentation = presentation,
         draft = state.draft,
@@ -450,14 +414,6 @@ internal fun TaskEditorUpdateScreen(
         }
     )
 
-    if (state.pendingConfirmation) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Task update") },
-            text = { Text(TASK_EDITOR_UPDATE_PENDING_MESSAGE) },
-            confirmButton = {}
-        )
-    }
     if (state.discardConfirmationVisible) {
         AlertDialog(
             onDismissRequest = { state = state.copy(discardConfirmationVisible = false) },
