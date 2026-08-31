@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 4 completed; ready for Task 5
+Status: Task 5 completed (Checkpoint A reached); ready for Task 6
 
 ## Task and plan status
 
@@ -13,7 +13,9 @@ Status: Task 4 completed; ready for Task 5
 - Task 2 (Introduce typed Todoist failures and bounded same-UUID command retry): COMPLETED (commits `2acdc659`..`83cf59e`)
 - Task 3 (Add the process-wide FIFO and deadline admission): COMPLETED (commit `1b6ce25829d0d654b1b65039e2996ff0308390c3`)
 - Task 4 (Simplify sync, recurrence rotation, and one-minute polling): COMPLETED (commit `917e98094d3e81dd2dd3cd4ab1abbe5629bcb06e`)
-- Next task: Task 5 (Build a one-shot mutation runner)
+- Task 5 (Build a one-shot mutation runner): COMPLETED (commit `df65a44a76617441cbc4d7e427e33a752a77bc20`)
+- **Checkpoint A (Backend foundation)**: COMPLETED.
+- Next task: Task 6 (Decouple task and checklist actions from the journal)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -47,7 +49,7 @@ Verification:
 Verification:
 - Command: `npm test && npm run typecheck` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: 40 test files, 492 tests passed. TypeScript typecheck passed cleanly with zero errors.
+- Evidence: 41 test files, 506 tests passed. TypeScript typecheck passed cleanly with zero errors.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -56,8 +58,7 @@ Verification:
 
 ## Next Steps
 
-Execute Task 5 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 5: Build a one-shot mutation runner.
+Execute Task 6 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 6: Decouple task and checklist actions from the journal.
 - Task 7: Replace the HTTP mutation/sync contract and add forced refresh.
 - Task 8: Upgrade backend Sentry structured logs and enforce ownership.
