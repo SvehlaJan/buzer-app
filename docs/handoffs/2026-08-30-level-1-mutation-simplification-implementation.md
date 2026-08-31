@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 14 completed; ready for Task 15
+Status: Task 15 completed; ready for Task 16
 
 ## Task and plan status
 
@@ -23,7 +23,8 @@ Status: Task 14 completed; ready for Task 15
 - Task 12 (Simplify Android enforcement outcomes and Sentry ownership): COMPLETED (commits `7db6dc6`..`662c428`)
 - Task 13 (Add session warnings, screen locks, forced Refresh, and Open Todoist): COMPLETED (commits `dbf522f`..`9df9307`)
 - Task 14 (Remove pending/retry UX from blockers, Morning Review, and editors): COMPLETED (commits `a65b330`..`cb0bbe9`)
-- Next task: Task 15 (Migrate and expand real-backend instrumentation)
+- Task 15 (Migrate and expand real-backend instrumentation): COMPLETED (commits `23a2331`..`f498841`)
+- Next task: Task 16 (Final verification, rollout tooling, production canary, and Sentry closure)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -60,12 +61,11 @@ Verification:
 - Evidence: 38 test files, 440 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
-- Command: `./gradlew test --rerun-tasks` (in `.worktrees/level-1-mutation-simplification/client`)
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin :androidApp:testDebugUnitTest :shared:testAndroidHostTest` (in `.worktrees/level-1-mutation-simplification/client`)
 - Result: PASS
-- Evidence: 43 actionable tasks executed, all unit tests in `androidApp` and `shared` passed cleanly.
+- Evidence: All unit, host, and Android test compilation succeeded with 100% tests passing.
 
 ## Next Steps
 
-Execute Task 15 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 15: Migrate and expand real-backend instrumentation.
+Execute Task 16 in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 16: Final verification, rollout tooling, production canary, and Sentry closure.
