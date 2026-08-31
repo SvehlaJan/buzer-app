@@ -62,12 +62,6 @@ class FakeBackendClient(
         .jsonPrimitive
         .content
 
-    fun taskReconciliationStatus(taskId: String): String? {
-        val body = request("GET", "/tasks/snapshot", authorized = true)
-        val tasks = Json.parseToJsonElement(body).jsonObject["tasks"]?.jsonArray ?: return null
-        return tasks.firstOrNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull == taskId }
-            ?.jsonObject?.get("reconciliationStatus")?.jsonPrimitive?.contentOrNull
-    }
 
     fun calls(): String = request("GET", "/__calls")
 

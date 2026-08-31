@@ -849,16 +849,6 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun morningReview_pendingOwnerAloneDisablesStart() {
-        resetTestState("pendingOnly")
-        val scenario = launchMorningReview()
-        try {
-            waitForText("Pending reconciliation")
-            composeRule.onNodeWithTag("morning-start-day").assertIsNotEnabled()
-        } finally { scenario.close() }
-    }
-
-    @Test
     fun acknowledgedDayNewInvalidSyncRestoresHomeBannerWithoutAutomatedLaunch() {
         resetTestState("clean")
         setMorningReviewClock("2026-08-08T07:00:00Z")

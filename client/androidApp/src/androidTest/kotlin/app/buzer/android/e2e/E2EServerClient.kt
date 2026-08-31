@@ -15,13 +15,32 @@ import kotlinx.serialization.json.jsonPrimitive
 class E2EServerClient(
     private val baseUrl: String = BuildConfig.BUZER_BACKEND_BASE_URL
 ) {
-    fun reset() {
-        request("POST", "/__reset")
+    fun reset(morningReviewScenario: String? = null) {
+        val body = morningReviewScenario?.let { """{"morningReviewScenario":"$it"}""" } ?: "{}"
+        request("POST", "/__reset", body)
     }
 
     fun setScenario(name: String) {
         request("POST", "/__scenario", """{"name":"$name"}""")
     }
+
+    fun blockQueue(enabled: Boolean) {
+        request("POST", "/__block-queue", """{"enabled":$enabled}""")
+    }
+
+    fun failSnapshot(enabled: Boolean) {
+        request("POST", "/__fail-snapshot", """{"enabled":$enabled}""")
+    }
+
+    fun failProjects(enabled: Boolean) {
+        request("POST", "/__fail-projects", """{"enabled":$enabled}""")
+    }
+
+    fun failNextChildAdd(enabled: Boolean) {
+        request("POST", "/__fail-next-child-add", """{"enabled":$enabled}""")
+    }
+
+    fun calls(): String = request("GET", "/__calls")
 
     fun updatePayloads(taskId: String): List<JsonObject> = recordedCalls()
         .mapNotNull { call ->

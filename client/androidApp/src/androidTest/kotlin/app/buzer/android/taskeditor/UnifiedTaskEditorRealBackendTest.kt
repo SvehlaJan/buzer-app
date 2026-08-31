@@ -123,25 +123,26 @@ class UnifiedTaskEditorRealBackendTest {
     }
 
     @Test
-    fun pendingEdit_disablesDuplicateSubmission_thenUsesConfirmedAuthorityToExit() {
+    fun uncertainEdit_showsWarningBannerAndAllowsRetryToExit() {
         assumeTrue(
             "backend has no /__scenario (tools/fake-backend) - skipping real-backend-only test",
             runCatching { e2eServer.setScenario("none") }.isSuccess
         )
         renderRealEditHost("task-one-time-empty")
         try {
-            e2eServer.setScenario("after_command_sent_timeout")
+            e2eServer.setScenario("delivery_unknown")
             val actionLabel = actionLabel("Save")
             composeRule.onNodeWithText(actionLabel).performClick()
 
             waitForUpdateCall("task-one-time-empty")
-            waitForText("Saved; waiting for confirmation")
-            composeRule.onNodeWithText(actionLabel).assertIsNotEnabled()
+            waitForText("Refresh")
+            composeRule.onNodeWithTag("session-warning-banner").assertIsDisplayed()
+            composeRule.onNodeWithText(actionLabel).assertIsEnabled()
             assertEquals(1, e2eServer.updateCallCount("task-one-time-empty"))
 
             e2eServer.setScenario("none")
-            composeRule.mainClock.advanceTimeBy(5_000)
-            waitUntil("Pending update was not retried for authoritative confirmation") {
+            composeRule.onNodeWithText(actionLabel).performClick()
+            waitUntil("Update was not retried after clearing scenario") {
                 e2eServer.updateCallCount("task-one-time-empty") == 2
             }
             waitForText("Edit returned")
