@@ -1,6 +1,8 @@
 import type {
   BackendObservability,
-  RequestFailureContext
+  InternalErrorContext,
+  RequestFailureContext,
+  SafeLogAttributes
 } from "../../src/diagnostics/backendObservability.js";
 
 export interface RecordedRequestFailure {
@@ -31,15 +33,15 @@ export class RecordingBackendObservability implements BackendObservability {
   public logs: RecordedLog[] = [];
   public exceptions: RecordedException[] = [];
 
-  info(marker: string, attributes?: Record<string, unknown>): void {
+  info(marker: string, attributes?: SafeLogAttributes): void {
     this.logs.push({ level: "info", marker, ...(attributes !== undefined ? { attributes } : {}) });
   }
 
-  warn(marker: string, attributes?: Record<string, unknown>): void {
+  warn(marker: string, attributes?: SafeLogAttributes): void {
     this.logs.push({ level: "warn", marker, ...(attributes !== undefined ? { attributes } : {}) });
   }
 
-  captureException(error: unknown, context?: Record<string, unknown>): void {
+  captureException(error: unknown, context?: InternalErrorContext | Record<string, unknown>): void {
     this.exceptions.push({ error, ...(context !== undefined ? { context } : {}) });
   }
 

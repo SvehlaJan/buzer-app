@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import { redactObject, redactString } from "./redaction.js";
+import { isCredentialKey, redactObject, redactString } from "./redaction.js";
 
 export interface RequestFailureContext {
   requestId?: string;
@@ -10,13 +10,142 @@ export interface RequestFailureContext {
 
 export type SafeLogAttributes = Record<string, unknown>;
 
+export interface InternalErrorContext extends Record<string, unknown> {
+  marker?: string;
+  operation?: string;
+  requestId?: string;
+  taskId?: string;
+  occurrenceKey?: string;
+}
+
 export interface BackendObservability {
+  info(marker: string, attributes?: SafeLogAttributes): void;
+  warn(marker: string, attributes?: SafeLogAttributes): void;
+  captureException(error: unknown, context?: InternalErrorContext | Record<string, unknown>): void;
   captureRequestFailure(error: unknown, context: RequestFailureContext): void;
   captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): void;
   flush(timeoutMillis?: number): Promise<void>;
-  info?(marker: string, attributes?: SafeLogAttributes): void;
-  warn?(marker: string, attributes?: SafeLogAttributes): void;
-  captureException?(error: unknown, context?: Record<string, unknown>): void;
+}
+
+export const MAX_LOG_ARRAY_LENGTH = 10;
+
+const FORBIDDEN_NORMALIZED_EXACT_KEYS = new Set([
+  "title",
+  "tasktitle",
+  "projecttitle",
+  "description",
+  "taskdescription",
+  "content",
+  "taskcontent",
+  "bodycontent",
+  "summary",
+  "tasksummary",
+  "text",
+  "prompt",
+  "header",
+  "headers",
+  "reqheaders",
+  "resheaders",
+  "requestheaders",
+  "responseheaders",
+  "body",
+  "rawbody",
+  "reqbody",
+  "resbody",
+  "requestbody",
+  "responsebody",
+  "payload",
+  "rawpayload",
+  "todoistpayload",
+  "taskdump",
+  "dump",
+  "task",
+  "tasks",
+  "project",
+  "rawurl",
+  "url",
+  "uri",
+  "href",
+  "email",
+  "useremail",
+  "phone",
+  "phonenumber"
+]);
+
+export function isForbiddenLogAttributeKey(rawKey: string): boolean {
+  if (isCredentialKey(rawKey)) return true;
+  const normalized = rawKey.toLowerCase().replace(/[-_]/g, "");
+  if (FORBIDDEN_NORMALIZED_EXACT_KEYS.has(normalized)) return true;
+  if (
+    normalized.endsWith("title") ||
+    normalized.endsWith("description") ||
+    normalized.endsWith("content") ||
+    normalized.endsWith("payload") ||
+    normalized.endsWith("body") ||
+    normalized.endsWith("headers") ||
+    normalized.endsWith("header") ||
+    normalized.endsWith("dump") ||
+    normalized.endsWith("rawurl") ||
+    normalized.endsWith("url") ||
+    normalized.endsWith("uri") ||
+    normalized.endsWith("prompt") ||
+    normalized.endsWith("email") ||
+    normalized.endsWith("phone")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function sanitizeLogAttributes(attributes: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(attributes)) {
+    if (isForbiddenLogAttributeKey(key)) {
+      continue;
+    }
+    if (val === undefined) {
+      continue;
+    }
+    if (val === null) {
+      result[key] = null;
+      continue;
+    }
+    if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") {
+      result[key] = val;
+      continue;
+    }
+    if (typeof val === "string") {
+      result[key] = redactString(val);
+      continue;
+    }
+    if (Array.isArray(val)) {
+      const allScalar = val.every(
+        (item) => item === null || item === undefined || typeof item === "string" || typeof item === "number" || typeof item === "boolean"
+      );
+      if (!allScalar) {
+        continue;
+      }
+      if (val.length > MAX_LOG_ARRAY_LENGTH) {
+        result[key] = val.slice(0, MAX_LOG_ARRAY_LENGTH).map((item) => (typeof item === "string" ? redactString(item) : item));
+        result[`${key}_count`] = val.length;
+        result[`${key}_truncated`] = true;
+      } else {
+        result[key] = val.map((item) => (typeof item === "string" ? redactString(item) : item));
+      }
+      continue;
+    }
+  }
+  return result;
+}
+
+export function sanitizeLog(log: Sentry.Log): Sentry.Log {
+  const message = typeof log.message === "string" ? redactString(log.message) : log.message;
+  const attributes = log.attributes ? sanitizeLogAttributes(log.attributes) : undefined;
+  return {
+    ...log,
+    message,
+    ...(attributes !== undefined ? { attributes } : {})
+  };
 }
 
 export class NoOpBackendObservability implements BackendObservability {
@@ -30,7 +159,7 @@ export class NoOpBackendObservability implements BackendObservability {
 
   warn(_marker: string, _attributes?: SafeLogAttributes): void {}
 
-  captureException(_error: unknown, _context?: Record<string, unknown>): void {}
+  captureException(_error: unknown, _context?: InternalErrorContext | Record<string, unknown>): void {}
 }
 
 export interface SentryObservabilityOptions {
@@ -54,6 +183,8 @@ export class SentryBackendObservability implements BackendObservability {
       environment: options.environment ?? "development-vps",
       release: options.release ?? "app.buzer@0.1.0+local",
       sendDefaultPii: false,
+      enableLogs: true,
+      beforeSendLog: (log) => sanitizeLog(log),
       beforeSend: (event) => {
         delete (event as { request?: unknown }).request;
         delete (event as { user?: unknown }).user;
@@ -149,25 +280,33 @@ export class SentryBackendObservability implements BackendObservability {
 
   info(marker: string, attributes?: SafeLogAttributes): void {
     if (!this.enabled) return;
+    const safeAttrs = attributes !== undefined ? sanitizeLogAttributes(attributes) : undefined;
+    if (typeof Sentry.logger?.info === "function") {
+      Sentry.logger.info(marker, safeAttrs);
+    }
     Sentry.addBreadcrumb({
       category: "log.info",
       message: marker,
-      ...(attributes !== undefined ? { data: redactObject(attributes) as Record<string, unknown> } : {}),
+      ...(safeAttrs !== undefined ? { data: safeAttrs } : {}),
       level: "info"
     });
   }
 
   warn(marker: string, attributes?: SafeLogAttributes): void {
     if (!this.enabled) return;
+    const safeAttrs = attributes !== undefined ? sanitizeLogAttributes(attributes) : undefined;
+    if (typeof Sentry.logger?.warn === "function") {
+      Sentry.logger.warn(marker, safeAttrs);
+    }
     Sentry.addBreadcrumb({
       category: "log.warn",
       message: marker,
-      ...(attributes !== undefined ? { data: redactObject(attributes) as Record<string, unknown> } : {}),
+      ...(safeAttrs !== undefined ? { data: safeAttrs } : {}),
       level: "warning"
     });
   }
 
-  captureException(error: unknown, context?: Record<string, unknown>): void {
+  captureException(error: unknown, context?: InternalErrorContext | Record<string, unknown>): void {
     if (!this.enabled) return;
     Sentry.withScope((scope) => {
       scope.setLevel("error");
@@ -242,17 +381,12 @@ export const backendObservability: BackendObservability = {
     return backendObservabilityRuntime.getInstance().flush(timeoutMillis);
   },
   info(marker: string, attributes?: SafeLogAttributes): void {
-    backendObservabilityRuntime.getInstance().info?.(marker, attributes);
+    backendObservabilityRuntime.getInstance().info(marker, attributes);
   },
   warn(marker: string, attributes?: SafeLogAttributes): void {
-    backendObservabilityRuntime.getInstance().warn?.(marker, attributes);
+    backendObservabilityRuntime.getInstance().warn(marker, attributes);
   },
-  captureException(error: unknown, context?: Record<string, unknown>): void {
-    const inst = backendObservabilityRuntime.getInstance();
-    if (inst.captureException) {
-      inst.captureException(error, context);
-    } else {
-      inst.captureBackgroundFailure("unhandled_exception", error, context as Record<string, string | undefined>);
-    }
+  captureException(error: unknown, context?: InternalErrorContext | Record<string, unknown>): void {
+    backendObservabilityRuntime.getInstance().captureException(error, context);
   }
 };

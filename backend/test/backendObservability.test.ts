@@ -11,13 +11,20 @@ import {
   SentryBackendObservability,
   BackendObservabilityRuntime,
   backendObservabilityRuntime,
-  backendObservability
+  backendObservability,
+  isForbiddenLogAttributeKey,
+  sanitizeLogAttributes,
+  sanitizeLog,
+  MAX_LOG_ARRAY_LENGTH
 } from "../src/diagnostics/backendObservability.js";
 
 describe("NoOpBackendObservability", () => {
   it("has no capture side effects and awaits flush", async () => {
     const noop = new NoOpBackendObservability();
 
+    expect(noop.info("marker", { key: "val" })).toBeUndefined();
+    expect(noop.warn("marker", { key: "val" })).toBeUndefined();
+    expect(noop.captureException(new Error("boom"), { taskId: "123" })).toBeUndefined();
     expect(noop.captureRequestFailure(new Error("boom"), { method: "GET", route: "/tasks" })).toBeUndefined();
     expect(noop.captureBackgroundFailure("test.marker", new Error("boom"), { key: "val" })).toBeUndefined();
 
@@ -59,6 +66,17 @@ describe("BackendObservabilityRuntime", () => {
     const fake = new RecordingBackendObservability();
     backendObservabilityRuntime.setInstance(fake);
 
+    expect(backendObservability.info("marker.info", { safe_key: "value" })).toBeUndefined();
+    expect(fake.logs).toHaveLength(1);
+    expect(fake.logs[0]).toEqual({ level: "info", marker: "marker.info", attributes: { safe_key: "value" } });
+
+    expect(backendObservability.warn("marker.warn", { warn_key: 123 })).toBeUndefined();
+    expect(fake.logs).toHaveLength(2);
+    expect(fake.logs[1]).toEqual({ level: "warn", marker: "marker.warn", attributes: { warn_key: 123 } });
+
+    expect(backendObservability.captureException(new Error("err"), { taskId: "task-1" })).toBeUndefined();
+    expect(fake.exceptions).toHaveLength(1);
+
     expect(backendObservability.captureRequestFailure(new Error("err"), { method: "POST" })).toBeUndefined();
     expect(fake.requestFailures).toHaveLength(1);
 
@@ -88,12 +106,26 @@ const sentryMockState = {
   lastScope: null as any,
   capturedExceptions: [] as any[],
   capturedMessages: [] as any[],
-  flushCalls: [] as number[]
+  flushCalls: [] as number[],
+  loggerInfoCalls: [] as { marker: string; attributes?: Record<string, unknown> | undefined }[],
+  loggerWarnCalls: [] as { marker: string; attributes?: Record<string, unknown> | undefined }[],
+  breadcrumbs: [] as any[]
 };
 
 vi.mock("@sentry/node", () => ({
   init: vi.fn((options: any) => {
     sentryMockState.initOptions = options;
+  }),
+  logger: {
+    info: vi.fn((marker: string, attributes?: Record<string, unknown>) => {
+      sentryMockState.loggerInfoCalls.push({ marker, attributes });
+    }),
+    warn: vi.fn((marker: string, attributes?: Record<string, unknown>) => {
+      sentryMockState.loggerWarnCalls.push({ marker, attributes });
+    })
+  },
+  addBreadcrumb: vi.fn((breadcrumb: any) => {
+    sentryMockState.breadcrumbs.push(breadcrumb);
   }),
   withScope: vi.fn((callback: (scope: any) => void) => {
     const tags: Record<string, string> = {};
@@ -127,6 +159,162 @@ vi.mock("@sentry/node", () => ({
   })
 }));
 
+describe("isForbiddenLogAttributeKey & sanitizeLogAttributes", () => {
+  it("correctly identifies forbidden keys", () => {
+    // Forbidden exact / suffix keys
+    expect(isForbiddenLogAttributeKey("title")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task_title")).toBe(true);
+    expect(isForbiddenLogAttributeKey("taskTitle")).toBe(true);
+    expect(isForbiddenLogAttributeKey("project_title")).toBe(true);
+    expect(isForbiddenLogAttributeKey("description")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task_description")).toBe(true);
+    expect(isForbiddenLogAttributeKey("content")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task_content")).toBe(true);
+    expect(isForbiddenLogAttributeKey("body_content")).toBe(true);
+    expect(isForbiddenLogAttributeKey("summary")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task_summary")).toBe(true);
+    expect(isForbiddenLogAttributeKey("text")).toBe(true);
+    expect(isForbiddenLogAttributeKey("prompt")).toBe(true);
+    expect(isForbiddenLogAttributeKey("header")).toBe(true);
+    expect(isForbiddenLogAttributeKey("headers")).toBe(true);
+    expect(isForbiddenLogAttributeKey("auth_header")).toBe(true);
+    expect(isForbiddenLogAttributeKey("req_headers")).toBe(true);
+    expect(isForbiddenLogAttributeKey("res_headers")).toBe(true);
+    expect(isForbiddenLogAttributeKey("body")).toBe(true);
+    expect(isForbiddenLogAttributeKey("raw_body")).toBe(true);
+    expect(isForbiddenLogAttributeKey("req_body")).toBe(true);
+    expect(isForbiddenLogAttributeKey("payload")).toBe(true);
+    expect(isForbiddenLogAttributeKey("raw_payload")).toBe(true);
+    expect(isForbiddenLogAttributeKey("todoist_payload")).toBe(true);
+    expect(isForbiddenLogAttributeKey("dump")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task_dump")).toBe(true);
+    expect(isForbiddenLogAttributeKey("task")).toBe(true);
+    expect(isForbiddenLogAttributeKey("tasks")).toBe(true);
+    expect(isForbiddenLogAttributeKey("project")).toBe(true);
+    expect(isForbiddenLogAttributeKey("url")).toBe(true);
+    expect(isForbiddenLogAttributeKey("raw_url")).toBe(true);
+    expect(isForbiddenLogAttributeKey("uri")).toBe(true);
+    expect(isForbiddenLogAttributeKey("href")).toBe(true);
+    expect(isForbiddenLogAttributeKey("email")).toBe(true);
+    expect(isForbiddenLogAttributeKey("user_email")).toBe(true);
+    expect(isForbiddenLogAttributeKey("phone")).toBe(true);
+    expect(isForbiddenLogAttributeKey("phone_number")).toBe(true);
+
+    // Credential keys
+    expect(isForbiddenLogAttributeKey("token")).toBe(true);
+    expect(isForbiddenLogAttributeKey("api_key")).toBe(true);
+    expect(isForbiddenLogAttributeKey("api_token")).toBe(true);
+    expect(isForbiddenLogAttributeKey("access_token")).toBe(true);
+    expect(isForbiddenLogAttributeKey("refresh_token")).toBe(true);
+    expect(isForbiddenLogAttributeKey("password")).toBe(true);
+    expect(isForbiddenLogAttributeKey("secret")).toBe(true);
+    expect(isForbiddenLogAttributeKey("cookie")).toBe(true);
+    expect(isForbiddenLogAttributeKey("authorization")).toBe(true);
+    expect(isForbiddenLogAttributeKey("qr_code")).toBe(true);
+
+    // Allowed scalar identifiers and metrics
+    expect(isForbiddenLogAttributeKey("request_id")).toBe(false);
+    expect(isForbiddenLogAttributeKey("task_id")).toBe(false);
+    expect(isForbiddenLogAttributeKey("occurrence_key")).toBe(false);
+    expect(isForbiddenLogAttributeKey("operation")).toBe(false);
+    expect(isForbiddenLogAttributeKey("error_code")).toBe(false);
+    expect(isForbiddenLogAttributeKey("status_code")).toBe(false);
+    expect(isForbiddenLogAttributeKey("duration_ms")).toBe(false);
+    expect(isForbiddenLogAttributeKey("queue_wait_ms")).toBe(false);
+    expect(isForbiddenLogAttributeKey("consecutive_failure_count")).toBe(false);
+    expect(isForbiddenLogAttributeKey("action_id")).toBe(false);
+    expect(isForbiddenLogAttributeKey("device_id")).toBe(false);
+    expect(isForbiddenLogAttributeKey("changed_task_ids")).toBe(false);
+    expect(isForbiddenLogAttributeKey("changed_task_count")).toBe(false);
+    expect(isForbiddenLogAttributeKey("is_success")).toBe(false);
+    expect(isForbiddenLogAttributeKey("operational")).toBe(false);
+    expect(isForbiddenLogAttributeKey("error_kind")).toBe(false);
+    expect(isForbiddenLogAttributeKey("previous_failure_count")).toBe(false);
+  });
+
+  it("sanitizeLogAttributes strips forbidden keys and redacts secrets", () => {
+    const sanitized = sanitizeLogAttributes({
+      task_title: "Secret Task",
+      task_id: "task-100",
+      description: "Secret desc",
+      operation: "sync",
+      auth_header: "Bearer sk-12345",
+      duration_ms: 120,
+      safe_text: "Bearer sk-ant-secret12345678901234567890",
+      null_val: null,
+      bool_val: true,
+      num_val: 42,
+      bigint_val: 100n,
+      undef_val: undefined
+    });
+
+    expect(sanitized).toEqual({
+      task_id: "task-100",
+      operation: "sync",
+      duration_ms: 120,
+      safe_text: "Bearer [REDACTED]",
+      null_val: null,
+      bool_val: true,
+      num_val: 42,
+      bigint_val: 100n
+    });
+  });
+
+  it("sanitizeLogAttributes truncates scalar arrays exceeding MAX_LOG_ARRAY_LENGTH and adds count/truncated flags", () => {
+    const shortArray = ["id-1", "id-2", "Bearer secret-val"];
+    const longArray = Array.from({ length: 15 }, (_, i) => `item-${i + 1}`);
+
+    const sanitized = sanitizeLogAttributes({
+      short_list: shortArray,
+      long_list: longArray,
+      object_list: [{ id: "1" }, { id: "2" }]
+    });
+
+    expect(sanitized.short_list).toEqual(["id-1", "id-2", "Bearer [REDACTED]"]);
+    expect(sanitized.short_list_count).toBeUndefined();
+    expect(sanitized.short_list_truncated).toBeUndefined();
+
+    expect(sanitized.long_list).toEqual(longArray.slice(0, MAX_LOG_ARRAY_LENGTH));
+    expect(sanitized.long_list_count).toBe(15);
+    expect(sanitized.long_list_truncated).toBe(true);
+
+    // Non-scalar array omitted
+    expect(sanitized.object_list).toBeUndefined();
+  });
+});
+
+describe("sanitizeLog", () => {
+  it("redacts message and sanitizes attributes", () => {
+    const log: any = {
+      level: "info",
+      message: "Operation completed with Bearer secret-tok-12345",
+      attributes: {
+        task_id: "t-1",
+        task_title: "Forbidden Title",
+        auth: "Bearer secret-tok-12345"
+      }
+    };
+
+    const sanitized = sanitizeLog(log);
+    expect(sanitized.message).not.toContain("secret-tok-12345");
+    expect(sanitized.message).toContain("[REDACTED]");
+    expect(sanitized.attributes).toEqual({
+      task_id: "t-1"
+    });
+  });
+
+  it("handles log without attributes", () => {
+    const log: any = {
+      level: "warn",
+      message: "Warning message without attrs"
+    };
+
+    const sanitized = sanitizeLog(log);
+    expect(sanitized.message).toBe("Warning message without attrs");
+    expect(sanitized.attributes).toBeUndefined();
+  });
+});
+
 describe("SentryBackendObservability & Privacy Boundary", () => {
   beforeEach(() => {
     sentryMockState.initOptions = null;
@@ -134,9 +322,12 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     sentryMockState.capturedExceptions = [];
     sentryMockState.capturedMessages = [];
     sentryMockState.flushCalls = [];
+    sentryMockState.loggerInfoCalls = [];
+    sentryMockState.loggerWarnCalls = [];
+    sentryMockState.breadcrumbs = [];
   });
 
-  it("initializes Sentry with sendDefaultPii=false, canonical release, and without tracing", () => {
+  it("initializes Sentry with sendDefaultPii=false, enableLogs=true, beforeSendLog, canonical release, and without tracing", () => {
     new SentryBackendObservability({
       dsn: "https://public@sentry.example.com/1",
       environment: "staging-vps",
@@ -148,7 +339,21 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     expect(sentryMockState.initOptions.environment).toBe("staging-vps");
     expect(sentryMockState.initOptions.release).toBe("app.buzer@0.1.0+gitsha");
     expect(sentryMockState.initOptions.sendDefaultPii).toBe(false);
+    expect(sentryMockState.initOptions.enableLogs).toBe(true);
+    expect(typeof sentryMockState.initOptions.beforeSendLog).toBe("function");
     expect(sentryMockState.initOptions.tracesSampleRate).toBeUndefined();
+  });
+
+  it("does not initialize Sentry when DSN is empty or whitespace", () => {
+    const emptyObs = new SentryBackendObservability({ dsn: "" });
+    expect(sentryMockState.initOptions).toBeNull();
+
+    emptyObs.info("some_marker", { key: "val" });
+    emptyObs.warn("some_warn", { key: "val" });
+    emptyObs.captureException(new Error("boom"));
+    expect(sentryMockState.loggerInfoCalls).toHaveLength(0);
+    expect(sentryMockState.loggerWarnCalls).toHaveLength(0);
+    expect(sentryMockState.capturedExceptions).toHaveLength(0);
   });
 
   it("beforeSend strips request and user and recursively redacts fields", () => {
@@ -216,6 +421,268 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     const sanitized = beforeBreadcrumb(breadcrumb);
     expect(sanitized.message).not.toContain("secret-token-12345");
     expect(sanitized.data.api_key).not.toContain("sk-ant-12345678901234567890");
+  });
+
+  it("beforeSendLog strips forbidden keys, redacts secrets, and truncates long scalar arrays with count/truncated flag", () => {
+    new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    const beforeSendLog = sentryMockState.initOptions.beforeSendLog;
+    expect(beforeSendLog).toBeDefined();
+
+    const logEntry: any = {
+      message: "Operation completed with token Bearer secret-token-12345",
+      attributes: {
+        // Allowed scalars
+        request_id: "req-123",
+        task_id: "task-456",
+        occurrence_key: "task-456:2026-08-31",
+        operation: "complete_occurrence",
+        error_code: "TASK_NOT_FOUND",
+        status_code: 404,
+        duration_ms: 42,
+        queue_wait_ms: 10,
+        consecutive_failure_count: 3,
+        is_success: false,
+        // Forbidden keys to strip
+        task_title: "Secret Task Title",
+        title: "Top Level Title",
+        description: "Confidential task description",
+        task_description: "Another description",
+        content: "Some sensitive content",
+        task_content: "Sensitive task body",
+        body: "raw body content",
+        req_body: "request body",
+        payload: { sensitive: "data" },
+        raw_payload: '{"some":"payload"}',
+        raw_url: "https://api.todoist.com/rest/v2/tasks",
+        url: "https://example.com/sensitive",
+        auth_header: "Bearer secret-token",
+        headers: { authorization: "secret" },
+        dump: "task dump text",
+        prompt: "system prompt content",
+        email: "user@example.com",
+        user_email: "admin@example.com",
+        phone: "+1234567890",
+        phone_number: "+0987654321",
+        token: "secret-token-val",
+        api_key: "sk-ant-1234567890",
+        secret: "my-secret-key",
+        // Value redaction for allowed key containing secrets
+        custom_message: "Connected with Bearer sk-ant-12345678901234567890",
+        // Scalar arrays <= 10 items
+        allowed_task_ids: ["t-1", "t-2", "Bearer secret-token-in-array"],
+        // Scalar arrays > 10 items (should truncate and add _count and _truncated)
+        long_scalar_list: ["id-1", "id-2", "id-3", "id-4", "id-5", "id-6", "id-7", "id-8", "id-9", "id-10", "id-11", "id-12"],
+        // Non-scalar array (should be stripped)
+        object_array: [{ a: 1 }, { b: 2 }],
+        // Complex object (should be stripped)
+        nested_object: { foo: "bar" }
+      }
+    };
+
+    const sanitized = beforeSendLog(logEntry);
+
+    expect(sanitized.message).not.toContain("secret-token-12345");
+    expect(sanitized.message).toContain("[REDACTED]");
+
+    // Check allowed scalars are retained
+    expect(sanitized.attributes.request_id).toBe("req-123");
+    expect(sanitized.attributes.task_id).toBe("task-456");
+    expect(sanitized.attributes.occurrence_key).toBe("task-456:2026-08-31");
+    expect(sanitized.attributes.operation).toBe("complete_occurrence");
+    expect(sanitized.attributes.error_code).toBe("TASK_NOT_FOUND");
+    expect(sanitized.attributes.status_code).toBe(404);
+    expect(sanitized.attributes.duration_ms).toBe(42);
+    expect(sanitized.attributes.queue_wait_ms).toBe(10);
+    expect(sanitized.attributes.consecutive_failure_count).toBe(3);
+    expect(sanitized.attributes.is_success).toBe(false);
+
+    // Check forbidden keys are stripped
+    expect(sanitized.attributes.task_title).toBeUndefined();
+    expect(sanitized.attributes.title).toBeUndefined();
+    expect(sanitized.attributes.description).toBeUndefined();
+    expect(sanitized.attributes.task_description).toBeUndefined();
+    expect(sanitized.attributes.content).toBeUndefined();
+    expect(sanitized.attributes.task_content).toBeUndefined();
+    expect(sanitized.attributes.body).toBeUndefined();
+    expect(sanitized.attributes.req_body).toBeUndefined();
+    expect(sanitized.attributes.payload).toBeUndefined();
+    expect(sanitized.attributes.raw_payload).toBeUndefined();
+    expect(sanitized.attributes.raw_url).toBeUndefined();
+    expect(sanitized.attributes.url).toBeUndefined();
+    expect(sanitized.attributes.auth_header).toBeUndefined();
+    expect(sanitized.attributes.headers).toBeUndefined();
+    expect(sanitized.attributes.dump).toBeUndefined();
+    expect(sanitized.attributes.prompt).toBeUndefined();
+    expect(sanitized.attributes.email).toBeUndefined();
+    expect(sanitized.attributes.user_email).toBeUndefined();
+    expect(sanitized.attributes.phone).toBeUndefined();
+    expect(sanitized.attributes.phone_number).toBeUndefined();
+    expect(sanitized.attributes.token).toBeUndefined();
+    expect(sanitized.attributes.api_key).toBeUndefined();
+    expect(sanitized.attributes.secret).toBeUndefined();
+    expect(sanitized.attributes.object_array).toBeUndefined();
+    expect(sanitized.attributes.nested_object).toBeUndefined();
+
+    // Check secret redaction in allowed string
+    expect(sanitized.attributes.custom_message).not.toContain("sk-ant-12345678901234567890");
+    expect(sanitized.attributes.custom_message).toContain("[REDACTED]");
+
+    // Check scalar array <= 10 items
+    expect(sanitized.attributes.allowed_task_ids).toHaveLength(3);
+    expect(sanitized.attributes.allowed_task_ids[2]).toContain("[REDACTED]");
+    expect(sanitized.attributes.allowed_task_ids_count).toBeUndefined();
+    expect(sanitized.attributes.allowed_task_ids_truncated).toBeUndefined();
+
+    // Check scalar array > 10 items
+    expect(sanitized.attributes.long_scalar_list).toHaveLength(10);
+    expect(sanitized.attributes.long_scalar_list_count).toBe(12);
+    expect(sanitized.attributes.long_scalar_list_truncated).toBe(true);
+  });
+
+  it("info(marker, attributes) forwards sanitized attributes to Sentry.logger.info and adds breadcrumb", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    obs.info("todoist_poll_changed", {
+      changed_task_count: 5,
+      changed_task_ids: ["t1", "t2"],
+      task_title: "Secret leaked title",
+      auth_token: "Bearer sk-1234567890"
+    });
+
+    expect(sentryMockState.loggerInfoCalls).toHaveLength(1);
+    expect(sentryMockState.loggerInfoCalls[0]?.marker).toBe("todoist_poll_changed");
+    expect(sentryMockState.loggerInfoCalls[0]?.attributes).toEqual({
+      changed_task_count: 5,
+      changed_task_ids: ["t1", "t2"]
+    });
+
+    expect(sentryMockState.breadcrumbs).toHaveLength(1);
+    expect(sentryMockState.breadcrumbs[0]).toEqual({
+      category: "log.info",
+      message: "todoist_poll_changed",
+      data: {
+        changed_task_count: 5,
+        changed_task_ids: ["t1", "t2"]
+      },
+      level: "info"
+    });
+  });
+
+  it("warn(marker, attributes) forwards sanitized attributes to Sentry.logger.warn and adds breadcrumb", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    obs.warn("todoist_poll_failed", {
+      duration_ms: 150,
+      consecutive_failure_count: 2,
+      error_kind: "network",
+      operational: true,
+      description: "sensitive description"
+    });
+
+    expect(sentryMockState.loggerWarnCalls).toHaveLength(1);
+    expect(sentryMockState.loggerWarnCalls[0]?.marker).toBe("todoist_poll_failed");
+    expect(sentryMockState.loggerWarnCalls[0]?.attributes).toEqual({
+      duration_ms: 150,
+      consecutive_failure_count: 2,
+      error_kind: "network",
+      operational: true
+    });
+
+    expect(sentryMockState.breadcrumbs).toHaveLength(1);
+    expect(sentryMockState.breadcrumbs[0]).toEqual({
+      category: "log.warn",
+      message: "todoist_poll_failed",
+      data: {
+        duration_ms: 150,
+        consecutive_failure_count: 2,
+        error_kind: "network",
+        operational: true
+      },
+      level: "warning"
+    });
+  });
+
+  it("info and warn handle calls without attributes", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    obs.info("simple_info_marker");
+    obs.warn("simple_warn_marker");
+
+    expect(sentryMockState.loggerInfoCalls).toHaveLength(1);
+    expect(sentryMockState.loggerInfoCalls[0]).toEqual({ marker: "simple_info_marker", attributes: undefined });
+    expect(sentryMockState.loggerWarnCalls).toHaveLength(1);
+    expect(sentryMockState.loggerWarnCalls[0]).toEqual({ marker: "simple_warn_marker", attributes: undefined });
+
+    expect(sentryMockState.breadcrumbs).toHaveLength(2);
+    expect(sentryMockState.breadcrumbs[0]).toEqual({
+      category: "log.info",
+      message: "simple_info_marker",
+      level: "info"
+    });
+    expect(sentryMockState.breadcrumbs[1]).toEqual({
+      category: "log.warn",
+      message: "simple_warn_marker",
+      level: "warning"
+    });
+  });
+
+  it("captureException(error, context) sets context tags on scope and captures exception", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    const error = new Error("Corrupted database invariant");
+    obs.captureException(error, {
+      marker: "db_invariant_corrupted",
+      taskId: "task-999",
+      occurrenceKey: "task-999:2026-08-31",
+      custom_detail: "details_here"
+    });
+
+    expect(sentryMockState.lastScope.level).toBe("error");
+    expect(sentryMockState.lastScope.tags.marker).toBe("db_invariant_corrupted");
+    expect(sentryMockState.lastScope.tags.taskId).toBe("task-999");
+    expect(sentryMockState.lastScope.tags.occurrenceKey).toBe("task-999:2026-08-31");
+    expect(sentryMockState.lastScope.tags.custom_detail).toBe("details_here");
+    expect(sentryMockState.capturedExceptions[0]).toBe(error);
+  });
+
+  it("captureException(nonErrorString, context) captures redacted message", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    obs.captureException("Unexpected failure with Bearer secret-token-xyz", {
+      marker: "unknown_error"
+    });
+
+    expect(sentryMockState.lastScope.level).toBe("error");
+    expect(sentryMockState.lastScope.tags.marker).toBe("unknown_error");
+    expect(sentryMockState.capturedMessages).toHaveLength(1);
+    expect(sentryMockState.capturedMessages[0]).not.toContain("secret-token-xyz");
+    expect(sentryMockState.capturedMessages[0]).toContain("[REDACTED]");
+  });
+
+  it("captureException handles call without context", () => {
+    const obs = new SentryBackendObservability({
+      dsn: "https://public@sentry.example.com/1"
+    });
+
+    const error = new Error("Bare error");
+    obs.captureException(error);
+
+    expect(sentryMockState.lastScope.level).toBe("error");
+    expect(sentryMockState.lastScope.tags).toEqual({});
+    expect(sentryMockState.capturedExceptions[0]).toBe(error);
   });
 
   it("captureRequestFailure sets scope tags and captures exception", () => {
