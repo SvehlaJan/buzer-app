@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 13 completed; ready for Task 14
+Status: Task 14 completed; ready for Task 15
 
 ## Task and plan status
 
@@ -22,7 +22,8 @@ Status: Task 13 completed; ready for Task 14
 - Task 11 (Simplify the shared Kotlin contract and add structured request logs): COMPLETED (commit `1e2b5ea5fd3640bd3f17b3b22388455989a36547`)
 - Task 12 (Simplify Android enforcement outcomes and Sentry ownership): COMPLETED (commits `7db6dc6`..`662c428`)
 - Task 13 (Add session warnings, screen locks, forced Refresh, and Open Todoist): COMPLETED (commits `dbf522f`..`9df9307`)
-- Next task: Task 14 (Remove pending/retry UX from blockers, Morning Review, and editors)
+- Task 14 (Remove pending/retry UX from blockers, Morning Review, and editors): COMPLETED (commits `a65b330`..`cb0bbe9`)
+- Next task: Task 15 (Migrate and expand real-backend instrumentation)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -59,13 +60,12 @@ Verification:
 - Evidence: 38 test files, 440 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
-- Command: `./gradlew :androidApp:testDebugUnitTest :shared:testAndroidHostTest` (in `.worktrees/level-1-mutation-simplification/client`)
+- Command: `./gradlew test --rerun-tasks` (in `.worktrees/level-1-mutation-simplification/client`)
 - Result: PASS
-- Evidence: 55 actionable tasks executed, all 395 unit tests in `androidApp` and all shared tests passed.
+- Evidence: 43 actionable tasks executed, all unit tests in `androidApp` and `shared` passed cleanly.
 
 ## Next Steps
 
-Execute Task 14 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 14: Remove pending/retry UX from blockers, Morning Review, and editors.
+Execute Task 15 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 15: Migrate and expand real-backend instrumentation.
 - Task 16: Final verification, rollout tooling, production canary, and Sentry closure.
