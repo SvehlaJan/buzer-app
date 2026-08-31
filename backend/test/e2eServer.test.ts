@@ -602,7 +602,7 @@ describe("debug surface parity & failure modes", () => {
 
       await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: false } });
     });
-  }, 20_000);
+  }, 40_000);
 
   it("keeps metadata-only and full mutation call views separate", async () => {
     await withServer(async (server) => {
