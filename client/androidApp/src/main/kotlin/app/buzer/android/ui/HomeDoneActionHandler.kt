@@ -34,7 +34,7 @@ class HomeDoneActionHandler(
             } catch (error: Throwable) {
                 reportRefreshFailure(error)
                 if (forceTodoist) {
-                    setStatusMessage(error.message ?: "Refresh failed")
+                    setStatusMessage(error.message?.takeIf { it.isNotBlank() } ?: "Refresh failed")
                 }
             } finally {
                 setRefreshInFlight(false)

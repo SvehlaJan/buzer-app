@@ -181,6 +181,23 @@ class HomeDoneActionHandlerTest {
     }
 
     @Test
+    fun failedForcedRefreshWithBlankMessageFallsBackToDefaultMessage() = runBlocking {
+        var actionStatus: String? = null
+
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> throw IllegalStateException("   ") },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {},
+            setStatusMessage = { actionStatus = it }
+        )
+
+        handler.refresh(forceTodoist = true)
+
+        assertEquals("Refresh failed", actionStatus)
+    }
+
+    @Test
     fun successfulRetryClearsRefreshError() = runBlocking {
         var refreshErrorCleared = false
         val handler = HomeDoneActionHandler(

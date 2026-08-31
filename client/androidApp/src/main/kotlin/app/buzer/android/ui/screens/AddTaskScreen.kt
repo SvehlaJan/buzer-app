@@ -34,14 +34,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.enforcement.EnforcementDependencies
-import app.buzer.android.ui.addtask.AddTaskFailurePresentation
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.selectAddTaskProject
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorField
@@ -518,20 +516,6 @@ fun AddTaskScreen(
             loading = projectsLoading,
             message = projectLoadStatusMessage,
             onRetry = ::retryProjects
-        )
-    }
-
-    submitDialogMessage?.let { message ->
-        val presentation = AddTaskFailurePresentation.fromSaveFailure(message)
-        ErrorAlertDialog(
-            title = presentation.dialogTitle,
-            message = presentation.dialogMessage,
-            onDismiss = { submitDialogMessage = null },
-            retryLabel = presentation.retryLabel,
-            onRetry = {
-                submitDialogMessage = null
-                validateAndSubmit()
-            }
         )
     }
     if (discardConfirmationVisible) {

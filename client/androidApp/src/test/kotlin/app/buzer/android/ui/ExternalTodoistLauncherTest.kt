@@ -4,8 +4,6 @@ import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.navigation.TodoistTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class ExternalTodoistLauncherTest {
 
