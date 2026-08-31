@@ -268,6 +268,33 @@ describe("TodoistCommandExecutor", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("never retries parse failure and returns delivery_unknown outcome", async () => {
+    const { adapter, calls } = createMockAdapter({
+      itemDelete: async () => {
+        throw new TodoistOperationError("parse", undefined, { http_code: 200 });
+      }
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+
+    const command: TodoistCommand = {
+      type: "item_delete",
+      input: { todoistTaskId: "task-1" }
+    };
+
+    const result = await executor.executeCommand({
+      command,
+      commandUuid: "parse-err-uuid",
+      deadlineMs: Date.now() + 10000
+    });
+
+    expect(result.outcome).toBe("delivery_unknown");
+    if (result.outcome === "delivery_unknown") {
+      expect(result.error.kind).toBe("parse");
+      expect(result.error.safeAttributes).toEqual({ http_code: 200 });
+    }
+    expect(calls).toHaveLength(1);
+  });
+
   it("honors Retry-After ms from 429 responses when wait and retry fit deadline", async () => {
     let currentTime = 1000;
     const sleptMs: number[] = [];

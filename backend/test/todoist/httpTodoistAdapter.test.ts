@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpTodoistAdapter } from "../../src/todoist/httpTodoistAdapter.js";
-import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
+import { parseRetryAfterHeader, TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 
 describe("HttpTodoistAdapter", () => {
   afterEach(() => {
@@ -861,7 +861,41 @@ describe("HttpTodoistAdapter", () => {
       return true;
     });
   });
+});
 
+describe("parseRetryAfterHeader", () => {
+  it("returns undefined for null, undefined, or empty strings", () => {
+    expect(parseRetryAfterHeader(null)).toBeUndefined();
+    expect(parseRetryAfterHeader(undefined)).toBeUndefined();
+    expect(parseRetryAfterHeader("")).toBeUndefined();
+  });
+
+  it("returns undefined for whitespace-only strings", () => {
+    expect(parseRetryAfterHeader("   ")).toBeUndefined();
+    expect(parseRetryAfterHeader("\t\n  ")).toBeUndefined();
+  });
+
+  it("returns undefined for invalid date strings", () => {
+    expect(parseRetryAfterHeader("not-a-date-or-number")).toBeUndefined();
+    expect(parseRetryAfterHeader("Tue, 99 Foo 2099 99:99:99 GMT")).toBeUndefined();
+  });
+
+  it("parses valid delta seconds including with surrounding whitespace", () => {
+    expect(parseRetryAfterHeader("120")).toBe(120000);
+    expect(parseRetryAfterHeader(" 5 ")).toBe(5000);
+    expect(parseRetryAfterHeader("0")).toBe(0);
+  });
+
+  it("returns 0 ms for past HTTP dates", () => {
+    const fixedNow = Date.parse("2026-08-31T10:00:00.000Z");
+    expect(parseRetryAfterHeader("Wed, 21 Oct 2015 07:28:00 GMT", fixedNow)).toBe(0);
+    expect(parseRetryAfterHeader("Mon, 31 Aug 2026 09:59:59 GMT", fixedNow)).toBe(0);
+  });
+
+  it("returns remaining ms for future HTTP dates", () => {
+    const fixedNow = Date.parse("2026-08-31T10:00:00.000Z");
+    expect(parseRetryAfterHeader("Mon, 31 Aug 2026 10:05:00 GMT", fixedNow)).toBe(300000);
+  });
 });
 
 function readCommands(fetchMock: ReturnType<typeof vi.spyOn>): Array<{

@@ -1,6 +1,6 @@
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
-import type { TodoistCommand, TodoistItemAddResult } from "../todoist/todoistMutationGateway.js";
+import type { TodoistCommand, TodoistItemAddInput, TodoistItemAddResult } from "../todoist/todoistMutationGateway.js";
 
 export const MAX_COMMAND_ATTEMPTS = 2;
 export const MAX_HTTP_ATTEMPT_TIMEOUT_MS = 5000;
@@ -154,7 +154,7 @@ export class TodoistCommandExecutor {
   ): Promise<TodoistItemAddResult | void> {
     switch (command.type) {
       case "item_add":
-        return await this.adapter.itemAdd({ ...command.input, commandUuid } as any, { signal });
+        return await this.adapter.itemAdd({ ...command.input, commandUuid } as TodoistItemAddInput, { signal });
       case "item_update":
         return await this.adapter.itemUpdate({ ...command.input, commandUuid }, { signal });
       case "item_move":
