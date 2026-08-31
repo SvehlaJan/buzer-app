@@ -21,6 +21,7 @@ interface QueueItem<T = unknown> {
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: unknown) => void;
   abortHandler?: () => void;
+  timer?: NodeJS.Timeout | null;
 }
 
 /**
@@ -87,6 +88,9 @@ export class TodoistOperationQueue {
 
       if (options.signal) {
         const abortHandler = () => {
+          if (item.timer) {
+            clearTimeout(item.timer);
+          }
           const index = this.queue.indexOf(item as QueueItem<unknown>);
           if (index !== -1) {
             this.queue.splice(index, 1);
@@ -95,6 +99,21 @@ export class TodoistOperationQueue {
         };
         item.abortHandler = abortHandler;
         options.signal.addEventListener("abort", abortHandler, { once: true });
+      }
+
+      const waitBudget = options.deadlineMs - minBudget;
+      if (waitBudget > 0 && Number.isFinite(waitBudget)) {
+        item.timer = setTimeout(() => {
+          const index = this.queue.indexOf(item as QueueItem<unknown>);
+          if (index !== -1) {
+            this.queue.splice(index, 1);
+            if (item.abortHandler && options.signal) {
+              options.signal.removeEventListener("abort", item.abortHandler);
+            }
+            reject(this.createTimeoutError(options));
+          }
+        }, waitBudget);
+        item.timer.unref?.();
       }
 
       this.queue.push(item as QueueItem<unknown>);
@@ -109,6 +128,10 @@ export class TodoistOperationQueue {
 
     while (this.queue.length > 0) {
       const item = this.queue.shift()!;
+
+      if (item.timer) {
+        clearTimeout(item.timer);
+      }
 
       // Clean up the queue abort listener before execution
       if (item.abortHandler && item.options.signal) {

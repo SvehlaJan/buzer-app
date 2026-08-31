@@ -24,12 +24,8 @@ async function snapshotTask(server: E2EServer, id: string): Promise<Record<strin
   return task;
 }
 
-const device = { deviceId: "e2e-device" };
-let actionCounter = 0;
-
 function action(extra: Record<string, unknown> = {}): Record<string, unknown> {
-  actionCounter += 1;
-  return { actionId: `e2e-action-${actionCounter}`, ...device, ...extra };
+  return { ...extra };
 }
 
 async function mutate(
@@ -116,7 +112,7 @@ describe("seeding", () => {
   });
 });
 
-describe("happy-path mutation conformance (every action completes, never goes pending)", () => {
+describe("happy-path mutation conformance", () => {
   it("holds and releases exactly the next forced sync response", async () => {
     await withServer(async (server) => {
       const armed = await server.app.inject({ method: "POST", url: "/__hold-next-sync", payload: {} });
@@ -124,10 +120,9 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       expect(armed.json()).toEqual({ state: "armed" });
 
       const syncPromise = server.app.inject({
-        method: "POST",
-        url: "/tasks/sync",
-        headers: auth,
-        payload: {}
+        method: "GET",
+        url: "/tasks/snapshot?forceRefresh=true",
+        headers: auth
       });
 
       await vi.waitFor(async () => {
@@ -141,51 +136,21 @@ describe("happy-path mutation conformance (every action completes, never goes pe
 
       const syncResponse = await syncPromise;
       expect(syncResponse.statusCode).toBe(200);
-      const idle = await server.app.inject({ method: "GET", url: "/__sync-hold" });
-      expect(idle.json()).toEqual({ state: "idle" });
-    });
-  });
-
-  it("records the exact serialized authority returned by a completed forced sync", async () => {
-    await withServer(async (server) => {
-      await server.app.inject({ method: "POST", url: "/__reset", payload: {} });
-
-      const response = await server.app.inject({
-        method: "POST",
-        url: "/tasks/sync",
-        headers: auth,
-        payload: {}
+      await vi.waitFor(async () => {
+        const idle = await server.app.inject({ method: "GET", url: "/__sync-hold" });
+        expect(idle.json()).toEqual({ state: "idle" });
       });
-      expect(response.statusCode).toBe(200);
-      const responseSnapshot = response.json();
-
-      const callsResponse = await server.app.inject({ method: "GET", url: "/__calls" });
-      expect(callsResponse.json().calls).toEqual([
-        expect.objectContaining({
-          method: "POST",
-          path: "/tasks/sync",
-          responseCompletedAt: expect.any(String),
-          responseStatusCode: 200,
-          responseAuthority: {
-            serverTime: responseSnapshot.serverTime,
-            snapshotGeneration: responseSnapshot.snapshotGeneration
-          }
-        })
-      ]);
     });
   });
 
   it("records the response-completed boundary for correlated Android mutations", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-reschedule");
-      const actionId = "e2e-response-correlation";
 
       await mutate(
         server,
         "/tasks/task-reschedule/update",
         {
-          actionId,
-          ...device,
           expectedOccurrenceKey: task.occurrenceKey,
           rootPatch: {
             expectedTaskRevision: task.taskRevision,
@@ -197,8 +162,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
 
       const callsResponse = await server.app.inject({ method: "GET", url: "/__calls" });
       const call = callsResponse.json().calls.find(
-        (candidate: { path: string; body: { actionId?: string } }) =>
-          candidate.path === "/tasks/task-reschedule/update" && candidate.body.actionId === actionId
+        (candidate: { path: string }) => candidate.path === "/tasks/task-reschedule/update"
       );
       expect(call).toMatchObject({
         responseStatusCode: 200,
@@ -216,7 +180,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         action({ expectedOccurrenceKey: task.occurrenceKey })
       );
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect((await snapshotTask(server, "task-start")).state).toBe("started");
     });
   });
@@ -230,7 +194,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         action({ expectedOccurrenceKey: task.occurrenceKey })
       );
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect((await snapshotTask(server, "task-one-time-empty")).isCompleted).toBe(true);
     });
   });
@@ -245,7 +209,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       );
       const after = await snapshotTask(server, "task-recurring-all-checked");
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect(after.isCompleted).toBe(false);
       expect(after.dueDatetime).not.toBe(before.dueDatetime);
       expect(Date.parse(after.dueDatetime) - Date.parse(before.dueDatetime)).toBe(24 * 60 * 60_000);
@@ -265,7 +229,8 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         action({ expectedOccurrenceKey: task.occurrenceKey })
       );
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
+      expect(body.snoozedUntil).toBeDefined();
       expect((await snapshotTask(server, "task-start")).startDismissCount).toBe(1);
     });
   });
@@ -282,19 +247,16 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         })
       );
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect((await snapshotTask(server, "task-deadline")).durationMinutes).toBe(task.durationMinutes + 30);
     });
   });
 
-  it("updates a complete schedule through normal reconciliation and keeps an action retry idempotent", async () => {
+  it("updates a complete schedule", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-reschedule");
       const dueDatetime = "2026-08-03T16:47:00.000Z";
-      const actionId = "e2e-complete-schedule-update";
       const request = {
-        actionId,
-        ...device,
         expectedOccurrenceKey: task.occurrenceKey,
         rootPatch: {
           expectedTaskRevision: task.taskRevision,
@@ -312,16 +274,11 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         "/tasks/task-reschedule/update",
         request
       );
-      const retry = await mutate(server, "/tasks/task-reschedule/update", request);
       const after = await snapshotTask(server, "task-reschedule");
 
-      expect(body.outcome).toBe("completed");
-      expect(retry.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect(after.dueDatetime).toBe(dueDatetime);
       expect(after.durationMinutes).toBe(30);
-      expect(server.db.prepare(
-        "select step_key as stepKey from task_action_commands where action_id = ? order by step_key"
-      ).all(actionId)).toEqual([{ stepKey: "item_update" }]);
     });
   });
 
@@ -342,7 +299,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       );
       const after = await snapshotTask(server, "task-invalid-blocker");
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect(after.durationMinutes).toBe(30);
       expect(after.dueDatetime).toBe(task.dueDatetime);
     });
@@ -375,7 +332,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       );
       const after = await snapshotTask(server, "task-one-time-partial");
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect(after.title).toBe("Edited root fixture");
       expect(after.checklistItems.find(
         (candidate: { id: string }) => candidate.id === "child-one-time-partial-open"
@@ -407,7 +364,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
         (candidate: { title: string }) => candidate.title === "E2E created task"
       );
 
-      expect(body.outcome).toBe("completed");
+      expect(body.snapshot).toBeDefined();
       expect(created).toMatchObject({
         projectId: "project-test",
         assigneeId: "user-me",
@@ -431,7 +388,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
           durationMinutes: null
         })
       );
-      expect(created.outcome).toBe("completed");
+      expect(created.snapshot).toBeDefined();
       const createdTask = server.adapter.world.state().tasks.find(
         (candidate) => candidate.title === "Wife can schedule later"
       );
@@ -457,7 +414,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
           childMutations: []
         })
       );
-      expect(updated.outcome).toBe("completed");
+      expect(updated.snapshot).toBeDefined();
       expect(server.adapter.world.getTask("todoist-task-one-time-empty")).toMatchObject({
         assigneeId: "user-wife",
         dueDatetime: null,
@@ -483,7 +440,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       const child = afterAdd.checklistItems.find(
         (candidate: { title: string }) => candidate.title === "New checklist child"
       );
-      expect(added.outcome).toBe("completed");
+      expect(added.snapshot).toBeDefined();
       expect(child).toMatchObject({ checked: false, description: null });
       const updated = await mutate(
         server,
@@ -499,7 +456,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       const updatedChild = afterUpdate.checklistItems.find(
         (candidate: { id: string }) => candidate.id === child.id
       );
-      expect(updated.outcome).toBe("completed");
+      expect(updated.snapshot).toBeDefined();
       expect(updatedChild).toMatchObject({
         checked: false,
         title: "Updated checklist child",
@@ -517,7 +474,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       const checkedChild = afterCheck.checklistItems.find(
         (candidate: { id: string }) => candidate.id === child.id
       );
-      expect(checked.outcome).toBe("completed");
+      expect(checked.snapshot).toBeDefined();
       expect(checkedChild).toMatchObject({ checked: true });
       const unchecked = await mutate(
         server,
@@ -531,7 +488,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       const uncheckedChild = afterUncheck.checklistItems.find(
         (candidate: { id: string }) => candidate.id === child.id
       );
-      expect(unchecked.outcome).toBe("completed");
+      expect(unchecked.snapshot).toBeDefined();
       expect(uncheckedChild).toMatchObject({ checked: false });
       const deleted = await mutate(
         server,
@@ -543,7 +500,7 @@ describe("happy-path mutation conformance (every action completes, never goes pe
       );
       const afterDelete = await snapshotTask(server, "task-one-time-partial");
 
-      expect(deleted.outcome).toBe("completed");
+      expect(deleted.snapshot).toBeDefined();
       expect(afterDelete.checklistItems.find(
         (candidate: { id: string }) => candidate.id === child.id
       )).toBeUndefined();
@@ -564,10 +521,16 @@ describe("happy-path mutation conformance (every action completes, never goes pe
   });
 });
 
-describe("debug surface parity", () => {
+describe("debug surface parity & failure modes", () => {
   it("selects each supported scenario and rejects an unknown name", async () => {
     await withServer(async (server) => {
-      for (const name of ["after_command_sent_timeout", "sync_lag_effect_unknown"] as const) {
+      for (const name of [
+        "after_command_sent_timeout",
+        "sync_lag_effect_unknown",
+        "command_rejected",
+        "delivery_unknown",
+        "accepted_stale"
+      ] as const) {
         const response = await server.app.inject({ method: "POST", url: "/__scenario", payload: { name } });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual({ scenario: name });
@@ -577,6 +540,70 @@ describe("debug surface parity", () => {
       expect(unknown.statusCode).toBe(400);
     });
   });
+
+  it("drives command_rejected scenario and returns 502 todoist_command_rejected", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "command_rejected" } });
+      const task = await snapshotTask(server, "task-one-time-empty");
+
+      const body = await mutate(
+        server,
+        "/tasks/task-one-time-empty/done",
+        action({ expectedOccurrenceKey: task.occurrenceKey }),
+        502
+      );
+      expect(body.code).toBe("todoist_command_rejected");
+      expect(body.snapshot).toBeDefined();
+    });
+  });
+
+  it("drives delivery_unknown scenario and returns 504 todoist_delivery_unknown", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "delivery_unknown" } });
+      const task = await snapshotTask(server, "task-one-time-empty");
+
+      const body = await mutate(
+        server,
+        "/tasks/task-one-time-empty/done",
+        action({ expectedOccurrenceKey: task.occurrenceKey }),
+        504
+      );
+      expect(body.code).toBe("todoist_delivery_unknown");
+      expect(body.snapshot).toBeDefined();
+    });
+  });
+
+  it("drives accepted_stale scenario and returns 502 todoist_accepted_snapshot_stale", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "accepted_stale" } });
+      const task = await snapshotTask(server, "task-one-time-empty");
+
+      const body = await mutate(
+        server,
+        "/tasks/task-one-time-empty/done",
+        action({ expectedOccurrenceKey: task.occurrenceKey }),
+        502
+      );
+      expect(body.code).toBe("todoist_accepted_snapshot_stale");
+    });
+  });
+
+  it("drives backend_busy scenario via __block-queue", async () => {
+    await withServer(async (server) => {
+      await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: true } });
+      const task = await snapshotTask(server, "task-one-time-empty");
+
+      const body = await mutate(
+        server,
+        "/tasks/task-one-time-empty/done",
+        action({ expectedOccurrenceKey: task.occurrenceKey }),
+        503
+      );
+      expect(body.code).toBe("backend_busy");
+
+      await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: false } });
+    });
+  }, 20_000);
 
   it("keeps metadata-only and full mutation call views separate", async () => {
     await withServer(async (server) => {
@@ -592,7 +619,6 @@ describe("debug surface parity", () => {
       const calls = (await server.app.inject({ method: "GET", url: "/__calls" })).json().calls;
       const recorded = calls.find((call: { path: string }) => call.path === "/tasks");
       expect(recorded).toMatchObject({ method: "POST", path: "/tasks" });
-      expect(Object.keys(recorded.body).sort()).toEqual(["actionId", "deviceId"]);
       expect(recorded.body).not.toHaveProperty("title");
 
       const fullCalls = (await server.app.inject({ method: "GET", url: "/__calls/full" })).json().calls;
@@ -678,47 +704,6 @@ describe("debug surface parity", () => {
     });
   });
 
-  it("drives after_command_sent_timeout through real reconciliation", async () => {
-    await withServer(async (server) => {
-      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "after_command_sent_timeout" } });
-      const task = await snapshotTask(server, "task-one-time-empty");
-
-      const body = await mutate(
-        server,
-        "/tasks/task-one-time-empty/done",
-        action({ expectedOccurrenceKey: task.occurrenceKey }),
-        202
-      );
-      expect(body.outcome).toBe("reconciliation_pending");
-      expect((await snapshotTask(server, "task-one-time-empty")).reconciliationStatus).toBe("pending");
-    });
-  });
-
-  it("drives sync_lag_effect_unknown through real reconciliation", async () => {
-    await withServer(async (server) => {
-      await server.app.inject({ method: "POST", url: "/__scenario", payload: { name: "sync_lag_effect_unknown" } });
-      const task = await snapshotTask(server, "task-reschedule");
-      const dueDatetime = new Date(Date.now() + 90 * 60_000).toISOString();
-
-      const body = await mutate(
-        server,
-        "/tasks/task-reschedule/update",
-        action({
-          expectedOccurrenceKey: task.occurrenceKey,
-          rootPatch: {
-            expectedTaskRevision: task.taskRevision,
-            dueDatetime,
-            durationMinutes: 45
-          },
-          childMutations: []
-        }),
-        202
-      );
-      expect(body.outcome).toBe("reconciliation_pending");
-      expect((await snapshotTask(server, "task-reschedule")).reconciliationStatus).toBe("pending");
-    });
-  });
-
   it("resets calls and controls, reseeds state, and keeps snapshot generation monotonic", async () => {
     await withServer(async (server) => {
       const task = await snapshotTask(server, "task-start");
@@ -735,11 +720,12 @@ describe("debug surface parity", () => {
       expect(reseeded.state).toBe("planned");
       expect((await server.app.inject({ method: "GET", url: "/__calls" })).json().calls).toHaveLength(0);
       expect((await server.app.inject({ method: "GET", url: "/__calls/full" })).json().calls).toHaveLength(0);
-      expect((await mutate(
+      const startRes = await mutate(
         server,
         "/tasks/task-start/start",
         action({ expectedOccurrenceKey: reseeded.occurrenceKey })
-      )).outcome).toBe("completed");
+      );
+      expect(startRes.snapshot).toBeDefined();
     });
   });
 

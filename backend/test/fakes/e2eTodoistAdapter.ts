@@ -17,6 +17,7 @@ import type {
   TodoistRecurringCompletionInput,
   TodoistRootItemAddInput
 } from "../../src/todoist/todoistMutationGateway.js";
+import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import type {
   TodoistCollaboratorMirror,
   TodoistCollaboratorStateMirror,
@@ -27,12 +28,18 @@ import type {
 export type E2EScenario =
   | "none"
   | "after_command_sent_timeout"
-  | "sync_lag_effect_unknown";
+  | "sync_lag_effect_unknown"
+  | "command_rejected"
+  | "delivery_unknown"
+  | "accepted_stale";
 
 export const E2E_SCENARIOS: readonly E2EScenario[] = [
   "none",
   "after_command_sent_timeout",
-  "sync_lag_effect_unknown"
+  "sync_lag_effect_unknown",
+  "command_rejected",
+  "delivery_unknown",
+  "accepted_stale"
 ];
 
 /**
@@ -314,6 +321,9 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   async sync(_syncToken: string): Promise<TodoistSyncResult> {
     this.syncCount += 1;
     const syncToken = `e2e-sync-${this.syncCount}`;
+    if (this.scenario === "accepted_stale") {
+      throw new TodoistOperationError("transport", undefined, { error_code: "e2e_sync_transport_error" });
+    }
     if (this.scenario === "sync_lag_effect_unknown") {
       return { syncToken, tasks: [], projects: [], collaborators: [], collaboratorStates: [] };
     }
@@ -327,6 +337,8 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     };
   }
 
+  private tempIdMap = new Map<string, string>();
+
   async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
     if (input.kind === "child" && this.failNextChildAdd) {
       this.failNextChildAdd = false;
@@ -334,12 +346,16 @@ export class E2ETodoistAdapter implements TodoistAdapter {
         code: "e2e_forced_child_create_failure"
       });
     }
-    return this.runAcceptedCommand(input.commandUuid, () => ({
-      todoistTaskId:
-        input.kind === "root"
-          ? this.world.addRoot(input)
-          : this.world.addChild(input)
-    }));
+    return this.runAcceptedCommand(input.commandUuid, () => {
+      if (input.kind === "root") {
+        const todoistTaskId = this.world.addRoot(input);
+        this.tempIdMap.set(input.tempId, todoistTaskId);
+        return { todoistTaskId };
+      }
+      const parentId = this.tempIdMap.get(input.parentTodoistTaskId) ?? input.parentTodoistTaskId;
+      const todoistTaskId = this.world.addChild({ ...input, parentTodoistTaskId: parentId });
+      return { todoistTaskId };
+    });
   }
 
   async itemUpdate(input: TodoistItemUpdateInput): Promise<void> {
@@ -353,7 +369,14 @@ export class E2ETodoistAdapter implements TodoistAdapter {
   }
 
   async itemClose(input: TodoistItemIdentityInput): Promise<void> {
-    this.runAcceptedCommand(input.commandUuid, () => this.world.close(input.todoistTaskId));
+    this.runAcceptedCommand(input.commandUuid, () => {
+      const task = this.world.getTask(input.todoistTaskId);
+      if (task.isRecurring) {
+        this.world.advanceRecurringDue(input.todoistTaskId);
+      } else {
+        this.world.close(input.todoistTaskId);
+      }
+    });
   }
 
   async itemUncomplete(input: TodoistItemIdentityInput): Promise<void> {
@@ -462,7 +485,13 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 
   private guardCommand(): void {
     if (this.scenario === "after_command_sent_timeout") {
-      throw new Error("e2e_command_timeout");
+      throw new TodoistOperationError("timeout", undefined, { error_code: "e2e_command_timeout" });
+    }
+    if (this.scenario === "delivery_unknown") {
+      throw new TodoistOperationError("transport", undefined, { error_code: "e2e_delivery_unknown" });
+    }
+    if (this.scenario === "command_rejected") {
+      throw new TodoistOperationError("command_rejected", undefined, { error_code: 400, error_tag: "INVALID_ARGUMENT" });
     }
   }
 }

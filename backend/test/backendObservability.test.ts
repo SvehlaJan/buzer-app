@@ -330,7 +330,7 @@ describe("Fastify Telemetry & Request Hooks", () => {
     try {
       const response = await app.inject({
         method: "GET",
-        url: "/tasks/snapshot?auth=SECRET_AUTH_123",
+        url: "/health?auth=SECRET_AUTH_123",
         headers: { authorization: "Bearer secret-token" }
       });
 
@@ -356,7 +356,7 @@ describe("Fastify Telemetry & Request Hooks", () => {
     try {
       const response = await app.inject({
         method: "GET",
-        url: "/tasks/snapshot?custom_secret=SECRET_SENTRY_123&safe=value",
+        url: "/health?custom_secret=SECRET_SENTRY_123&safe=value",
         headers: { authorization: "Bearer secret-token", "x-request-id": "SECRET_ANDROID_123" }
       });
 

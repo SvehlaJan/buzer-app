@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
 import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
@@ -6,8 +7,17 @@ import { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskActionService } from "../services/taskActionService.js";
 import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
 import type { TodoistSyncService } from "../services/todoistSyncService.js";
+import type { TodoistOperationQueue } from "../services/todoistOperationQueue.js";
+import {
+  MUTATION_DEADLINE_MS,
+  MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
+  type MutationRunResult,
+  type TaskSnapshot
+} from "../services/taskMutationRunner.js";
+import { TodoistOperationError } from "../todoist/todoistErrors.js";
 import type { BuildServerOptions } from "../server.js";
 import { isBearerTokenValid, requireBearerToken } from "./auth.js";
+import { backendObservability } from "../diagnostics/backendObservability.js";
 
 const MAX_OPAQUE_VALUE_LENGTH = 200;
 const MAX_TEXT_LENGTH = 16_384;
@@ -20,17 +30,21 @@ const nullablePatchPositiveInt = z.number().int().positive().nullable().optional
 const timeZone = z.string().trim().min(1).max(100).refine(isIanaTimeZone, "timeZone must be an IANA time zone");
 const recurrencePreset = z.enum(["never", "daily", "weekdays", "weekly", "monthly", "yearly"]);
 const taskIdParams = z.strictObject({ id: opaqueValue });
-const actionMetadata = z.strictObject({
-  actionId: opaqueValue,
-  deviceId: opaqueValue
+const checklistChildParams = z.strictObject({ id: opaqueValue, childId: opaqueValue });
+const getSnapshotQuery = z.strictObject({ forceRefresh: z.enum(["true", "false"]).optional() });
+
+const occurrenceActionMetadata = z.strictObject({ expectedOccurrenceKey: opaqueValue });
+const revisionActionMetadata = z.strictObject({
+  expectedOccurrenceKey: opaqueValue,
+  expectedTaskRevision: taskRevision
 });
-const occurrenceActionMetadata = actionMetadata.extend({ expectedOccurrenceKey: opaqueValue });
-const revisionActionMetadata = actionMetadata.extend({ expectedOccurrenceKey: opaqueValue, expectedTaskRevision: taskRevision });
+
 const checklistDraft = z.strictObject({
   clientMutationId: opaqueValue,
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
   description: nullableString
 });
+
 const childMutationBase = { clientMutationId: opaqueValue };
 const childMutation = z.discriminatedUnion("type", [
   z.strictObject({ ...childMutationBase, type: z.literal("add"), title: z.string().trim().min(1).max(MAX_TEXT_LENGTH), description: nullableString }),
@@ -39,6 +53,7 @@ const childMutation = z.discriminatedUnion("type", [
   z.strictObject({ ...childMutationBase, type: z.literal("check"), childId: opaqueValue, expectedChildRevision: taskRevision }),
   z.strictObject({ ...childMutationBase, type: z.literal("uncheck"), childId: opaqueValue, expectedChildRevision: taskRevision })
 ]);
+
 const createTaskBody = z.strictObject({
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
   projectId: opaqueValue,
@@ -48,23 +63,26 @@ const createTaskBody = z.strictObject({
   description: nullableString,
   recurrencePreset: recurrencePreset.optional(),
   timeZone: timeZone.optional(),
-  checklistDrafts: z.array(checklistDraft).max(30).optional(),
-  ...actionMetadata.shape
+  checklistDrafts: z.array(checklistDraft).max(30).optional()
 });
+
 const addChecklistItemBody = z.strictObject({
+  expectedOccurrenceKey: opaqueValue,
   clientMutationId: opaqueValue,
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
-  description: nullableString,
-  ...occurrenceActionMetadata.shape
+  description: nullableString
 });
+
 const focusedChecklistItemBody = z.strictObject({
-  expectedChildRevision: taskRevision,
-  ...occurrenceActionMetadata.shape
+  expectedOccurrenceKey: opaqueValue,
+  expectedChildRevision: taskRevision
 });
+
 const editChecklistItemBody = focusedChecklistItemBody.extend({
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
   description: nullableString
 });
+
 const rootEditPatch = z.strictObject({
   expectedTaskRevision: taskRevision,
   title: z.string().trim().min(1).max(MAX_TEXT_LENGTH).optional(),
@@ -76,16 +94,19 @@ const rootEditPatch = z.strictObject({
   recurrencePreset: recurrencePreset.optional(),
   timeZone: timeZone.optional()
 });
+
 const updateTaskBody = z.strictObject({
-  ...occurrenceActionMetadata.shape,
+  expectedOccurrenceKey: opaqueValue.optional(),
   rootPatch: rootEditPatch.nullable(),
   childMutations: z.array(childMutation).max(30)
 });
+
 const deviceCheckInBody = z.strictObject({
   deviceId: opaqueValue,
   appVersion: z.string().trim().min(1).max(200),
   permissions: z.record(z.string().min(1).max(100), z.union([z.string().max(200), z.number(), z.boolean(), z.null()]))
 });
+
 const emptyBody = z.strictObject({});
 
 export interface RouteServices {
@@ -93,6 +114,7 @@ export interface RouteServices {
   snapshots: TaskSnapshotService;
   collaborators: CollaboratorRepository;
   synchronizer: TodoistSyncService;
+  todoistQueue?: TodoistOperationQueue;
 }
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions, services: RouteServices): void {
@@ -116,26 +138,18 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.addHook("preHandler", async (request) => {
     if (request.routeOptions.url !== "/health") requireBearerToken(request, options.androidApiToken);
   });
+
   app.setErrorHandler((error: Error & { statusCode?: number; code?: string; details?: Record<string, unknown> }, request, reply) => {
     if (error instanceof z.ZodError) {
       reply.status(400).send({ code: "validation_error", message: "Request validation failed", details: { issues: error.issues } });
       return;
     }
     const statusCode = typeof error.statusCode === "number" ? error.statusCode : 500;
-    const actionId = actionIdFromBody(request.body);
-    if (statusCode === 202 && error.code === "reconciliation_pending") {
-      reply.status(statusCode).send({
-        ...(actionId === null ? {} : { actionId }),
-        outcome: "reconciliation_pending",
-        snapshot: services.snapshots.getSnapshot(new Date().toISOString())
-      });
-      return;
-    }
-    if (statusCode === 409) {
+    if (statusCode === 409 || error.code === "stale_task" || error.code === "stale_occurrence" || error.code === "stale_child") {
       reply.status(statusCode).send({
         code: typeof error.code === "string" ? error.code : "stale_task",
         message: error.message,
-        snapshot: services.snapshots.getSnapshot(new Date().toISOString())
+        snapshot: (error.details?.snapshot as TaskSnapshot | undefined) ?? services.snapshots.getSnapshot(new Date().toISOString())
       });
       return;
     }
@@ -146,12 +160,82 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     });
   });
 
-  app.get("/tasks/snapshot", async () => services.snapshots.getSnapshot(new Date().toISOString()));
-  app.post("/tasks/sync", async (request) => {
-    emptyBody.parse(request.body ?? {});
-    await services.synchronizer.syncNow();
+  app.get("/tasks/snapshot", async (request, reply) => {
+    const query = getSnapshotQuery.parse(request.query ?? {});
+    if (query.forceRefresh === "true") {
+      const queue = services.todoistQueue;
+      const obs = options.observability ?? backendObservability;
+      obs.info?.("todoist_operation_started", {
+        operation: "force_refresh",
+        request_id: request.id
+      });
+
+      try {
+        if (queue) {
+          const signal = getRequestSignal(request);
+          await queue.run(
+            {
+              operation: "force_refresh",
+              requestId: request.id,
+              deadlineMs: MUTATION_DEADLINE_MS,
+              minimumExecutionBudgetMs: MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
+              ...(signal !== undefined ? { signal } : {})
+            },
+            async () => {
+              await services.synchronizer.syncOnce();
+            }
+          );
+        } else {
+          await services.synchronizer.syncOnce();
+        }
+
+        obs.info?.("todoist_operation_succeeded", {
+          operation: "force_refresh",
+          request_id: request.id
+        });
+
+        return services.snapshots.getSnapshot(new Date().toISOString());
+      } catch (error) {
+        if (
+          error instanceof TodoistOperationError &&
+          (error.safeAttributes?.error_code === "backend_busy" || error.kind === "timeout")
+        ) {
+          obs.warn?.("backend_busy", {
+            operation: "force_refresh",
+            request_id: request.id
+          });
+          reply.status(503).send({
+            code: "backend_busy",
+            message: "Buzer is currently processing another Todoist operation. Please try again shortly.",
+            snapshot: services.snapshots.getSnapshot(new Date().toISOString())
+          });
+          return;
+        }
+
+        obs.warn?.("forced_refresh_failed", {
+          operation: "force_refresh",
+          request_id: request.id
+        });
+
+        let currentSnapshot: TaskSnapshot | undefined;
+        try {
+          currentSnapshot = services.snapshots.getSnapshot(new Date().toISOString());
+        } catch {
+          // ignore
+        }
+
+        reply.status(503).send({
+          code: "forced_refresh_failed",
+          message: error instanceof Error ? error.message : "Failed to refresh snapshot from Todoist.",
+          ...(currentSnapshot !== undefined ? { snapshot: currentSnapshot } : {})
+        });
+        return;
+      }
+    }
+
     return services.snapshots.getSnapshot(new Date().toISOString());
   });
+
   app.get("/projects", async () => {
     const collaboratorsReady = services.collaborators.isMirrorContractReady();
     return {
@@ -169,11 +253,16 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     };
   });
 
-  app.post("/tasks", async (request) => {
+  app.post("/tasks", async (request, reply) => {
     const body = createTaskBody.parse(request.body);
+    const signal = getRequestSignal(request);
     const result = await services.actions.create({
-      title: body.title, projectId: body.projectId, assigneeId: body.assigneeId, dueDatetime: body.dueDatetime,
-      durationMinutes: body.durationMinutes, description: body.description,
+      title: body.title,
+      projectId: body.projectId,
+      assigneeId: body.assigneeId,
+      dueDatetime: body.dueDatetime,
+      durationMinutes: body.durationMinutes,
+      description: body.description,
       ...(body.recurrencePreset === undefined ? {} : { recurrencePreset: body.recurrencePreset }),
       ...(body.timeZone === undefined ? {} : { timeZone: body.timeZone }),
       ...(body.checklistDrafts === undefined ? {} : {
@@ -183,76 +272,112 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
           description: draft.description
         }))
       }),
-      creatorId: options.currentUserId, now: new Date().toISOString()
+      creatorId: options.currentUserId,
+      now: new Date().toISOString(),
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
     });
-    return mutationResponse(body.actionId, result, services.snapshots);
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/start", async (request) => {
+
+  app.post("/tasks/:id/start", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
-    await services.actions.start(id, new Date().toISOString(), body);
-    return mutationResponse(body.actionId, undefined, services.snapshots);
+    const result = await services.actions.start(id, new Date().toISOString(), body);
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/done", async (request) => {
+
+  app.post("/tasks/:id/done", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
-    await services.actions.done(id, new Date().toISOString(), body);
-    return mutationResponse(body.actionId, undefined, services.snapshots);
+    const signal = getRequestSignal(request);
+    const result = await services.actions.done(id, new Date().toISOString(), {
+      ...body,
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
+    });
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/postpone-start", async (request) => {
+
+  app.post("/tasks/:id/postpone-start", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
-    return mutationResponse(body.actionId, await services.actions.postponeStart(id, new Date().toISOString(), body), services.snapshots);
+    const result = await services.actions.postponeStart(id, new Date().toISOString(), body);
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/extend", async (request) => {
+
+  app.post("/tasks/:id/extend", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = revisionActionMetadata.parse(request.body);
-    await services.actions.extend(id, new Date().toISOString(), body);
-    return mutationResponse(body.actionId, undefined, services.snapshots);
+    const signal = getRequestSignal(request);
+    const result = await services.actions.extend(id, new Date().toISOString(), {
+      ...body,
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
+    });
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/update", async (request) => {
+
+  app.post("/tasks/:id/update", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = updateTaskBody.parse(request.body);
+    const signal = getRequestSignal(request);
     const result = await services.actions.update(id, {
       expectedOccurrenceKey: body.expectedOccurrenceKey,
       rootPatch: body.rootPatch === null ? null : mapRootEditPatch(body.rootPatch),
-      childMutations: body.childMutations.map(mapChildMutation)
+      childMutations: body.childMutations.map(mapChildMutation),
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
     });
-    return mutationResponse(body.actionId, result, services.snapshots);
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/checklist", async (request) => {
+
+  app.post("/tasks/:id/checklist", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = addChecklistItemBody.parse(request.body);
+    const signal = getRequestSignal(request);
     const result = await services.actions.mutateChecklist(id, {
-      expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
-      mutations: [{ type: "add", clientMutationId: body.clientMutationId, title: body.title, description: body.description }]
+      expectedOccurrenceKey: body.expectedOccurrenceKey,
+      mutations: [{ type: "add", clientMutationId: body.clientMutationId, title: body.title, description: body.description }],
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
     });
-    return mutationResponse(body.actionId, result, services.snapshots);
+    return sendMutationResult(reply, result);
   });
-  app.post("/tasks/:id/checklist/:childId/update", async (request) => {
+
+  app.post("/tasks/:id/checklist/:childId/update", async (request, reply) => {
     const { id, childId } = checklistChildParams.parse(request.params);
     const body = editChecklistItemBody.parse(request.body);
+    const signal = getRequestSignal(request);
     const result = await services.actions.mutateChecklist(id, {
-      expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
-      mutations: [{ type: "edit", clientMutationId: body.actionId, childId, expectedChildRevision: body.expectedChildRevision, title: body.title, description: body.description }]
+      expectedOccurrenceKey: body.expectedOccurrenceKey,
+      mutations: [{ type: "edit", clientMutationId: randomUUID(), childId, expectedChildRevision: body.expectedChildRevision, title: body.title, description: body.description }],
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
     });
-    return mutationResponse(body.actionId, result, services.snapshots);
+    return sendMutationResult(reply, result);
   });
+
   for (const action of ["delete", "check", "uncheck"] as const) {
-    app.post(`/tasks/:id/checklist/:childId/${action}`, async (request) => {
+    app.post(`/tasks/:id/checklist/:childId/${action}`, async (request, reply) => {
       const { id, childId } = checklistChildParams.parse(request.params);
       const body = focusedChecklistItemBody.parse(request.body);
+      const signal = getRequestSignal(request);
       const result = await services.actions.mutateChecklist(id, {
-        expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
-        mutations: [{ type: action, clientMutationId: body.actionId, childId, expectedChildRevision: body.expectedChildRevision }]
+        expectedOccurrenceKey: body.expectedOccurrenceKey,
+        mutations: [{ type: action, clientMutationId: randomUUID(), childId, expectedChildRevision: body.expectedChildRevision }],
+        requestId: request.id,
+        ...(signal !== undefined ? { signal } : {})
       });
-      return mutationResponse(body.actionId, result, services.snapshots);
+      return sendMutationResult(reply, result);
     });
   }
+
   app.post("/review/dismiss", async (request) => {
     emptyBody.parse(request.body ?? {});
     return { snoozedUntil: new Date(Date.now() + 5 * 60_000).toISOString() };
   });
+
   app.post("/device/check-in", async (request) => {
     const body = deviceCheckInBody.parse(request.body);
     new DeviceRepository(options.db).upsertCheckIn({ id: body.deviceId, appVersion: body.appVersion, permissions: body.permissions, checkedInAt: new Date().toISOString() });
@@ -289,12 +414,48 @@ function projectCollaborators(
   ];
 }
 
-function mutationResponse(actionId: string, result: unknown, snapshots: TaskSnapshotService) {
-  const snapshot = snapshots.getSnapshot(new Date().toISOString());
-  return { actionId, outcome: "completed", snapshot };
+function getRequestSignal(request: FastifyRequest): AbortSignal | undefined {
+  return (request.raw as unknown as { signal?: AbortSignal }).signal;
 }
 
-const checklistChildParams = z.strictObject({ id: opaqueValue, childId: opaqueValue });
+function sendMutationResult(
+  reply: FastifyReply,
+  result: MutationRunResult | { kind: "success"; snapshot: TaskSnapshot; snoozedUntil?: string }
+) {
+  switch (result.kind) {
+    case "success": {
+      const snoozedUntil = "snoozedUntil" in result && typeof result.snoozedUntil === "string"
+        ? result.snoozedUntil
+        : undefined;
+      return reply.status(200).send({
+        snapshot: result.snapshot,
+        ...(snoozedUntil !== undefined ? { snoozedUntil } : {})
+      });
+    }
+    case "busy":
+      return reply.status(503).send({
+        code: "backend_busy",
+        message: "Buzer is currently processing another Todoist operation. Please try again shortly."
+      });
+    case "rejected":
+      return reply.status(502).send({
+        code: "todoist_command_rejected",
+        message: "Todoist rejected the requested change. Check Todoist before trying again.",
+        ...(result.snapshot !== undefined ? { snapshot: result.snapshot } : {})
+      });
+    case "delivery_unknown":
+      return reply.status(504).send({
+        code: "todoist_delivery_unknown",
+        message: "Buzer could not confirm the change. Check Todoist before trying again.",
+        ...(result.snapshot !== undefined ? { snapshot: result.snapshot } : {})
+      });
+    case "accepted_stale":
+      return reply.status(502).send({
+        code: "todoist_accepted_snapshot_stale",
+        message: "The change was accepted by Todoist, but the local snapshot could not be refreshed."
+      });
+  }
+}
 
 function mapRootEditPatch(patch: z.infer<typeof rootEditPatch>) {
   return {
@@ -338,22 +499,6 @@ function mapChildMutation(mutation: z.infer<typeof childMutation>) {
         expectedChildRevision: mutation.expectedChildRevision
       };
   }
-}
-
-function requiredOccurrenceKey(value: string | null): string {
-  if (value === null) {
-    throw Object.assign(new Error("Checklist mutations require expectedOccurrenceKey"), {
-      code: "task_action_metadata_invalid",
-      statusCode: 422
-    });
-  }
-  return value;
-}
-
-function actionIdFromBody(body: unknown): string | null {
-  if (typeof body !== "object" || body === null || !("actionId" in body)) return null;
-  const actionId = (body as { actionId?: unknown }).actionId;
-  return typeof actionId === "string" ? actionId : null;
 }
 
 function isIanaTimeZone(value: string): boolean {

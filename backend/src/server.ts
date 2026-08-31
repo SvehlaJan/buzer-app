@@ -88,13 +88,23 @@ export function buildServer(options: BuildServerOptions) {
 
   app.addHook("onError", async (request, reply, error) => {
     const errStatusCode = (error as { statusCode?: number }).statusCode;
+    const errCode = (error as { code?: string }).code;
     const isClientError =
       error.name === "ZodError" ||
-      (error as { code?: string }).code === "FST_ERR_VALIDATION" ||
+      errCode === "FST_ERR_VALIDATION" ||
       (typeof errStatusCode === "number" && errStatusCode >= 400 && errStatusCode < 500) ||
       (reply.statusCode >= 400 && reply.statusCode < 500);
 
-    if (!isClientError) {
+    const isOperationalError =
+      errCode === "backend_busy" ||
+      errCode === "todoist_command_rejected" ||
+      errCode === "todoist_delivery_unknown" ||
+      errCode === "todoist_accepted_snapshot_stale" ||
+      errCode === "forced_refresh_failed" ||
+      errCode === "sync_initializing" ||
+      errCode === "collaborators_unavailable";
+
+    if (!isClientError && !isOperationalError) {
       const statusCode =
         reply.statusCode >= 500
           ? reply.statusCode
@@ -143,7 +153,7 @@ export function buildServer(options: BuildServerOptions) {
     observability
   );
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer });
+    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer, todoistQueue: queue });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {

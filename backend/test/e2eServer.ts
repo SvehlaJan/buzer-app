@@ -7,6 +7,7 @@ import { buildServer } from "../src/server.js";
 import { EscalationService } from "../src/services/escalationService.js";
 import { TaskSnapshotService } from "../src/services/taskSnapshotService.js";
 import { TodoistSyncService } from "../src/services/todoistSyncService.js";
+import { TodoistOperationQueue } from "../src/services/todoistOperationQueue.js";
 import {
   e2eFixtureSeed,
   e2eMorningReviewScenarioSeed,
@@ -60,6 +61,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
   const adapter = new E2ETodoistAdapter(CURRENT_USER_ID);
   const tasks = new TaskRepository(db);
   const projects = new ProjectRepository(db);
+  const todoistQueue = new TodoistOperationQueue();
   const synchronizer = new TodoistSyncService(db, tasks, projects, adapter, CURRENT_USER_ID);
   const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true);
   const escalationService = new EscalationService(db, tasks, new DryRunSender(), "e2e-recipient");
@@ -69,6 +71,8 @@ export async function buildE2EServer(): Promise<E2EServer> {
     currentUserId: CURRENT_USER_ID,
     androidApiToken: ANDROID_API_TOKEN,
     todoist: adapter,
+    synchronizer,
+    todoistQueue,
     escalationService,
     rateLimit: { max: 100_000, timeWindowMs: 60_000 },
     observability,
@@ -77,6 +81,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
 
   const calls: RecordedCall[] = [];
   const fullCalls: RecordedFullCall[] = [];
+  let queueBlocker: (() => void) | null = null;
   const controls = {
     failActions: false,
     failSnapshot: false,
@@ -124,6 +129,10 @@ export async function buildE2EServer(): Promise<E2EServer> {
   const reset = async (morningReviewScenario?: E2EMorningReviewScenario): Promise<void> => {
     controls.syncHold?.release();
     controls.syncHold = null;
+    if (queueBlocker !== null) {
+      queueBlocker();
+      queueBlocker = null;
+    }
     db.transaction(() => {
       for (const table of [
         "task_action_commands",
@@ -152,7 +161,18 @@ export async function buildE2EServer(): Promise<E2EServer> {
     await seed(morningReviewScenario);
   };
 
-  registerDebugSurface(app, { adapter, calls, fullCalls, controls, snapshots, observability, reset });
+  registerDebugSurface(app, {
+    adapter,
+    calls,
+    fullCalls,
+    controls,
+    snapshots,
+    observability,
+    todoistQueue,
+    getBlocker: () => queueBlocker,
+    setBlocker: (b) => { queueBlocker = b; },
+    reset
+  });
   await seed();
   return { app, adapter, db, observability, reset };
 }
@@ -170,15 +190,17 @@ interface DebugSurfaceOptions {
   };
   snapshots: TaskSnapshotService;
   observability: RecordingBackendObservability;
+  todoistQueue: TodoistOperationQueue;
+  getBlocker: () => (() => void) | null;
+  setBlocker: (b: (() => void) | null) => void;
   reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
 const ACTION_METADATA_KEYS = [
-  "actionId",
-  "deviceId",
   "expectedOccurrenceKey",
   "expectedTaskRevision",
-  "expectedChildRevision"
+  "expectedChildRevision",
+  "clientMutationId"
 ] as const;
 
 function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScenario {
@@ -187,7 +209,7 @@ function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScena
 }
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
-  const { adapter, calls, fullCalls, controls, snapshots, observability, reset } = options;
+  const { adapter, calls, fullCalls, controls, snapshots, observability, todoistQueue, getBlocker, setBlocker, reset } = options;
   const correlatedCalls = new Map<string, RecordedCall>();
 
   app.addHook("preHandler", async (request, reply) => {
@@ -222,13 +244,16 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       }
     }
 
-    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "armed") {
+    const query = typeof request.query === "object" && request.query !== null
+      ? (request.query as Record<string, unknown>)
+      : {};
+    if (request.method === "GET" && path === "/tasks/snapshot" && query.forceRefresh === "true" && controls.syncHold?.state === "armed") {
       const hold = controls.syncHold;
       hold.state = "waiting";
       await hold.waiting;
     }
 
-    if (controls.failSnapshot && ((request.method === "GET" && path === "/tasks/snapshot") || (request.method === "POST" && path === "/tasks/sync"))) {
+    if (controls.failSnapshot && request.method === "GET" && path === "/tasks/snapshot") {
       return reply.code(500).send({ error: "forced_snapshot_failure" });
     }
     if (controls.failProjects && request.method === "GET" && path === "/projects") {
@@ -246,12 +271,13 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
 
   app.addHook("onResponse", async (request, reply) => {
     const call = correlatedCalls.get(request.id);
-    if (call === undefined) return;
-    call.responseCompletedAt = new Date().toISOString();
-    call.responseStatusCode = reply.statusCode;
-    correlatedCalls.delete(request.id);
+    if (call !== undefined) {
+      call.responseCompletedAt = new Date().toISOString();
+      call.responseStatusCode = reply.statusCode;
+      correlatedCalls.delete(request.id);
+    }
     const path = request.url.split("?")[0] ?? request.url;
-    if (request.method === "POST" && path === "/tasks/sync" && controls.syncHold?.state === "released") {
+    if (request.method === "GET" && path === "/tasks/snapshot" && controls.syncHold?.state === "released") {
       controls.syncHold = null;
     }
   });
@@ -306,6 +332,19 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     if (hold === null) return { state: "idle" };
     hold.release();
     return { state: hold.state };
+  });
+  app.post("/__block-queue", async (request) => {
+    const enabled = (request.body as { enabled?: unknown } | null)?.enabled === true;
+    const currentBlocker = getBlocker();
+    if (enabled && currentBlocker === null) {
+      void todoistQueue.run({ operation: "blocked", deadlineMs: 60_000 }, () => new Promise<void>((resolve) => {
+        setBlocker(resolve);
+      }));
+    } else if (!enabled && currentBlocker !== null) {
+      currentBlocker();
+      setBlocker(null);
+    }
+    return { blocked: enabled };
   });
 }
 

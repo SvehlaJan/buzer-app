@@ -46,15 +46,15 @@ describe("rate limiting", () => {
     });
 
     const response = await app.inject({
-      method: "POST", url: "/tasks/root/checklist/todoist-child/check", remoteAddress: "198.51.100.9",
+      method: "POST", url: "/tasks/root/checklist/child/check", remoteAddress: "198.51.100.9",
       headers: { authorization: "Bearer secret" },
-      payload: { actionId: "rate-child", deviceId: "android-1", expectedOccurrenceKey: "occurrence-1", expectedChildRevision: childRevision }
+      payload: { expectedOccurrenceKey: "occurrence-1", expectedChildRevision: childRevision }
     });
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["x-ratelimit-limit"]).toBe("3");
-    expect(response.json()).toMatchObject({ actionId: "rate-child", outcome: "completed", snapshot: { tasks: expect.any(Array) } });
+    expect(response.json()).toMatchObject({ snapshot: { tasks: expect.any(Array) } });
   });
 
   it("adds rate-limit headers to responses from the registered route plugin", async () => {
