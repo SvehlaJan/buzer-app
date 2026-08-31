@@ -76,11 +76,21 @@ export interface TodoistRecurringCompletionInput {
 }
 
 export interface TodoistMutationGateway {
-  itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult>;
-  itemUpdate(input: TodoistItemUpdateInput): Promise<void>;
-  itemMove(input: TodoistItemMoveInput): Promise<void>;
-  itemClose(input: TodoistItemIdentityInput): Promise<void>;
-  itemUncomplete(input: TodoistItemIdentityInput): Promise<void>;
-  itemDelete(input: TodoistItemIdentityInput): Promise<void>;
-  itemUpdateDateComplete(input: TodoistRecurringCompletionInput): Promise<void>;
+  itemAdd(input: TodoistItemAddInput, options?: { signal?: AbortSignal }): Promise<TodoistItemAddResult>;
+  itemUpdate(input: TodoistItemUpdateInput, options?: { signal?: AbortSignal }): Promise<void>;
+  itemMove(input: TodoistItemMoveInput, options?: { signal?: AbortSignal }): Promise<void>;
+  itemClose(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
+  itemUncomplete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
+  itemDelete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
+  itemUpdateDateComplete(input: TodoistRecurringCompletionInput, options?: { signal?: AbortSignal }): Promise<void>;
 }
+
+export type TodoistCommand =
+  | { type: "item_add"; input: Omit<TodoistRootItemAddInput, "commandUuid"> | Omit<TodoistChildItemAddInput, "commandUuid"> | TodoistItemAddInput }
+  | { type: "item_update"; input: Omit<TodoistItemUpdateInput, "commandUuid"> | TodoistItemUpdateInput }
+  | { type: "item_move"; input: Omit<TodoistItemMoveInput, "commandUuid"> | TodoistItemMoveInput }
+  | { type: "item_close"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
+  | { type: "item_uncomplete"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
+  | { type: "item_delete"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
+  | { type: "item_update_date_complete"; input: Omit<TodoistRecurringCompletionInput, "commandUuid"> | TodoistRecurringCompletionInput };
+

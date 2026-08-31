@@ -44,8 +44,9 @@ export interface TodoistLegacyUpdateCommandIdentities {
 }
 
 export interface TodoistAdapter extends TodoistMutationGateway {
-  sync(syncToken: string): Promise<TodoistSyncResult>;
-  createTask(input: TodoistCreateTaskInput): Promise<TodoistCreateTaskResult>;
-  completeTask(todoistTaskId: string, commandUuid: string): Promise<void>;
-  updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities): Promise<void>;
+  sync(syncToken: string, options?: { signal?: AbortSignal }): Promise<TodoistSyncResult>;
+  createTask(input: TodoistCreateTaskInput, options?: { signal?: AbortSignal }): Promise<TodoistCreateTaskResult>;
+  completeTask(todoistTaskId: string, commandUuid: string, options?: { signal?: AbortSignal }): Promise<void>;
+  updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities, options?: { signal?: AbortSignal }): Promise<void>;
 }
+

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HttpTodoistAdapter } from "../../src/todoist/httpTodoistAdapter.js";
+import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 
 describe("HttpTodoistAdapter", () => {
   afterEach(() => {
@@ -678,47 +679,189 @@ describe("HttpTodoistAdapter", () => {
     }]);
   });
 
-  it("reports sanitized command failures with UUID, type, and Todoist status", async () => {
+  it("classifies transport error without leaking secrets", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "delete-transport",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("transport");
+      expect(opErr.message).toBe("Todoist operation failed: transport");
+      expect(JSON.stringify(opErr)).not.toContain("super-secret-token");
+      return true;
+    });
+  });
+
+  it("classifies AbortSignal abort as timeout failure", async () => {
+    const controller = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+      throw error;
+    });
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    controller.abort();
+    await expect(adapter.itemDelete(
+      { commandUuid: "delete-timeout", todoistTaskId: "todoist-1" },
+      { signal: controller.signal }
+    )).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("timeout");
+      return true;
+    });
+  });
+
+  it("classifies 429 rate limit with parsed Retry-After seconds", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Rate limited", {
+      status: 429,
+      headers: { "retry-after": "5" }
+    }));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "delete-rate-limit",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("rate_limited");
+      expect(opErr.retryAfterMs).toBe(5000);
+      expect(opErr.safeAttributes).toEqual({ http_code: 429 });
+      expect(JSON.stringify(opErr)).not.toContain("Rate limited");
+      return true;
+    });
+  });
+
+  it("classifies 429 rate limit with parsed Retry-After HTTP-date", async () => {
+    const futureDate = new Date(Date.now() + 10000).toUTCString();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Rate limited", {
+      status: 429,
+      headers: { "retry-after": futureDate }
+    }));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "delete-rate-limit-date",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("rate_limited");
+      expect(opErr.retryAfterMs).toBeGreaterThan(0);
+      expect(opErr.retryAfterMs).toBeLessThanOrEqual(10000);
+      expect(opErr.safeAttributes).toEqual({ http_code: 429 });
+      return true;
+    });
+  });
+
+  it("classifies 5xx as server error with http_code attribute", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Internal Server Error", {
+      status: 503
+    }));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "delete-5xx",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("server");
+      expect(opErr.safeAttributes).toEqual({ http_code: 503 });
+      expect(JSON.stringify(opErr)).not.toContain("Internal Server Error");
+      return true;
+    });
+  });
+
+  it("classifies non-ok sync_status as command_rejected with sanitized code/tag only", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_status: {
-        "delete-failure": { error_code: 22, error: "invalid item" }
+        "delete-failure": { error_code: 22, error: "invalid item", error_tag: "ITEM_NOT_FOUND", payload_leaked: "secret" }
       }
     })));
     const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
 
-    const error = await adapter.itemDelete({
+    await expect(adapter.itemDelete({
       commandUuid: "delete-failure",
       todoistTaskId: "todoist-1"
-    }).catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
-    expect(message).toContain("delete-failure");
-    expect(message).toContain("item_delete");
-    expect(message).toContain("invalid item");
-    expect(message).not.toContain("super-secret-token");
-    expect(message.toLowerCase()).not.toContain("authorization");
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("command_rejected");
+      expect(opErr.safeAttributes).toEqual({
+        command_type: "item_delete",
+        error_code: 22,
+        error_tag: "ITEM_NOT_FOUND"
+      });
+      expect(JSON.stringify(opErr)).not.toContain("super-secret-token");
+      expect(JSON.stringify(opErr)).not.toContain("payload_leaked");
+      return true;
+    });
   });
 
-  it("rejects a command response that omits the caller UUID status", async () => {
+  it("classifies missing sync_status UUID as command_rejected with missing_status tag", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_status: {}
     })));
     const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
 
-    const error = await adapter.itemDelete({
+    await expect(adapter.itemDelete({
       commandUuid: "missing-status-command",
       todoistTaskId: "todoist-1"
-    }).catch((caught: unknown) => caught);
-
-    expect(error).toBeInstanceOf(Error);
-    const message = (error as Error).message;
-    expect(message).toContain("missing-status-command");
-    expect(message).toContain("item_delete");
-    expect(message).toContain("missing_status");
-    expect(message).not.toContain("super-secret-token");
-    expect(message.toLowerCase()).not.toContain("authorization");
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("command_rejected");
+      expect(opErr.safeAttributes).toEqual({
+        command_type: "item_delete",
+        error_tag: "missing_status"
+      });
+      return true;
+    });
   });
+
+  it("classifies other 4xx as client error with http_code attribute", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Bad Request", {
+      status: 400
+    }));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "delete-4xx",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("client");
+      expect(opErr.safeAttributes).toEqual({ http_code: 400 });
+      expect(JSON.stringify(opErr)).not.toContain("Bad Request");
+      return true;
+    });
+  });
+
+  it("classifies malformed JSON response as parse error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<html>Not JSON</html>", {
+      status: 200,
+      headers: { "content-type": "text/html" }
+    }));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.sync("*")).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("parse");
+      expect(opErr.safeAttributes).toEqual({ http_code: 200 });
+      expect(JSON.stringify(opErr)).not.toContain("<html>Not JSON</html>");
+      return true;
+    });
+  });
+
 });
 
 function readCommands(fetchMock: ReturnType<typeof vi.spyOn>): Array<{

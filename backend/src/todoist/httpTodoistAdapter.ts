@@ -5,6 +5,7 @@ import type {
   TodoistUpdateTaskInput,
   TodoistSyncResult
 } from "./todoistAdapter.js";
+import { parseRetryAfterHeader, TodoistOperationError } from "./todoistErrors.js";
 import type {
   TodoistDueMutation,
   TodoistDurationMutation,
@@ -21,6 +22,7 @@ import type {
   TodoistProjectMirror,
   TodoistTaskMirror
 } from "./todoistTypes.js";
+
 
 interface TodoistApiTask {
   id: string;
@@ -100,13 +102,14 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     private readonly baseUrl = "https://api.todoist.com/api/v1"
   ) {}
 
-  async sync(syncToken: string): Promise<TodoistSyncResult> {
+  async sync(syncToken: string, options?: { signal?: AbortSignal }): Promise<TodoistSyncResult> {
     const response = await this.request<SyncResponse>("/sync", {
       method: "POST",
       body: this.encodeForm({
         sync_token: syncToken,
         resource_types: JSON.stringify(["items", "projects", "collaborators", "collaborator_states"])
-      })
+      }),
+      ...(options?.signal !== undefined ? { signal: options.signal } : {})
     });
     const responseUpdatedAt = response.updated_at ?? new Date().toISOString();
 
@@ -123,7 +126,10 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     };
   }
 
-  async createTask(input: TodoistCreateTaskInput): Promise<{ todoistTaskId: string; task: TodoistTaskMirror }> {
+  async createTask(
+    input: TodoistCreateTaskInput,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ todoistTaskId: string; task: TodoistTaskMirror }> {
     const body: Record<string, unknown> = {
       content: input.title
     };
@@ -147,23 +153,28 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     const response = await this.request<TodoistApiTask>("/tasks", {
       method: "POST",
       body: JSON.stringify(body),
-      headers: { "content-type": "application/json" }
+      headers: { "content-type": "application/json" },
+      ...(options?.signal !== undefined ? { signal: options.signal } : {})
     });
     const task = this.mapTask(response);
     return { todoistTaskId: task.todoistTaskId, task };
   }
 
-  async completeTask(todoistTaskId: string, commandUuid: string): Promise<void> {
-    await this.itemClose({ commandUuid, todoistTaskId });
+  async completeTask(todoistTaskId: string, commandUuid: string, options?: { signal?: AbortSignal }): Promise<void> {
+    await this.itemClose({ commandUuid, todoistTaskId }, options);
   }
 
-  async updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities): Promise<void> {
+  async updateTask(
+    input: TodoistUpdateTaskInput,
+    commands: TodoistLegacyUpdateCommandIdentities,
+    options?: { signal?: AbortSignal }
+  ): Promise<void> {
     if (commands.moveCommandUuid !== undefined) {
       await this.itemMove({
         commandUuid: commands.moveCommandUuid,
         todoistTaskId: input.todoistTaskId,
         projectId: input.projectId
-      });
+      }, options);
     }
     await this.itemUpdate({
       commandUuid: commands.updateCommandUuid,
@@ -185,10 +196,10 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       duration: input.durationMinutes === null
         ? { kind: "clear" }
         : { kind: "replace", amount: input.durationMinutes, unit: "minute" }
-    });
+    }, options);
   }
 
-  async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
+  async itemAdd(input: TodoistItemAddInput, options?: { signal?: AbortSignal }): Promise<TodoistItemAddResult> {
     const args: Record<string, unknown> = {
       content: input.title,
       project_id: input.projectId
@@ -207,11 +218,11 @@ export class HttpTodoistAdapter implements TodoistAdapter {
         applyDurationMutation(args, input.duration);
       }
     }
-    const response = await this.command(input.commandUuid, "item_add", args, input.tempId);
+    const response = await this.command(input.commandUuid, "item_add", args, input.tempId, options);
     return { todoistTaskId: response.temp_id_mapping?.[input.tempId] ?? null };
   }
 
-  async itemUpdate(input: TodoistItemUpdateInput): Promise<void> {
+  async itemUpdate(input: TodoistItemUpdateInput, options?: { signal?: AbortSignal }): Promise<void> {
     const args: Record<string, unknown> = { id: input.todoistTaskId };
     if (input.title !== undefined) {
       args.content = input.title;
@@ -228,29 +239,29 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     } else if (input.assignment.kind === "unassign") {
       args.responsible_uid = null;
     }
-    await this.command(input.commandUuid, "item_update", args);
+    await this.command(input.commandUuid, "item_update", args, undefined, options);
   }
 
-  async itemMove(input: TodoistItemMoveInput): Promise<void> {
+  async itemMove(input: TodoistItemMoveInput, options?: { signal?: AbortSignal }): Promise<void> {
     await this.command(input.commandUuid, "item_move", {
       id: input.todoistTaskId,
       project_id: input.projectId
-    });
+    }, undefined, options);
   }
 
-  async itemClose(input: TodoistItemIdentityInput): Promise<void> {
-    await this.command(input.commandUuid, "item_close", { id: input.todoistTaskId });
+  async itemClose(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {
+    await this.command(input.commandUuid, "item_close", { id: input.todoistTaskId }, undefined, options);
   }
 
-  async itemUncomplete(input: TodoistItemIdentityInput): Promise<void> {
-    await this.command(input.commandUuid, "item_uncomplete", { id: input.todoistTaskId });
+  async itemUncomplete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {
+    await this.command(input.commandUuid, "item_uncomplete", { id: input.todoistTaskId }, undefined, options);
   }
 
-  async itemDelete(input: TodoistItemIdentityInput): Promise<void> {
-    await this.command(input.commandUuid, "item_delete", { id: input.todoistTaskId });
+  async itemDelete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {
+    await this.command(input.commandUuid, "item_delete", { id: input.todoistTaskId }, undefined, options);
   }
 
-  async itemUpdateDateComplete(input: TodoistRecurringCompletionInput): Promise<void> {
+  async itemUpdateDateComplete(input: TodoistRecurringCompletionInput, options?: { signal?: AbortSignal }): Promise<void> {
     const due: Record<string, unknown> = { is_recurring: true };
     const dueDate = input.task.dueDate ?? input.task.dueDatetime;
     if (dueDate !== null) {
@@ -270,48 +281,103 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       due,
       is_forward: 1,
       reset_subtasks: true
-    });
+    }, undefined, options);
   }
 
-  private async command(uuid: string, type: string, args: Record<string, unknown>, tempId?: string): Promise<SyncResponse> {
+  private async command(
+    uuid: string,
+    type: string,
+    args: Record<string, unknown>,
+    tempId?: string,
+    options?: { signal?: AbortSignal }
+  ): Promise<SyncResponse> {
     const command = tempId === undefined
       ? { type, uuid, args }
       : { type, uuid, temp_id: tempId, args };
-    let response: SyncResponse;
-    try {
-      response = await this.request<SyncResponse>("/sync", {
-        method: "POST",
-        body: this.encodeForm({
-          commands: JSON.stringify([command])
-        })
-      });
-    } catch (error) {
-      const status = error instanceof TodoistHttpError ? `http_${error.status}` : "transport_error";
-      throw new Error(formatCommandFailure(uuid, type, status));
-    }
+    const response = await this.request<SyncResponse>("/sync", {
+      method: "POST",
+      body: this.encodeForm({
+        commands: JSON.stringify([command])
+      }),
+      ...(options?.signal !== undefined ? { signal: options.signal } : {})
+    });
     const status = response.sync_status?.[uuid];
     if (status !== "ok") {
-      throw new Error(formatCommandFailure(uuid, type, status ?? "missing_status"));
+      const safeAttributes: Record<string, string | number> = {
+        command_type: type
+      };
+      if (typeof status === "object" && status !== null) {
+        const statusRecord = status as Record<string, unknown>;
+        if (typeof statusRecord.error_code === "number") {
+          safeAttributes.error_code = statusRecord.error_code;
+        }
+        if (typeof statusRecord.error_tag === "string") {
+          safeAttributes.error_tag = statusRecord.error_tag;
+        } else if (typeof statusRecord.error === "string") {
+          safeAttributes.error_tag = statusRecord.error;
+        }
+      } else if (status === undefined) {
+        safeAttributes.error_tag = "missing_status";
+      } else if (typeof status === "string") {
+        safeAttributes.error_tag = status;
+      }
+      throw new TodoistOperationError("command_rejected", undefined, safeAttributes);
     }
     return response;
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const fetchInit: RequestInit = {
       ...init,
       headers: {
         authorization: `Bearer ${this.apiToken}`,
         "content-type": "application/x-www-form-urlencoded",
         ...init.headers
       }
-    });
-
-    if (!response.ok) {
-      throw new TodoistHttpError(response.status);
+    };
+    if (init.signal !== undefined) {
+      fetchInit.signal = init.signal;
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, fetchInit);
+    } catch (error: unknown) {
+      if (error instanceof TodoistOperationError) {
+        throw error;
+      }
+      if (init.signal?.aborted || (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"))) {
+        throw new TodoistOperationError("timeout");
+      }
+      throw new TodoistOperationError("transport");
     }
 
-    return await response.json() as T;
+
+    if (!response.ok) {
+      const status = response.status;
+      const safeAttributes: Record<string, string | number> = {
+        http_code: status
+      };
+      if (status === 429) {
+        const retryAfterHeader = response.headers.get("retry-after");
+        const retryAfterMs = parseRetryAfterHeader(retryAfterHeader);
+        throw new TodoistOperationError("rate_limited", retryAfterMs, safeAttributes);
+      }
+      if (status >= 500 && status < 600) {
+        throw new TodoistOperationError("server", undefined, safeAttributes);
+      }
+      if (status >= 400 && status < 500) {
+        throw new TodoistOperationError("client", undefined, safeAttributes);
+      }
+      throw new TodoistOperationError("server", undefined, safeAttributes);
+    }
+
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new TodoistOperationError("parse", undefined, { http_code: response.status });
+    }
   }
+
 
   private encodeForm(values: Record<string, string>): string {
     const params = new URLSearchParams();
@@ -407,11 +473,6 @@ export class HttpTodoistAdapter implements TodoistAdapter {
   }
 }
 
-class TodoistHttpError extends Error {
-  constructor(readonly status: number) {
-    super(`todoist_http_${status}`);
-  }
-}
 
 function applyDueMutation(args: Record<string, unknown>, due: TodoistDueMutation): void {
   if (due.kind === "preserve") {
@@ -459,10 +520,7 @@ function normalizeDurationMinutes(amount: number | null, unit: string | null): n
 }
 
 
-function formatCommandFailure(uuid: string, type: string, status: unknown): string {
-  const serializedStatus = typeof status === "string" ? status : JSON.stringify(status);
-  return `todoist_command_failed uuid=${uuid} type=${type} status=${serializedStatus}`;
-}
+
 
 function stringifyNullable(value: string | number | null): string | null {
   return value === null ? null : String(value);
