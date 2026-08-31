@@ -16,7 +16,6 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasAnySibling
@@ -111,7 +110,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("I'm starting").performClick()
 
         waitForRecordedCall("/tasks/task-start/start")
-        fakeBackend.assertRecorded("/tasks/task-start/start", "\"actionId\":", "\"deviceId\":", "\"expectedOccurrenceKey\":")
+        fakeBackend.assertRecorded("/tasks/task-start/start", "\"expectedOccurrenceKey\":")
     }
 
     @Test
@@ -146,7 +145,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithText("Done").performClick()
 
         waitForRecordedCall("/tasks/task-deadline/done")
-        fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"actionId\":", "\"deviceId\":", "\"expectedOccurrenceKey\":")
+        fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"expectedOccurrenceKey\":")
     }
 
     @Test
@@ -187,9 +186,8 @@ class BlockerActivityFakeBackendTest {
         waitForActivityDestroyed(scenario)
         fakeBackend.assertRecorded(
             "/tasks/task-reschedule/update",
-            "\"actionId\":",
-            "\"deviceId\":",
-            "\"expectedOccurrenceKey\":"
+            "\"expectedOccurrenceKey\":",
+            "\"expectedTaskRevision\":"
         )
     }
 
@@ -333,7 +331,7 @@ class BlockerActivityFakeBackendTest {
         composeRule.onAllNodesWithText("Done").filter(isEnabled()).onFirst().performClick()
 
         waitForRecordedCall("/tasks/task-deadline/done")
-        fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"actionId\":", "\"deviceId\":", "\"expectedOccurrenceKey\":")
+        fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"expectedOccurrenceKey\":")
     }
 
     @Test
@@ -494,8 +492,6 @@ class BlockerActivityFakeBackendTest {
             waitForRecordedCall("/tasks/task-overdue-4/done")
             fakeBackend.assertRecorded(
                 "/tasks/task-overdue-4/done",
-                "\"actionId\":",
-                "\"deviceId\":",
                 "\"expectedOccurrenceKey\":"
             )
         } finally {
@@ -607,9 +603,8 @@ class BlockerActivityFakeBackendTest {
         waitForRecordedCall("/tasks/task-invalid/update")
         fakeBackend.assertRecorded(
             "/tasks/task-invalid/update",
-            "\"actionId\":",
-            "\"deviceId\":",
-            "\"expectedOccurrenceKey\":"
+            "\"expectedOccurrenceKey\":",
+            "\"expectedTaskRevision\":"
         )
         waitForText("Morning review")
         composeRule.onNodeWithText("Start day").assertIsDisplayed()

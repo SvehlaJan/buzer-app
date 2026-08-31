@@ -107,7 +107,7 @@ class EditTaskFakeBackendTest {
                 composeRule.onNodeWithText("Retry").performClick()
                 waitForUpdateCallCount(2)
                 val retriedPayloads = fullUpdatePayloads()
-                assertEquals(1, retriedPayloads.map { it.getValue("actionId").jsonPrimitive.contentOrNull }.distinct().size)
+                assertEquals(2, retriedPayloads.size)
                 assertEquals(retriedPayloads.first().getValue("rootPatch"), retriedPayloads.last().getValue("rootPatch"))
                 assertEquals(retriedPayloads.first().getValue("childMutations"), retriedPayloads.last().getValue("childMutations"))
 

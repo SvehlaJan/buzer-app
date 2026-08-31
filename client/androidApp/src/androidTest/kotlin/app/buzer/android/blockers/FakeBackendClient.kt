@@ -62,7 +62,6 @@ class FakeBackendClient(
         .jsonPrimitive
         .content
 
-
     fun calls(): String = request("GET", "/__calls")
 
     fun fullCalls(): String = request("GET", "/__calls/full")

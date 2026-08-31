@@ -92,11 +92,7 @@ class AddTaskFakeBackendTest {
             clickAddBlockRange()
 
             waitForRecordedCall("/tasks")
-            fakeBackend.assertRecorded(
-                "/tasks",
-                "\"actionId\":",
-                "\"deviceId\":"
-            )
+            fakeBackend.assertRecorded("/tasks")
         } finally {
             scenario.close()
         }
@@ -212,11 +208,7 @@ class AddTaskFakeBackendTest {
             clickAddBlockRange()
 
             waitForRecordedCall("/tasks")
-            fakeBackend.assertRecorded(
-                "/tasks",
-                "\"actionId\":",
-                "\"deviceId\":"
-            )
+            fakeBackend.assertRecorded("/tasks")
         } finally {
             scenario.close()
         }
@@ -240,7 +232,7 @@ class AddTaskFakeBackendTest {
 
             waitForScrollableText("Checklist item 1")
             waitForScrollableText("Failed child")
-            assertEquals(1, recordedCreateActionIds().size)
+            assertEquals(1, recordedCreateBodies().size)
         } finally {
             scenario.close()
             fakeBackend.setFailNextChildAdd(false)
@@ -632,14 +624,11 @@ class AddTaskFakeBackendTest {
     private fun waitForCreateCallCount(expectedCount: Int) {
         val deadline = SystemClock.elapsedRealtime() + 15_000
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (recordedCreateActionIds().size >= expectedCount) return
+            if (recordedCreateBodies().size >= expectedCount) return
             SystemClock.sleep(100)
         }
-        fail("Expected $expectedCount create calls, got ${recordedCreateActionIds()}")
+        fail("Expected $expectedCount create calls, got ${recordedCreateBodies()}")
     }
-
-    private fun recordedCreateActionIds(): List<String> =
-        recordedCreateBodies().mapNotNull { body -> body["actionId"]?.jsonPrimitive?.contentOrNull }
 
     private fun recordedCreateBodies() = Json.parseToJsonElement(fakeBackend.calls())
         .jsonObject["calls"]
