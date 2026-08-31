@@ -10,6 +10,7 @@ import app.buzer.shared.api.BuzerApiRequestCorrelation
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 import java.util.Collections
 import java.util.WeakHashMap
@@ -103,8 +104,19 @@ class BlockerErrorReporter(
         throwable: Throwable?
     ): Boolean {
         if (throwable is CancellationException) return false
+        if (throwable is BuzerApiException) return false
+        if (isTransportOrTimeout(throwable)) return false
         if (isValidationOrClientError(throwable, message)) return false
         return true
+    }
+
+    private fun isTransportOrTimeout(throwable: Throwable?): Boolean {
+        if (throwable == null) return false
+        if (throwable is IOException) return true
+        val className = throwable::class.qualifiedName.orEmpty()
+        return className.contains("Timeout") ||
+            className.contains("Connect") ||
+            className.contains("UnresolvedAddress")
     }
 
     private fun isValidationOrClientError(throwable: Throwable?, message: String): Boolean {
@@ -112,11 +124,6 @@ class BlockerErrorReporter(
             (throwable.message?.contains("validation", ignoreCase = true) == true || message.contains("validation", ignoreCase = true))
         ) {
             return true
-        }
-        if (throwable is BuzerApiException) {
-            if (throwable.status == 400 || throwable.status == 422 || throwable.status == 409 || throwable.status == 429) {
-                return true
-            }
         }
         if (message.contains("validation", ignoreCase = true) || message.contains("invalid input", ignoreCase = true)) {
             return true

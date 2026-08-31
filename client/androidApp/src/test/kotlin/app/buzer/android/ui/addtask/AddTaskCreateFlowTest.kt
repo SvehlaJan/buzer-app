@@ -1,7 +1,6 @@
 package app.buzer.android.ui.addtask
 
 import app.buzer.shared.model.CreateTaskRequest
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlinx.coroutines.runBlocking
@@ -19,8 +18,6 @@ class AddTaskCreateFlowTest {
             createTask = {
                 events += "create"
                 MutationResponse(
-                    actionId = it.actionId,
-                    outcome = MutationOutcome.completed,
                     snapshot = snapshot()
                 )
             },
@@ -41,9 +38,7 @@ class AddTaskCreateFlowTest {
             projectId = "project",
             assigneeId = "user-me",
             dueDatetime = "2026-06-15T20:30:00Z",
-            durationMinutes = 5,
-            actionId = "action-create-test",
-            deviceId = "device-test"
+            durationMinutes = 5
         )
 
     private fun snapshot() = TasksSnapshotResponse(

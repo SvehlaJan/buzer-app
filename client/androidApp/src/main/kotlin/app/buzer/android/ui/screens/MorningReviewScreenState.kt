@@ -203,16 +203,12 @@ private fun screenState(
 )
 
 private fun blockingCard(task: TaskSnapshotItem): MorningReviewBlockingCard =
-    if (task.reconciliationStatus == app.buzer.shared.model.ReconciliationStatus.pending) {
-        MorningReviewBlockingCard.SyncPending(task.id, task.title)
-    } else {
-        MorningReviewBlockingCard.Repair(
-            taskId = task.id,
-            title = task.title,
-            problemText = reviewProblemText(task.validationErrors),
-            description = task.description?.trim()?.takeIf { it.isNotEmpty() }
-        )
-    }
+    MorningReviewBlockingCard.Repair(
+        taskId = task.id,
+        title = task.title,
+        problemText = reviewProblemText(task.validationErrors),
+        description = task.description?.trim()?.takeIf { it.isNotEmpty() }
+    )
 
 private fun reviewProblemText(validationErrors: List<String>): String {
     val errors = validationErrors.toSet()

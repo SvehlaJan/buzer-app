@@ -179,8 +179,6 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 },
                 onToggleChild = { child, checked ->
                     val request = FocusedChecklistMutationRequest(
-                        actionId = UUID.randomUUID().toString(),
-                        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
                         expectedOccurrenceKey = occurrenceKey,
                         expectedChildRevision = child.childRevision
                     )
@@ -202,7 +200,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                 onUpdate = { request ->
                     val currentTask = deadlineTask
                     if (currentTask == null || currentTask.id != taskId || currentTask.occurrenceKey != occurrenceKey) {
-                        CoordinatorActionResult.FailedAndHidden("Task details are unavailable. Refresh and try again.")
+                        CoordinatorActionResult.Warning(code = "task_unavailable", message = "Task details are unavailable. Refresh and try again.", snapshot = null)
                     } else {
                         AppLog.info("deadline_blocker update_clicked taskId=$taskId occurrence=$occurrenceKey")
                         coordinator.updateTask(taskId, request)
@@ -266,27 +264,28 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     CoordinatorActionResult.Success -> {
                         if (closeOnSuccess) finish() else onAppliedSnapshot?.invoke()
                     }
-                    is CoordinatorActionResult.Pending,
-                    is CoordinatorActionResult.Stale,
+                    is CoordinatorActionResult.Warning -> {
+                        onAppliedSnapshot?.invoke()
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                    is CoordinatorActionResult.Conflict -> {
+                        onAppliedSnapshot?.invoke()
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                    is CoordinatorActionResult.TransportFailure -> {
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
                     is CoordinatorActionResult.LocalReconciliationFailed -> {
                         onAppliedSnapshot?.invoke()
-                        errorMessage = when (result) {
-                            is CoordinatorActionResult.Stale -> result.message
-                            is CoordinatorActionResult.LocalReconciliationFailed -> result.message
-                            else -> null
-                        }
-                    }
-                    is CoordinatorActionResult.RetryAfter -> {
-                        errorMessage = "Retry in ${result.retryAfterSeconds} seconds"
-                        actionState = BlockerActionState.Failed(errorMessage!!)
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
                     }
                     CoordinatorActionResult.ChildActionInFlight -> {
                         errorMessage = "Checklist update is already in progress"
                         actionState = BlockerActionState.Failed(errorMessage!!)
-                    }
-                    is CoordinatorActionResult.FailedAndHidden -> {
-                        errorMessage = result.message
-                        actionState = BlockerActionState.Failed(result.message)
                     }
                 }
             } catch (error: CancellationException) {
@@ -309,15 +308,11 @@ class DeadlineBlockerActivity : ComponentActivity() {
     }
 
     private fun actionRequest(occurrenceKey: String, expectedTaskRevision: String? = null): TaskActionRequest = TaskActionRequest(
-        actionId = UUID.randomUUID().toString(),
-        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
         expectedOccurrenceKey = occurrenceKey,
         expectedTaskRevision = expectedTaskRevision
     )
 
     private fun extendRequest(occurrenceKey: String, expectedTaskRevision: String): ExtendTaskRequest = ExtendTaskRequest(
-        actionId = UUID.randomUUID().toString(),
-        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
         expectedOccurrenceKey = occurrenceKey,
         expectedTaskRevision = expectedTaskRevision
     )

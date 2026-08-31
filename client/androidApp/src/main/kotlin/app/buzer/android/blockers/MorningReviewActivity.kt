@@ -148,9 +148,7 @@ class MorningReviewActivity : ComponentActivity() {
                 return
             }
             val request = TaskActionRequest(
-                UUID.randomUUID().toString(),
-                EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
-                occurrenceKey
+                expectedOccurrenceKey = occurrenceKey
             )
             lifecycleScope.launch {
                 try {
@@ -184,8 +182,8 @@ class MorningReviewActivity : ComponentActivity() {
                 },
                 onRepair = { taskId: String, request: UpdateTaskRequest ->
                     val currentCoordinator = coordinator
-                        ?: return@MorningReviewScreen CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
-                    if (!session.beginAction()) return@MorningReviewScreen CoordinatorActionResult.FailedAndHidden("Another action is in progress")
+                        ?: return@MorningReviewScreen CoordinatorActionResult.Warning("unavailable", "Task editing is unavailable", null)
+                    if (!session.beginAction()) return@MorningReviewScreen CoordinatorActionResult.Warning("in_flight", "Another action is in progress", null)
                     try {
                         currentCoordinator.updateTask(taskId, request).also { result ->
                             session.handleRepairResult(result) { reloadCached(currentCoordinator) }

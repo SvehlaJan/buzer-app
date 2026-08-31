@@ -84,7 +84,7 @@ class MorningReviewSessionController(
     suspend fun handleOverdueResult(
         result: CoordinatorActionResult,
         reloadCached: () -> Unit,
-        execute: suspend () -> CoordinatorActionResult = { CoordinatorActionResult.FailedAndHidden("Retry unavailable") }
+        execute: suspend () -> CoordinatorActionResult = { CoordinatorActionResult.Warning("retry_unavailable", "Retry unavailable", null) }
     ) {
         when (result) {
             CoordinatorActionResult.Success -> {
@@ -92,16 +92,13 @@ class MorningReviewSessionController(
                 retry = null
                 finishAction()
             }
-            is CoordinatorActionResult.Pending -> applyAuthority(SnapshotReducer.reduce(result.response.snapshot))
-            is CoordinatorActionResult.Stale -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
-            is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
-            is CoordinatorActionResult.RetryAfter -> {
-                retry = {
-                    if (beginAction()) handleOverdueResult(result.retry(), reloadCached, execute)
-                }
-                update(state.actionFailed(result.message))
+            is CoordinatorActionResult.Warning -> {
+                result.snapshot?.let { applyAuthority(SnapshotReducer.reduce(it)) }
+                    ?: run { update(state.actionFailed(result.message)) }
             }
-            is CoordinatorActionResult.FailedAndHidden -> retryOverdue(result.message, reloadCached, execute)
+            is CoordinatorActionResult.Conflict -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.TransportFailure -> retryOverdue(result.message, reloadCached, execute)
             CoordinatorActionResult.ChildActionInFlight -> retryOverdue("Another action is in progress", reloadCached, execute)
         }
     }
@@ -124,8 +121,8 @@ class MorningReviewSessionController(
     fun handleRepairResult(result: CoordinatorActionResult, reloadCached: () -> Unit) {
         when (result) {
             CoordinatorActionResult.Success -> reloadCached()
-            is CoordinatorActionResult.Pending -> cache(SnapshotReducer.reduce(result.response.snapshot))
-            is CoordinatorActionResult.Stale -> cache(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.Warning -> result.snapshot?.let { cache(SnapshotReducer.reduce(it)) }
+            is CoordinatorActionResult.Conflict -> cache(SnapshotReducer.reduce(result.snapshot))
             is CoordinatorActionResult.LocalReconciliationFailed -> cache(SnapshotReducer.reduce(result.snapshot))
             else -> Unit
         }

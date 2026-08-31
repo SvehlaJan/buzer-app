@@ -2,7 +2,6 @@ package app.buzer.android.morningreview
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -50,10 +49,9 @@ class BlockerPriorityResolverTest {
     }
 
     @Test
-    fun invalidPendingUnassignedCompletedAndDeletedTasksNeverSuppressReview() {
+    fun invalidUnassignedCompletedAndDeletedTasksNeverSuppressReview() {
         val snapshot = snapshot(
             task(id = "invalid", validationErrors = listOf("duration required")),
-            task(id = "pending", reconciliationStatus = ReconciliationStatus.pending),
             task(id = "unassigned", isAssignedToUser = false),
             task(id = "completed", isCompleted = true),
             task(id = "deleted", isDeleted = true)
@@ -87,8 +85,7 @@ class BlockerPriorityResolverTest {
         invalidTasks = invalidTasks ?: tasks.filter {
             it.state == CommitmentState.invalid ||
                 it.validationErrors.isNotEmpty() ||
-                it.hierarchyStatus != HierarchyStatus.valid ||
-                it.reconciliationStatus == ReconciliationStatus.pending
+                it.hierarchyStatus != HierarchyStatus.valid
         },
         activeBlockers = emptyList(),
         inProgressTasks = emptyList(),
@@ -107,7 +104,6 @@ class BlockerPriorityResolverTest {
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         validationErrors: List<String> = emptyList(),
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
         occurrenceKey: String = "occurrence-$id"
     ): TaskSnapshotItem = TaskSnapshotItem(
         id = id,
@@ -131,7 +127,6 @@ class BlockerPriorityResolverTest {
         escalationSentAt = null,
         updatedAt = now.toString(),
         occurrenceKey = occurrenceKey,
-        hierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus = reconciliationStatus
+        hierarchyStatus = HierarchyStatus.valid
     )
 }

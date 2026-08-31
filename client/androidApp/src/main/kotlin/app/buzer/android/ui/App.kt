@@ -45,7 +45,7 @@ fun BuzerApp(
     onToggleCurrentChild: (String, String, Boolean) -> Unit = { _, _, _ -> },
     deviceId: String = "",
     onUpdateTask: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
-        CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
+        CoordinatorActionResult.Warning("unavailable", "Task editing is unavailable", null)
     },
     morningReviewBannerVisible: Boolean = false,
     morningReviewBlockingCount: Int? = null,

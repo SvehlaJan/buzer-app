@@ -2,7 +2,6 @@ package app.buzer.android.morningreview
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -52,8 +51,7 @@ object BlockerPriorityResolver {
             state == CommitmentState.deleted ||
             state == CommitmentState.invalid ||
             validationErrors.isNotEmpty() ||
-            hierarchyStatus != HierarchyStatus.valid ||
-            reconciliationStatus == ReconciliationStatus.pending
+            hierarchyStatus != HierarchyStatus.valid
         ) {
             return null
         }

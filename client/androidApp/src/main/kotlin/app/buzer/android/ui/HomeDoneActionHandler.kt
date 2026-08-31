@@ -37,7 +37,7 @@ class HomeDoneActionHandler(
         }
     }
 
-    /** The request is created by the UI once and retained by the coordinator's retry closure. */
+    /** The request is created by the UI once. */
     suspend fun completeTask(taskId: String, request: TaskActionRequest) {
         mutex.withLock {
             handleCompletionResult(this.completeTask.invoke(taskId, request))
@@ -53,27 +53,27 @@ class HomeDoneActionHandler(
 
     private fun handleCompletionResult(result: CoordinatorActionResult) {
         when (result) {
-            CoordinatorActionResult.Success,
-            is CoordinatorActionResult.Pending,
-            is CoordinatorActionResult.Stale -> {
+            CoordinatorActionResult.Success -> {
                 retryCurrentAction = null
-                authoritativeViewState(result)?.let(applySnapshot) ?: latestSnapshot()?.let(applySnapshot)
-                setStatusMessage(
-                    when (result) {
-                        is CoordinatorActionResult.Pending -> "Saved; waiting for Todoist confirmation"
-                        is CoordinatorActionResult.Stale -> result.message
-                        else -> null
-                    }
-                )
+                latestSnapshot()?.let(applySnapshot)
+                setStatusMessage(null)
             }
 
-            is CoordinatorActionResult.RetryAfter -> {
-                retryCurrentAction = result.retry
-                setStatusMessage("Retry in ${result.retryAfterSeconds} seconds")
+            is CoordinatorActionResult.Warning -> {
+                retryCurrentAction = null
+                result.snapshot?.let { applySnapshot(SnapshotReducer.reduce(it)) } ?: latestSnapshot()?.let(applySnapshot)
+                setStatusMessage(result.message)
             }
 
-            CoordinatorActionResult.ChildActionInFlight -> {
-                setStatusMessage("Checklist update is already in progress")
+            is CoordinatorActionResult.Conflict -> {
+                retryCurrentAction = null
+                applySnapshot(SnapshotReducer.reduce(result.snapshot))
+                setStatusMessage(result.message)
+            }
+
+            is CoordinatorActionResult.TransportFailure -> {
+                retryCurrentAction = null
+                setStatusMessage(result.message)
             }
 
             is CoordinatorActionResult.LocalReconciliationFailed -> {
@@ -82,17 +82,9 @@ class HomeDoneActionHandler(
                 setStatusMessage("Action accepted; local alarm reconciliation failed: ${result.message}")
             }
 
-            is CoordinatorActionResult.FailedAndHidden -> {
-                retryCurrentAction = null
-                setStatusMessage(result.message)
+            CoordinatorActionResult.ChildActionInFlight -> {
+                setStatusMessage("Checklist update is already in progress")
             }
         }
     }
-
-    private fun authoritativeViewState(result: CoordinatorActionResult): SnapshotViewState? =
-        when (result) {
-            is CoordinatorActionResult.Pending -> SnapshotReducer.reduce(result.response.snapshot)
-            is CoordinatorActionResult.Stale -> SnapshotReducer.reduce(result.snapshot)
-            else -> null
-        }
 }

@@ -49,7 +49,7 @@ object AddTaskDependencies {
                 baseUrl = baseUrl,
                 token = BuildConfig.BUZER_BACKEND_TOKEN
             ).createTask(request)
-            AppLog.info("add_task dependency create completed outcome=${response.outcome}")
+            AppLog.info("add_task dependency create completed")
             response
         } catch (error: Throwable) {
             AppLog.error("add_task dependency create failed type=${error::class.simpleName} message=${error.message}", error)

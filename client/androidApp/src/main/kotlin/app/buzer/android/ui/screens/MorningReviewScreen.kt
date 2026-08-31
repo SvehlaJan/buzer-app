@@ -77,7 +77,7 @@ fun MorningReviewScreen(
     taskLookup: (String) -> TaskSnapshotItem?,
     onBack: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
-        CoordinatorActionResult.FailedAndHidden("Repair is unavailable")
+        CoordinatorActionResult.Warning("unavailable", "Repair is unavailable", null)
     },
     onRepairSuccess: (String) -> Unit = {},
     onStart: () -> Unit = {},
@@ -400,10 +400,10 @@ private fun MorningReviewRepairEditor(
                     if (checklistMutationsAllowed) addedDrafts else emptyList()
                 )
                 if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
-                    return@update CoordinatorActionResult.FailedAndHidden("Checklist items need titles")
+                    return@update CoordinatorActionResult.Warning("validation_error", "Checklist items need titles", null)
                 }
                 val project = choices.selectedProject(draft)
-                    ?: return@update CoordinatorActionResult.FailedAndHidden("Project is unavailable")
+                    ?: return@update CoordinatorActionResult.Warning("unavailable", "Project is unavailable", null)
                 val fingerprint = currentFingerprint(draft)
                 val nextCapture = captureEditTaskUpdate(capturedUpdate, fingerprint) {
                     updateRequest(

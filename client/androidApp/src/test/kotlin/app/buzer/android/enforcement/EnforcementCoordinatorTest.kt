@@ -2,22 +2,22 @@ package app.buzer.android.enforcement
 
 import app.buzer.android.sync.SnapshotStorage
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ExtendTaskRequest
-import app.buzer.shared.model.ChecklistItem
-import app.buzer.shared.model.ReconciliationStatus
+import app.buzer.shared.model.FocusedChecklistMutationRequest
+import app.buzer.shared.model.HealthStatus
+import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
-import app.buzer.shared.model.TaskRecurrence
-import app.buzer.shared.model.HealthStatus
-import app.buzer.shared.model.MutationOutcome
-import app.buzer.shared.model.MutationResponse
-import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TaskActionRequest
+import app.buzer.shared.model.TaskRecurrence
+import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotWithCallerDraft
+import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -37,11 +37,7 @@ class EnforcementCoordinatorTest {
         val api = FakeBuzerApi(
             snapshot = snapshot(task("stale-task")),
             startHandler = {
-                MutationResponse(
-                actionId = "action-start-1",
-                outcome = MutationOutcome.completed,
-                snapshot = returnedSnapshot
-                )
+                MutationResponse(snapshot = returnedSnapshot)
             }
         )
         val coordinator = EnforcementCoordinator(
@@ -54,46 +50,12 @@ class EnforcementCoordinatorTest {
 
         val result = coordinator.startTask(
             "task-1",
-            TaskActionRequest(
-                actionId = "action-start-1",
-                deviceId = "device-1",
-                expectedOccurrenceKey = "occurrence-task-1"
-            )
+            TaskActionRequest(expectedOccurrenceKey = "occurrence-task-1")
         )
 
         assertEquals(CoordinatorActionResult.Success, result)
         assertEquals(returnedSnapshot, store.saved)
         assertEquals(0, api.snapshotCalls)
-    }
-
-    @Test
-    fun pendingMutationCancelsOnlyTheTaskSpeculativeAlarmsAndReturnsPending() = runBlocking {
-        val pendingSnapshot = snapshot(
-            task("task-1", reconciliationStatus = ReconciliationStatus.pending),
-            task("task-2"),
-            snapshotGeneration = 2
-        )
-        val scheduler = RecordingAlarmScheduler()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(
-                snapshot(task("task-1")),
-                startHandler = { request ->
-                    MutationResponse(request.actionId, MutationOutcome.reconciliation_pending, pendingSnapshot)
-                }
-            ),
-            snapshotStore = FakeSnapshotStore(snapshot(task("task-1"), task("task-2"))),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-        coordinator.reconcileLatestSnapshot()
-        scheduler.scheduled.clear()
-
-        val result = coordinator.startTask("task-1", action("pending-1"))
-
-        assertTrue(result is CoordinatorActionResult.Pending)
-        assertTrue(scheduler.cancelled.any { it.taskId == "task-1" })
-        assertFalse(scheduler.cancelled.any { it.taskId == "task-2" })
     }
 
     @Test
@@ -111,6 +73,7 @@ class EnforcementCoordinatorTest {
                     throw BuzerApiException(
                         status = 409,
                         code = "stale_task",
+                        message = "Task changed remotely",
                         retryAfterSeconds = null,
                         snapshot = conflictSnapshot
                     )
@@ -122,50 +85,78 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.startTask("task-1", action("conflict-1"))
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
 
-        val stale = result as CoordinatorActionResult.Stale
-        assertEquals(CoordinatorActionResult.Stale(conflictSnapshot, "stale_task"), stale)
+        val conflict = result as CoordinatorActionResult.Conflict
+        assertEquals("stale_task", conflict.code)
+        assertEquals("Task changed remotely", conflict.message)
+        assertEquals(conflictSnapshot, conflict.snapshot)
         assertEquals(conflictSnapshot, store.saved)
         assertEquals(
             "keep this edit",
-            SnapshotReducer.replaceAuthoritative(callerOwnedState, stale.snapshot).callerDraft
+            SnapshotReducer.replaceAuthoritative(callerOwnedState, conflict.snapshot).callerDraft
         )
     }
 
     @Test
-    fun rateLimitedRetryUsesTheOriginalImmutableActionRequest() = runBlocking {
+    fun operationalWarningAppliesReturnedSnapshotAndReturnsWarning() = runBlocking {
         val returnedSnapshot = snapshot(task("task-1", state = CommitmentState.started))
-        var calls = 0
+        val store = FakeSnapshotStore()
+        val reporter = RecordingErrorReporter()
         val api = FakeBuzerApi(
             snapshot(task("task-1")),
-            startHandler = { request ->
-                calls += 1
-                if (calls == 1) {
-                    throw BuzerApiException(
-                        status = 429,
-                        code = "rate_limited",
-                        retryAfterSeconds = 17,
-                        snapshot = null
-                    )
-                }
-                MutationResponse(request.actionId, MutationOutcome.completed, returnedSnapshot)
+            startHandler = {
+                throw BuzerApiException(
+                    status = 429,
+                    code = "backend_busy",
+                    message = "Server busy",
+                    retryAfterSeconds = 5,
+                    snapshot = returnedSnapshot
+                )
             }
         )
-        val request = action("retry-same-id")
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
+
+        val warning = result as CoordinatorActionResult.Warning
+        assertEquals("backend_busy", warning.code)
+        assertEquals("Server busy", warning.message)
+        assertEquals(returnedSnapshot, warning.snapshot)
+        assertEquals(returnedSnapshot, store.saved)
+        assertTrue(reporter.errors.isEmpty())
+    }
+
+    @Test
+    fun transportFailureReturnsTransportFailureWithoutReportingSentryError() = runBlocking {
+        val reporter = RecordingErrorReporter()
+        val api = FakeBuzerApi(
+            snapshot(task("task-1")),
+            startHandler = {
+                throw IOException("Connection timed out")
+            }
+        )
         val coordinator = EnforcementCoordinator(
             api = api,
             snapshotStore = FakeSnapshotStore(),
             alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = RecordingErrorReporter(),
+            errorReporter = reporter,
+            isConnectedProvider = { true },
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val rateLimited = coordinator.startTask("task-1", request)
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
 
-        assertEquals(17, (rateLimited as CoordinatorActionResult.RetryAfter).retryAfterSeconds)
-        assertEquals(CoordinatorActionResult.Success, rateLimited.retry())
-        assertEquals(listOf(request, request), api.startRequests)
+        val transport = result as CoordinatorActionResult.TransportFailure
+        assertTrue(transport.isConnected)
+        assertEquals("Connection timed out", transport.message)
+        assertTrue(reporter.errors.isEmpty())
     }
 
     @Test
@@ -174,10 +165,10 @@ class EnforcementCoordinatorTest {
         val startedFirstRequest = CompletableDeferred<Unit>()
         val api = FakeBuzerApi(
             snapshot(task("task-1")),
-            checkHandler = { request ->
+            checkHandler = {
                 startedFirstRequest.complete(Unit)
                 releaseFirstRequest.await()
-                MutationResponse(request.actionId, MutationOutcome.completed, snapshot(task("task-1")))
+                MutationResponse(snapshot = snapshot(task("task-1")))
             }
         )
         val coordinator = EnforcementCoordinator(
@@ -187,86 +178,31 @@ class EnforcementCoordinatorTest {
             errorReporter = RecordingErrorReporter(),
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
-        val firstRequest = focusedAction("check-1", "child-r1")
+        val firstRequest = focusedAction("child-r1")
         val first = async { coordinator.checkChild("task-1", "child-1", firstRequest) }
         startedFirstRequest.await()
 
         assertEquals(
             CoordinatorActionResult.ChildActionInFlight,
-            coordinator.uncheckChild("task-1", "child-1", focusedAction("uncheck-blocked", "child-r1"))
+            coordinator.uncheckChild("task-1", "child-1", focusedAction("child-r1"))
         )
 
         releaseFirstRequest.complete(Unit)
         assertEquals(CoordinatorActionResult.Success, first.await())
         assertEquals(
             CoordinatorActionResult.Success,
-            coordinator.uncheckChild("task-1", "child-1", focusedAction("uncheck-fresh", "child-r2"))
+            coordinator.uncheckChild("task-1", "child-1", focusedAction("child-r2"))
         )
-        assertEquals(listOf("check-1", "uncheck-fresh"), api.focusedActionIds)
     }
 
     @Test
-    fun localSchedulerFailureAfterConfirmedMutationDoesNotReportOrRetryThePost() = runBlocking {
+    fun localStoreFailureAfterConfirmedMutationReportsErrorAndReturnsLocalReconciliationFailed() = runBlocking {
         val responseSnapshot = snapshot(task("task-1", state = CommitmentState.started))
-        val scheduler = RecordingAlarmScheduler(failScheduleCalls = 1)
-        val reporter = RecordingErrorReporter()
-        val store = FakeSnapshotStore()
-        val api = FakeBuzerApi(
-            snapshot(task("task-1")),
-            postponeHandler = { request -> MutationResponse(request.actionId, MutationOutcome.completed, responseSnapshot) }
-        )
-        val failingCoordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = store,
-            alarmScheduler = scheduler,
-            errorReporter = reporter,
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        val result = failingCoordinator.postponeStart("task-1", action("local-scheduler-failure"))
-
-        assertTrue(result is CoordinatorActionResult.LocalReconciliationFailed)
-        assertEquals(responseSnapshot, (result as CoordinatorActionResult.LocalReconciliationFailed).snapshot)
-        assertEquals(responseSnapshot, store.saved)
-        assertTrue(reporter.errors.isEmpty())
-        assertEquals(1, api.postponeRequests.size)
-        assertTrue(scheduler.scheduled.isEmpty())
-    }
-
-    @Test
-    fun localStoreFailureAfterConfirmedMutationDoesNotReportOrRetryThePost() = runBlocking {
-        val responseSnapshot = snapshot(task("task-1", state = CommitmentState.started))
-        val api = FakeBuzerApi(
-            snapshot(task("task-1")),
-            startHandler = { request -> MutationResponse(request.actionId, MutationOutcome.completed, responseSnapshot) }
-        )
-        val reporter = RecordingErrorReporter()
-        val coordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = FakeSnapshotStore(throwOnSave = true),
-            alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = reporter,
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        val result = coordinator.startTask("task-1", action("local-store-failure"))
-
-        assertTrue(result is CoordinatorActionResult.LocalReconciliationFailed)
-        assertEquals(responseSnapshot, (result as CoordinatorActionResult.LocalReconciliationFailed).snapshot)
-        assertTrue(reporter.errors.isEmpty())
-        assertEquals(1, api.startRequests.size)
-    }
-
-    @Test
-    fun localFailureWhileApplyingConflictSnapshotRemainsDistinctFromBackendConflict() = runBlocking {
-        val conflictSnapshot = snapshot(task("task-1", state = CommitmentState.started))
         val reporter = RecordingErrorReporter()
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(
                 snapshot(task("task-1")),
-                startHandler = {
-                    throw BuzerApiException(409, "stale_task", null, conflictSnapshot)
-                }
+                startHandler = { MutationResponse(snapshot = responseSnapshot) }
             ),
             snapshotStore = FakeSnapshotStore(throwOnSave = true),
             alarmScheduler = RecordingAlarmScheduler(),
@@ -274,11 +210,12 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.startTask("task-1", action("conflict-local-failure"))
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
 
         assertTrue(result is CoordinatorActionResult.LocalReconciliationFailed)
-        assertEquals(conflictSnapshot, (result as CoordinatorActionResult.LocalReconciliationFailed).snapshot)
-        assertTrue(reporter.errors.isEmpty())
+        assertEquals(responseSnapshot, (result as CoordinatorActionResult.LocalReconciliationFailed).snapshot)
+        assertEquals(1, reporter.errors.size)
+        assertEquals(BlockerAction.REFRESH_SNAPSHOT, reporter.errors.first().action)
     }
 
     @Test
@@ -297,7 +234,7 @@ class EnforcementCoordinatorTest {
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(
                 snapshot(task("task-1")),
-                startHandler = { request -> MutationResponse(request.actionId, MutationOutcome.completed, staleReturned) }
+                startHandler = { MutationResponse(snapshot = staleReturned) }
             ),
             snapshotStore = FakeSnapshotStore(newerCached),
             alarmScheduler = scheduler,
@@ -306,10 +243,11 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        val result = coordinator.startTask("task-1", action("stale-root"))
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
 
-        assertTrue(result is CoordinatorActionResult.Stale)
-        assertEquals(newerCached, (result as CoordinatorActionResult.Stale).snapshot)
+        assertTrue(result is CoordinatorActionResult.Conflict)
+        assertEquals("stale_snapshot", (result as CoordinatorActionResult.Conflict).code)
+        assertEquals(newerCached, result.snapshot)
         assertEquals(newerCached, coordinator.loadLatestSnapshot())
         assertTrue(scheduler.scheduled.isEmpty())
         assertTrue(scheduler.cancelled.isEmpty())
@@ -325,7 +263,7 @@ class EnforcementCoordinatorTest {
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(
                 snapshot(task("task-1")),
-                startHandler = { request -> MutationResponse(request.actionId, MutationOutcome.completed, equalButDifferent) }
+                startHandler = { MutationResponse(snapshot = equalButDifferent) }
             ),
             snapshotStore = FakeSnapshotStore(cached),
             alarmScheduler = scheduler,
@@ -334,37 +272,12 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
 
-        assertEquals(CoordinatorActionResult.Success, coordinator.startTask("task-1", action("equal-replay")))
+        assertEquals(CoordinatorActionResult.Success, coordinator.startTask("task-1", action("occurrence-task-1")))
 
         assertEquals(cached, coordinator.loadLatestSnapshot())
         assertTrue(scheduler.scheduled.isEmpty())
         assertTrue(scheduler.cancelled.isEmpty())
         assertEquals(listOf(NotificationCleaned("task-1", "occurrence-task-1")), notifications.cleaned)
-    }
-
-    @Test
-    fun positiveServerGenerationReplacesLegacyZeroCacheAsWholeAuthority() = runBlocking {
-        val legacy = snapshot(task("legacy-root"), snapshotGeneration = 0)
-        val returned = snapshot(
-            task("task-1", occurrenceKey = "next-occurrence", recurrence = TaskRecurrence(
-                kind = RecurrenceKind.supported,
-                preset = RecurrencePreset.daily
-            )),
-            snapshotGeneration = 1
-        )
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(
-                snapshot(task("task-1")),
-                startHandler = { request -> MutationResponse(request.actionId, MutationOutcome.completed, returned) }
-            ),
-            snapshotStore = FakeSnapshotStore(legacy),
-            alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        assertEquals(CoordinatorActionResult.Success, coordinator.startTask("task-1", action("replace-legacy")))
-        assertEquals(returned, coordinator.loadLatestSnapshot())
     }
 
     @Test
@@ -375,11 +288,7 @@ class EnforcementCoordinatorTest {
         val api = FakeBuzerApi(
             snapshot(old),
             completeHandler = {
-                request -> MutationResponse(
-                    request.actionId,
-                    MutationOutcome.completed,
-                    snapshot(completed, snapshotGeneration = 2)
-                )
+                MutationResponse(snapshot = snapshot(completed, snapshotGeneration = 2))
             }
         )
         val coordinator = EnforcementCoordinator(
@@ -392,54 +301,11 @@ class EnforcementCoordinatorTest {
         coordinator.reconcileLatestSnapshot()
         scheduler.scheduled.clear()
 
-        assertEquals(CoordinatorActionResult.Success, coordinator.completeTask("task-1", action("done-one-time")))
+        assertEquals(CoordinatorActionResult.Success, coordinator.completeTask("task-1", action("occurrence-task-1")))
 
         assertTrue(scheduler.cancelled.all { it.taskId == "task-1" && it.occurrenceKey == old.occurrenceKey })
         assertTrue(scheduler.cancelled.isNotEmpty())
         assertTrue(scheduler.scheduled.isEmpty())
-        assertEquals(0, api.snapshotCalls)
-    }
-
-    @Test
-    fun confirmedRecurringDoneCancelsOldOccurrenceAndSchedulesReturnedNextOccurrenceWithoutFetch() = runBlocking {
-        val old = task(
-            "task-1",
-            recurrence = TaskRecurrence(kind = RecurrenceKind.supported, preset = RecurrencePreset.daily)
-        )
-        val next = task(
-            "task-1",
-            occurrenceKey = "occurrence-task-1-next",
-            dueDatetime = "2026-05-29T13:00:00Z",
-            startAt = "2026-05-29T12:00:00Z",
-            recurrence = TaskRecurrence(kind = RecurrenceKind.supported, preset = RecurrencePreset.daily)
-        )
-        val scheduler = RecordingAlarmScheduler()
-        val api = FakeBuzerApi(
-            snapshot(old),
-            completeHandler = {
-                request -> MutationResponse(
-                    request.actionId,
-                    MutationOutcome.completed,
-                    snapshot(next, snapshotGeneration = 2)
-                )
-            }
-        )
-        val coordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = FakeSnapshotStore(snapshot(old)),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-        coordinator.reconcileLatestSnapshot()
-        scheduler.scheduled.clear()
-
-        assertEquals(CoordinatorActionResult.Success, coordinator.completeTask("task-1", action("done-recurring")))
-
-        assertTrue(scheduler.cancelled.all { it.occurrenceKey == old.occurrenceKey })
-        assertTrue(scheduler.cancelled.isNotEmpty())
-        assertEquals(3, scheduler.scheduled.size)
-        assertTrue(scheduler.scheduled.all { it.occurrenceKey == next.occurrenceKey })
         assertEquals(0, api.snapshotCalls)
     }
 
@@ -470,53 +336,7 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
-    fun completedAndDeletedTasksScheduleNoNewAlarmsAfterRefresh() = runBlocking {
-        val scheduler = RecordingAlarmScheduler()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(
-                snapshot(
-                    task("done", state = CommitmentState.completed, isCompleted = true),
-                    task("deleted", state = CommitmentState.deleted, isDeleted = true)
-                )
-            ),
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        coordinator.refreshAndReconcile()
-
-        assertTrue(scheduler.cancelled.isEmpty())
-        assertTrue(scheduler.scheduled.isEmpty())
-    }
-
-    @Test
-    fun refreshSchedulesLatestDesiredAlarmsThroughTheIdentityRegistry() = runBlocking {
-        val scheduler = RecordingAlarmScheduler()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(snapshot(task("task-1"))),
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T10:30:00Z" }
-        )
-
-        coordinator.refreshAndReconcile()
-
-        assertTrue(scheduler.cancelled.isEmpty())
-        assertEquals(
-            listOf(
-                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
-                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
-                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
-            ),
-            scheduler.scheduled
-        )
-    }
-
-    @Test
-    fun forceSyncAndReconcileCallsOnlyForceSyncAndPersistsSnapshot() = runBlocking {
+    fun forceSyncAndReconcileCallsGetSnapshotWithForceRefreshTrue() = runBlocking {
         val initialSnapshot = snapshot(task("initial-task"), snapshotGeneration = 1)
         val forcedSnapshot = snapshot(task("forced-task"), snapshotGeneration = 2)
         val store = FakeSnapshotStore(initialSnapshot)
@@ -534,81 +354,10 @@ class EnforcementCoordinatorTest {
 
         val result = coordinator.forceSyncAndReconcile()
 
-        assertEquals(1, api.forceSyncCalls)
-        assertEquals(0, api.snapshotCalls)
+        assertEquals(1, api.forceRefreshCalls)
+        assertEquals(0, api.normalCalls)
         assertEquals(forcedSnapshot, result)
         assertEquals(forcedSnapshot, store.saved)
-    }
-
-    @Test
-    fun forceSyncAndReconcileReconcilesAlarmsThroughSamePathAsOrdinaryRefresh() = runBlocking {
-        val forcedSnapshot = snapshot(task("task-1"), snapshotGeneration = 2)
-        val scheduler = RecordingAlarmScheduler()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(forceSyncSnapshot = forcedSnapshot),
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T10:30:00Z" }
-        )
-
-        coordinator.forceSyncAndReconcile()
-
-        assertEquals(
-            listOf(
-                scheduled("task-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
-                scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
-                scheduled("task-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
-            ),
-            scheduler.scheduled
-        )
-    }
-
-    @Test
-    fun forceSyncAndReconcilePropagatesNetworkFailureWithoutReplacingStoredSnapshot() = runBlocking {
-        val initialSnapshot = snapshot(task("task-1"), snapshotGeneration = 1)
-        val store = FakeSnapshotStore(initialSnapshot)
-        val api = FakeBuzerApi(
-            snapshot = initialSnapshot,
-            failForceSync = true
-        )
-        val coordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = store,
-            alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        assertFailsWith<IllegalStateException> {
-            coordinator.forceSyncAndReconcile()
-        }
-
-        assertEquals(1, api.forceSyncCalls)
-        assertEquals(0, api.snapshotCalls)
-        assertEquals(initialSnapshot, store.saved)
-    }
-
-    @Test
-    fun postponeFailureReportsErrorAndSchedulesFiveMinuteStartBlockerRetry() = runBlocking {
-        val scheduler = RecordingAlarmScheduler()
-        val reporter = RecordingErrorReporter()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(snapshot(task("task-1")), failPostpone = true),
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = scheduler,
-            errorReporter = reporter,
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        val result = coordinator.postponeStart("task-1", action("postpone-1"))
-
-        assertTrue(result is CoordinatorActionResult.FailedAndHidden)
-        assertEquals(
-            listOf(scheduled("task-1", AlarmKind.START_BLOCKER, "2026-05-28T09:35:00Z")),
-            scheduler.scheduled
-        )
-        assertEquals(listOf(ErrorRecord(BlockerAction.POSTPONE_START, "task-1", "backend unavailable", "backend unavailable")), reporter.errors)
     }
 
     @Test
@@ -624,7 +373,7 @@ class EnforcementCoordinatorTest {
         )
 
         assertFailsWith<CancellationException> {
-            coordinator.postponeStart("task-1", action("postpone-1"))
+            coordinator.postponeStart("task-1", action("occurrence-task-1"))
         }
 
         assertTrue(scheduler.scheduled.isEmpty())
@@ -643,106 +392,13 @@ class EnforcementCoordinatorTest {
             nowProvider = { "2026-05-28T11:01:00Z" }
         )
 
-        val result = coordinator.startTask("task-1", action("start-1"))
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
 
         assertEquals(CoordinatorActionResult.Success, result)
         assertEquals(
             listOf(NotificationCleaned("task-1", "occurrence-task-1")),
             notifications.cleaned
         )
-    }
-
-    @Test
-    fun actionCleansTheTriggeringOccurrenceRatherThanDifferentCachedOccurrence() = runBlocking {
-        val notifications = RecordingBlockerNotificationCleaner()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
-            snapshotStore = FakeSnapshotStore(snapshot(task("task-1", occurrenceKey = "occurrence-cached"))),
-            alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = RecordingErrorReporter(),
-            blockerNotificationCleaner = notifications,
-            nowProvider = { "2026-05-28T11:01:00Z" }
-        )
-
-        coordinator.startTask("task-1", action("start-1", occurrenceKey = "occurrence-alarm"))
-
-        assertEquals(listOf(NotificationCleaned("task-1", "occurrence-alarm")), notifications.cleaned)
-    }
-
-    @Test
-    fun actionCleansTheTriggeringOccurrenceWhenCacheMisses() = runBlocking {
-        val notifications = RecordingBlockerNotificationCleaner()
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(snapshot(task("task-1", state = CommitmentState.started))),
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = RecordingAlarmScheduler(),
-            errorReporter = RecordingErrorReporter(),
-            blockerNotificationCleaner = notifications,
-            nowProvider = { "2026-05-28T11:01:00Z" }
-        )
-
-        coordinator.startTask("task-1", action("start-1", occurrenceKey = "occurrence-alarm"))
-
-        assertEquals(listOf(NotificationCleaned("task-1", "occurrence-alarm")), notifications.cleaned)
-    }
-
-    @Test
-    fun deadlineCompleteFailureReportsErrorWithoutRetry() = runBlocking {
-        val scheduler = RecordingAlarmScheduler()
-        val reporter = RecordingErrorReporter()
-        val cached = snapshot(task("task-1"))
-        val coordinator = EnforcementCoordinator(
-            api = FakeBuzerApi(cached, failComplete = true),
-            snapshotStore = FakeSnapshotStore(cached),
-            alarmScheduler = scheduler,
-            scheduledAlarmRegistry = ScheduledAlarmRegistry(InMemoryScheduledAlarmRegistryStorage()),
-            errorReporter = reporter,
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-        coordinator.reconcileLatestSnapshot()
-        scheduler.scheduled.clear()
-
-        val result = coordinator.completeTask("task-1", action("complete-1"))
-
-        assertTrue(result is CoordinatorActionResult.FailedAndHidden)
-        assertTrue(scheduler.scheduled.isEmpty())
-        assertTrue(scheduler.cancelled.isEmpty())
-        assertEquals(listOf(ErrorRecord(BlockerAction.COMPLETE_TASK, "task-1", "backend unavailable", "backend unavailable")), reporter.errors)
-    }
-
-    @Test
-    fun reconcileLatestSnapshotReturnsFalseAndSchedulesNothingWhenCacheMisses() {
-        val scheduler = RecordingAlarmScheduler()
-        val api = FakeBuzerApi(snapshot(task("task-1")))
-        val coordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = FakeSnapshotStore(),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        assertFalse(coordinator.reconcileLatestSnapshot())
-        assertEquals(0, api.snapshotCalls)
-        assertTrue(scheduler.scheduled.isEmpty())
-        assertTrue(scheduler.cancelled.isEmpty())
-    }
-
-    @Test
-    fun reconcileLatestSnapshotSkipsUnorderableLegacyGeneration() {
-        val scheduler = RecordingAlarmScheduler()
-        val api = FakeBuzerApi(snapshot(task("task-1")))
-        val coordinator = EnforcementCoordinator(
-            api = api,
-            snapshotStore = FakeSnapshotStore(snapshot(task("task-1"), snapshotGeneration = 0)),
-            alarmScheduler = scheduler,
-            errorReporter = RecordingErrorReporter(),
-            nowProvider = { "2026-05-28T09:30:00Z" }
-        )
-
-        assertFalse(coordinator.reconcileLatestSnapshot())
-        assertEquals(0, api.snapshotCalls)
-        assertTrue(scheduler.scheduled.isEmpty())
     }
 
     @Test
@@ -789,7 +445,6 @@ class EnforcementCoordinatorTest {
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         occurrenceKey: String = "occurrence-$id",
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
         dueDatetime: String = "2026-05-28T12:00:00Z",
         startAt: String = "2026-05-28T12:00:00Z",
         recurrence: TaskRecurrence = TaskRecurrence(),
@@ -817,7 +472,6 @@ class EnforcementCoordinatorTest {
             escalationSentAt = null,
             updatedAt = "2026-05-28T09:00:00Z",
             occurrenceKey = occurrenceKey,
-            reconciliationStatus = reconciliationStatus,
             recurrence = recurrence,
             checklistItems = checklistItems,
             checkedCount = checklistItems.count(ChecklistItem::checked),
@@ -840,21 +494,15 @@ class EnforcementCoordinatorTest {
         ScheduledAlarm(taskId, "occurrence-$taskId", kind, Instant.parse(triggerAtIso).toEpochMilli())
 
     private fun action(
-        actionId: String,
         occurrenceKey: String = "occurrence-task-1"
     ): TaskActionRequest = TaskActionRequest(
-        actionId = actionId,
-        deviceId = "device-1",
         expectedOccurrenceKey = occurrenceKey
     )
 
     private fun focusedAction(
-        actionId: String,
         childRevision: String
-    ): app.buzer.shared.model.FocusedChecklistMutationRequest =
-        app.buzer.shared.model.FocusedChecklistMutationRequest(
-            actionId = actionId,
-            deviceId = "device-1",
+    ): FocusedChecklistMutationRequest =
+        FocusedChecklistMutationRequest(
             expectedOccurrenceKey = "occurrence-task-1",
             expectedChildRevision = childRevision
         )
@@ -865,7 +513,7 @@ class EnforcementCoordinatorTest {
         private val failForceSync: Boolean = false,
         private val startHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val postponeHandler: ((TaskActionRequest) -> MutationResponse)? = null,
-        private val checkHandler: (suspend (app.buzer.shared.model.FocusedChecklistMutationRequest) -> MutationResponse)? = null,
+        private val checkHandler: (suspend (FocusedChecklistMutationRequest) -> MutationResponse)? = null,
         private val completeHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val failPostpone: Boolean = false,
         private val failComplete: Boolean = false,
@@ -873,11 +521,12 @@ class EnforcementCoordinatorTest {
     ) : EnforcementApi {
         var snapshotCalls = 0
             private set
-        var forceSyncCalls = 0
+        var normalCalls = 0
+            private set
+        var forceRefreshCalls = 0
             private set
         val startRequests = mutableListOf<TaskActionRequest>()
         val postponeRequests = mutableListOf<TaskActionRequest>()
-        val focusedActionIds = mutableListOf<String>()
 
         private val effectiveSnapshot get() = snapshot ?: TasksSnapshotResponse(
             scheduleVersion = 1,
@@ -887,53 +536,51 @@ class EnforcementCoordinatorTest {
             tasks = emptyList()
         )
 
-        override suspend fun getSnapshot(): TasksSnapshotResponse {
+        override suspend fun getSnapshot(forceRefresh: Boolean): TasksSnapshotResponse {
             snapshotCalls += 1
-            return effectiveSnapshot
+            if (forceRefresh) {
+                forceRefreshCalls += 1
+                if (failForceSync) error("backend unavailable")
+                return forceSyncSnapshot ?: effectiveSnapshot
+            } else {
+                normalCalls += 1
+                return effectiveSnapshot
+            }
         }
 
-        override suspend fun forceSync(): TasksSnapshotResponse {
-            forceSyncCalls += 1
-            if (failForceSync) error("backend unavailable")
-            return forceSyncSnapshot ?: effectiveSnapshot
-        }
         override suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse {
             startRequests += request
-            return startHandler?.invoke(request) ?: response(request.actionId)
+            return startHandler?.invoke(request) ?: response()
         }
 
         override suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse {
             postponeRequests += request
             if (cancelPostpone) throw CancellationException("cancelled")
             if (failPostpone) error("backend unavailable")
-            return postponeHandler?.invoke(request) ?: response(request.actionId)
+            return postponeHandler?.invoke(request) ?: response()
         }
 
         override suspend fun completeTask(id: String, request: TaskActionRequest): MutationResponse {
             if (failComplete) error("backend unavailable")
-            return completeHandler?.invoke(request) ?: response(request.actionId)
+            return completeHandler?.invoke(request) ?: response()
         }
-        override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse = response(request.actionId)
-        override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse = response(request.actionId)
+        override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse = response()
+        override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse = response()
         override suspend fun checkChecklistItem(
             taskId: String,
             childId: String,
-            request: app.buzer.shared.model.FocusedChecklistMutationRequest
+            request: FocusedChecklistMutationRequest
         ): MutationResponse {
-            focusedActionIds += request.actionId
-            return checkHandler?.invoke(request) ?: response(request.actionId)
+            return checkHandler?.invoke(request) ?: response()
         }
         override suspend fun uncheckChecklistItem(
             taskId: String,
             childId: String,
-            request: app.buzer.shared.model.FocusedChecklistMutationRequest
+            request: FocusedChecklistMutationRequest
         ): MutationResponse {
-            focusedActionIds += request.actionId
-            return response(request.actionId)
+            return response()
         }
-        private fun response(actionId: String): MutationResponse = MutationResponse(
-            actionId = actionId,
-            outcome = MutationOutcome.completed,
+        private fun response(): MutationResponse = MutationResponse(
             snapshot = effectiveSnapshot
         )
     }
@@ -969,7 +616,6 @@ class EnforcementCoordinatorTest {
         override fun cancel(identity: ScheduledAlarmIdentity) {
             cancelled += identity
         }
-
     }
 
     private data class ErrorRecord(

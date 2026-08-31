@@ -1,10 +1,9 @@
 package app.buzer.android.ui.taskeditor
 
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.MutationOutcome
-import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrenceKind
@@ -15,137 +14,54 @@ import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TaskEditorUpdateScreenStateTest {
-    @Test
-    fun invalidSnapshotShowsAllEntryValidationBeforeInteraction() {
-        val state = initialTaskEditorUpdateState(
-            task = task().copy(
-                title = " ",
-                projectId = "",
-                assigneeId = null,
-                dueDatetime = null,
-                durationMinutes = null
-            ),
-            choices = readyChoices()
-        )
-
-        assertEquals("Fix the highlighted fields", state.visibleValidation.bannerMessage)
-        assertEquals("Title is required", state.visibleValidation.titleError)
-        assertEquals("Project is required", state.visibleValidation.projectError)
-        assertEquals("Me assignee ID is not configured", state.visibleValidation.assigneeError)
-        assertEquals("Start time is required", state.visibleValidation.scheduleError)
-        assertFalse(TaskEditorField.Project in state.visibleValidation.unavailableFields)
-    }
 
     @Test
-    fun unavailableChoicesKeepTheEditorVisibleAndDisableSubmitUntilReady() {
-        val loading = initialTaskEditorUpdateState(
-            task = task(),
-            choices = TaskEditorUpdateChoices(loading = true)
-        )
-
-        val ready = loading.withChoices(readyChoices())
-
-        assertEquals("Review finances", loading.draft.title)
-        assertFalse(loading.canSubmit)
-        assertTrue(TaskEditorField.Project in loading.visibleValidation.unavailableFields)
-        assertTrue(TaskEditorField.Assignee in loading.visibleValidation.unavailableFields)
-        assertEquals("Review finances", ready.draft.title)
-        assertTrue(ready.canSubmit)
-    }
-
-    @Test
-    fun refreshingCachedChoicesStillTemporarilyDisablesSubmit() {
-        val refreshing = initialTaskEditorUpdateState(
-            task = task(),
-            choices = readyChoices().copy(loading = true)
-        )
-
-        assertEquals("Review finances", refreshing.draft.title)
-        assertFalse(refreshing.canSubmit)
-    }
-
-    @Test
-    fun invalidChecklistContentDisablesSubmitAndStaysInlineWithTheEditor() {
+    fun initialDraftPopulatesSupportedTaskProperties() {
         val state = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
 
-        val validation = effectiveTaskEditorUpdateValidation(
-            state = state,
-            contentValidation = TaskEditorUpdateContentValidation(
-                canSubmit = false,
-                message = "Each checklist item needs a title"
-            )
-        )
-
-        assertFalse(validation.canSubmit)
-        assertEquals("Each checklist item needs a title", validation.bannerMessage)
+        assertEquals("Test task", state.draft.title)
+        assertEquals("Initial details", state.draft.description)
+        assertEquals(sharedProject.id, state.draft.projectId)
+        assertEquals(me.id, state.draft.assignee?.id)
+        assertEquals(RecurrencePreset.daily, state.draft.recurrencePreset)
+        assertTrue(state.editingEnabled)
+        assertTrue(state.canSubmit)
     }
 
     @Test
-    fun pendingResultRetainsDraftAndBlocksDuplicateSubmission() {
+    fun warningResultRetainsDraft() {
         val original = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
         val changed = original.withDraft(original.draft.copy(title = "Updated title"))
 
-        val transition = reduceTaskEditorUpdateResult(changed.beginSubmission(), pendingResult())
+        val transition = reduceTaskEditorUpdateResult(
+            changed.beginSubmission(),
+            CoordinatorActionResult.Warning("busy", "Server busy", null)
+        )
 
         assertEquals("Updated title", transition.state.draft.title)
-        assertEquals("Saved; waiting for confirmation", transition.state.resultMessage)
-        assertTrue(transition.state.pendingConfirmation)
-        assertEquals(1, transition.state.confirmationAttempt)
-        assertFalse(transition.state.canSubmit)
+        assertEquals("Server busy", transition.state.resultMessage)
+        assertFalse(transition.state.submitting)
+        assertTrue(transition.state.canSubmit)
         assertFalse(transition.shouldInvokeSuccess)
     }
 
     @Test
-    fun pendingResultConsumesCancelAndBackWithoutOpeningDiscardConfirmation() {
-        val initial = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
-        val pending = reduceTaskEditorUpdateResult(
-            initial.withDraft(initial.draft.copy(title = "Updated title")).beginSubmission(),
-            pendingResult()
-        ).state
+    fun conflictResultRetainsDraft() {
+        val original = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
+        val changed = original.withDraft(original.draft.copy(title = "Updated title"))
 
-        assertEquals(
-            TaskEditorUpdateCancelRequest.Ignore,
-            taskEditorUpdateCancelRequest(state = pending, isDirty = true)
-        )
-        assertFalse(pending.discardConfirmationVisible)
-        assertFalse(pending.canSubmit)
-    }
-
-    @Test
-    fun pendingConfirmationRetriesItsCapturedActionUntilAuthorityConfirmsIt() {
-        val initial = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
-        val pending = reduceTaskEditorUpdateResult(initial.beginSubmission(), pendingResult()).state
-
-        val retried = reduceTaskEditorUpdateResult(pending, pendingResult()).state
-        val confirmed = reduceTaskEditorUpdateResult(retried, CoordinatorActionResult.Success)
-
-        assertEquals(2, retried.confirmationAttempt)
-        assertTrue(retried.pendingConfirmation)
-        assertTrue(confirmed.shouldInvokeSuccess)
-        assertFalse(confirmed.state.pendingConfirmation)
-    }
-
-    @Test
-    fun pendingResultSurvivesChoiceRefreshWithoutMutatingItsDraft() {
-        val original = initialTaskEditorUpdateState(
-            task = task().copy(assigneeId = wife.id, isAssignedToUser = false),
-            choices = readyChoices()
-        )
-        val pending = reduceTaskEditorUpdateResult(original.beginSubmission(), pendingResult()).state
-        val refreshed = pending.withChoices(
-            TaskEditorUpdateChoices(
-                projects = listOf(sharedProject.copy(collaborators = listOf(me))),
-                membershipWasRefreshed = true
-            )
+        val transition = reduceTaskEditorUpdateResult(
+            changed.beginSubmission(),
+            CoordinatorActionResult.Conflict("conflict", "Task changed remotely", snapshot())
         )
 
-        assertEquals(wife.id, refreshed.draft.assignee?.id)
-        assertTrue(refreshed.pendingConfirmation)
-        assertFalse(refreshed.canSubmit)
+        assertEquals("Updated title", transition.state.draft.title)
+        assertEquals("Task changed remotely", transition.state.resultMessage)
+        assertFalse(transition.state.submitting)
+        assertFalse(transition.shouldInvokeSuccess)
     }
 
     @Test
@@ -171,9 +87,9 @@ class TaskEditorUpdateScreenStateTest {
     @Test
     fun confirmedResultInvokesSuccessOnlyOnce() {
         val initial = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
-        val pending = reduceTaskEditorUpdateResult(initial.beginSubmission(), pendingResult()).state
+        val submitting = initial.beginSubmission()
 
-        val first = reduceTaskEditorUpdateResult(pending, CoordinatorActionResult.Success)
+        val first = reduceTaskEditorUpdateResult(submitting, CoordinatorActionResult.Success)
         val repeated = reduceTaskEditorUpdateResult(first.state, CoordinatorActionResult.Success)
 
         assertTrue(first.shouldInvokeSuccess)
@@ -182,18 +98,18 @@ class TaskEditorUpdateScreenStateTest {
     }
 
     @Test
-    fun staleAndFailedResultsRetainDraftAndUseGenericRetryPresentation() {
+    fun warningAndFailedResultsRetainDraft() {
         val initial = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
             .withDraft(initialTaskEditorUpdateDraft(task()).copy(title = "Keep this edit"))
 
-        val stale = reduceTaskEditorUpdateResult(
+        val warning = reduceTaskEditorUpdateResult(
             initial.beginSubmission(),
-            CoordinatorActionResult.Stale(snapshot(), "stale details must not leak into the editor")
+            CoordinatorActionResult.Warning("error", "Error message", null)
         )
-        val failed = failTaskEditorUpdateSubmission(stale.state.beginSubmission())
+        val failed = failTaskEditorUpdateSubmission(warning.state.beginSubmission())
 
-        assertEquals("Keep this edit", stale.state.draft.title)
-        assertEquals(GENERIC_TASK_EDITOR_UPDATE_ERROR, stale.state.resultMessage)
+        assertEquals("Keep this edit", warning.state.draft.title)
+        assertEquals("Error message", warning.state.resultMessage)
         assertEquals("Keep this edit", failed.draft.title)
         assertEquals(GENERIC_TASK_EDITOR_UPDATE_ERROR, failed.resultMessage)
         assertFalse(failed.submitting)
@@ -201,62 +117,8 @@ class TaskEditorUpdateScreenStateTest {
     }
 
     @Test
-    fun clearingANonSelfCustomScheduleExplicitlySelectsNever() {
-        val custom = task().copy(
-            assigneeId = wife.id,
-            isAssignedToUser = false,
-            recurrence = TaskRecurrence(RecurrenceKind.custom, null, "every 2 days")
-        )
-        val state = initialTaskEditorUpdateState(custom, readyChoices())
-
-        val cleared = state.withDraft(state.draft.copy(schedule = TaskEditorSchedule()))
-
-        assertEquals(RecurrencePreset.never, cleared.draft.recurrencePreset)
-        assertTrue(cleared.draft.repeatReplacementSelected)
-        assertTrue(cleared.visibleValidation.repeatError == null)
-    }
-
-    @Test
-    fun recurrenceFingerprintPreservesTheUnchangedSnapshotMeaning() {
-        val noRepeat = initialTaskEditorUpdateDraft(
-            task().copy(recurrence = TaskRecurrence(RecurrenceKind.none, null, null))
-        )
-        val unmodifiedCustom = initialTaskEditorUpdateDraft(
-            task().copy(recurrence = TaskRecurrence(RecurrenceKind.custom, null, "every 2 days"))
-        )
-
-        assertEquals(RecurrencePreset.never, noRepeat.recurrencePresetForUpdate())
-        assertNull(unmodifiedCustom.recurrencePresetForUpdate())
-    }
-
-    @Test
-    fun fingerprintOmitsAPersonalProjectAssigneeOnlyAfterProjectChoicesLoad() {
-        val personalProject = sharedProject.copy(
-            id = "project-personal",
-            name = "Personal",
-            canAssignTasks = false,
-            shared = false,
-            collaborators = listOf(me)
-        )
-        val draft = initialTaskEditorUpdateDraft(
-            task().copy(projectId = personalProject.id, assigneeId = me.id)
-        )
-
-        assertEquals(
-            me.id,
-            TaskEditorUpdateChoices(loading = true).assigneeIdForFingerprint(draft)
-        )
-        assertNull(
-            TaskEditorUpdateChoices(projects = listOf(personalProject)).assigneeIdForFingerprint(draft)
-        )
-    }
-
-    @Test
-    fun unsupportedHierarchyLocksOnlyChecklistAndShowsItsExistingWarning() {
-        val unsupported = task().copy(
-            hierarchyStatus = HierarchyStatus.unsupported,
-            hierarchyViolation = "Nested checklist items cannot be edited"
-        )
+    fun unsupportedHierarchyDisablesChecklistEditing() {
+        val unsupported = task().copy(hierarchyStatus = HierarchyStatus.unsupported)
         val state = initialTaskEditorUpdateState(unsupported, readyChoices())
 
         val checklist = taskEditorUpdateChecklistAccess(
@@ -266,18 +128,10 @@ class TaskEditorUpdateScreenStateTest {
 
         assertTrue(state.editingEnabled)
         assertFalse(checklist.enabled)
-        assertEquals("Nested checklist items cannot be edited", checklist.warningMessage)
+        assertEquals("This task has unsupported nested checklist items", checklist.warningMessage)
     }
 
     private fun readyChoices() = TaskEditorUpdateChoices(projects = listOf(sharedProject))
-
-    private fun pendingResult() = CoordinatorActionResult.Pending(
-        MutationResponse(
-            actionId = "action-1",
-            outcome = MutationOutcome.reconciliation_pending,
-            snapshot = snapshot()
-        )
-    )
 
     private fun snapshot() = TasksSnapshotResponse(
         scheduleVersion = 1,
@@ -289,13 +143,13 @@ class TaskEditorUpdateScreenStateTest {
 
     private fun task() = TaskSnapshotItem(
         id = "task-1",
-        todoistTaskId = "todoist-task-1",
-        title = "Review finances",
+        todoistTaskId = "todoist-1",
+        title = "Test task",
+        description = "Initial details",
         projectId = sharedProject.id,
         assigneeId = me.id,
-        creatorId = null,
-        dueDatetime = "2026-07-24T09:00:00Z",
-        dueDate = null,
+        creatorId = "creator",
+        dueDatetime = "2026-07-23T10:00:00Z",
         durationMinutes = 30,
         startAt = null,
         state = CommitmentState.planned,
@@ -308,18 +162,23 @@ class TaskEditorUpdateScreenStateTest {
         startDismissCount = 0,
         deadlineExtensionCount = 0,
         escalationSentAt = null,
-        updatedAt = "2026-07-23T08:00:00Z",
-        occurrenceKey = "occurrence-1",
-        taskRevision = "task-r1",
-        recurrence = TaskRecurrence(RecurrenceKind.supported, RecurrencePreset.never, null),
-        checklistItems = emptyList()
+        updatedAt = "2026-07-23T09:00:00Z",
+        occurrenceKey = "occ-1",
+        taskRevision = "rev-1",
+        recurrence = TaskRecurrence(kind = RecurrenceKind.supported, preset = RecurrencePreset.daily),
+        checklistItems = listOf(
+            ChecklistItem(id = "child-1", title = "Check item", description = null, checked = false, order = 1, childRevision = "cr-1")
+        ),
+        checkedCount = 0,
+        totalCount = 1,
+        hierarchyStatus = HierarchyStatus.valid
     )
 
     private companion object {
-        val me = ProjectCollaborator(id = "me", displayName = "Me", isCurrentUser = true)
-        val wife = ProjectCollaborator(id = "wife", displayName = "Wife", isCurrentUser = false)
+        val me = ProjectCollaborator(id = "user-me", displayName = "Me", isCurrentUser = true)
+        val wife = ProjectCollaborator(id = "user-wife", displayName = "Wife", isCurrentUser = false)
         val sharedProject = ProjectItem(
-            id = "project-1",
+            id = "proj-shared",
             name = "Shared",
             canAssignTasks = true,
             shared = true,

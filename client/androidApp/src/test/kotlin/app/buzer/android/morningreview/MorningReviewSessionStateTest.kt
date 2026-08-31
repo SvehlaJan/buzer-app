@@ -53,28 +53,29 @@ class MorningReviewSessionStateTest {
         var retries = 0
         val controller = MorningReviewSessionController(publish = { })
 
-        controller.handleOverdueResult(CoordinatorActionResult.Pending(response()), { reloads++ })
+        controller.handleOverdueResult(CoordinatorActionResult.Success, { reloads++ })
         controller.handleOverdueResult(
-            CoordinatorActionResult.RetryAfter(1, "wait") {
+            CoordinatorActionResult.TransportFailure(isConnected = false, message = "offline"),
+            { reloads++ },
+            {
                 retries++
                 CoordinatorActionResult.Success
-            },
-            { reloads++ }
+            }
         )
         controller.retryAction()
 
-        assertEquals(1, reloads)
+        assertEquals(2, reloads)
         assertEquals(1, retries)
     }
 
     @Test
-    fun overdueReturnedAuthorityReplacesSessionForPendingStaleAndLocalFailure() = runBlocking {
+    fun overdueReturnedAuthorityReplacesSessionForConflictWarningAndLocalFailure() = runBlocking {
         val controller = MorningReviewSessionController(publish = { })
         val authority = app.buzer.shared.model.TasksSnapshotResponse(7, "now", emptyList(), emptyList(), 1)
 
-        controller.handleOverdueResult(CoordinatorActionResult.Pending(response(authority)), {})
+        controller.handleOverdueResult(CoordinatorActionResult.Conflict("conflict", "stale", authority), {})
         assertEquals(7, controller.state.snapshot?.scheduleVersion)
-        controller.handleOverdueResult(CoordinatorActionResult.Stale(authority.copy(scheduleVersion = 8), "stale"), {})
+        controller.handleOverdueResult(CoordinatorActionResult.Warning("warning", "stale", authority.copy(scheduleVersion = 8)), {})
         assertEquals(8, controller.state.snapshot?.scheduleVersion)
         controller.handleOverdueResult(CoordinatorActionResult.LocalReconciliationFailed(authority.copy(scheduleVersion = 9), "disk"), {})
         assertEquals(9, controller.state.snapshot?.scheduleVersion)
@@ -89,22 +90,6 @@ class MorningReviewSessionStateTest {
         controller.runTerminalAction(MorningReviewResult.Snoozed, { error("storage") }, finished::add) {}
         assertEquals(listOf(MorningReviewResult.Acknowledged, MorningReviewResult.Snoozed), finished)
         assertTrue(controller.hasRetryAction)
-        assertFalse(controller.state.actionInFlight)
-    }
-
-    @Test
-    fun retryAfterReentersActionGuardBeforeExecutingItsClosure() = runBlocking {
-        val controller = MorningReviewSessionController(publish = { })
-        var observedInFlight = false
-        var duplicateRejected = false
-        controller.handleOverdueResult(CoordinatorActionResult.RetryAfter(1, "wait") {
-            observedInFlight = controller.state.actionInFlight
-            duplicateRejected = !controller.beginAction()
-            CoordinatorActionResult.Success
-        }, {})
-        controller.retryAction()
-        assertTrue(observedInFlight)
-        assertTrue(duplicateRejected)
         assertFalse(controller.state.actionInFlight)
     }
 
@@ -126,12 +111,6 @@ class MorningReviewSessionStateTest {
         assertEquals("storage failed", controller.state.actionError)
         assertTrue(controller.hasRetryAction)
     }
-
-    private fun response(snapshot: app.buzer.shared.model.TasksSnapshotResponse = app.buzer.shared.model.TasksSnapshotResponse(1, "2026-08-02T10:00:00Z", emptyList(), emptyList(), 1)) = app.buzer.shared.model.MutationResponse(
-        actionId = "action",
-        outcome = app.buzer.shared.model.MutationOutcome.reconciliation_pending,
-        snapshot = snapshot
-    )
 
     private fun snapshot(scheduleVersion: Long = 1) = SnapshotViewState(
         scheduleVersion = scheduleVersion,

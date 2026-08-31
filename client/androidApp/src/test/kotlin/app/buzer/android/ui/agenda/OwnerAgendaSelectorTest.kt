@@ -2,7 +2,6 @@ package app.buzer.android.ui.agenda
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -45,22 +44,17 @@ class OwnerAgendaSelectorTest {
     }
 
     @Test
-    fun authoritativeInvalidProjectionAndPendingOwnerTasksAreBlockingBeforeTimeClassification() {
+    fun authoritativeInvalidProjectionOwnerTasksAreBlockingBeforeTimeClassification() {
         val projectionOnly = task("projection", due = "2026-08-02T12:00:00Z", duration = 30)
-        val pending = task(
-            "pending",
-            due = "2026-08-02T12:30:00Z",
-            duration = 30,
-            reconciliationStatus = ReconciliationStatus.pending
-        )
+        val invalidTask = task("invalid", state = CommitmentState.invalid)
         val snapshot = snapshot(
-            tasks = listOf(projectionOnly, pending),
+            tasks = listOf(projectionOnly, invalidTask),
             invalidTasks = listOf(projectionOnly)
         )
 
         val buckets = selectOwnerAgenda(snapshot, now = NOW, zoneId = ZONE)
 
-        assertEquals(listOf("pending", "projection"), buckets.blocking.map { it.id })
+        assertEquals(listOf("invalid", "projection"), buckets.blocking.map { it.id })
         assertTrue(buckets.future.isEmpty())
     }
 
@@ -174,8 +168,7 @@ class OwnerAgendaSelectorTest {
         state: CommitmentState = CommitmentState.planned,
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
-        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none
+        hierarchyStatus: HierarchyStatus = HierarchyStatus.valid
     ) = TaskSnapshotItem(
         id = id,
         todoistTaskId = "todoist-$id",
@@ -197,8 +190,7 @@ class OwnerAgendaSelectorTest {
         deadlineExtensionCount = 0,
         escalationSentAt = null,
         updatedAt = "2026-08-02T09:00:00Z",
-        hierarchyStatus = hierarchyStatus,
-        reconciliationStatus = reconciliationStatus
+        hierarchyStatus = hierarchyStatus
     )
 
     private companion object {

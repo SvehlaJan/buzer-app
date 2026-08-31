@@ -1,9 +1,9 @@
 package app.buzer.android.ui
 
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TaskActionRequest
+import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.state.SnapshotViewState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -53,53 +53,29 @@ class HomeDoneActionHandlerTest {
     }
 
     @Test
-    fun pendingCompletionAppliesAuthoritativeSnapshotAndShowsPendingStatus() = runBlocking {
+    fun conflictCompletionAppliesAuthoritativeSnapshotAndShowsMessage() = runBlocking {
         var statusMessage: String? = null
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
-        val pendingSnapshot = emptySnapshot(scheduleVersion = 23)
+        val conflictSnapshot = TasksSnapshotResponse(
+            scheduleVersion = 23,
+            serverTime = "2026-07-10T12:00:00Z",
+            tasks = emptyList(),
+            health = emptyList(),
+            snapshotGeneration = 23
+        )
         val handler = HomeDoneActionHandler(
             refreshSnapshot = { _ -> error("refresh should not run") },
-            completeTask = { _, _ -> CoordinatorActionResult.Pending(response()) },
-            latestSnapshot = { pendingSnapshot },
+            completeTask = { _, _ -> CoordinatorActionResult.Conflict("conflict", "Task changed remotely", conflictSnapshot) },
+            latestSnapshot = { emptySnapshot(scheduleVersion = 23) },
             applySnapshot = appliedSnapshots::add,
             setStatusMessage = { statusMessage = it }
         )
 
         handler.completeTask("task-current", action())
 
-        assertEquals(listOf(pendingSnapshot), appliedSnapshots)
-        assertEquals("Saved; waiting for Todoist confirmation", statusMessage)
-    }
-
-    @Test
-    fun retryUsesCapturedCoordinatorClosureInsteadOfCreatingAnotherRequest() = runBlocking {
-        var completeCalls = 0
-        var retryCalls = 0
-        var statusMessage: String? = null
-        val handler = HomeDoneActionHandler(
-            refreshSnapshot = { _ -> error("refresh should not run") },
-            completeTask = { _, _ ->
-                completeCalls += 1
-                CoordinatorActionResult.RetryAfter(
-                    retryAfterSeconds = 9,
-                    message = "rate limited",
-                    retry = {
-                        retryCalls += 1
-                        CoordinatorActionResult.Success
-                    }
-                )
-            },
-            latestSnapshot = { emptySnapshot(scheduleVersion = 33) },
-            applySnapshot = {},
-            setStatusMessage = { statusMessage = it }
-        )
-
-        handler.completeTask("task-current", action())
-        handler.retryCompletion()
-
-        assertEquals(1, completeCalls)
-        assertEquals(1, retryCalls)
-        assertNull(statusMessage)
+        assertEquals(1, appliedSnapshots.size)
+        assertEquals(23L, appliedSnapshots.first().scheduleVersion)
+        assertEquals("Task changed remotely", statusMessage)
     }
 
     @Test
@@ -109,7 +85,7 @@ class HomeDoneActionHandlerTest {
         val appliedSnapshots = mutableListOf<SnapshotViewState>()
         val handler = HomeDoneActionHandler(
             refreshSnapshot = { _ -> error("refresh should not run after failed completion") },
-            completeTask = { _, _ -> CoordinatorActionResult.FailedAndHidden("500 forced failure") },
+            completeTask = { _, _ -> CoordinatorActionResult.Warning("error", "500 forced failure", null) },
             latestSnapshot = {
                 latestSnapshotCalls += 1
                 emptySnapshot()
@@ -121,8 +97,7 @@ class HomeDoneActionHandlerTest {
         handler.completeTask("task-current", action())
 
         assertEquals("500 forced failure", statusMessage)
-        assertEquals(0, latestSnapshotCalls)
-        assertEquals(emptyList(), appliedSnapshots)
+        assertEquals(1, latestSnapshotCalls)
     }
 
     @Test
@@ -222,34 +197,24 @@ class HomeDoneActionHandlerTest {
     }
 
     @Test
-    fun completionWorksForAnyHomeRowUsingOneRetainedTaskActionRequestPerRetryChain() = runBlocking {
+    fun completionWorksForAnyHomeRow() = runBlocking {
         val receivedRequests = mutableListOf<TaskActionRequest>()
-        var retryCalls = 0
         val initialRequest = action()
 
         val handler = HomeDoneActionHandler(
             refreshSnapshot = { _ -> emptySnapshot() },
             completeTask = { _, request ->
                 receivedRequests.add(request)
-                CoordinatorActionResult.RetryAfter(
-                    retryAfterSeconds = 5,
-                    message = "Rate limited",
-                    retry = {
-                        retryCalls += 1
-                        CoordinatorActionResult.Success
-                    }
-                )
+                CoordinatorActionResult.Success
             },
             latestSnapshot = { emptySnapshot() },
             applySnapshot = {}
         )
 
         handler.completeTask("unassigned-task-99", initialRequest)
-        handler.retryCompletion()
 
         assertEquals(1, receivedRequests.size)
         assertEquals(initialRequest, receivedRequests.first())
-        assertEquals(1, retryCalls)
     }
 
     private fun emptySnapshot(scheduleVersion: Long = 1): SnapshotViewState =
@@ -265,20 +230,6 @@ class HomeDoneActionHandlerTest {
         )
 
     private fun action(): TaskActionRequest = TaskActionRequest(
-        actionId = "action-current",
-        deviceId = "device-current",
         expectedOccurrenceKey = "occurrence-current"
-    )
-
-    private fun response(): MutationResponse = MutationResponse(
-        actionId = "action-current",
-        outcome = MutationOutcome.reconciliation_pending,
-        snapshot = app.buzer.shared.model.TasksSnapshotResponse(
-            scheduleVersion = 23,
-            serverTime = "2026-07-10T12:00:00Z",
-            tasks = emptyList(),
-            health = emptyList(),
-            snapshotGeneration = 23
-        )
     )
 }

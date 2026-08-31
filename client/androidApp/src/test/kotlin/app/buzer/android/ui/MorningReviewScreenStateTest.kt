@@ -8,7 +8,6 @@ import app.buzer.android.ui.screens.shouldCloseMorningReviewEditor
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -85,11 +84,10 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
-    fun invalidOwnerGetsRepairAndPendingOwnerGetsSyncPendingRetry() {
+    fun invalidOwnerGetsRepairAndAuthoritativeInvalidOwnerUsesRepair() {
         val state = buildMorningReviewScreenState(
             snapshot(
-                task("invalid", state = CommitmentState.invalid),
-                task("pending", reconciliationStatus = ReconciliationStatus.pending)
+                task("invalid", state = CommitmentState.invalid)
             ),
             now = NOW,
             zoneId = ZONE
@@ -97,8 +95,7 @@ class MorningReviewScreenStateTest {
 
         assertEquals(MorningReviewPhase.Blocking, state.phase)
         assertIs<MorningReviewBlockingCard.Repair>(state.blockingCards[0])
-        assertIs<MorningReviewBlockingCard.SyncPending>(state.blockingCards[1])
-        assertEquals(listOf("invalid", "pending"), state.blockingCards.map { it.taskId })
+        assertEquals(listOf("invalid"), state.blockingCards.map { it.taskId })
     }
 
     @Test
@@ -122,7 +119,7 @@ class MorningReviewScreenStateTest {
         val state = buildMorningReviewScreenState(
             snapshot(
                 task("unassigned", assignedToUser = false, assigneeId = null, state = CommitmentState.invalid),
-                task("other", assignedToUser = false, assigneeId = "other", reconciliationStatus = ReconciliationStatus.pending)
+                task("other", assignedToUser = false, assigneeId = "other", state = CommitmentState.invalid)
             ),
             now = NOW,
             zoneId = ZONE
@@ -354,7 +351,6 @@ class MorningReviewScreenStateTest {
         due: String? = null,
         duration: Int? = null,
         state: CommitmentState = CommitmentState.planned,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
         isCompleted: Boolean = false,
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
         validationErrors: List<String> = emptyList(),
@@ -384,8 +380,7 @@ class MorningReviewScreenStateTest {
         checklistItems = listOf(ChecklistItem("child", "Child", checked = false, order = 0, childRevision = "r1")),
         checkedCount = 0,
         totalCount = 1,
-        hierarchyStatus = hierarchyStatus,
-        reconciliationStatus = reconciliationStatus
+        hierarchyStatus = hierarchyStatus
     )
 
     private companion object {

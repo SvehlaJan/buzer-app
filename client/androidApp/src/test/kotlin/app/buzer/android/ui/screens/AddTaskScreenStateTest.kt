@@ -163,8 +163,6 @@ class AddTaskScreenStateTest {
             ),
             selectedProject = sharedProject(),
             checklistDrafts = listOf(ChecklistDraft("check-1", "Bring bags", null)),
-            actionId = "create-action",
-            deviceId = "device-1",
             zoneId = ZoneId.of("Europe/Warsaw")
         )
         val retried = retainAddTaskCreateRequest(request) {
@@ -181,8 +179,6 @@ class AddTaskScreenStateTest {
         assertEquals(RecurrencePreset.weekly, request.recurrencePreset)
         assertEquals("Europe/Warsaw", request.timeZone)
         assertEquals(listOf(ChecklistDraft("check-1", "Bring bags", null)), request.checklistDrafts)
-        assertEquals("create-action", request.actionId)
-        assertEquals("device-1", request.deviceId)
     }
 
     @Test

@@ -186,8 +186,6 @@ internal fun addTaskCreateRequest(
     draft: TaskEditorDraft,
     selectedProject: ProjectItem,
     checklistDrafts: List<ChecklistDraft>,
-    actionId: String,
-    deviceId: String,
     zoneId: ZoneId = ZoneId.systemDefault()
 ): CreateTaskRequest {
     val deadline = draft.schedule.startDateTime()?.let { start ->
@@ -200,8 +198,6 @@ internal fun addTaskCreateRequest(
         assigneeId = draft.assignee?.id?.takeIf { selectedProject.canAssignTasks },
         dueDatetime = deadline?.toIsoInstantString(zoneId),
         durationMinutes = draft.schedule.durationMinutes,
-        actionId = actionId,
-        deviceId = deviceId,
         recurrencePreset = draft.recurrencePreset,
         timeZone = zoneId.id.takeIf {
             draft.schedule.isComplete() && draft.recurrencePreset != app.buzer.shared.model.RecurrencePreset.never
@@ -411,9 +407,7 @@ fun AddTaskScreen(
                 selectedProject = submissionState.selectedProject!!,
                 checklistDrafts = checklistDrafts.map { item ->
                     ChecklistDraft(item.clientMutationId, item.title.trim(), item.description)
-                },
-                actionId = UUID.randomUUID().toString(),
-                deviceId = deviceId
+                }
             )
         }.also { pendingCreateRequest = it }
         submitRequest(request)

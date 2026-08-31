@@ -191,30 +191,22 @@ class EditTaskScreenRequestTest {
             val request = requireNotNull(captured).request
             dispatchedRequests += request
             return if (dispatchedRequests.size == 1) {
-                CoordinatorActionResult.Pending(
-                    MutationResponse(
-                        actionId = request.actionId,
-                        outcome = MutationOutcome.reconciliation_pending,
-                        snapshot = TasksSnapshotResponse(
-                            scheduleVersion = 1,
-                            serverTime = "2026-07-23T12:00:00Z",
-                            tasks = listOf(updateTask),
-                            health = emptyList(),
-                            snapshotGeneration = 1
-                        )
-                    )
+                CoordinatorActionResult.Warning(
+                    code = "busy",
+                    message = "Server busy",
+                    snapshot = null
                 )
             } else {
                 CoordinatorActionResult.Success
             }
         }
 
-        val pending = reduceTaskEditorUpdateResult(
+        val firstResult = reduceTaskEditorUpdateResult(
             state.beginSubmission(),
             submitCurrentEdit()
         )
         val confirmed = reduceTaskEditorUpdateResult(
-            pending.state,
+            firstResult.state,
             submitCurrentEdit()
         )
         var successCallbacks = 0
@@ -228,7 +220,6 @@ class EditTaskScreenRequestTest {
         assertEquals(1, requestConstructionCount)
         assertEquals(2, dispatchedRequests.size)
         assertSame(dispatchedRequests.first(), dispatchedRequests.last())
-        assertEquals(dispatchedRequests.first().actionId, dispatchedRequests.last().actionId)
         assertEquals(1, successCallbacks)
     }
 

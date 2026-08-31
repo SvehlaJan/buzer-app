@@ -2,7 +2,6 @@ package app.buzer.android.ui.agenda
 
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -37,7 +36,6 @@ fun selectOwnerAgenda(
     val blocking = activeOwnerTasks
         .filter { task ->
             task.state == CommitmentState.invalid ||
-                task.reconciliationStatus == ReconciliationStatus.pending ||
                 task.id in invalidIds
         }
         .sortedBy { it.id }

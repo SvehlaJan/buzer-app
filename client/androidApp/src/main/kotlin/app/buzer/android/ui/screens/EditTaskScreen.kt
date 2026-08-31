@@ -235,10 +235,10 @@ fun EditTaskScreen(
                     if (checklistMutationsAllowed) addedDrafts else emptyList()
                 )
                 if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
-                    return@update CoordinatorActionResult.FailedAndHidden("Checklist items need titles")
+                    return@update CoordinatorActionResult.Warning("validation_error", "Checklist items need titles", null)
                 }
                 val project = choices.selectedProject(draft)
-                    ?: return@update CoordinatorActionResult.FailedAndHidden("Project is unavailable")
+                    ?: return@update CoordinatorActionResult.Warning("unavailable", "Project is unavailable", null)
                 val fingerprint = currentFingerprint(draft)
                 val nextCapture = captureEditTaskUpdate(
                     captured = capturedUpdate,
@@ -299,7 +299,7 @@ internal fun updateRequest(
     existingDrafts: List<ExistingChecklistDraft>,
     deletedChildren: Set<String>,
     addedDrafts: List<ChecklistEditorDraft>,
-    deviceId: String
+    deviceId: String = ""
 ): UpdateTaskRequest {
     check(schedule.isEmpty() || schedule.isComplete()) { "Update requests require a complete or empty schedule" }
     val originalById = task.checklistItems.associateBy { it.id }
@@ -330,8 +330,6 @@ internal fun updateRequest(
         else -> null
     }
     return UpdateTaskRequest(
-        actionId = UUID.randomUUID().toString(),
-        deviceId = deviceId,
         expectedOccurrenceKey = task.occurrenceKey,
         rootPatch = RootTaskPatch(
             expectedTaskRevision = task.taskRevision,

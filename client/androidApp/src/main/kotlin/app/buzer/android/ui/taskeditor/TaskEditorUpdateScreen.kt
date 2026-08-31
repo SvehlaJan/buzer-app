@@ -290,24 +290,23 @@ internal fun reduceTaskEditorUpdateResult(
         ),
         shouldInvokeSuccess = !state.successDelivered
     )
-    is CoordinatorActionResult.Pending -> TaskEditorUpdateTransition(
-        state = state.copy(
-            submitting = false,
-            pendingConfirmation = true,
-            confirmationAttempt = state.confirmationAttempt + 1,
-            resultMessage = TASK_EDITOR_UPDATE_PENDING_MESSAGE
-        )
-    )
-    is CoordinatorActionResult.Stale,
-    is CoordinatorActionResult.RetryAfter,
+    is CoordinatorActionResult.Warning,
+    is CoordinatorActionResult.Conflict,
+    is CoordinatorActionResult.TransportFailure,
     is CoordinatorActionResult.LocalReconciliationFailed,
-    is CoordinatorActionResult.FailedAndHidden,
     CoordinatorActionResult.ChildActionInFlight -> TaskEditorUpdateTransition(
         state = state.copy(
             submitting = false,
             pendingConfirmation = false,
             confirmationAttempt = 0,
-            resultMessage = GENERIC_TASK_EDITOR_UPDATE_ERROR
+            resultMessage = when (result) {
+                is CoordinatorActionResult.Warning -> result.message
+                is CoordinatorActionResult.Conflict -> result.message
+                is CoordinatorActionResult.TransportFailure -> result.message
+                is CoordinatorActionResult.LocalReconciliationFailed -> result.message
+                CoordinatorActionResult.ChildActionInFlight -> "Checklist update is already in progress"
+                CoordinatorActionResult.Success -> null
+            }
         )
     )
 }

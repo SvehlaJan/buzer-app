@@ -244,8 +244,6 @@ class OverlayBlockerService : Service() {
     }
 
     private fun actionRequest(occurrenceKey: String): TaskActionRequest = TaskActionRequest(
-        actionId = UUID.randomUUID().toString(),
-        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
         expectedOccurrenceKey = occurrenceKey
     )
 

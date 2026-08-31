@@ -7,6 +7,7 @@ import app.buzer.shared.api.BuzerApiException
 import app.buzer.shared.api.BuzerApiRequestCorrelation
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -63,7 +64,7 @@ class BlockerErrorReporterTest {
     }
 
     @Test
-    fun preservesApiRequestIdInHandledErrorCorrelation() {
+    fun routesApiFailureToLogOnly() {
         val recordingObservability = RecordingAndroidObservability()
         val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
         val failure = BuzerApiException(
@@ -82,14 +83,36 @@ class BlockerErrorReporterTest {
             throwable = failure
         )
 
-        assertEquals("request-123", recordingObservability.handledExceptions.single().context.requestId)
+        assertTrue(recordingObservability.handledExceptions.isEmpty())
+        assertEquals(1, recordingObservability.logs.size)
+        val log = recordingObservability.logs.single()
+        assertEquals("warning", log.severity)
     }
 
     @Test
-    fun preservesRequestIdFromOriginalApiFailureInHandledErrorCorrelation() {
+    fun routesTransportFailureToLogOnly() {
         val recordingObservability = RecordingAndroidObservability()
         val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
-        val failure = IllegalStateException("connection lost").apply {
+        val failure = IOException("Connection reset by peer")
+
+        reporter.report(
+            action = BlockerAction.START_TASK,
+            taskId = "task-123",
+            message = "Start task failed",
+            showNotification = false,
+            throwable = failure
+        )
+
+        assertTrue(recordingObservability.handledExceptions.isEmpty())
+        assertEquals(1, recordingObservability.logs.size)
+        assertEquals("warning", recordingObservability.logs.single().severity)
+    }
+
+    @Test
+    fun preservesRequestIdFromSuppressedApiCorrelationInHandledError() {
+        val recordingObservability = RecordingAndroidObservability()
+        val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
+        val failure = IllegalStateException("local parsing error").apply {
             addSuppressed(BuzerApiRequestCorrelation("request-transport-123"))
         }
 
@@ -101,6 +124,7 @@ class BlockerErrorReporterTest {
             throwable = failure
         )
 
+        assertEquals(1, recordingObservability.handledExceptions.size)
         assertEquals("request-transport-123", recordingObservability.handledExceptions.single().context.requestId)
     }
 
@@ -108,13 +132,7 @@ class BlockerErrorReporterTest {
     fun routesValidationFailureToLogOnly() {
         val recordingObservability = RecordingAndroidObservability()
         val reporter = BlockerErrorReporter(directory, observability = recordingObservability)
-        val validationError = BuzerApiException(
-            status = 400,
-            code = "validation_error",
-            retryAfterSeconds = null,
-            snapshot = null,
-            message = "Task title is invalid"
-        )
+        val validationError = IllegalArgumentException("validation failed: invalid title")
 
         reporter.report(
             action = BlockerAction.UPDATE_TASK,
@@ -158,7 +176,7 @@ class BlockerErrorReporterTest {
         val recordingObservability = RecordingAndroidObservability()
         val reporter1 = BlockerErrorReporter(directory, fileName = "log1.log", observability = recordingObservability)
         val reporter2 = BlockerErrorReporter(directory, fileName = "log2.log", observability = recordingObservability)
-        val sharedThrowable = RuntimeException("shared critical network partition")
+        val sharedThrowable = RuntimeException("shared critical storage defect")
 
         // First report at lower boundary
         reporter1.report(
@@ -200,7 +218,7 @@ class BlockerErrorReporterTest {
             taskId = "task-789",
             message = "Action extend failed",
             showNotification = false,
-            throwable = RuntimeException("Backend timeout")
+            throwable = RuntimeException("local error")
         )
 
         val text = directory.resolve(fileName).readText()

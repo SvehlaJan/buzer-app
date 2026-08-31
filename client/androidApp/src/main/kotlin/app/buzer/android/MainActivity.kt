@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
             },
             completeTask = { taskId, request ->
                 val coordinator = coordinator
-                    ?: return@HomeDoneActionHandler CoordinatorActionResult.FailedAndHidden("Task completion failed")
+                    ?: return@HomeDoneActionHandler CoordinatorActionResult.Warning("unavailable", "Task completion failed", null)
                 coordinator.completeTask(taskId, request)
             },
             latestSnapshot = {
@@ -319,8 +319,6 @@ class MainActivity : ComponentActivity() {
                 return
             }
         val request = TaskActionRequest(
-            actionId = UUID.randomUUID().toString(),
-            deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
             expectedOccurrenceKey = occurrenceKey
         )
         lifecycleScope.launch {
@@ -330,7 +328,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun updateTask(taskId: String, request: UpdateTaskRequest): CoordinatorActionResult {
         val activeCoordinator = coordinator
-            ?: return CoordinatorActionResult.FailedAndHidden("Task editing is unavailable")
+            ?: return CoordinatorActionResult.Warning("unavailable", "Task editing is unavailable", null)
         val result = activeCoordinator.updateTask(taskId, request)
         activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let {
             snapshotViewState = it
@@ -343,8 +341,6 @@ class MainActivity : ComponentActivity() {
         val task = snapshotViewState?.tasks?.firstOrNull { it.id == taskId } ?: return
         val child = task.checklistItems.firstOrNull { it.id == childId } ?: return
         val request = FocusedChecklistMutationRequest(
-            actionId = UUID.randomUUID().toString(),
-            deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
             expectedOccurrenceKey = task.occurrenceKey,
             expectedChildRevision = child.childRevision
         )

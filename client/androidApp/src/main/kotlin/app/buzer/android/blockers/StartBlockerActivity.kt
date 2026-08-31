@@ -204,12 +204,24 @@ class StartBlockerActivity : ComponentActivity() {
             try {
                 when (val result = action()) {
                     CoordinatorActionResult.Success -> finish()
-                    is CoordinatorActionResult.FailedAndHidden -> {
+                    is CoordinatorActionResult.Warning -> {
                         errorMessage = result.message
                         actionState = BlockerActionState.Failed(result.message)
                     }
-                    else -> {
-                        errorMessage = "Action requires attention"
+                    is CoordinatorActionResult.Conflict -> {
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                    is CoordinatorActionResult.TransportFailure -> {
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                    is CoordinatorActionResult.LocalReconciliationFailed -> {
+                        errorMessage = result.message
+                        actionState = BlockerActionState.Failed(result.message)
+                    }
+                    CoordinatorActionResult.ChildActionInFlight -> {
+                        errorMessage = "Action already in progress"
                         actionState = BlockerActionState.Failed(errorMessage!!)
                     }
                 }
@@ -233,8 +245,6 @@ class StartBlockerActivity : ComponentActivity() {
     }
 
     private fun actionRequest(occurrenceKey: String): TaskActionRequest = TaskActionRequest(
-        actionId = UUID.randomUUID().toString(),
-        deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
         expectedOccurrenceKey = occurrenceKey
     )
 }

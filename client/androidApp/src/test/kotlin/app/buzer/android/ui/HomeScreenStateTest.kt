@@ -7,7 +7,6 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
-import app.buzer.shared.model.ReconciliationStatus
 import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
@@ -299,9 +298,8 @@ class HomeScreenStateTest {
     }
 
     @Test
-    fun test10_ownerInvalidAndPendingReconciliationProduceRepairAttentionAndExcludedFromTimedSections() {
+    fun test10_ownerInvalidProducesRepairAttentionAndExcludedFromTimedSections() {
         val invalidTask = createTaskFixture("invalid-task", dueDatetime = "2026-08-02T14:00:00Z", durationMinutes = 30, state = CommitmentState.invalid)
-        val pendingTask = createTaskFixture("pending-task", dueDatetime = "2026-08-02T15:00:00Z", durationMinutes = 30, reconciliationStatus = ReconciliationStatus.pending)
         val validTask = createTaskFixture("valid-task", dueDatetime = "2026-08-02T16:00:00Z", durationMinutes = 30)
 
         val snapshot = SnapshotViewState(
@@ -312,7 +310,7 @@ class HomeScreenStateTest {
             inProgressTasks = emptyList(),
             startingToday = listOf(validTask),
             healthWarnings = emptyList(),
-            tasks = listOf(invalidTask, pendingTask, validTask)
+            tasks = listOf(invalidTask, validTask)
         )
 
         val state = buildHomeScreenState(
@@ -323,7 +321,7 @@ class HomeScreenStateTest {
         )
 
         val attention = assertNotNull(state.reviewAttention)
-        assertEquals("2 invalid tasks need review", attention.message)
+        assertEquals("1 invalid task needs review", attention.message)
         assertEquals(HomeAttentionAction.OpenMorningReview, attention.action)
         assertTrue(state.canOpenMorningReview)
 
@@ -553,7 +551,6 @@ class HomeScreenStateTest {
         isCompleted: Boolean = false,
         isDeleted: Boolean = false,
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        reconciliationStatus: ReconciliationStatus = ReconciliationStatus.none,
         updatedAt: String = "2026-08-02T09:00:00Z",
         checkedCount: Int = 0,
         totalCount: Int = 0,
@@ -587,8 +584,7 @@ class HomeScreenStateTest {
         checklistItems = checklistItems,
         checkedCount = checkedCount,
         totalCount = totalCount,
-        hierarchyStatus = hierarchyStatus,
-        reconciliationStatus = reconciliationStatus
+        hierarchyStatus = hierarchyStatus
     )
 
     private companion object {

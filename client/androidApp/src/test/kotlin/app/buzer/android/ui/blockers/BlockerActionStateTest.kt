@@ -80,8 +80,6 @@ class BlockerActionStateTest {
         )
 
         val patch = requireNotNull(request.rootPatch)
-        assertTrue(request.actionId.isNotBlank())
-        assertEquals("device-test", request.deviceId)
         assertEquals("occurrence-test", request.expectedOccurrenceKey)
         assertEquals("opaque-root-revision", patch.expectedTaskRevision)
         assertEquals("Edited title", patch.title)

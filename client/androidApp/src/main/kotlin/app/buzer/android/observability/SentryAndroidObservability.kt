@@ -129,11 +129,19 @@ class SentryAndroidObservability : AndroidObservability {
             }
             record.throwableType?.let { setData("throwable_type", it) }
             record.throwableMessage?.let { setData("throwable_message", it) }
+            record.attributes.forEach { (key, value) ->
+                setData(key, value)
+            }
         }
         Sentry.addBreadcrumb(breadcrumb)
 
         val message = buildString {
             append(record.message)
+            if (record.attributes.isNotEmpty()) {
+                record.attributes.forEach { (key, value) ->
+                    append(" ").append(key).append("=").append(value)
+                }
+            }
             record.throwableType?.let { append(" throwable_type=").append(it) }
             record.throwableMessage?.let { append(" throwable_message=").append(it) }
         }

@@ -2,37 +2,29 @@ package app.buzer.android.enforcement
 
 import app.buzer.android.sync.SnapshotStorage
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.enforcement.AlarmPlanCalculator
 import app.buzer.shared.enforcement.DesiredAlarmKind
-import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.ExtendTaskRequest
-import app.buzer.shared.model.MutationOutcome
+import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotDiagnostics
+import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-
 sealed interface CoordinatorActionResult {
     data object Success : CoordinatorActionResult
-    data class Pending(val response: MutationResponse) : CoordinatorActionResult
-    data class Stale(val snapshot: TasksSnapshotResponse, val message: String) : CoordinatorActionResult
-    data class RetryAfter(
-        val retryAfterSeconds: Long,
-        val message: String,
-        val retry: suspend () -> CoordinatorActionResult
-    ) : CoordinatorActionResult
+    data class Warning(val code: String, val message: String, val snapshot: TasksSnapshotResponse?) : CoordinatorActionResult
+    data class Conflict(val code: String, val message: String, val snapshot: TasksSnapshotResponse) : CoordinatorActionResult
+    data class TransportFailure(val isConnected: Boolean, val message: String) : CoordinatorActionResult
+    data class LocalReconciliationFailed(val snapshot: TasksSnapshotResponse, val message: String) : CoordinatorActionResult
     data object ChildActionInFlight : CoordinatorActionResult
-    data class LocalReconciliationFailed(
-        val snapshot: TasksSnapshotResponse,
-        val message: String
-    ) : CoordinatorActionResult
-    data class FailedAndHidden(val message: String) : CoordinatorActionResult
 }
 
 class EnforcementCoordinator(
@@ -43,6 +35,7 @@ class EnforcementCoordinator(
         ScheduledAlarmRegistry(InMemoryScheduledAlarmRegistryStorage()),
     private val errorReporter: BlockerErrorReporting,
     private val blockerNotificationCleaner: BlockerNotificationCleaner = NoOpBlockerNotificationCleaner,
+    private val isConnectedProvider: (() -> Boolean)? = null,
     private val nowProvider: () -> String = { Instant.now().toString() },
     private val logger: (String) -> Unit = {}
 ) {
@@ -62,7 +55,7 @@ class EnforcementCoordinator(
 
     suspend fun refreshAndReconcile(): TasksSnapshotResponse {
         logger("refresh start")
-        val snapshot = api.getSnapshot()
+        val snapshot = api.getSnapshot(forceRefresh = false)
         logger("refresh fetched ${SnapshotDiagnostics.describe(snapshot)}")
         val appliedSnapshot = applyFreshSnapshot(snapshot)
         logger("refresh complete scheduleVersion=${appliedSnapshot.scheduleVersion}")
@@ -71,7 +64,7 @@ class EnforcementCoordinator(
 
     suspend fun forceSyncAndReconcile(): TasksSnapshotResponse {
         logger("force_sync start")
-        val snapshot = api.forceSync()
+        val snapshot = api.getSnapshot(forceRefresh = true)
         logger("force_sync fetched ${SnapshotDiagnostics.describe(snapshot)}")
         val appliedSnapshot = applyFreshSnapshot(snapshot)
         logger("force_sync complete scheduleVersion=${appliedSnapshot.scheduleVersion}")
@@ -138,8 +131,6 @@ class EnforcementCoordinator(
             action = BlockerAction.EXTEND_TASK,
             taskId = taskId,
             request = TaskActionRequest(
-                actionId = request.actionId,
-                deviceId = request.deviceId,
                 expectedOccurrenceKey = request.expectedOccurrenceKey,
                 expectedTaskRevision = request.expectedTaskRevision
             )
@@ -155,9 +146,7 @@ class EnforcementCoordinator(
             action = BlockerAction.UPDATE_TASK,
             taskId = taskId,
             request = TaskActionRequest(
-                actionId = request.actionId,
-                deviceId = request.deviceId,
-                expectedOccurrenceKey = request.expectedOccurrenceKey
+                expectedOccurrenceKey = request.expectedOccurrenceKey.orEmpty()
             )
         ) {
             api.updateTask(taskId, request)
@@ -215,28 +204,30 @@ class EnforcementCoordinator(
         taskId = taskId,
         occurrenceKey = occurrenceKey,
         snapshot = response.snapshot
-    ) { appliedSnapshot ->
+    ) {
         logger(
             "mutation applied taskId=$taskId occurrence=$occurrenceKey " +
-                "actionId=${response.actionId} outcome=${response.outcome}"
+                "scheduleVersion=${response.snapshot.scheduleVersion}"
         )
-        when (response.outcome) {
-            MutationOutcome.completed -> CoordinatorActionResult.Success
-            MutationOutcome.reconciliation_pending -> CoordinatorActionResult.Pending(response.copy(snapshot = appliedSnapshot))
-        }
+        CoordinatorActionResult.Success
     }
 
     private fun applyConflictSnapshot(
         taskId: String,
         occurrenceKey: String,
         snapshot: TasksSnapshotResponse,
+        code: String,
         message: String
     ): CoordinatorActionResult = applyAuthoritativeSnapshot(
         taskId = taskId,
         occurrenceKey = occurrenceKey,
         snapshot = snapshot
     ) { appliedSnapshot ->
-        CoordinatorActionResult.Stale(appliedSnapshot, message)
+        CoordinatorActionResult.Conflict(
+            code = code,
+            message = message,
+            snapshot = appliedSnapshot
+        )
     }
 
     /** Serializes local application only; API requests happen before entering this boundary. */
@@ -255,9 +246,10 @@ class EnforcementCoordinator(
                             "incomingGeneration=${snapshot.snapshotGeneration} " +
                             "cachedGeneration=${application.snapshot.snapshotGeneration}"
                     )
-                    CoordinatorActionResult.Stale(
-                        snapshot = application.snapshot,
-                        message = "A newer authoritative snapshot is already applied"
+                    CoordinatorActionResult.Conflict(
+                        code = "stale_snapshot",
+                        message = "A newer authoritative snapshot is already applied",
+                        snapshot = application.snapshot
                     )
                 }
 
@@ -282,6 +274,13 @@ class EnforcementCoordinator(
             logger(
                 "authoritative snapshot local_failure taskId=$taskId occurrence=$occurrenceKey " +
                     "scheduleVersion=${snapshot.scheduleVersion} message=$message"
+            )
+            errorReporter.report(
+                action = BlockerAction.REFRESH_SNAPSHOT,
+                taskId = taskId,
+                message = message,
+                showNotification = true,
+                throwable = error
             )
             CoordinatorActionResult.LocalReconciliationFailed(snapshot, message)
         }
@@ -348,7 +347,8 @@ class EnforcementCoordinator(
         val occurrenceKey = request.expectedOccurrenceKey
         return try {
             logger("action start action=$action taskId=$taskId occurrence=$occurrenceKey")
-            applyMutationResponse(taskId, occurrenceKey, call())
+            val response = call()
+            applyMutationResponse(taskId, occurrenceKey, response)
         } catch (error: CancellationException) {
             throw error
         } catch (error: BuzerApiException) {
@@ -357,25 +357,55 @@ class EnforcementCoordinator(
                 error.status == 409 && snapshot != null -> {
                     applyConflictSnapshot(
                         taskId = taskId,
-                        occurrenceKey = request.expectedOccurrenceKey,
+                        occurrenceKey = occurrenceKey,
                         snapshot = snapshot,
+                        code = error.code ?: "conflict",
                         message = error.message ?: "Task changed on another device"
                     )
                 }
 
-                error.status == 429 -> {
-                    val retryAfterSeconds = error.retryAfterSeconds ?: RETRY_DELAY_SECONDS
-                    CoordinatorActionResult.RetryAfter(
-                        retryAfterSeconds = retryAfterSeconds,
-                        message = error.message ?: "Too many requests",
-                        retry = { runBackendAction(action, taskId, request, call) }
+                isOperationalFailure(error) -> {
+                    if (snapshot != null) {
+                        applyAuthoritativeSnapshot(taskId, occurrenceKey, snapshot) {
+                            CoordinatorActionResult.Success
+                        }
+                    }
+                    val code = error.code ?: "operational_error"
+                    val message = error.message ?: "Operational error"
+                    AppLog.warn(
+                        "enforcement_action_warning",
+                        error,
+                        mapOf(
+                            "action" to action.name,
+                            "task_id" to taskId,
+                            "code" to code
+                        )
                     )
+                    logger("action warning action=$action taskId=$taskId occurrence=$occurrenceKey code=$code message=$message")
+                    CoordinatorActionResult.Warning(code = code, message = message, snapshot = snapshot)
                 }
 
-                else -> failedAction(action, taskId, request.expectedOccurrenceKey, error, request.actionId)
+                else -> {
+                    val code = error.code ?: "backend_error"
+                    val message = error.message ?: "Backend error"
+                    errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
+                    logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
+                    CoordinatorActionResult.Warning(code = code, message = message, snapshot = snapshot)
+                }
             }
         } catch (error: Exception) {
-            failedAction(action, taskId, request.expectedOccurrenceKey, error, request.actionId)
+            if (isTransportFailure(error)) {
+                val isConnected = isConnectedProvider?.invoke() ?: false
+                val message = error.message ?: "Network failure"
+                logger("action transport_failure action=$action taskId=$taskId occurrence=$occurrenceKey isConnected=$isConnected message=$message")
+                CoordinatorActionResult.TransportFailure(isConnected = isConnected, message = message)
+            } else {
+                val message = error.message ?: error::class.simpleName ?: "unknown error"
+                errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
+                logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
+                val cachedSnapshot = loadLatestSnapshot()
+                CoordinatorActionResult.Warning(code = "local_failure", message = message, snapshot = cachedSnapshot)
+            }
         }
     }
 
@@ -391,59 +421,40 @@ class EnforcementCoordinator(
             return CoordinatorActionResult.ChildActionInFlight
         }
         return try {
-            val result = runBackendAction(
+            runBackendAction(
                 action = action,
                 taskId = taskId,
                 request = TaskActionRequest(
-                    actionId = request.actionId,
-                    deviceId = request.deviceId,
                     expectedOccurrenceKey = request.expectedOccurrenceKey
                 ),
                 call = call
             )
-            if (result is CoordinatorActionResult.RetryAfter) {
-                result.copy(
-                    retry = {
-                        runFocusedChildAction(action, taskId, childId, request, call)
-                    }
-                )
-            } else {
-                result
-            }
         } finally {
             childActionMutex.withLock { inFlightChildren.remove(childIdentity) }
         }
     }
 
-    private fun failedAction(
-        action: BlockerAction,
-        taskId: String,
-        occurrenceKey: String,
-        error: Throwable,
-        actionId: String? = null
-    ): CoordinatorActionResult {
-        val message = error.message ?: error::class.simpleName ?: "unknown error"
-        errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
-        logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
-        if (action == BlockerAction.POSTPONE_START) {
-            alarmScheduler.schedule(startRetryAlarm(taskId, occurrenceKey))
-            logger(
-                "action retry scheduled action=$action taskId=$taskId occurrence=$occurrenceKey " +
-                    "delaySeconds=$RETRY_DELAY_SECONDS"
-            )
-        }
-        return CoordinatorActionResult.FailedAndHidden(message)
+    private fun isOperationalFailure(error: BuzerApiException): Boolean {
+        val operationalCodes = setOf(
+            "backend_busy",
+            "todoist_command_rejected",
+            "todoist_delivery_unknown",
+            "todoist_accepted_snapshot_stale",
+            "forced_refresh_failed",
+            "rate_limited",
+            "validation_error",
+            "invalid_request"
+        )
+        if (error.code in operationalCodes) return true
+        if (error.status in 400..499) return true
+        return false
     }
 
-    private fun startRetryAlarm(taskId: String, occurrenceKey: String): ScheduledAlarm =
-        ScheduledAlarm(
-            taskId = taskId,
-            occurrenceKey = occurrenceKey,
-            kind = AlarmKind.START_BLOCKER,
-            triggerAtEpochMillis = Instant.parse(nowProvider()).plusSeconds(RETRY_DELAY_SECONDS).toEpochMilli()
-        )
-
-    companion object {
-        private const val RETRY_DELAY_SECONDS = 5L * 60L
+    private fun isTransportFailure(error: Throwable): Boolean {
+        if (error is IOException) return true
+        val className = error::class.qualifiedName.orEmpty()
+        return className.contains("Timeout") ||
+            className.contains("Connect") ||
+            className.contains("UnresolvedAddress")
     }
 }

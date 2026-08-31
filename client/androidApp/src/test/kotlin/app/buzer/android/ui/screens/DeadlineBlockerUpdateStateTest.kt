@@ -180,22 +180,19 @@ class DeadlineBlockerUpdateStateTest {
     }
 
     @Test
-    fun pendingConfirmationAndFailurePreserveTheSharedHostLifecycle() {
+    fun warningAndFailurePreserveTheSharedHostLifecycle() {
         val initial = initialTaskEditorUpdateState(task(), readyChoices())
         val submitted = initial.withDraft(initial.draft.copy(title = "Keep this edit")).beginSubmission()
-        val pending = reduceTaskEditorUpdateResult(submitted, pendingResult()).state
-        val confirmed = reduceTaskEditorUpdateResult(pending, CoordinatorActionResult.Success)
+        val warning = reduceTaskEditorUpdateResult(submitted, CoordinatorActionResult.Warning("busy", "Server busy", null)).state
         val failed = reduceTaskEditorUpdateResult(
             initial.withDraft(initial.draft.copy(title = "Keep this edit")).beginSubmission(),
-            CoordinatorActionResult.FailedAndHidden("backend failed")
+            CoordinatorActionResult.Warning("failed", "backend failed", null)
         ).state
 
-        assertEquals("Saved; waiting for confirmation", pending.resultMessage)
-        assertFalse(pending.canSubmit)
-        assertEquals(TaskEditorUpdateCancelRequest.Ignore, taskEditorUpdateCancelRequest(pending, isDirty = true))
-        assertTrue(confirmed.shouldInvokeSuccess)
+        assertEquals("Server busy", warning.resultMessage)
+        assertTrue(warning.canSubmit)
         assertEquals("Keep this edit", failed.draft.title)
-        assertEquals(GENERIC_TASK_EDITOR_UPDATE_ERROR, failed.resultMessage)
+        assertEquals("backend failed", failed.resultMessage)
     }
 
     @Test
@@ -301,20 +298,6 @@ class DeadlineBlockerUpdateStateTest {
     }
 
     private fun readyChoices() = TaskEditorUpdateChoices(projects = listOf(sharedProject, otherProject))
-
-    private fun pendingResult() = CoordinatorActionResult.Pending(
-        MutationResponse(
-            actionId = "action-1",
-            outcome = MutationOutcome.reconciliation_pending,
-            snapshot = TasksSnapshotResponse(
-                scheduleVersion = 1,
-                serverTime = "2026-07-23T10:00:00Z",
-                tasks = listOf(task()),
-                health = emptyList(),
-                snapshotGeneration = 1
-            )
-        )
-    )
 
     private fun activityEntry() = app.buzer.shared.model.ActivityLogEntry(
         timestamp = "2026-07-23T09:00:00Z",
