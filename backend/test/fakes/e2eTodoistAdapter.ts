@@ -226,6 +226,13 @@ export class E2ETodoistWorld {
       task.dueDate = task.dueDatetime;
     }
     task.updatedAt = new Date().toISOString();
+
+    for (const child of this.tasks.values()) {
+      if (child.parentId === todoistTaskId) {
+        child.completedAt = null;
+        child.updatedAt = new Date().toISOString();
+      }
+    }
   }
 
   getTask(todoistTaskId: string): TodoistTaskMirror {

@@ -22,7 +22,7 @@ export interface RootTaskStore {
 }
 
 export interface TaskSynchronizer {
-  syncOnce(): Promise<void>;
+  syncOnce(): Promise<unknown>;
 }
 
 export interface TaskActionCommandContext {

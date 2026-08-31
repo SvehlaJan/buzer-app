@@ -8,10 +8,15 @@ export interface RequestFailureContext {
   statusCode?: number;
 }
 
+export type SafeLogAttributes = Record<string, unknown>;
+
 export interface BackendObservability {
   captureRequestFailure(error: unknown, context: RequestFailureContext): void;
   captureBackgroundFailure(marker: string, error: unknown, tags?: Record<string, string | undefined>): void;
   flush(timeoutMillis?: number): Promise<void>;
+  info?(marker: string, attributes?: SafeLogAttributes): void;
+  warn?(marker: string, attributes?: SafeLogAttributes): void;
+  captureException?(error: unknown, context?: Record<string, unknown>): void;
 }
 
 export class NoOpBackendObservability implements BackendObservability {
@@ -20,6 +25,12 @@ export class NoOpBackendObservability implements BackendObservability {
   captureBackgroundFailure(_marker: string, _error: unknown, _tags?: Record<string, string | undefined>): void {}
 
   async flush(_timeoutMillis: number = 2000): Promise<void> {}
+
+  info(_marker: string, _attributes?: SafeLogAttributes): void {}
+
+  warn(_marker: string, _attributes?: SafeLogAttributes): void {}
+
+  captureException(_error: unknown, _context?: Record<string, unknown>): void {}
 }
 
 export interface SentryObservabilityOptions {
@@ -136,6 +147,45 @@ export class SentryBackendObservability implements BackendObservability {
     });
   }
 
+  info(marker: string, attributes?: SafeLogAttributes): void {
+    if (!this.enabled) return;
+    Sentry.addBreadcrumb({
+      category: "log.info",
+      message: marker,
+      ...(attributes !== undefined ? { data: redactObject(attributes) as Record<string, unknown> } : {}),
+      level: "info"
+    });
+  }
+
+  warn(marker: string, attributes?: SafeLogAttributes): void {
+    if (!this.enabled) return;
+    Sentry.addBreadcrumb({
+      category: "log.warn",
+      message: marker,
+      ...(attributes !== undefined ? { data: redactObject(attributes) as Record<string, unknown> } : {}),
+      level: "warning"
+    });
+  }
+
+  captureException(error: unknown, context?: Record<string, unknown>): void {
+    if (!this.enabled) return;
+    Sentry.withScope((scope) => {
+      scope.setLevel("error");
+      if (context) {
+        for (const [key, value] of Object.entries(context)) {
+          if (value !== undefined) {
+            scope.setTag(key, String(value));
+          }
+        }
+      }
+      if (error instanceof Error) {
+        Sentry.captureException(error);
+      } else {
+        Sentry.captureMessage(redactString(String(error)));
+      }
+    });
+  }
+
   async flush(timeoutMillis: number = 2000): Promise<void> {
     if (this.enabled) {
       await Sentry.flush(timeoutMillis);
@@ -190,5 +240,19 @@ export const backendObservability: BackendObservability = {
   },
   flush(timeoutMillis?: number): Promise<void> {
     return backendObservabilityRuntime.getInstance().flush(timeoutMillis);
+  },
+  info(marker: string, attributes?: SafeLogAttributes): void {
+    backendObservabilityRuntime.getInstance().info?.(marker, attributes);
+  },
+  warn(marker: string, attributes?: SafeLogAttributes): void {
+    backendObservabilityRuntime.getInstance().warn?.(marker, attributes);
+  },
+  captureException(error: unknown, context?: Record<string, unknown>): void {
+    const inst = backendObservabilityRuntime.getInstance();
+    if (inst.captureException) {
+      inst.captureException(error, context);
+    } else {
+      inst.captureBackgroundFailure("unhandled_exception", error, context as Record<string, string | undefined>);
+    }
   }
 };

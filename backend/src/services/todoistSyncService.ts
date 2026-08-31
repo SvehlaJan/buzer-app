@@ -2,7 +2,6 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
-import { ActionJournalRepository } from "../repositories/actionJournalRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
 import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
@@ -19,14 +18,32 @@ export interface TodoistSyncDiagnostics {
   errorMessage?: string | null;
 }
 
+export interface TodoistSyncSummary {
+  hasChanges: boolean;
+  changedTaskCount: number;
+  changedTaskIds: string[];
+  changedProjectCount: number;
+  changedCollaboratorCount: number;
+}
+
+/**
+ * Raw non-queuing sync service for Todoist synchronization.
+ *
+ * NON-REENTRANCY WARNING:
+ * `TodoistSyncService.syncOnce` is a raw, non-queuing primitive.
+ * It does NOT acquire the `TodoistOperationQueue` itself. Top-level entry points
+ * (background poller, forced refresh endpoints, mutation runners) are responsible for
+ * acquiring the process-wide queue slot before calling `syncOnce`.
+ * Attempting to acquire the queue inside `syncOnce` would cause deadlock.
+ */
 export class TodoistSyncService {
-  private syncTail: Promise<void> = Promise.resolve();
-  private manualSyncInFlight: Promise<void> | null = null;
   private readonly occurrenceReconciler = new OccurrenceReconciler();
   private lastSyncAt: string | null = null;
   private lastOutcome: "success" | "error" | null = null;
   private lastDurationMs: number | null = null;
   private lastErrorMessage: string | null = null;
+
+  private manualSyncInFlight: Promise<TodoistSyncSummary> | null = null;
 
   constructor(
     private readonly db: Database.Database,
@@ -46,7 +63,7 @@ export class TodoistSyncService {
     };
   }
 
-  syncNow(): Promise<void> {
+  syncNow(): Promise<TodoistSyncSummary> {
     if (this.manualSyncInFlight !== null) return this.manualSyncInFlight;
     const run = this.syncOnce().finally(() => {
       if (this.manualSyncInFlight === run) this.manualSyncInFlight = null;
@@ -55,28 +72,25 @@ export class TodoistSyncService {
     return run;
   }
 
-  async syncOnce(): Promise<void> {
+  async syncOnce(): Promise<TodoistSyncSummary> {
     const start = Date.now();
-    const run = this.syncTail.then(async () => {
-      try {
-        await this.syncOnceSerialized();
-        this.lastSyncAt = new Date().toISOString();
-        this.lastOutcome = "success";
-        this.lastDurationMs = Date.now() - start;
-        this.lastErrorMessage = null;
-      } catch (err) {
-        this.lastSyncAt = new Date().toISOString();
-        this.lastOutcome = "error";
-        this.lastDurationMs = Date.now() - start;
-        this.lastErrorMessage = err instanceof Error ? err.message : String(err);
-        throw err;
-      }
-    });
-    this.syncTail = run.catch(() => undefined);
-    return run;
+    try {
+      const summary = await this.performSync();
+      this.lastSyncAt = new Date().toISOString();
+      this.lastOutcome = "success";
+      this.lastDurationMs = Date.now() - start;
+      this.lastErrorMessage = null;
+      return summary;
+    } catch (err) {
+      this.lastSyncAt = new Date().toISOString();
+      this.lastOutcome = "error";
+      this.lastDurationMs = Date.now() - start;
+      this.lastErrorMessage = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
   }
 
-  private async syncOnceSerialized(allowChildResetFollowUp = true): Promise<void> {
+  private async performSync(): Promise<TodoistSyncSummary> {
     const preSyncTasks = this.tasks.listAll();
     const preSyncPolicy = new TaskEnforcementPolicy({
       currentUserId: this.currentUserId,
@@ -96,18 +110,17 @@ export class TodoistSyncService {
     const previousByTodoistId = new Map(
       preSyncTasks.map((task) => [task.todoistTaskId, task])
     );
-    const resetPlans: ResetPlan[] = [];
 
     const tx = this.db.transaction(() => {
-      for (const collaborator of result.collaborators) {
+      for (const collaborator of result.collaborators ?? []) {
         this.collaborators.upsertCollaborator(collaborator);
       }
 
-      for (const collaboratorState of result.collaboratorStates) {
+      for (const collaboratorState of result.collaboratorStates ?? []) {
         this.collaborators.upsertCollaboratorState(collaboratorState);
       }
 
-      for (const project of result.projects) {
+      for (const project of result.projects ?? []) {
         this.projects.upsertProject({
           todoistProjectId: project.todoistProjectId,
           name: project.name,
@@ -121,7 +134,7 @@ export class TodoistSyncService {
         });
       }
 
-      for (const task of result.tasks) {
+      for (const task of result.tasks ?? []) {
         const existing = previousByTodoistId.get(task.todoistTaskId) ?? null;
         const id = existing?.id ?? randomUUID();
         this.tasks.upsertTodoistTask({
@@ -185,7 +198,7 @@ export class TodoistSyncService {
           source: "sync",
           checkedChildIds: eligibleCheckedChildIds(currentTask, allTasks)
         });
-        this.applyOccurrenceDecision(currentTask, decision, now, resetPlans);
+        this.applyOccurrenceDecision(currentTask, decision, now);
       }
 
       this.db.prepare(`
@@ -204,24 +217,27 @@ export class TodoistSyncService {
 
     tx();
 
-    if (!allowChildResetFollowUp) {
-      return;
-    }
-    for (const plan of resetPlans) {
-      await this.resetCheckedChildren(plan);
-    }
-    if (resetPlans.length > 0) {
-      await this.syncOnceSerialized(false);
-    }
+    const changedTaskCount = (result.tasks ?? []).length;
+    const changedTaskIds = (result.tasks ?? []).slice(0, 10).map((t) => t.todoistTaskId);
+    const changedProjectCount = (result.projects ?? []).length;
+    const changedCollaboratorCount = (result.collaborators?.length ?? 0) + (result.collaboratorStates?.length ?? 0);
+    const hasChanges = changedTaskCount > 0 || changedProjectCount > 0 || changedCollaboratorCount > 0;
+
+    return {
+      hasChanges,
+      changedTaskCount,
+      changedTaskIds,
+      changedProjectCount,
+      changedCollaboratorCount
+    };
   }
 
   private applyOccurrenceDecision(
     task: TaskWithCommitment,
     decision: OccurrenceDecision,
-    now: string,
-    resetPlans: ResetPlan[]
+    now: string
   ): void {
-    if (decision.kind === "rotate") {
+    if (decision.kind === "rotate" || decision.kind === "reset_children_then_rotate") {
       this.tasks.rotateOccurrence(task.id, {
         occurrenceKey: randomUUID(),
         occurrenceDueDatetime: task.dueDatetime,
@@ -234,58 +250,7 @@ export class TodoistSyncService {
       this.tasks.leaveOccurrenceOwnership(task.id, now);
       return;
     }
-    if (decision.kind === "reset_children_then_rotate") {
-      this.tasks.markOccurrenceReconciliationPending(task.id, now);
-      resetPlans.push({ task, checkedChildIds: decision.checkedChildIds });
-    }
   }
-
-  private async resetCheckedChildren(plan: ResetPlan): Promise<void> {
-    const journal = new ActionJournalRepository(this.db);
-    const fingerprint = JSON.stringify({
-      taskId: plan.task.id,
-      occurrenceKey: plan.task.occurrenceKey,
-      checkedChildIds: plan.checkedChildIds
-    });
-    const actionId = `system-recurring-reset:${plan.task.id}:${plan.task.occurrenceKey}`;
-    const now = new Date().toISOString();
-    journal.reserve({
-      actionId,
-      deviceId: "system",
-      rootTaskId: plan.task.id,
-      expectedOccurrenceKey: plan.task.occurrenceKey,
-      actionType: "recurring_child_reset",
-      requestFingerprint: fingerprint,
-      now
-    });
-
-    for (const childId of plan.checkedChildIds) {
-      const reservation = journal.reserveCommand({
-        actionId,
-        stepKey: `uncomplete:${childId}`,
-        commandUuid: randomUUID(),
-        tempId: null,
-        now
-      });
-      if (reservation.command.status === "confirmed") {
-        continue;
-      }
-      if (reservation.command.status === "reserved") {
-        journal.markCommandSent(actionId, reservation.command.stepKey, now);
-      }
-      await this.todoist.itemUncomplete({
-        commandUuid: reservation.command.commandUuid,
-        todoistTaskId: childId
-      });
-      journal.markCommandConfirmed(actionId, reservation.command.stepKey, { todoistTaskId: childId }, new Date().toISOString());
-    }
-    journal.markCompleted(actionId, { outcome: "commands_sent" }, new Date().toISOString());
-  }
-}
-
-interface ResetPlan {
-  task: TaskWithCommitment;
-  checkedChildIds: string[];
 }
 
 function isTerminal(task: TaskWithCommitment): boolean {

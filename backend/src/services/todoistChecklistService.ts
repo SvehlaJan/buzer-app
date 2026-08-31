@@ -31,7 +31,7 @@ export interface TodoistChecklistServiceOptions {
   /** The coordinator provides the durable root lock and per-command journal when supplied. */
   coordinator?: TaskActionCoordinator;
   /** Sync must refresh the local Todoist mirror before validation and after a focused action. */
-  synchronize?: () => Promise<void>;
+  synchronize?: () => Promise<unknown>;
   snapshot?: () => unknown;
   now?: () => string;
 }

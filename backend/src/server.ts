@@ -15,6 +15,7 @@ import { EscalationService } from "./services/escalationService.js";
 import { TaskActionCoordinator } from "./services/taskActionCoordinator.js";
 import { TaskActionService } from "./services/taskActionService.js";
 import { TaskSnapshotService } from "./services/taskSnapshotService.js";
+import { TodoistOperationQueue } from "./services/todoistOperationQueue.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
 import { TodoistSyncService } from "./services/todoistSyncService.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
@@ -32,6 +33,7 @@ export interface BuildServerOptions {
   androidApiToken: string;
   todoist: TodoistAdapter;
   synchronizer?: TodoistSyncService | undefined;
+  todoistQueue?: TodoistOperationQueue | undefined;
   escalationService?: EscalationService | null | undefined;
   rateLimit?: { max: number; timeWindowMs: number } | undefined;
   observability?: BackendObservability | undefined;
@@ -192,12 +194,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     whatsappRecipientId,
     { observability: backendObservability }
   );
+  const todoistQueue = new TodoistOperationQueue();
   const synchronizer = new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators);
   const app = buildServer({
     db,
     currentUserId,
     androidApiToken,
     todoist,
+    todoistQueue,
     escalationService,
     synchronizer,
     observability: backendObservability
@@ -205,6 +209,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const poller = new TodoistPoller(
     synchronizer,
     {
+      queue: todoistQueue,
       runImmediately: true,
       observability: backendObservability,
       onError: (error) => {

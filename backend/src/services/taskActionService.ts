@@ -29,7 +29,7 @@ export interface TaskActionServiceOptions {
   /** Task 9 supplies these server-scoped dependencies for action-aware root calls. */
   rootActions?: {
     coordinator: TaskActionCoordinator;
-    synchronize: () => Promise<void>;
+    synchronize: () => Promise<unknown>;
     snapshot: () => unknown;
   };
 }

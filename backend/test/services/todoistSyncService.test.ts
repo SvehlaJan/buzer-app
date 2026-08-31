@@ -298,80 +298,91 @@ describe("TodoistSyncService", () => {
     `).get()).toEqual({ syncToken: "full-contract-token", mirrorContractVersion: 3 });
   });
 
-  it("serializes sync token reads across concurrent callers", async () => {
+  it("syncOnce performs a raw fetch and apply cycle directly without queue acquisition", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const adapter = new FakeTodoistAdapter();
-    let releaseFirst: (() => void) | undefined;
-    adapter.sync = vi.fn()
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        releaseFirst = () => resolve({
-          syncToken: "first-token",
-          tasks: [],
-          collaborators: [],
-          collaboratorStates: [],
-          projects: [{
-            todoistProjectId: "project-1",
-            name: "Project",
-            shared: false,
-            canAssignTasks: true,
-            isInboxProject: false,
-            isDeleted: false,
-            isArchived: false,
-            rawJson: { id: "project-1" },
-            updatedAt: "2026-07-15T10:00:00Z"
-          }]
-        });
-      }))
-      .mockResolvedValue({
-        syncToken: "second-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
-      });
+    adapter.syncResults.push({
+      syncToken: "sync-token-1",
+      tasks: [],
+      projects: [],
+      collaborators: [],
+      collaboratorStates: []
+    });
     const service = new TodoistSyncService(db, new TaskRepository(db), new ProjectRepository(db), adapter);
 
-    const first = service.syncOnce();
-    const second = service.syncOnce();
-    await Promise.resolve();
-    expect(adapter.sync).toHaveBeenCalledWith("*");
-    releaseFirst?.();
-    await Promise.all([first, second]);
+    const summary = await service.syncOnce();
 
-    expect(adapter.sync).toHaveBeenNthCalledWith(1, "*");
-    expect(adapter.sync).toHaveBeenNthCalledWith(2, "first-token");
+    expect(adapter.syncTokens).toEqual(["*"]);
+    expect(summary).toEqual({
+      hasChanges: false,
+      changedTaskCount: 0,
+      changedTaskIds: [],
+      changedProjectCount: 0,
+      changedCollaboratorCount: 0
+    });
+    expect(service.getLastSyncDiagnostics()).toMatchObject({
+      lastOutcome: "success"
+    });
+    expect(service.getLastSyncDiagnostics().errorMessage).toBeUndefined();
   });
 
-  it("coalesces concurrent manual sync calls into a single adapter invocation", async () => {
+  it("returns a sync summary with aggregate changed counts and bounded identifier lists", async () => {
     const db = new Database(":memory:");
     migrate(db);
     const adapter = new FakeTodoistAdapter();
-    let releaseFirst: (() => void) | undefined;
-    adapter.sync = vi.fn()
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        releaseFirst = () => resolve({
-          syncToken: "first-token",
-          tasks: [],
-          collaborators: [],
-          collaboratorStates: [],
-          projects: []
-        });
-      }))
-      .mockResolvedValue({
-        syncToken: "second-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
-      });
+    const tasks = Array.from({ length: 15 }, (_, i) => ({
+      todoistTaskId: `task-${i + 1}`,
+      title: `Task ${i + 1}`,
+      description: null,
+      projectId: "project-1",
+      parentId: null,
+      childOrder: i,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDate: "2026-07-15T09:00:00Z",
+      dueDatetime: "2026-07-15T09:00:00Z",
+      dueString: null,
+      dueLang: null,
+      dueTimezone: null,
+      isRecurring: false,
+      durationAmount: 30,
+      durationUnit: "minute",
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: { id: `task-${i + 1}` },
+      updatedAt: "2026-07-15T08:00:00Z"
+    }));
+    adapter.syncResults.push({
+      syncToken: "summary-token",
+      tasks,
+      projects: [{
+        todoistProjectId: "project-1",
+        name: "Project 1",
+        shared: false,
+        canAssignTasks: true,
+        isInboxProject: false,
+        isDeleted: false,
+        isArchived: false,
+        rawJson: { id: "project-1" },
+        updatedAt: "2026-07-15T08:00:00Z"
+      }],
+      collaborators: [],
+      collaboratorStates: []
+    });
     const service = new TodoistSyncService(db, new TaskRepository(db), new ProjectRepository(db), adapter);
 
-    const first = service.syncNow();
-    const second = service.syncNow();
-    await Promise.resolve();
-    expect(adapter.sync).toHaveBeenCalledTimes(1);
+    const summary = await service.syncOnce();
 
-    releaseFirst?.();
-    await Promise.all([first, second]);
-
-    const third = service.syncNow();
-    await third;
-    expect(adapter.sync).toHaveBeenCalledTimes(2);
+    expect(summary.hasChanges).toBe(true);
+    expect(summary.changedTaskCount).toBe(15);
+    // Bounded to 10 IDs
+    expect(summary.changedTaskIds).toHaveLength(10);
+    expect(summary.changedTaskIds).toEqual(tasks.slice(0, 10).map((t) => t.todoistTaskId));
+    expect(summary.changedProjectCount).toBe(1);
+    expect(summary.changedCollaboratorCount).toBe(0);
   });
-
 
   it("rotates state when an authoritative one-time due instance changes", async () => {
     const db = new Database(":memory:");
@@ -447,7 +458,7 @@ describe("TodoistSyncService", () => {
     expect(tasks.getById("local-one-time")?.occurrenceKey).not.toBe(before?.occurrenceKey);
   });
 
-  it("unchecks checked children and waits for the authoritative recurring tree before rotating", async () => {
+  it("rotates occurrence immediately on external recurrence advancement without generating repair commands", async () => {
     const db = new Database(":memory:");
     migrate(db);
     db.prepare(`
@@ -511,106 +522,26 @@ describe("TodoistSyncService", () => {
     `).run();
     const adapter = new FakeTodoistAdapter();
     adapter.syncResults.push(
-      syncRecurringRoot("2026-07-16T09:00:00Z", "after-advance-token"),
-      {
-        syncToken: "confirmed-token",
-        projects: [],
-        tasks: [
-          {
-            todoistTaskId: "todoist-checked-child",
-            title: "Checklist step",
-            description: null,
-            projectId: "project-1",
-            parentId: "todoist-recurring-root",
-            childOrder: 1,
-            assigneeId: null,
-            creatorId: "user-self",
-            dueDate: null,
-            dueDatetime: null,
-            dueString: null,
-            dueLang: null,
-            dueTimezone: null,
-            isRecurring: false,
-            durationAmount: null,
-            durationUnit: null,
-            durationMinutes: null,
-            completedAt: null,
-            deletedAt: null,
-            rawJson: { id: "todoist-checked-child", checked: false },
-            updatedAt: "2026-07-15T08:40:00Z"
-          }
-        ]
-      }
+      syncRecurringRoot("2026-07-16T09:00:00Z", "after-advance-token")
     );
 
-    await new TodoistSyncService(db, tasks, projects, adapter, "user-self").syncOnce();
+    const summary = await new TodoistSyncService(db, tasks, projects, adapter, "user-self").syncOnce();
 
-    expect(adapter.itemUncompletes).toHaveLength(1);
-    expect(adapter.itemUncompletes[0]?.todoistTaskId).toBe("todoist-checked-child");
-    expect(adapter.syncTokens).toEqual(["old-sync-token", "after-advance-token"]);
+    // No uncomplete commands are scheduled or sent to Todoist
+    expect(adapter.itemUncompletes).toHaveLength(0);
+    expect(adapter.syncTokens).toEqual(["old-sync-token"]);
+
+    // Root occurrence is rotated immediately to the new date
     expect(tasks.getById("recurring-root")).toMatchObject({
       occurrenceDueDatetime: "2026-07-16T09:00:00Z",
       reconciliationStatus: "confirmed",
       state: "planned"
     });
     expect(tasks.getById("recurring-root")?.occurrenceKey).not.toBe("old-recurring-key");
-  });
 
-  it("returns pending after one empty child-reset confirmation instead of recursively resetting again", async () => {
-    const db = new Database(":memory:");
-    migrate(db);
-    db.prepare(`
-      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
-      values (1, 'old-sync-token', 3, '2026-07-15T08:00:00Z')
-    `).run();
-    const projects = new ProjectRepository(db);
-    projects.upsertProject({ ...projectMirror("project-1", true), rawJson: "{}" });
-    const tasks = new TaskRepository(db);
-    tasks.upsertTodoistTask({
-      id: "recurring-root",
-      ...syncRecurringRoot("2026-07-15T09:00:00Z", "unused").tasks[0]!,
-      rawJson: "{}"
-    });
-    tasks.upsertTodoistTask({
-      id: "checked-child",
-      todoistTaskId: "todoist-checked-child",
-      title: "Checklist step",
-      description: null,
-      projectId: "project-1",
-      parentId: "todoist-recurring-root",
-      childOrder: 1,
-      assigneeId: null,
-      creatorId: "user-self",
-      dueDatetime: null,
-      durationMinutes: null,
-      completedAt: "2026-07-15T08:30:00Z",
-      deletedAt: null,
-      rawJson: "{}",
-      updatedAt: "2026-07-15T08:30:00Z"
-    });
-    db.prepare(`
-      update commitment_states
-      set occurrence_key = 'old-recurring-key', occurrence_due_datetime = '2026-07-15T09:00:00Z',
-          occurrence_recurrence_fingerprint = '{"isRecurring":true,"dueString":"every day at 09:00","dueLang":"en","dueTimezone":"Europe/Bratislava"}'
-      where task_id = 'recurring-root'
-    `).run();
-    const adapter = new FakeTodoistAdapter();
-    adapter.sync = vi.fn()
-      .mockResolvedValueOnce(syncRecurringRoot("2026-07-16T09:00:00Z", "after-advance-token"))
-      .mockResolvedValueOnce({
-        syncToken: "lagged-token", projects: [], tasks: [], collaborators: [], collaboratorStates: []
-      })
-      .mockRejectedValue(new Error("unexpected_recursive_sync"));
-
-    await expect(new TodoistSyncService(db, tasks, projects, adapter, "user-self").syncOnce()).resolves.toBeUndefined();
-
-    expect(adapter.sync).toHaveBeenCalledTimes(2);
-    expect(adapter.itemUncompletes).toHaveLength(1);
-    expect(tasks.getById("recurring-root")).toMatchObject({
-      occurrenceKey: "old-recurring-key",
-      occurrenceDueDatetime: "2026-07-15T09:00:00Z",
-      reconciliationStatus: "pending"
-    });
+    // The checked child remains checked (observed state accepted without repair)
+    expect(tasks.getById("checked-child")?.completedAt).toBe("2026-07-15T08:30:00Z");
+    expect(summary.hasChanges).toBe(true);
   });
 
   it("leaves ownership when a personal project's assignment capability changes without a task item", async () => {
