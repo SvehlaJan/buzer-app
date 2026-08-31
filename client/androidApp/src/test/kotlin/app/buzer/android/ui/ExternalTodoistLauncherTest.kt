@@ -1,6 +1,5 @@
 package app.buzer.android.ui
 
-import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.navigation.TodoistTarget
 import kotlin.test.Test
 import kotlin.test.assertEquals
