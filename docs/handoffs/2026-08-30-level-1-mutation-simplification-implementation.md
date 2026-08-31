@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 8 completed; ready for Task 9
+Status: Task 9 completed; ready for Task 10 (Checkpoint B)
 
 ## Task and plan status
 
@@ -17,7 +17,8 @@ Status: Task 8 completed; ready for Task 9
 - Task 6 (Decouple task and checklist actions from the journal): COMPLETED (commits `96719e4`..`207f978`)
 - Task 7 (Replace the HTTP mutation/sync contract and add forced refresh): COMPLETED (commit `1600a5015b630b91e9883526da0c22646d510e4a`)
 - Task 8 (Upgrade backend Sentry structured logs and enforce ownership): COMPLETED (commits `ce906db`..`0f4e6cd`)
-- Next task: Task 9 (Remove journal persistence and migrate SQLite schema v7)
+- Task 9 (Remove journal persistence and migrate SQLite schema v7): COMPLETED (commit `6c737ca1855f839ed9b8f0ff8c8b44509f651fe8`)
+- Next task: Task 10 (Delete the coordinator and root mutex, then prove backend convergence)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -51,7 +52,7 @@ Verification:
 Verification:
 - Command: `npm test && npm run typecheck && npm run build` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: 41 test files, 476 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
+- Evidence: 40 test files, 461 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -60,9 +61,8 @@ Verification:
 
 ## Next Steps
 
-Execute Task 9 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 9: Remove journal persistence and migrate SQLite schema v7.
-- Task 10: Delete the coordinator and root mutex, then prove backend convergence.
+Execute Task 10 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
+- Task 10: Delete the coordinator and root mutex, then prove backend convergence (Checkpoint B).
 - Task 11: Simplify the shared Kotlin contract and add structured request logs.
 - Task 12: Simplify Android enforcement outcomes and Sentry ownership.
 - Task 13: Add session warnings, screen locks, forced Refresh, and Open Todoist.
