@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 2 completed; ready for Task 3
+Status: Task 3 completed; ready for Task 4
 
 ## Task and plan status
 
@@ -11,7 +11,8 @@ Status: Task 2 completed; ready for Task 3
 - Task 0 (Workspace preparation & Context7 lookups): COMPLETED
 - Task 1 (Retire reconciliation protocol and align repository guidance): COMPLETED (commit `295146a08053a34db7ef0cf6d45b3debb36d25d9`)
 - Task 2 (Introduce typed Todoist failures and bounded same-UUID command retry): COMPLETED (commits `2acdc659`..`83cf59e`)
-- Next task: Task 3 (Add the process-wide FIFO and deadline admission)
+- Task 3 (Add the process-wide FIFO and deadline admission): COMPLETED (commit `1b6ce25829d0d654b1b65039e2996ff0308390c3`)
+- Next task: Task 4 (Simplify sync, recurrence rotation, and one-minute polling)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -43,14 +44,9 @@ Verification:
 - Evidence: Worktree `.worktrees/level-1-mutation-simplification` created on branch `feature/level-1-mutation-simplification`.
 
 Verification:
-- Command: `rg -n "action journal|action-journal|reconciliation_status|five minutes|5 minutes|Todoist polling" AGENTS.md .codex/skills .claude/skills docs/notes/action-reconciliation-protocol.md`
-- Result: PASS
-- Evidence: No active mandates remain in repository guidance. Old skills removed, historical notice added.
-
-Verification:
 - Command: `npm test && npm run typecheck` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: 39 test files, 478 tests passed. TypeScript typecheck passed cleanly with zero errors.
+- Evidence: 40 test files, 489 tests passed. TypeScript typecheck passed cleanly with zero errors.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -59,8 +55,7 @@ Verification:
 
 ## Next Steps
 
-Execute Task 3 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 3: Add process-wide FIFO and deadline admission.
+Execute Task 4 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 4: Simplify sync, recurrence rotation, and one-minute polling.
 - Task 5: Build one-shot mutation runner.
 - Task 6: Decouple task and checklist actions from the journal.
