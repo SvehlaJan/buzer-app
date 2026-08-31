@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 6 completed; ready for Task 7
+Status: Task 7 completed; ready for Task 8
 
 ## Task and plan status
 
@@ -15,7 +15,8 @@ Status: Task 6 completed; ready for Task 7
 - Task 4 (Simplify sync, recurrence rotation, and one-minute polling): COMPLETED (commit `917e98094d3e81dd2dd3cd4ab1abbe5629bcb06e`)
 - Task 5 (Build a one-shot mutation runner): COMPLETED (commit `df65a44a76617441cbc4d7e427e33a752a77bc20`)
 - Task 6 (Decouple task and checklist actions from the journal): COMPLETED (commits `96719e4`..`207f978`)
-- Next task: Task 7 (Replace the HTTP mutation/sync contract and add forced refresh)
+- Task 7 (Replace the HTTP mutation/sync contract and add forced refresh): COMPLETED (commit `1600a5015b630b91e9883526da0c22646d510e4a`)
+- Next task: Task 8 (Upgrade backend Sentry structured logs and enforce ownership)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -47,9 +48,9 @@ Verification:
 - Evidence: Worktree `.worktrees/level-1-mutation-simplification` created on branch `feature/level-1-mutation-simplification`.
 
 Verification:
-- Command: `npm test && npm run typecheck` (in `.worktrees/level-1-mutation-simplification/backend`)
+- Command: `npm test && npm run typecheck && npm run build` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: Domain service unit tests passing (53 tests), TypeScript typecheck passed cleanly with zero errors.
+- Evidence: 41 test files, 463 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -58,8 +59,7 @@ Verification:
 
 ## Next Steps
 
-Execute Task 7 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 7: Replace the HTTP mutation/sync contract and add forced refresh.
+Execute Task 8 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 8: Upgrade backend Sentry structured logs and enforce ownership.
 - Task 9: Remove journal persistence and migrate SQLite schema v7.
 - Task 10: Delete the coordinator and root mutex, then prove backend convergence.
