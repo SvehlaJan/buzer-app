@@ -173,7 +173,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const body = createTaskBody.parse(request.body);
     const result = await services.actions.create({
       title: body.title, projectId: body.projectId, assigneeId: body.assigneeId, dueDatetime: body.dueDatetime,
-      durationMinutes: body.durationMinutes, description: body.description, actionId: body.actionId, deviceId: body.deviceId,
+      durationMinutes: body.durationMinutes, description: body.description,
       ...(body.recurrencePreset === undefined ? {} : { recurrencePreset: body.recurrencePreset }),
       ...(body.timeZone === undefined ? {} : { timeZone: body.timeZone }),
       ...(body.checklistDrafts === undefined ? {} : {
@@ -214,8 +214,6 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = updateTaskBody.parse(request.body);
     const result = await services.actions.update(id, {
-      actionId: body.actionId,
-      deviceId: body.deviceId,
       expectedOccurrenceKey: body.expectedOccurrenceKey,
       rootPatch: body.rootPatch === null ? null : mapRootEditPatch(body.rootPatch),
       childMutations: body.childMutations.map(mapChildMutation)
@@ -226,7 +224,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = addChecklistItemBody.parse(request.body);
     const result = await services.actions.mutateChecklist(id, {
-      action: { actionId: body.actionId, deviceId: body.deviceId, expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey) },
+      expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
       mutations: [{ type: "add", clientMutationId: body.clientMutationId, title: body.title, description: body.description }]
     });
     return mutationResponse(body.actionId, result, services.snapshots);
@@ -235,7 +233,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id, childId } = checklistChildParams.parse(request.params);
     const body = editChecklistItemBody.parse(request.body);
     const result = await services.actions.mutateChecklist(id, {
-      action: { actionId: body.actionId, deviceId: body.deviceId, expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey) },
+      expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
       mutations: [{ type: "edit", clientMutationId: body.actionId, childId, expectedChildRevision: body.expectedChildRevision, title: body.title, description: body.description }]
     });
     return mutationResponse(body.actionId, result, services.snapshots);
@@ -245,7 +243,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       const { id, childId } = checklistChildParams.parse(request.params);
       const body = focusedChecklistItemBody.parse(request.body);
       const result = await services.actions.mutateChecklist(id, {
-        action: { actionId: body.actionId, deviceId: body.deviceId, expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey) },
+        expectedOccurrenceKey: requiredOccurrenceKey(body.expectedOccurrenceKey),
         mutations: [{ type: action, clientMutationId: body.actionId, childId, expectedChildRevision: body.expectedChildRevision }]
       });
       return mutationResponse(body.actionId, result, services.snapshots);

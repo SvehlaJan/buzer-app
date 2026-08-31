@@ -31,8 +31,6 @@ export interface CreateTaskInput {
   now?: string | undefined;
   requestId?: string | undefined;
   signal?: AbortSignal | undefined;
-  actionId?: string | undefined;
-  deviceId?: string | undefined;
 }
 
 export interface RootEditPatch {
@@ -53,8 +51,6 @@ export interface UpdateTaskRequest {
   childMutations?: readonly ChildMutation[] | undefined;
   requestId?: string | undefined;
   signal?: AbortSignal | undefined;
-  actionId?: string | undefined;
-  deviceId?: string | undefined;
 }
 
 export interface StartTaskOptions {
@@ -271,7 +267,7 @@ export class TaskActionService {
     if (opts.expectedOccurrenceKey !== undefined && opts.expectedOccurrenceKey !== null && opts.expectedOccurrenceKey !== task.occurrenceKey) {
       throw DomainError.staleOccurrence(this.getSnapshot());
     }
-    if (opts.expectedTaskRevision !== undefined && parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
+    if (opts.expectedTaskRevision !== undefined && this.parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
       throw DomainError.staleTask(this.getSnapshot());
     }
 
@@ -304,7 +300,7 @@ export class TaskActionService {
     if (opts.expectedOccurrenceKey !== undefined && opts.expectedOccurrenceKey !== null && opts.expectedOccurrenceKey !== task.occurrenceKey) {
       throw DomainError.staleOccurrence(this.getSnapshot());
     }
-    if (opts.expectedTaskRevision !== undefined && parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
+    if (opts.expectedTaskRevision !== undefined && this.parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
       throw DomainError.staleTask(this.getSnapshot());
     }
 
@@ -391,7 +387,7 @@ export class TaskActionService {
     if (opts.expectedOccurrenceKey !== undefined && opts.expectedOccurrenceKey !== null && opts.expectedOccurrenceKey !== task.occurrenceKey) {
       throw DomainError.staleOccurrence(this.getSnapshot());
     }
-    if (opts.expectedTaskRevision !== undefined && parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
+    if (opts.expectedTaskRevision !== undefined && this.parseRevision(opts.expectedTaskRevision) !== task.mirrorRevision) {
       throw DomainError.staleTask(this.getSnapshot());
     }
 
@@ -458,7 +454,7 @@ export class TaskActionService {
       });
     }
 
-    if (parseRevision(request.rootPatch.expectedTaskRevision) !== task.mirrorRevision) {
+    if (this.parseRevision(request.rootPatch.expectedTaskRevision) !== task.mirrorRevision) {
       throw DomainError.staleTask(this.getSnapshot());
     }
 
@@ -689,15 +685,15 @@ export class TaskActionService {
     return { children, valid: children.length <= 30 && !hasGrandchild && !invalidChild };
   }
 
+  private parseRevision(value: string): number {
+    const match = /^r:(\d+)$/.exec(value);
+    if (match === null) throw DomainError.staleTask(this.getSnapshot());
+    return Number(match[1]);
+  }
+
   private getSnapshot(): TaskSnapshot {
     return this.snapshotProvider();
   }
-}
-
-function parseRevision(value: string): number {
-  const match = /^r:(\d+)$/.exec(value);
-  if (match === null) throw DomainError.staleTask(undefined);
-  return Number(match[1]);
 }
 
 function normalizeOptionalText(value: string | null): string | null {

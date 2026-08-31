@@ -19,7 +19,6 @@ export interface ChecklistMutationRequest {
   signal?: AbortSignal | undefined;
   deadlineMs?: number | undefined;
   minimumExecutionBudgetMs?: number | undefined;
-  action?: { actionId?: string | undefined; deviceId?: string | undefined; expectedOccurrenceKey?: string | null | undefined } | undefined;
 }
 
 export interface TodoistChecklistServiceOptions {
@@ -74,7 +73,6 @@ export class TodoistChecklistService {
     if (
       request.expectedOccurrenceKey !== undefined &&
       request.expectedOccurrenceKey !== null &&
-      root.occurrenceKey !== null &&
       request.expectedOccurrenceKey !== root.occurrenceKey
     ) {
       throw DomainError.staleOccurrence(this.snapshotProvider());
@@ -134,7 +132,7 @@ export class TodoistChecklistService {
         continue;
       }
       const child = this.requireChild(root, mutation.childId);
-      if (child.mirrorRevision !== parseRevision(mutation.expectedChildRevision)) {
+      if (child.mirrorRevision !== this.parseRevision(mutation.expectedChildRevision)) {
         throw DomainError.staleChild(this.snapshotProvider());
       }
       if (mutation.type === "edit") {
@@ -248,6 +246,12 @@ export class TodoistChecklistService {
     return child;
   }
 
+  private parseRevision(value: string): number {
+    const match = /^r:(\d+)$/.exec(value);
+    if (match === null) throw DomainError.staleChild(this.snapshotProvider());
+    return Number(match[1]);
+  }
+
   private findChild(root: TaskWithCommitment, childId: string): TaskWithCommitment | null {
     const child = this.tasks.getById(childId) ?? this.tasks.getByTodoistTaskId(childId);
     return child === null || child.parentId !== root.todoistTaskId ? null : child;
@@ -296,12 +300,6 @@ function hasOwn(source: Record<string, unknown>, key: string): boolean {
 
 function invalidChildMutation(): DomainError {
   return domainError("forbidden_child_field", "Checklist items only accept their declared mutation fields");
-}
-
-function parseRevision(value: string): number {
-  const match = /^r:(\d+)$/.exec(value);
-  if (match === null) throw domainError("stale_child", "Checklist item revision is invalid", 409);
-  return Number(match[1]);
 }
 
 function requiredProjectId(root: TaskWithCommitment): string {

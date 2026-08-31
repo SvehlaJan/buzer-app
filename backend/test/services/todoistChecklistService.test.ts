@@ -245,6 +245,34 @@ describe("TodoistChecklistService", () => {
       statusCode: 422
     });
   });
+
+  it("rejects checklist mutation when expectedOccurrenceKey does not match root occurrence key", async () => {
+    const { service } = setup();
+    await expect(service.mutate("root", {
+      expectedOccurrenceKey: "mismatched-key",
+      mutations: [add("draft-1", "Valid title")]
+    })).rejects.toMatchObject({
+      code: "stale_occurrence",
+      statusCode: 409,
+      details: { snapshot: { authoritative: true } }
+    });
+  });
+
+  it("rejects checklist mutation with invalid child revision format attaching snapshot", async () => {
+    const { service } = setup({ children: [child("one")] });
+    await expect(service.mutate("root", {
+      mutations: [{
+        type: "check",
+        clientMutationId: "check-1",
+        childId: "child-one",
+        expectedChildRevision: "not-a-valid-revision"
+      }]
+    })).rejects.toMatchObject({
+      code: "stale_child",
+      statusCode: 409,
+      details: { snapshot: { authoritative: true } }
+    });
+  });
 });
 
 function setup(input: { children?: ReturnType<typeof child>[]; sync?: () => Promise<void> } = {}) {

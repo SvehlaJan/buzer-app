@@ -12,10 +12,11 @@ import { CollaboratorRepository } from "./repositories/collaboratorRepository.js
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
-import { TaskActionCoordinator } from "./services/taskActionCoordinator.js";
 import { TaskActionService } from "./services/taskActionService.js";
 import { TaskSnapshotService } from "./services/taskSnapshotService.js";
 import { TodoistOperationQueue } from "./services/todoistOperationQueue.js";
+import { TodoistCommandExecutor } from "./services/todoistCommandExecutor.js";
+import { TaskMutationRunner } from "./services/taskMutationRunner.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
 import { TodoistSyncService } from "./services/todoistSyncService.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
@@ -121,27 +122,25 @@ export function buildServer(options: BuildServerOptions) {
   const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
-  const coordinator = new TaskActionCoordinator({ db: options.db, roots: tasks, sync: synchronizer });
+  const queue = options.todoistQueue ?? new TodoistOperationQueue();
+  const executor = new TodoistCommandExecutor(options.todoist);
+  const runner = new TaskMutationRunner({
+    queue,
+    executor,
+    syncService: synchronizer,
+    snapshotService: snapshots,
+    observability
+  });
   const actions = new TaskActionService(
     options.db,
     tasks,
     projects,
-    options.todoist,
+    runner,
+    snapshots,
     options.currentUserId,
     options.escalationService ?? null,
     true,
-    {
-      rootActions: {
-        coordinator,
-        synchronize: () => synchronizer.syncOnce(),
-        snapshot: () => snapshots.getSnapshot(new Date().toISOString())
-      },
-      checklist: {
-        coordinator,
-        synchronize: () => synchronizer.syncOnce(),
-        snapshot: () => snapshots.getSnapshot(new Date().toISOString())
-      }
-    }
+    observability
   );
   app.register(async (scope) => {
     registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer });

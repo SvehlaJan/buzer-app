@@ -516,5 +516,25 @@ describe("TaskActionService", () => {
 
       expect(adapter.itemUpdates).toHaveLength(0);
     });
+
+    it("rejects edit when root revision is malformed attaching snapshot", async () => {
+      const { service, repo, adapter } = setupTestService();
+      insertCommittedTask(repo);
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: {
+          expectedTaskRevision: "bad-revision-format",
+          title: "Malformed edit"
+        },
+        childMutations: []
+      })).rejects.toMatchObject({
+        code: "stale_task",
+        statusCode: 409,
+        details: { snapshot: expect.any(Object) }
+      });
+
+      expect(adapter.itemUpdates).toHaveLength(0);
+    });
   });
 });
