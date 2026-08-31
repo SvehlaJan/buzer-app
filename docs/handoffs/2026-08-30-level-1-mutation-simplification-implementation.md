@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
-Date: 2026-08-30
-Status: Task 0 completed; ready for Task 1
+Date: 2026-08-31
+Status: Task 1 completed; ready for Task 2
 
 ## Task and plan status
 
@@ -9,7 +9,8 @@ Status: Task 0 completed; ready for Task 1
 - Worktree: `/Users/svehla/playground/buzer-app/.worktrees/level-1-mutation-simplification`
 - Branch: `feature/level-1-mutation-simplification`
 - Task 0 (Workspace preparation & Context7 lookups): COMPLETED
-- Next task: Task 1 (Retire reconciliation protocol and align repository guidance)
+- Task 1 (Retire reconciliation protocol and align repository guidance): COMPLETED (commit `295146a08053a34db7ef0cf6d45b3debb36d25d9`)
+- Next task: Task 2 (Introduce typed Todoist failures and bounded same-UUID command retry)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -41,6 +42,11 @@ Verification:
 - Evidence: Worktree `.worktrees/level-1-mutation-simplification` created on branch `feature/level-1-mutation-simplification`.
 
 Verification:
+- Command: `rg -n "action journal|action-journal|reconciliation_status|five minutes|5 minutes|Todoist polling" AGENTS.md .codex/skills .claude/skills docs/notes/action-reconciliation-protocol.md`
+- Result: PASS
+- Evidence: No active mandates remain in repository guidance. Old skills removed, historical notice added.
+
+Verification:
 - Command: `npm test && npm run typecheck` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
 - Evidence: 38 test files, 451 tests passed. TypeScript typecheck passed cleanly with zero errors.
@@ -52,9 +58,19 @@ Verification:
 
 ## Next Steps
 
-Execute Task 1 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 1: Retire the reconciliation protocol and align repository guidance.
+Execute Task 2 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 2: Introduce typed Todoist failures and bounded same-UUID command retry.
 - Task 3: Add process-wide FIFO and deadline admission.
 - Task 4: Simplify sync, recurrence rotation, and one-minute polling.
 - Task 5: Build one-shot mutation runner.
+- Task 6: Decouple task and checklist actions from the journal.
+- Task 7: Replace the HTTP mutation/sync contract and add forced refresh.
+- Task 8: Upgrade backend Sentry structured logs and enforce ownership.
+- Task 9: Remove journal persistence and migrate SQLite schema v7.
+- Task 10: Delete the coordinator and root mutex, then prove backend convergence.
+- Task 11: Simplify the shared Kotlin contract and add structured request logs.
+- Task 12: Simplify Android enforcement outcomes and Sentry ownership.
+- Task 13: Add session warnings, screen locks, forced Refresh, and Open Todoist.
+- Task 14: Remove pending/retry UX from blockers, Morning Review, and editors.
+- Task 15: Migrate and expand real-backend instrumentation.
+- Task 16: Final verification, rollout tooling, production canary, and Sentry closure.
