@@ -39,6 +39,10 @@ export class EscalationService {
     return this.sender.getHealth();
   }
 
+  async handleSecondDismissal(taskId: string): Promise<EscalationResult> {
+    return this.sendForTask(taskId, 2);
+  }
+
   async sendForTask(taskId: string, dismissCount: number): Promise<EscalationResult> {
     let task = this.tasks.getById(taskId);
     if (task === null) {

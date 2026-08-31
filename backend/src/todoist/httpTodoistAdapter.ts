@@ -250,7 +250,11 @@ export class HttpTodoistAdapter implements TodoistAdapter {
   }
 
   async itemClose(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {
-    await this.command(input.commandUuid, "item_close", { id: input.todoistTaskId }, undefined, options);
+    const args: Record<string, unknown> = { id: input.todoistTaskId };
+    if (input.resetSubtasks === true) {
+      args.reset_subtasks = true;
+    }
+    await this.command(input.commandUuid, "item_close", args, undefined, options);
   }
 
   async itemUncomplete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {

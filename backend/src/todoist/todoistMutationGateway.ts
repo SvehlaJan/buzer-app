@@ -68,6 +68,7 @@ export interface TodoistItemMoveInput {
 export interface TodoistItemIdentityInput {
   commandUuid: string;
   todoistTaskId: string;
+  resetSubtasks?: boolean;
 }
 
 export interface TodoistRecurringCompletionInput {
