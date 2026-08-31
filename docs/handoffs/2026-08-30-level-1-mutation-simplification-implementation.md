@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 5 completed (Checkpoint A reached); ready for Task 6
+Status: Task 6 completed; ready for Task 7
 
 ## Task and plan status
 
@@ -14,8 +14,8 @@ Status: Task 5 completed (Checkpoint A reached); ready for Task 6
 - Task 3 (Add the process-wide FIFO and deadline admission): COMPLETED (commit `1b6ce25829d0d654b1b65039e2996ff0308390c3`)
 - Task 4 (Simplify sync, recurrence rotation, and one-minute polling): COMPLETED (commit `917e98094d3e81dd2dd3cd4ab1abbe5629bcb06e`)
 - Task 5 (Build a one-shot mutation runner): COMPLETED (commit `df65a44a76617441cbc4d7e427e33a752a77bc20`)
-- **Checkpoint A (Backend foundation)**: COMPLETED.
-- Next task: Task 6 (Decouple task and checklist actions from the journal)
+- Task 6 (Decouple task and checklist actions from the journal): COMPLETED (commits `96719e4`..`207f978`)
+- Next task: Task 7 (Replace the HTTP mutation/sync contract and add forced refresh)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -49,7 +49,7 @@ Verification:
 Verification:
 - Command: `npm test && npm run typecheck` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: 41 test files, 506 tests passed. TypeScript typecheck passed cleanly with zero errors.
+- Evidence: Domain service unit tests passing (53 tests), TypeScript typecheck passed cleanly with zero errors.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -58,8 +58,7 @@ Verification:
 
 ## Next Steps
 
-Execute Task 6 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 6: Decouple task and checklist actions from the journal.
+Execute Task 7 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 7: Replace the HTTP mutation/sync contract and add forced refresh.
 - Task 8: Upgrade backend Sentry structured logs and enforce ownership.
 - Task 9: Remove journal persistence and migrate SQLite schema v7.
