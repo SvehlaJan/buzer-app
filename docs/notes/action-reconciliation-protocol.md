@@ -1,11 +1,18 @@
-# Action Reconciliation Protocol
+# Action Reconciliation Protocol [HISTORICAL / SUPERSEDED]
 
-Date: 2026-07-17
+> [!WARNING]
+> **HISTORICAL / SUPERSEDED**: This protocol has been superseded by the Level 1 mutation simplification architecture documented in [`docs/decisions/2026-08-30-level-1-mutation-simplification.md`](../decisions/2026-08-30-level-1-mutation-simplification.md) and [`docs/superpowers/specs/2026-08-30-level-1-mutation-simplification-design.md`](../superpowers/specs/2026-08-30-level-1-mutation-simplification-design.md).
+>
+> The action journal, command journal, replay fingerprints, root mutex, and reconciliation statuses (`reconciliation_pending`, etc.) have been removed in favor of a process-local FIFO, 1-minute polling, forced refresh, and session-only user warnings.
+>
+> This document is retained solely as a historical record of previous distributed-action design iterations and incident history. Do not use for new endpoints.
 
-The full protocol referenced by the `buzer-action-reconciliation` skill
+Date: 2026-07-17 (Superseded: 2026-08-30)
+
+The full protocol previously referenced by the retired `buzer-action-reconciliation` skill
 (`.codex/skills/buzer-action-reconciliation/SKILL.md` /
-`.claude/skills/buzer-action-reconciliation/SKILL.md`). Read this file before
-implementing a new mutation endpoint.
+`.claude/skills/buzer-action-reconciliation/SKILL.md`). Read this file only for historical
+context on past incident history.
 
 ## Why This Exists
 

@@ -7,6 +7,12 @@ This repository is a personal Todoist commitment companion. It has two MVP deplo
 
 The approved product spec is `docs/superpowers/specs/2026-04-30-todoist-commitment-companion-design.md`. Treat that file as product truth unless a later decision document explicitly changes it.
 
+The approved mutation architecture is
+`docs/superpowers/specs/2026-08-30-level-1-mutation-simplification-design.md` and
+`docs/decisions/2026-08-30-level-1-mutation-simplification.md`. It supersedes the
+2026-07-16 atomic mutation reconciliation design and protocol, which are retained only as
+historical records.
+
 The approved observability/bug-reporting direction is
 `docs/superpowers/specs/2026-08-22-lean-observability-design.md` and
 `docs/decisions/2026-08-22-lean-observability.md`, amended for searchable Android logs by
@@ -147,14 +153,14 @@ In scope:
 - Android-native alarms, blocker activities, widget, boot rescheduling, and permission health.
 - Node.js/TypeScript backend.
 - SQLite on the VPS.
-- Todoist polling every 5 minutes.
+- Todoist polling every minute.
 - `whatsapp-web.js` escalation.
 
 Out of scope until a later decision:
 
 - macOS app.
 - calendar blocking.
-- Todoist webhooks.
+- Todoist webhooks (backlog; see `docs/decisions/2026-08-30-level-1-mutation-simplification.md`).
 - FCM push invalidation.
 - Firebase/Supabase realtime layer.
 - public multi-user product behavior.
