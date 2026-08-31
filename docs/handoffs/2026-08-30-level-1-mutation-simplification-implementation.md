@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 7 completed; ready for Task 8
+Status: Task 8 completed; ready for Task 9
 
 ## Task and plan status
 
@@ -16,7 +16,8 @@ Status: Task 7 completed; ready for Task 8
 - Task 5 (Build a one-shot mutation runner): COMPLETED (commit `df65a44a76617441cbc4d7e427e33a752a77bc20`)
 - Task 6 (Decouple task and checklist actions from the journal): COMPLETED (commits `96719e4`..`207f978`)
 - Task 7 (Replace the HTTP mutation/sync contract and add forced refresh): COMPLETED (commit `1600a5015b630b91e9883526da0c22646d510e4a`)
-- Next task: Task 8 (Upgrade backend Sentry structured logs and enforce ownership)
+- Task 8 (Upgrade backend Sentry structured logs and enforce ownership): COMPLETED (commits `ce906db`..`0f4e6cd`)
+- Next task: Task 9 (Remove journal persistence and migrate SQLite schema v7)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -50,7 +51,7 @@ Verification:
 Verification:
 - Command: `npm test && npm run typecheck && npm run build` (in `.worktrees/level-1-mutation-simplification/backend`)
 - Result: PASS
-- Evidence: 41 test files, 463 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
+- Evidence: 41 test files, 476 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
 - Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug` (in `.worktrees/level-1-mutation-simplification/client`)
@@ -59,8 +60,7 @@ Verification:
 
 ## Next Steps
 
-Execute Task 8 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 8: Upgrade backend Sentry structured logs and enforce ownership.
+Execute Task 9 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 9: Remove journal persistence and migrate SQLite schema v7.
 - Task 10: Delete the coordinator and root mutex, then prove backend convergence.
 - Task 11: Simplify the shared Kotlin contract and add structured request logs.
