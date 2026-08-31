@@ -312,7 +312,7 @@ export class SentryBackendObservability implements BackendObservability {
       scope.setLevel("error");
       if (context) {
         for (const [key, value] of Object.entries(context)) {
-          if (value !== undefined) {
+          if (value !== undefined && !isForbiddenLogAttributeKey(key)) {
             scope.setTag(key, String(value));
           }
         }
