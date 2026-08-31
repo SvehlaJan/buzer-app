@@ -26,13 +26,9 @@ import app.buzer.android.ui.screens.MorningReviewScreen
 import app.buzer.android.ui.screens.buildMorningReviewScreenState
 import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotReducer
-import java.time.Instant
-import java.time.ZoneId
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 

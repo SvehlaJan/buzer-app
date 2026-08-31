@@ -14,7 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ProjectCollaborator
@@ -319,7 +318,6 @@ internal fun TaskEditorUpdateScreen(
     onRetryChoices: () -> Unit,
     contentValidation: () -> TaskEditorUpdateContentValidation = { TaskEditorUpdateContentValidation() },
     isDirty: (TaskEditorDraft) -> Boolean,
-    /** Must reuse its captured action ID so pending retries only refresh backend authority. */
     onUpdate: suspend (TaskEditorDraft) -> CoordinatorActionResult,
     onSuccess: () -> Unit,
     onCancel: () -> Unit,
