@@ -285,7 +285,7 @@ class DeadlineBlockerActivity : ComponentActivity() {
                     }
                     CoordinatorActionResult.ChildActionInFlight -> {
                         errorMessage = "Checklist update is already in progress"
-                        actionState = BlockerActionState.Failed(errorMessage!!)
+                        actionState = BlockerActionState.Failed("Checklist update is already in progress")
                     }
                 }
             } catch (error: CancellationException) {

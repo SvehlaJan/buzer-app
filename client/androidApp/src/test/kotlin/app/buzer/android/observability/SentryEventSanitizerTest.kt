@@ -3,9 +3,13 @@ package app.buzer.android.observability
 import io.sentry.Breadcrumb
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
+import io.sentry.SentryLogEvent
+import io.sentry.SentryLogEventAttributeValue
+import io.sentry.SentryLogLevel
 import io.sentry.protocol.Message
 import io.sentry.protocol.Request
 import io.sentry.protocol.SentryException
+import io.sentry.protocol.SentryId
 import io.sentry.protocol.User
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -203,6 +207,43 @@ class SentryEventSanitizerTest {
         val headers = nestedObj["headers"] as List<Any?>
         assertEquals("Cookie: [REDACTED]", headers[0])
         assertEquals("[REDACTED]", nestedObj["token"])
+    }
+
+    @Test
+    fun sanitizesLogBodyAndAttributes() {
+        val logEvent = SentryLogEvent(
+            SentryId(),
+            0.0,
+            "Log record with Authorization: Bearer SECRET_BEARER_123 and todoist_token=SECRET_TODOIST_123",
+            SentryLogLevel.INFO
+        ).apply {
+            setAttribute("todoist_token", SentryLogEventAttributeValue("string", "SECRET_TODOIST_123"))
+            setAttribute("authorization", SentryLogEventAttributeValue("string", "Bearer SECRET_BEARER_123"))
+            setAttribute("api_key", SentryLogEventAttributeValue("string", "SECRET_ANDROID_123"))
+            setAttribute("details", SentryLogEventAttributeValue("string", "Connecting with password=\"SECRET_PASSWORD_999\""))
+            setAttribute("screen_name", SentryLogEventAttributeValue("string", "home_screen"))
+        }
+
+        val sanitized = SentryEventSanitizer.sanitizeLog(logEvent)
+
+        // Verify body redaction
+        assertFalse(sanitized.body.contains("SECRET_BEARER_123"))
+        assertFalse(sanitized.body.contains("SECRET_TODOIST_123"))
+        assertTrue(sanitized.body.contains("[REDACTED]"))
+
+        // Verify credential key attributes mapped to [REDACTED]
+        assertEquals("[REDACTED]", sanitized.attributes?.get("todoist_token")?.value)
+        assertEquals("[REDACTED]", sanitized.attributes?.get("authorization")?.value)
+        assertEquals("[REDACTED]", sanitized.attributes?.get("api_key")?.value)
+
+        // Verify non-credential key with secret in value has secret redacted
+        val detailsVal = sanitized.attributes?.get("details")?.value as? String
+        assertNotNull(detailsVal)
+        assertFalse(detailsVal.contains("SECRET_PASSWORD_999"))
+        assertTrue(detailsVal.contains("[REDACTED]"))
+
+        // Verify safe attribute preserved
+        assertEquals("home_screen", sanitized.attributes?.get("screen_name")?.value)
     }
 
 }

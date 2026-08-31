@@ -40,7 +40,11 @@ class HomeDoneActionHandler(
     /** The request is created by the UI once. */
     suspend fun completeTask(taskId: String, request: TaskActionRequest) {
         mutex.withLock {
-            handleCompletionResult(this.completeTask.invoke(taskId, request))
+            val result = completeTask.invoke(taskId, request)
+            if (result is CoordinatorActionResult.TransportFailure) {
+                retryCurrentAction = { completeTask.invoke(taskId, request) }
+            }
+            handleCompletionResult(result)
         }
     }
 
@@ -72,7 +76,6 @@ class HomeDoneActionHandler(
             }
 
             is CoordinatorActionResult.TransportFailure -> {
-                retryCurrentAction = null
                 setStatusMessage(result.message)
             }
 

@@ -217,6 +217,73 @@ class HomeDoneActionHandlerTest {
         assertEquals(initialRequest, receivedRequests.first())
     }
 
+    @Test
+    fun retryCompletionReinvokesCompleteTaskOnTransportFailureAndDoesNothingWhenCleared() = runBlocking {
+        var completeCount = 0
+        var shouldFail = true
+        val appliedSnapshots = mutableListOf<SnapshotViewState>()
+        var statusMessage: String? = null
+        val refreshedSnapshot = emptySnapshot(scheduleVersion = 50)
+
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> emptySnapshot() },
+            completeTask = { _, _ ->
+                completeCount += 1
+                if (shouldFail) {
+                    CoordinatorActionResult.TransportFailure(false, "503 Service Unavailable")
+                } else {
+                    CoordinatorActionResult.Success
+                }
+            },
+            latestSnapshot = { refreshedSnapshot },
+            applySnapshot = appliedSnapshots::add,
+            setStatusMessage = { statusMessage = it }
+        )
+
+        // 1. Initial completeTask fails with TransportFailure
+        handler.completeTask("task-1", action())
+        assertEquals(1, completeCount)
+        assertEquals("503 Service Unavailable", statusMessage)
+        assertEquals(0, appliedSnapshots.size)
+
+        // 2. retryCompletion() retries completeTask while failing
+        handler.retryCompletion()
+        assertEquals(2, completeCount)
+        assertEquals("503 Service Unavailable", statusMessage)
+        assertEquals(0, appliedSnapshots.size)
+
+        // 3. retryCompletion() succeeds when backend recovers
+        shouldFail = false
+        handler.retryCompletion()
+        assertEquals(3, completeCount)
+        assertNull(statusMessage)
+        assertEquals(listOf(refreshedSnapshot), appliedSnapshots)
+
+        // 4. retryCompletion() does nothing once cleared on Success
+        handler.retryCompletion()
+        assertEquals(3, completeCount)
+    }
+
+    @Test
+    fun retryCompletionDoesNothingIfNoTransportFailureOccurred() = runBlocking {
+        var completeCount = 0
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ -> emptySnapshot() },
+            completeTask = { _, _ ->
+                completeCount += 1
+                CoordinatorActionResult.Success
+            },
+            latestSnapshot = { emptySnapshot() },
+            applySnapshot = {}
+        )
+
+        handler.completeTask("task-1", action())
+        assertEquals(1, completeCount)
+
+        handler.retryCompletion()
+        assertEquals(1, completeCount)
+    }
+
     private fun emptySnapshot(scheduleVersion: Long = 1): SnapshotViewState =
         SnapshotViewState(
             scheduleVersion = scheduleVersion,
