@@ -1,7 +1,7 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: Task 11 completed; ready for Task 12
+Status: Task 12 completed; ready for Task 13
 
 ## Task and plan status
 
@@ -20,7 +20,8 @@ Status: Task 11 completed; ready for Task 12
 - Task 9 (Remove journal persistence and migrate SQLite schema v7): COMPLETED (commit `6c737ca1855f839ed9b8f0ff8c8b44509f651fe8`)
 - Task 10 (Delete the coordinator and root mutex, then prove backend convergence): COMPLETED (commit `2df59ca0a14891a98d092ac11049b0bd16b09512`) - Checkpoint B
 - Task 11 (Simplify the shared Kotlin contract and add structured request logs): COMPLETED (commit `1e2b5ea5fd3640bd3f17b3b22388455989a36547`)
-- Next task: Task 12 (Simplify Android enforcement outcomes and Sentry ownership)
+- Task 12 (Simplify Android enforcement outcomes and Sentry ownership): COMPLETED (commits `7db6dc6`..`662c428`)
+- Next task: Task 13 (Add session warnings, screen locks, forced Refresh, and Open Todoist)
 
 ## Context7 Lookups and Resolved Documentation
 
@@ -57,14 +58,13 @@ Verification:
 - Evidence: 38 test files, 440 tests passed. TypeScript typecheck passed cleanly with zero errors. Build succeeded.
 
 Verification:
-- Command: `./gradlew :shared:testAndroidHostTest` (in `.worktrees/level-1-mutation-simplification/client`)
+- Command: `./gradlew :androidApp:testDebugUnitTest :shared:testAndroidHostTest` (in `.worktrees/level-1-mutation-simplification/client`)
 - Result: PASS
-- Evidence: 20 actionable tasks, all shared tests passed.
+- Evidence: 55 actionable tasks executed, all 395 unit tests in `androidApp` and all shared tests passed.
 
 ## Next Steps
 
-Execute Task 12 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
-- Task 12: Simplify Android enforcement outcomes and Sentry ownership.
+Execute Task 13 onwards sequentially in the dedicated worktree `.worktrees/level-1-mutation-simplification`:
 - Task 13: Add session warnings, screen locks, forced Refresh, and Open Todoist.
 - Task 14: Remove pending/retry UX from blockers, Morning Review, and editors.
 - Task 15: Migrate and expand real-backend instrumentation.
