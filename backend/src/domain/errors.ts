@@ -21,14 +21,6 @@ export class DomainError extends Error {
     return actionError("stale_occurrence", "Task occurrence is no longer current", snapshot, 409);
   }
 
-  static actionIdReused(snapshot: unknown): DomainError {
-    return actionError("action_id_reused", "Action ID was already used for a different request", snapshot, 409);
-  }
-
-  static reconciliationPending(snapshot: unknown): DomainError {
-    return actionError("reconciliation_pending", "Action is awaiting Todoist confirmation", snapshot, 202);
-  }
-
   static unsupportedHierarchy(snapshot: unknown): DomainError {
     return actionError("unsupported_hierarchy", "Task hierarchy is not supported", snapshot, 422);
   }

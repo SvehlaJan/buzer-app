@@ -5,8 +5,7 @@ import {
   TodoistCommandExecutor
 } from "../../src/services/todoistCommandExecutor.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
-import type { TodoistAdapter } from "../../src/todoist/todoistAdapter.js";
-import type { TodoistCommand } from "../../src/todoist/todoistMutationGateway.js";
+import type { TodoistAdapter, TodoistCommand } from "../../src/todoist/todoistAdapter.js";
 
 interface RecordedCall {
   method: string;

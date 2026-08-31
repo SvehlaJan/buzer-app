@@ -1,6 +1,10 @@
-import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
+import type {
+  TodoistAdapter,
+  TodoistCommand,
+  TodoistItemAddInput,
+  TodoistItemAddResult
+} from "../todoist/todoistAdapter.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
-import type { TodoistCommand, TodoistItemAddInput, TodoistItemAddResult } from "../todoist/todoistMutationGateway.js";
 
 export const MAX_COMMAND_ATTEMPTS = 2;
 export const MAX_HTTP_ATTEMPT_TIMEOUT_MS = 5000;

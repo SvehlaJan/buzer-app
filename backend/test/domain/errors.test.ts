@@ -6,8 +6,6 @@ describe("DomainError action factories", () => {
     ["staleTask", "stale_task", 409],
     ["staleChild", "stale_child", 409],
     ["staleOccurrence", "stale_occurrence", 409],
-    ["actionIdReused", "action_id_reused", 409],
-    ["reconciliationPending", "reconciliation_pending", 202],
     ["unsupportedHierarchy", "unsupported_hierarchy", 422],
     ["childrenIncomplete", "children_incomplete", 422],
     ["activityLogFull", "activity_log_full", 422]

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
-import type { TodoistCommand } from "../todoist/todoistMutationGateway.js";
+import type { TodoistCommand } from "../todoist/todoistAdapter.js";
 import type { TodoistCommandExecutor } from "./todoistCommandExecutor.js";
 import type { QueueExecutionContext, TodoistOperationQueue } from "./todoistOperationQueue.js";
 import type { TaskSnapshotService } from "./taskSnapshotService.js";

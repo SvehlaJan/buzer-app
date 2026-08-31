@@ -9,8 +9,7 @@ import {
 import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.js";
 import { TodoistCommandExecutor } from "../../src/services/todoistCommandExecutor.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
-import type { TodoistAdapter } from "../../src/todoist/todoistAdapter.js";
-import type { TodoistCommand } from "../../src/todoist/todoistMutationGateway.js";
+import type { TodoistAdapter, TodoistCommand } from "../../src/todoist/todoistAdapter.js";
 import { RecordingBackendObservability } from "../fakes/recordingBackendObservability.js";
 
 function createMockSnapshot(overrides?: Partial<TaskSnapshot>): TaskSnapshot {

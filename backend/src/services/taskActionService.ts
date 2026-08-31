@@ -12,8 +12,7 @@ import { TaskMutationRunner, type MutationRunResult, type TaskSnapshot } from ".
 import type { TaskSnapshotService } from "./taskSnapshotService.js";
 import type { EscalationService } from "./escalationService.js";
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
-import type { TodoistCommand } from "../todoist/todoistMutationGateway.js";
-import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
+import type { TodoistAdapter, TodoistCommand } from "../todoist/todoistAdapter.js";
 import { TodoistOperationQueue } from "./todoistOperationQueue.js";
 import { TodoistCommandExecutor } from "./todoistCommandExecutor.js";
 

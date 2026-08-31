@@ -1,12 +1,6 @@
 import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
-  TodoistLegacyUpdateCommandIdentities,
-  TodoistUpdateTaskInput,
-  TodoistSyncResult
-} from "./todoistAdapter.js";
-import { parseRetryAfterHeader, TodoistOperationError } from "./todoistErrors.js";
-import type {
   TodoistDueMutation,
   TodoistDurationMutation,
   TodoistItemAddInput,
@@ -14,8 +8,12 @@ import type {
   TodoistItemIdentityInput,
   TodoistItemMoveInput,
   TodoistItemUpdateInput,
-  TodoistRecurringCompletionInput
-} from "./todoistMutationGateway.js";
+  TodoistLegacyUpdateCommandIdentities,
+  TodoistRecurringCompletionInput,
+  TodoistSyncResult,
+  TodoistUpdateTaskInput
+} from "./todoistAdapter.js";
+import { parseRetryAfterHeader, TodoistOperationError } from "./todoistErrors.js";
 import type {
   TodoistCollaboratorMirror,
   TodoistCollaboratorStateMirror,

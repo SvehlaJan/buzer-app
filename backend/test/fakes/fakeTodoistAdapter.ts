@@ -2,18 +2,16 @@ import type {
   TodoistAdapter,
   TodoistCreateTaskInput,
   TodoistCreateTaskResult,
-  TodoistLegacyUpdateCommandIdentities,
-  TodoistUpdateTaskInput,
-  TodoistSyncResult
-} from "../../src/todoist/todoistAdapter.js";
-import type {
   TodoistItemAddInput,
   TodoistItemAddResult,
   TodoistItemIdentityInput,
   TodoistItemMoveInput,
   TodoistItemUpdateInput,
-  TodoistRecurringCompletionInput
-} from "../../src/todoist/todoistMutationGateway.js";
+  TodoistLegacyUpdateCommandIdentities,
+  TodoistRecurringCompletionInput,
+  TodoistSyncResult,
+  TodoistUpdateTaskInput
+} from "../../src/todoist/todoistAdapter.js";
 
 export class FakeTodoistAdapter implements TodoistAdapter {
   syncResults: QueuedSyncResult[] = [];

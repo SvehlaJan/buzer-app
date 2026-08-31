@@ -1,22 +1,20 @@
 import type {
   TodoistAdapter,
+  TodoistChildItemAddInput,
   TodoistCreateTaskInput,
   TodoistCreateTaskResult,
-  TodoistLegacyUpdateCommandIdentities,
-  TodoistSyncResult,
-  TodoistUpdateTaskInput
-} from "../../src/todoist/todoistAdapter.js";
-import type {
-  TodoistChildItemAddInput,
   TodoistDueMutation,
   TodoistItemAddInput,
   TodoistItemAddResult,
   TodoistItemIdentityInput,
   TodoistItemMoveInput,
   TodoistItemUpdateInput,
+  TodoistLegacyUpdateCommandIdentities,
   TodoistRecurringCompletionInput,
-  TodoistRootItemAddInput
-} from "../../src/todoist/todoistMutationGateway.js";
+  TodoistRootItemAddInput,
+  TodoistSyncResult,
+  TodoistUpdateTaskInput
+} from "../../src/todoist/todoistAdapter.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import type {
   TodoistCollaboratorMirror,

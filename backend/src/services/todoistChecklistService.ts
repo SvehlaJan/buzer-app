@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DomainError } from "../domain/errors.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
-import type { TodoistCommand } from "../todoist/todoistMutationGateway.js";
+import type { TodoistCommand } from "../todoist/todoistAdapter.js";
 import type { TaskMutationRunner, MutationRunResult, TaskSnapshot } from "./taskMutationRunner.js";
 import type { TaskSnapshotService } from "./taskSnapshotService.js";
 
