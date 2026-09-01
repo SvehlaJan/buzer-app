@@ -35,8 +35,10 @@ interface QueueItem<T = unknown> {
  * 4. Admission control: operations whose deadline has expired or whose remaining
  *    execution budget is insufficient (< minimumExecutionBudgetMs) are rejected
  *    before execution with a typed TodoistOperationError("timeout", ..., { error_code: "backend_busy" }).
- * 5. Immediate cancellation / dequeue if an operation's AbortSignal fires while waiting.
- * 6. Pure non-durable in-memory drain loop without SQLite tables, journals, or root mutexes.
+ * 5. Immediate cancellation / dequeue if a client's AbortSignal fires while waiting.
+ * 6. A queue-owned execution signal aborts active work at the remaining total deadline;
+ *    client disconnection no longer controls work after dequeue.
+ * 7. Pure non-durable in-memory drain loop without SQLite tables, journals, or root mutexes.
  *
  * NON-REENTRANCY WARNING:
  * This queue is strictly non-reentrant. Top-level entry points (HTTP mutation handlers,
@@ -155,17 +157,34 @@ export class TodoistOperationQueue {
       }
 
       this.isProcessing = true;
+      let executionTimer: NodeJS.Timeout | null = null;
       try {
+        const executionController = new AbortController();
         const ctx: QueueExecutionContext = {
-          signal: item.options.signal ?? new AbortController().signal,
+          signal: executionController.signal,
           remainingMs,
           queueWaitMs,
         };
-        const result = await item.callback(ctx);
+        const callbackPromise = item.callback(ctx);
+        const deadlinePromise = new Promise<never>((_resolve, reject) => {
+          if (!Number.isFinite(remainingMs)) {
+            return;
+          }
+          executionTimer = setTimeout(() => {
+            const error = this.createExecutionTimeoutError(item.options);
+            executionController.abort(error);
+            reject(error);
+          }, remainingMs);
+          executionTimer.unref?.();
+        });
+        const result = await Promise.race([callbackPromise, deadlinePromise]);
         item.resolve(result);
       } catch (err) {
         item.reject(err);
       } finally {
+        if (executionTimer !== null) {
+          clearTimeout(executionTimer);
+        }
         this.isProcessing = false;
       }
     }
@@ -174,6 +193,16 @@ export class TodoistOperationQueue {
   private createTimeoutError(options: QueueRunOptions): TodoistOperationError {
     const safeAttributes: Record<string, string | number> = {
       error_code: "backend_busy",
+      operation: options.operation,
+    };
+    if (options.requestId) {
+      safeAttributes.request_id = options.requestId;
+    }
+    return new TodoistOperationError("timeout", undefined, safeAttributes);
+  }
+
+  private createExecutionTimeoutError(options: QueueRunOptions): TodoistOperationError {
+    const safeAttributes: Record<string, string | number> = {
       operation: options.operation,
     };
     if (options.requestId) {

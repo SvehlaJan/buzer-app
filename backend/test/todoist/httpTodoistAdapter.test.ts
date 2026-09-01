@@ -231,6 +231,22 @@ describe("HttpTodoistAdapter", () => {
     });
   });
 
+  it("passes an optional AbortSignal through the Todoist read sync request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_token: "next-token",
+      items: []
+    })));
+    const adapter = new HttpTodoistAdapter("todoist-token", "https://todoist.test/api/v1");
+    const signal = new AbortController().signal;
+
+    await adapter.sync("*", { signal });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://todoist.test/api/v1/sync",
+      expect.objectContaining({ signal })
+    );
+  });
+
   it("sync maps Todoist projects and collaborator membership", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_token: "project-token",

@@ -77,6 +77,7 @@ describe("TodoistPoller", () => {
       expect.any(Function)
     );
     expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
   });
 
   it("gracefully handles a busy queue / deadline timeout by skipping without throwing", async () => {

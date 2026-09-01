@@ -218,6 +218,44 @@ describe("HTTP routes", () => {
     expect(adapter.syncTokens).toEqual(["ready-token"]);
   });
 
+  it("passes the queue execution signal to forced refresh sync", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    const synchronizer = new TodoistSyncService(
+      db,
+      new TaskRepository(db),
+      new ProjectRepository(db),
+      adapter,
+      "user-self"
+    );
+    const syncOnce = vi.spyOn(synchronizer, "syncOnce").mockResolvedValue({
+      hasChanges: false,
+      changedTaskCount: 0,
+      changedTaskIds: [],
+      changedProjectCount: 0,
+      changedCollaboratorCount: 0
+    });
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter,
+      synchronizer
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot?forceRefresh=true",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+  });
+
   it("rejects invalid forceRefresh query parameters with 400", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -265,6 +303,73 @@ describe("HTTP routes", () => {
     });
   });
 
+  it("captures a forced-refresh parse/internal defect while still returning the typed warning", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    const internalError = new TodoistOperationError("parse");
+    adapter.sync = vi.fn().mockRejectedValue(internalError);
+    const observability = new RecordingBackendObservability();
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter,
+      observability
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot?forceRefresh=true",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "forced_refresh_failed" });
+    expect(observability.exceptions).toEqual([{
+      error: internalError,
+      context: {
+        marker: "forced_refresh_internal_defect",
+        operation: "force_refresh",
+        request_id: expect.any(String)
+      }
+    }]);
+    expect(observability.requestFailures).toHaveLength(0);
+  });
+
+  it("keeps operational forced-refresh failures warning-only", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    adapter.sync = vi.fn().mockRejectedValue(new TodoistOperationError("transport"));
+    const observability = new RecordingBackendObservability();
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter,
+      observability
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot?forceRefresh=true",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(observability.logs).toContainEqual(expect.objectContaining({
+      level: "warn",
+      marker: "forced_refresh_failed"
+    }));
+    expect(observability.exceptions).toHaveLength(0);
+    expect(observability.requestFailures).toHaveLength(0);
+  });
+
   it("returns 503 backend_busy when forced refresh cannot acquire queue budget", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -289,9 +394,38 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({
-      code: "backend_busy"
+    expect(response.json()).toEqual({
+      code: "backend_busy",
+      message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly.",
+      snapshot: expect.any(Object)
     });
+  });
+
+  it("maps an active forced-refresh deadline timeout to forced_refresh_failed, not backend_busy", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const queue = new TodoistOperationQueue();
+    queue.run = vi.fn().mockRejectedValue(
+      new TodoistOperationError("timeout", undefined, { operation: "force_refresh" })
+    );
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: new FakeTodoistAdapter(),
+      todoistQueue: queue
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot?forceRefresh=true",
+      headers: { authorization: "Bearer secret" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ code: "forced_refresh_failed" });
   });
 
   it("returns 404 for removed POST /tasks/sync", async () => {
@@ -408,6 +542,86 @@ describe("HTTP routes", () => {
     expect(adapter.itemCloses).toEqual([
       expect.objectContaining({ todoistTaskId: "todoist-child-1" })
     ]);
+  });
+
+  it("does not treat a parsed real-socket mutation request as pre-aborted", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-socket", todoistTaskId: "todoist-socket", title: "Socket mutation", description: null,
+      projectId: "project-family", assigneeId: "user-self", creatorId: "user-self",
+      dueDatetime: "2026-07-15T18:00:00Z", durationMinutes: 30, completedAt: null, deletedAt: null,
+      rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    setOccurrence(db, "task-socket", "2026-07-15T18:00:00Z");
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter
+    });
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(`${address}/tasks/task-socket/done`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer secret",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ expectedOccurrenceKey: "occurrence-1" })
+    });
+    const body = await response.json();
+    await app.close();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ snapshot: expect.any(Object) });
+    expect(adapter.itemCloses).toEqual([
+      expect.objectContaining({ todoistTaskId: "todoist-socket" })
+    ]);
+  });
+
+  it("states that nothing was sent when a mutation expires before execution", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-busy", todoistTaskId: "todoist-busy", title: "Busy mutation", description: null,
+      projectId: "project-family", assigneeId: "user-self", creatorId: "user-self",
+      dueDatetime: "2026-07-15T18:00:00Z", durationMinutes: 30, completedAt: null, deletedAt: null,
+      rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    setOccurrence(db, "task-busy", "2026-07-15T18:00:00Z");
+    const queue = new TodoistOperationQueue();
+    queue.run = vi.fn().mockRejectedValue(
+      new TodoistOperationError("timeout", undefined, { error_code: "backend_busy" })
+    );
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter,
+      todoistQueue: queue
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/tasks/task-busy/done",
+      headers: { authorization: "Bearer secret" },
+      payload: { expectedOccurrenceKey: "occurrence-1" }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      code: "backend_busy",
+      message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly."
+    });
+    expect(adapter.itemCloses).toHaveLength(0);
   });
 
   it("handles local task action routes and device check-in", async () => {

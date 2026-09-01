@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 
 describe("TodoistOperationQueue", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("executes operations sequentially in strict FIFO start order", async () => {
     const queue = new TodoistOperationQueue();
     const order: string[] = [];
@@ -348,19 +352,62 @@ describe("TodoistOperationQueue", () => {
     expect(queue.queuedCount).toBe(0);
   });
 
-  it("removes abort event listener when item begins execution", async () => {
+  it("uses client cancellation only while waiting, then gives active work a queue deadline signal", async () => {
     const queue = new TodoistOperationQueue();
     const ac = new AbortController();
 
-    let executed = false;
-    await queue.run(
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let executionSignal: AbortSignal | undefined;
+    const running = queue.run(
       { operation: "test_listener", deadlineMs: 5000, signal: ac.signal },
       async (ctx) => {
-        executed = true;
-        expect(ctx.signal).toBe(ac.signal);
+        executionSignal = ctx.signal;
+        await gate;
       }
     );
 
-    expect(executed).toBe(true);
+    await vi.waitFor(() => expect(executionSignal).toBeDefined());
+    expect(executionSignal).not.toBe(ac.signal);
+    ac.abort(new Error("Client disconnected after dequeue"));
+    expect(executionSignal?.aborted).toBe(false);
+
+    release?.();
+    await expect(running).resolves.toBeUndefined();
+  });
+
+  it("aborts active work at its remaining total deadline and releases the next FIFO entry", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    let executionSignal: AbortSignal | undefined;
+    const first = queue.run(
+      { operation: "hung_sync", requestId: "req-active-timeout", deadlineMs: 1000 },
+      async (ctx) => {
+        executionSignal = ctx.signal;
+        await new Promise<void>(() => {});
+      }
+    );
+    const secondCallback = vi.fn().mockResolvedValue("next-ran");
+    const second = queue.run(
+      { operation: "next", deadlineMs: 5000 },
+      secondCallback
+    );
+    const firstRejection = expect(first).rejects.toMatchObject({
+      kind: "timeout",
+      safeAttributes: {
+        operation: "hung_sync",
+        request_id: "req-active-timeout"
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(executionSignal?.aborted).toBe(true);
+    await firstRejection;
+    await expect(second).resolves.toBe("next-ran");
+    expect(secondCallback).toHaveBeenCalledOnce();
+    expect(queue.activeCount).toBe(0);
   });
 });
