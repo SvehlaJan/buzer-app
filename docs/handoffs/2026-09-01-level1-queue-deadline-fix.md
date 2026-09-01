@@ -25,8 +25,9 @@ Status: DONE_WITH_CONCERNS
   to remove waiting work.
 - Pre-execution timeout errors are tagged `failure_stage=waiting` and `backend_busy`;
   active deadline errors are tagged `failure_stage=active` and
-  `todoist_operation_deadline`. The narrow TaskMutationRunner boundary maps an active
-  deadline conservatively to `delivery_unknown`, never busy/nothing-sent.
+  `todoist_operation_deadline`. TaskMutationRunner preserves the authoritative phase:
+  acknowledged commands map to `accepted_stale`, explicit rejection stays `rejected`,
+  and only unresolved delivery maps to `delivery_unknown`; none map to busy/nothing-sent.
 - `TodoistSyncService.syncOnce`/`syncNow` accept optional signal options and pass the signal
   to `TodoistAdapter.sync`. The poller and forced refresh route pass their queue execution
   signals to raw sync. The HTTP adapter already forwarded read-sync signals to `fetch`; a
@@ -52,7 +53,6 @@ Status: DONE_WITH_CONCERNS
 - `backend/test/services/todoistSyncService.test.ts`
 - `backend/test/todoist/httpTodoistAdapter.test.ts`
 - `docs/handoffs/2026-09-01-level1-queue-deadline-fix.md`
-- `.agents/tasks/level1-queue-deadline-fix.yaml`
 
 ## Red/green evidence
 
@@ -83,12 +83,26 @@ Verification:
 - Result: PASS (GREEN)
 - Evidence: 7 test files and 129 tests passed with no warnings or unhandled rejections.
 
+## Outcome-preservation follow-up red/green evidence
+
+Verification:
+- Command: `npm test -- test/services/taskMutationRunner.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: 2 focused failures showed acknowledged-command post-sync timeout and explicit
+  rejection plus best-effort-sync timeout both incorrectly returned `delivery_unknown`.
+
+Verification:
+- Command: `npm test -- test/services/taskMutationRunner.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 17 TaskMutationRunner tests passed; active deadlines now preserve accepted,
+  rejected, and unresolved-delivery phases.
+
 ## Final verification
 
 Verification:
 - Command: `npm test`
 - Result: PASS
-- Evidence: 38 test files and 453 tests passed after the spec-review repair.
+- Evidence: 38 test files and 455 tests passed after all review repairs.
 
 Verification:
 - Command: `npm run typecheck`
@@ -129,19 +143,22 @@ Verification:
 - `npm ci` warns that the repository declares Node 22.x while the regression host is Node
   v26.4.0; the Node 26 host is intentional for reproducing the reviewed request-signal bug.
 - TaskMutationRunner post-sync signal propagation remains assigned to the next task. This
-  repair changes only its narrow active-vs-waiting timeout mapping. Until signal propagation
-  lands, a stuck post-sync retains the FIFO after its caller receives `delivery_unknown`;
-  later entries expire waiting and never overlap it.
+  repair changes only its narrow deadline phase/outcome mapping. Until signal propagation
+  lands, a stuck post-sync retains the FIFO after its caller receives the phase-correct
+  `accepted_stale`, `rejected`, or `delivery_unknown`; later entries expire waiting and
+  never overlap it.
 - A callback that ignores cooperative cancellation deliberately retains queue ownership
   until it settles. This preserves the one-active-operation invariant at the cost of queue
   availability; owned poll and forced-refresh paths honor the execution signal.
-- The normally gitignored `.agents/tasks/level1-queue-deadline-fix.yaml` manifest is
-  intentionally committed because the spec-review follow-up explicitly required it.
+- `.agents/tasks/level1-queue-deadline-fix.yaml` remains available locally but is ignored
+  and removed from the tracked index, matching the workspace protocol.
 
 ## Self-review findings
 
 - Confirmed active timeout metadata uses `todoist_operation_deadline` / `active`, while only
   `backend_busy` / `waiting` says nothing was sent.
+- Confirmed active deadline handling preserves acknowledged commands as accepted-stale and
+  explicit rejection as rejected; only unresolved command delivery becomes unknown.
 - Confirmed client cancellation remains effective for queued entries but no longer cancels
   already-dequeued work.
 - Confirmed operational forced-refresh failures create warning logs and zero Issues, while
@@ -152,5 +169,5 @@ Verification:
 ## Next recommended step
 
 Integrate these commits before or together with the separately owned TaskMutationRunner
-repair that passes `ctx.signal` to both post-command sync paths. The active-vs-waiting
-deadline distinction is already repaired here.
+repair that passes `ctx.signal` to both post-command sync paths. Active-vs-waiting deadline
+classification and known outcome preservation are already repaired here.

@@ -89,6 +89,13 @@ export class TaskMutationRunner {
   async execute(options: MutationRunOptions): Promise<MutationRunResult> {
     const deadlineMs = options.deadlineMs ?? MUTATION_DEADLINE_MS;
     const minimumExecutionBudgetMs = options.minimumExecutionBudgetMs ?? MUTATION_MINIMUM_EXECUTION_BUDGET_MS;
+    const activeDeadlineState: {
+      outcome: "delivery_unknown" | "rejected" | "accepted_stale";
+      logged: boolean;
+    } = {
+      outcome: "delivery_unknown",
+      logged: false
+    };
 
     this.observability.info?.("todoist_operation_started", {
       operation: options.operation,
@@ -122,6 +129,7 @@ export class TaskMutationRunner {
             });
 
             if (cmdResult.outcome === "rejected" || cmdResult.outcome === "delivery_unknown") {
+              activeDeadlineState.outcome = cmdResult.outcome;
               const marker = cmdResult.outcome === "rejected"
                 ? "todoist_command_rejected"
                 : "todoist_delivery_unknown";
@@ -135,6 +143,7 @@ export class TaskMutationRunner {
                 ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
                 ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
               });
+              activeDeadlineState.logged = true;
 
               // Best-effort post-failure syncOnce to refresh SQLite
               let snapshot: TaskSnapshot | undefined;
@@ -156,6 +165,7 @@ export class TaskMutationRunner {
 
           // All commands in the batch succeeded (or 0 commands).
           // Perform post-command syncOnce exactly once.
+          activeDeadlineState.outcome = "accepted_stale";
           try {
             await this.syncService.syncOnce();
             const snapshot = this.getSnapshot();
@@ -196,14 +206,21 @@ export class TaskMutationRunner {
         error instanceof TodoistOperationError &&
         error.safeAttributes?.failure_stage === "active"
       ) {
-        this.observability.warn?.("todoist_delivery_unknown", {
-          operation: options.operation,
-          failure_stage: "active",
-          ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-          ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-          ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-        });
-        return { kind: "delivery_unknown" };
+        if (!activeDeadlineState.logged) {
+          const marker = activeDeadlineState.outcome === "rejected"
+            ? "todoist_command_rejected"
+            : activeDeadlineState.outcome === "accepted_stale"
+              ? "todoist_accepted_snapshot_stale"
+              : "todoist_delivery_unknown";
+          this.observability.warn?.(marker, {
+            operation: options.operation,
+            failure_stage: "active",
+            ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
+            ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
+            ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
+          });
+        }
+        return { kind: activeDeadlineState.outcome };
       }
 
       if (
