@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MUTATION_DEADLINE_MS,
   MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
@@ -67,6 +67,10 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
 }
 
 describe("TaskMutationRunner", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("exports default constants MUTATION_DEADLINE_MS = 13_000 and MUTATION_MINIMUM_EXECUTION_BUDGET_MS = 5_000", () => {
     expect(MUTATION_DEADLINE_MS).toBe(13_000);
     expect(MUTATION_MINIMUM_EXECUTION_BUDGET_MS).toBe(5_000);
@@ -505,6 +509,57 @@ describe("TaskMutationRunner", () => {
       }
     });
     expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("maps an active queue deadline after command dispatch to delivery_unknown, never backend_busy", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    let rejectDispatchedCommand: ((error: TodoistOperationError) => void) | undefined;
+    const dispatchedCommand = new Promise<void>((_resolve, reject) => {
+      rejectDispatchedCommand = reject;
+    });
+    const { adapter, calls } = createMockAdapter({
+      itemClose: async () => await dispatchedCommand
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const observability = new RecordingBackendObservability();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => createMockSnapshot(),
+      observability
+    });
+
+    const result = runner.execute({
+      operation: "complete_task",
+      requestId: "req-active-deadline",
+      taskId: "task-1",
+      occurrenceKey: "occurrence-1",
+      commands: [{ type: "item_close", input: { todoistTaskId: "todoist-1" } }],
+      deadlineMs: 1000,
+      minimumExecutionBudgetMs: 0
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(result).resolves.toEqual({ kind: "delivery_unknown" });
+    expect(observability.logs).toContainEqual(expect.objectContaining({
+      level: "warn",
+      marker: "todoist_delivery_unknown"
+    }));
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "backend_busy"
+    }));
+    expect(queue.activeCount).toBe(1);
+
+    rejectDispatchedCommand?.(new TodoistOperationError("timeout"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(queue.activeCount).toBe(0);
   });
 
   // Scenario 8: Retry succeeds -> max 2 attempts reusing same UUID -> { kind: "success", snapshot }

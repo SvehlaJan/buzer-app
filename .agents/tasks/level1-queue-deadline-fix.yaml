@@ -1,0 +1,25 @@
+task: level1-queue-deadline-fix
+branch: feature/level1-fix-queue-deadline
+owns:
+  - backend/src/http/routes.ts
+  - backend/src/services/todoistOperationQueue.ts
+  - backend/src/services/todoistSyncService.ts
+  - backend/src/services/todoistPoller.ts
+  - backend/src/services/taskMutationRunner.ts
+  - backend/src/todoist/todoistAdapter.ts
+  - backend/src/todoist/httpTodoistAdapter.ts
+  - backend/test/http/**
+  - backend/test/services/todoistOperationQueue.test.ts
+  - backend/test/services/todoistSyncService.test.ts
+  - backend/test/services/todoistPoller.test.ts
+  - backend/test/services/todoistPollerDiagnostics.test.ts
+  - backend/test/services/taskMutationRunner.test.ts
+  - backend/test/todoist/**
+  - docs/handoffs/2026-09-01-level1-queue-deadline-fix.md
+  - .agents/tasks/level1-queue-deadline-fix.yaml
+may_read: []
+must_not_touch:
+  - client/**
+  - backend/src/services/taskActionService.ts
+  - backend/src/services/todoistChecklistService.ts
+allows_shared_with: []

@@ -378,15 +378,19 @@ describe("TodoistOperationQueue", () => {
     await expect(running).resolves.toBeUndefined();
   });
 
-  it("aborts active work at its remaining total deadline and releases the next FIFO entry", async () => {
+  it("returns the active deadline promptly but holds FIFO ownership until the callback settles", async () => {
     vi.useFakeTimers();
     const queue = new TodoistOperationQueue();
     let executionSignal: AbortSignal | undefined;
+    let rejectLateCallback: ((error: Error) => void) | undefined;
+    const lateCallback = new Promise<void>((_resolve, reject) => {
+      rejectLateCallback = reject;
+    });
     const first = queue.run(
       { operation: "hung_sync", requestId: "req-active-timeout", deadlineMs: 1000 },
       async (ctx) => {
         executionSignal = ctx.signal;
-        await new Promise<void>(() => {});
+        await lateCallback;
       }
     );
     const secondCallback = vi.fn().mockResolvedValue("next-ran");
@@ -397,6 +401,8 @@ describe("TodoistOperationQueue", () => {
     const firstRejection = expect(first).rejects.toMatchObject({
       kind: "timeout",
       safeAttributes: {
+        error_code: "todoist_operation_deadline",
+        failure_stage: "active",
         operation: "hung_sync",
         request_id: "req-active-timeout"
       }
@@ -406,8 +412,76 @@ describe("TodoistOperationQueue", () => {
 
     expect(executionSignal?.aborted).toBe(true);
     await firstRejection;
+    expect(secondCallback).not.toHaveBeenCalled();
+    expect(queue.activeCount).toBe(1);
+
+    rejectLateCallback?.(new Error("late callback failure"));
+    await vi.advanceTimersByTimeAsync(0);
+
     await expect(second).resolves.toBe("next-ran");
     expect(secondCallback).toHaveBeenCalledOnce();
     expect(queue.activeCount).toBe(0);
+  });
+
+  it("times out later entries without overlap when an aborted active callback never settles", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    const first = queue.run(
+      { operation: "never_settles", deadlineMs: 1000 },
+      async () => {
+        await new Promise<void>(() => {});
+      }
+    );
+    const firstRejection = expect(first).rejects.toMatchObject({
+      safeAttributes: {
+        error_code: "todoist_operation_deadline",
+        failure_stage: "active"
+      }
+    });
+    const secondCallback = vi.fn();
+    const second = queue.run(
+      { operation: "waiting", deadlineMs: 2000, minimumExecutionBudgetMs: 500 },
+      secondCallback
+    );
+    const secondRejection = expect(second).rejects.toMatchObject({
+      safeAttributes: {
+        error_code: "backend_busy",
+        failure_stage: "waiting"
+      }
+    });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await firstRejection;
+    expect(queue.activeCount).toBe(1);
+    expect(secondCallback).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    await secondRejection;
+    expect(secondCallback).not.toHaveBeenCalled();
+    expect(queue.activeCount).toBe(1);
+  });
+
+  it("arms and rechecks the active deadline around synchronous callback prelude", async () => {
+    let now = 1000;
+    const queue = new TodoistOperationQueue({ now: () => now });
+    let executionSignal: AbortSignal | undefined;
+
+    const result = queue.run(
+      { operation: "sync_prelude", deadlineMs: 1000 },
+      async (ctx) => {
+        executionSignal = ctx.signal;
+        now = 2001;
+        return "too-late";
+      }
+    );
+
+    await expect(result).rejects.toMatchObject({
+      kind: "timeout",
+      safeAttributes: {
+        error_code: "todoist_operation_deadline",
+        failure_stage: "active"
+      }
+    });
+    expect(executionSignal?.aborted).toBe(true);
   });
 });

@@ -230,8 +230,12 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
         let currentSnapshot: TaskSnapshot | undefined;
         try {
           currentSnapshot = services.snapshots.getSnapshot(new Date().toISOString());
-        } catch {
-          // ignore
+        } catch (snapshotError) {
+          obs.captureException(snapshotError, {
+            marker: "forced_refresh_snapshot_internal_defect",
+            operation: "force_refresh",
+            request_id: request.id
+          });
         }
 
         reply.status(503).send({

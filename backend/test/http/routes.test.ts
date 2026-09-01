@@ -8,6 +8,7 @@ import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
 import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.js";
 import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
+import { TaskSnapshotService } from "../../src/services/taskSnapshotService.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import { buildServer as createServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
@@ -367,6 +368,52 @@ describe("HTTP routes", () => {
       marker: "forced_refresh_failed"
     }));
     expect(observability.exceptions).toHaveLength(0);
+    expect(observability.requestFailures).toHaveLength(0);
+  });
+
+  it("captures an internal fallback snapshot failure after an operational forced-refresh failure", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const adapter = new FakeTodoistAdapter();
+    const operationalError = new TodoistOperationError("transport");
+    const snapshotError = new Error("SQLite snapshot read failed");
+    adapter.sync = vi.fn().mockRejectedValue(operationalError);
+    const snapshotSpy = vi
+      .spyOn(TaskSnapshotService.prototype, "getSnapshot")
+      .mockImplementation(() => {
+        throw snapshotError;
+      });
+    const observability = new RecordingBackendObservability();
+    const app = buildServer({
+      db,
+      currentUserId: "user-self",
+      androidApiToken: "secret",
+      todoist: adapter,
+      observability
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/tasks/snapshot?forceRefresh=true",
+      headers: { authorization: "Bearer secret" }
+    });
+    snapshotSpy.mockRestore();
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      code: "forced_refresh_failed",
+      message: "Todoist operation failed: transport"
+    });
+    expect(observability.exceptions).toEqual([{
+      error: snapshotError,
+      context: {
+        marker: "forced_refresh_snapshot_internal_defect",
+        operation: "force_refresh",
+        request_id: expect.any(String)
+      }
+    }]);
     expect(observability.requestFailures).toHaveLength(0);
   });
 

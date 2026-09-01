@@ -194,7 +194,21 @@ export class TaskMutationRunner {
     } catch (error) {
       if (
         error instanceof TodoistOperationError &&
-        (error.safeAttributes?.error_code === "backend_busy" || error.kind === "timeout")
+        error.safeAttributes?.failure_stage === "active"
+      ) {
+        this.observability.warn?.("todoist_delivery_unknown", {
+          operation: options.operation,
+          failure_stage: "active",
+          ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
+          ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
+          ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
+        });
+        return { kind: "delivery_unknown" };
+      }
+
+      if (
+        error instanceof TodoistOperationError &&
+        error.safeAttributes?.error_code === "backend_busy"
       ) {
         this.observability.warn?.("backend_busy", {
           operation: options.operation,

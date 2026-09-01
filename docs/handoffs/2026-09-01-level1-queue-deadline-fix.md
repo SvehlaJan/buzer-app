@@ -19,11 +19,14 @@ Status: DONE_WITH_CONCERNS
   `IncomingMessage.signal`. A real TCP POST regression proves a parsed mutation request
   reaches its successful typed outcome instead of returning HTTP 500.
 - `TodoistOperationQueue` now gives dequeued callbacks a queue-owned signal that aborts at
-  the remaining total deadline. The queue races active execution against that deadline so
-  a stuck callback cannot retain the FIFO indefinitely. The client signal is used only to
-  remove waiting work.
-- Pre-execution timeout errors remain tagged `backend_busy`; active deadline errors are
-  typed `timeout` without the `backend_busy` tag.
+  the remaining total deadline. The caller receives the active deadline promptly, but the
+  queue retains exclusive ownership until the callback actually settles; later entries
+  expire waiting instead of overlapping a stuck operation. The client signal is used only
+  to remove waiting work.
+- Pre-execution timeout errors are tagged `failure_stage=waiting` and `backend_busy`;
+  active deadline errors are tagged `failure_stage=active` and
+  `todoist_operation_deadline`. The narrow TaskMutationRunner boundary maps an active
+  deadline conservatively to `delivery_unknown`, never busy/nothing-sent.
 - `TodoistSyncService.syncOnce`/`syncNow` accept optional signal options and pass the signal
   to `TodoistAdapter.sync`. The poller and forced refresh route pass their queue execution
   signals to raw sync. The HTTP adapter already forwarded read-sync signals to `fetch`; a
@@ -39,14 +42,17 @@ Status: DONE_WITH_CONCERNS
 
 - `backend/src/http/routes.ts`
 - `backend/src/services/todoistOperationQueue.ts`
+- `backend/src/services/taskMutationRunner.ts`
 - `backend/src/services/todoistPoller.ts`
 - `backend/src/services/todoistSyncService.ts`
 - `backend/test/http/routes.test.ts`
 - `backend/test/services/todoistOperationQueue.test.ts`
+- `backend/test/services/taskMutationRunner.test.ts`
 - `backend/test/services/todoistPoller.test.ts`
 - `backend/test/services/todoistSyncService.test.ts`
 - `backend/test/todoist/httpTodoistAdapter.test.ts`
 - `docs/handoffs/2026-09-01-level1-queue-deadline-fix.md`
+- `.agents/tasks/level1-queue-deadline-fix.yaml`
 
 ## Red/green evidence
 
@@ -63,12 +69,26 @@ Verification:
 - Result: PASS (GREEN)
 - Evidence: 6 test files and 111 tests passed with no warnings or unhandled rejections.
 
+## Spec-review follow-up red/green evidence
+
+Verification:
+- Command: `npm test -- test/services/todoistOperationQueue.test.ts test/services/taskMutationRunner.test.ts test/http/routes.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: five focused failures proved active timeouts lacked a phase tag and mapped to
+  busy, the FIFO released while the old callback was still running, synchronous callback
+  prelude could exceed the total deadline, and fallback snapshot failure was swallowed.
+
+Verification:
+- Command: `npm test -- test/services/todoistOperationQueue.test.ts test/services/taskMutationRunner.test.ts test/services/todoistSyncService.test.ts test/services/todoistPoller.test.ts test/services/todoistPollerDiagnostics.test.ts test/todoist/httpTodoistAdapter.test.ts test/http/routes.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 7 test files and 129 tests passed with no warnings or unhandled rejections.
+
 ## Final verification
 
 Verification:
 - Command: `npm test`
 - Result: PASS
-- Evidence: 38 test files and 449 tests passed.
+- Evidence: 38 test files and 453 tests passed after the spec-review repair.
 
 Verification:
 - Command: `npm run typecheck`
@@ -108,27 +128,29 @@ Verification:
   not push it.
 - `npm ci` warns that the repository declares Node 22.x while the regression host is Node
   v26.4.0; the Node 26 host is intentional for reproducing the reviewed request-signal bug.
-- TaskMutationRunner post-sync signal propagation is intentionally excluded by ownership
-  and belongs to the next task. Until that integration lands, the queue can time out and
-  release a runner callback whose post-sync does not yet consume the queue signal.
-- Queue deadline release assumes active integrations honor the supplied signal. The queue
-  still races the callback to prevent an ignored signal from retaining the FIFO, but an
-  implementation that ignores cancellation could continue in the background; owned poll
-  and forced-refresh read paths now honor it.
+- TaskMutationRunner post-sync signal propagation remains assigned to the next task. This
+  repair changes only its narrow active-vs-waiting timeout mapping. Until signal propagation
+  lands, a stuck post-sync retains the FIFO after its caller receives `delivery_unknown`;
+  later entries expire waiting and never overlap it.
+- A callback that ignores cooperative cancellation deliberately retains queue ownership
+  until it settles. This preserves the one-active-operation invariant at the cost of queue
+  availability; owned poll and forced-refresh paths honor the execution signal.
+- The normally gitignored `.agents/tasks/level1-queue-deadline-fix.yaml` manifest is
+  intentionally committed because the spec-review follow-up explicitly required it.
 
 ## Self-review findings
 
-- Confirmed active timeout metadata does not contain `error_code: backend_busy`, preserving
-  the guarantee that only pre-execution expiry says nothing was sent.
+- Confirmed active timeout metadata uses `todoist_operation_deadline` / `active`, while only
+  `backend_busy` / `waiting` says nothing was sent.
 - Confirmed client cancellation remains effective for queued entries but no longer cancels
   already-dequeued work.
 - Confirmed operational forced-refresh failures create warning logs and zero Issues, while
   the non-operational path creates one backend exception and no Fastify duplicate.
-- Confirmed no journal, replay, persistence, Android, mutation-runner, or checklist-service
-  files were modified.
+- Confirmed no journal, replay, persistence, Android, task-action, or checklist-service
+  files were modified. TaskMutationRunner received only the required narrow phase mapping.
 
 ## Next recommended step
 
-Integrate this commit before or together with the separately owned TaskMutationRunner
-repair that passes `ctx.signal` to both post-command sync paths and distinguishes active
-deadline exhaustion from pre-send `backend_busy`.
+Integrate these commits before or together with the separately owned TaskMutationRunner
+repair that passes `ctx.signal` to both post-command sync paths. The active-vs-waiting
+deadline distinction is already repaired here.
