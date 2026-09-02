@@ -821,7 +821,7 @@ describe("HttpTodoistAdapter", () => {
     });
   });
 
-  it("classifies missing sync_status UUID as command_rejected with missing_status tag", async () => {
+  it("classifies a missing sync_status UUID as a parse defect", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       sync_status: {}
     })));
@@ -833,10 +833,52 @@ describe("HttpTodoistAdapter", () => {
     })).rejects.toSatisfy((err) => {
       expect(err).toBeInstanceOf(TodoistOperationError);
       const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("parse");
+      expect(opErr.safeAttributes).toEqual({
+        command_type: "item_delete",
+        response_shape: "missing_sync_status"
+      });
+      return true;
+    });
+  });
+
+  it.each([null, 42, true, [], {}, "", "   "])("classifies malformed sync_status value %j as a parse defect", async (status) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: { "malformed-status-command": status }
+    })));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "malformed-status-command",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
+      expect(opErr.kind).toBe("parse");
+      expect(opErr.safeAttributes).toEqual({
+        command_type: "item_delete",
+        response_shape: "malformed_sync_status"
+      });
+      return true;
+    });
+  });
+
+  it("preserves a non-ok string sync_status as an explicit command rejection", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      sync_status: { "string-rejection-command": "INVALID_ARGUMENT" }
+    })));
+    const adapter = new HttpTodoistAdapter("super-secret-token", "https://todoist.test/api/v1");
+
+    await expect(adapter.itemDelete({
+      commandUuid: "string-rejection-command",
+      todoistTaskId: "todoist-1"
+    })).rejects.toSatisfy((err) => {
+      expect(err).toBeInstanceOf(TodoistOperationError);
+      const opErr = err as TodoistOperationError;
       expect(opErr.kind).toBe("command_rejected");
       expect(opErr.safeAttributes).toEqual({
         command_type: "item_delete",
-        error_tag: "missing_status"
+        error_tag: "INVALID_ARGUMENT"
       });
       return true;
     });

@@ -102,7 +102,21 @@ export class TaskMutationRunner {
       attributes?: Record<string, unknown>;
     };
     let pendingTerminalLog: TerminalLog | undefined;
+    let startLogged = false;
     let terminalLogged = false;
+    const emitStart = (commandCount: number): void => {
+      if (startLogged) {
+        return;
+      }
+      startLogged = true;
+      this.observability.info?.("todoist_operation_started", {
+        operation: options.operation,
+        command_count: commandCount,
+        ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
+        ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
+        ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
+      });
+    };
     const emitTerminal = (terminal: TerminalLog): void => {
       if (terminalLogged) {
         return;
@@ -122,13 +136,9 @@ export class TaskMutationRunner {
       }
     };
 
-    this.observability.info?.("todoist_operation_started", {
-      operation: options.operation,
-      ...(options.commands !== undefined ? { command_count: options.commands.length } : {}),
-      ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-      ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-      ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-    });
+    if (options.commands !== undefined) {
+      emitStart(options.commands.length);
+    }
 
     try {
       const result: MutationRunResult = await this.queue.run(
@@ -142,6 +152,7 @@ export class TaskMutationRunner {
         async (ctx: QueueExecutionContext) => {
           const executionDeadlineMs = this.now() + ctx.remainingMs;
           const commands = options.prepareCommands?.() ?? options.commands ?? [];
+          emitStart(commands.length);
           const resolvedTempIds = new Map<string, string>();
 
           for (const [i, originalCommand] of commands.entries()) {
@@ -267,31 +278,37 @@ export class TaskMutationRunner {
       }
 
       if (error instanceof DomainError || isExpectedValidationFailure(error)) {
-        emitTerminal({
-          level: "warn",
-          marker: "todoist_operation_validation_failed",
-          attributes: {
-            error_code: error.code
-          }
-        });
+        if (startLogged) {
+          emitTerminal({
+            level: "warn",
+            marker: "todoist_operation_validation_failed",
+            attributes: {
+              error_code: error.code
+            }
+          });
+        }
         throw error;
       }
 
       if (options.signal?.aborted && error === options.signal.reason) {
-        emitTerminal({
-          level: "warn",
-          marker: "todoist_operation_cancelled"
-        });
+        if (startLogged) {
+          emitTerminal({
+            level: "warn",
+            marker: "todoist_operation_cancelled"
+          });
+        }
         throw error;
       }
 
-      emitTerminal({
-        level: "warn",
-        marker: "todoist_operation_failed",
-        attributes: {
-          error_kind: error instanceof TodoistOperationError ? error.kind : "internal"
-        }
-      });
+      if (startLogged) {
+        emitTerminal({
+          level: "warn",
+          marker: "todoist_operation_failed",
+          attributes: {
+            error_kind: error instanceof TodoistOperationError ? error.kind : "internal"
+          }
+        });
+      }
 
       if (!isOperationalFailure(error)) {
         this.captureDefect(error, "mutation_runner_internal_defect", options);

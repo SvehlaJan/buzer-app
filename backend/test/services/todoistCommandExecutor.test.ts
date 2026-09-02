@@ -294,9 +294,14 @@ describe("TodoistCommandExecutor", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("treats a successful item_add response without a permanent ID as a parse defect", async () => {
+  it.each([
+    ["null", null],
+    ["empty", ""],
+    ["whitespace", "   "],
+    ["non-string", 123]
+  ])("treats a successful item_add response with a %s permanent ID as a parse defect", async (_label, todoistTaskId) => {
     const { adapter, calls } = createMockAdapter({
-      itemAdd: async () => ({ todoistTaskId: null })
+      itemAdd: async () => ({ todoistTaskId } as any)
     });
     const executor = new TodoistCommandExecutor(adapter);
 

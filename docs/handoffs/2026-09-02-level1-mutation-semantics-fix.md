@@ -44,11 +44,13 @@ Status: DONE — ready for parent review and integration
 - `backend/src/services/taskMutationRunner.ts`
 - `backend/src/services/todoistChecklistService.ts`
 - `backend/src/services/todoistCommandExecutor.ts`
+- `backend/src/todoist/httpTodoistAdapter.ts`
 - `backend/test/fakes/e2eTodoistAdapter.ts`
 - `backend/test/services/taskActionService.test.ts`
 - `backend/test/services/taskMutationRunner.test.ts`
 - `backend/test/services/todoistChecklistService.test.ts`
 - `backend/test/services/todoistCommandExecutor.test.ts`
+- `backend/test/todoist/httpTodoistAdapter.test.ts`
 - `docs/handoffs/2026-09-02-level1-mutation-semantics-fix.md`
 
 The local ownership manifest is ignored and was not committed.
@@ -85,12 +87,39 @@ Verification:
 - Result: PASS
 - Evidence: 2 files and 41 tests passed after adding the final queued-completion regression.
 
+## Spec-review follow-up
+
+- Successful `item_add` now requires a non-empty string permanent ID. Null, empty,
+  whitespace-only, and non-string mappings become a parse defect, stop dependent child
+  commands, create one backend Issue through the runner, and return
+  `delivery_unknown`.
+- Missing and structurally malformed `sync_status[uuid]` values now become parse
+  defects. Recognized non-`ok` strings and error objects remain explicit
+  `command_rejected` outcomes.
+- A prepared mutation emits `todoist_operation_started` only after preparation succeeds,
+  with the exact bounded `command_count`, immediately before the first send. A rejected
+  pre-send preparation emits no lifecycle start or terminal pair; successful work still
+  emits exactly one start and one terminal record.
+
+Verification:
+- Command: `npm test -- test/services/todoistCommandExecutor.test.ts test/todoist/httpTodoistAdapter.test.ts test/services/taskMutationRunner.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: 15 focused failures covered empty/whitespace/non-string permanent IDs,
+  missing/malformed Sync status, dependent child suppression, parse capture ownership,
+  and prepared lifecycle count/order.
+
+Verification:
+- Command: `npm test -- test/services/todoistCommandExecutor.test.ts test/todoist/httpTodoistAdapter.test.ts test/services/taskMutationRunner.test.ts`
+- Result: PASS
+- Evidence: 3 files and 82 tests passed after the review fixes, including empty and
+  whitespace Sync status cases.
+
 ## Final verification
 
 Verification:
 - Command: `npm test`
 - Result: PASS
-- Evidence: all 38 backend test files and 465 tests passed.
+- Evidence: all 38 backend test files and 480 tests passed after the spec-review fixes.
 
 Verification:
 - Command: `npm run typecheck`
