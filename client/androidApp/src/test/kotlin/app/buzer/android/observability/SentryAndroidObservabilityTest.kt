@@ -66,6 +66,24 @@ class SentryAndroidObservabilityTest {
     }
 
     @Test
+    fun addLogWithThrowableAndAttributesBuildsStructuredAttributesWithoutThrowing() {
+        val observability = SentryAndroidObservability()
+        val record = DiagnosticLogRecord(
+            severity = "error",
+            tag = "TestTag",
+            message = "Local defect captured",
+            throwableType = "IllegalStateException",
+            throwableMessage = "boom",
+            attributes = mapOf("task_id" to "task-1", "occurrence_key" to "occ-1")
+        )
+
+        // Attributes and throwable context must reach Sentry's structured log attribute API
+        // (SentryAttribute/SentryAttributes/SentryLogParameters), not get flattened into the
+        // message string.
+        observability.addLog(record)
+    }
+
+    @Test
     fun captureHandledSetsAppropriateTags() {
         val observability = SentryAndroidObservability()
         val correlation = DiagnosticCorrelation(

@@ -71,7 +71,8 @@ internal data class TaskEditorUpdateState(
     val submitting: Boolean = false,
     val resultMessage: String? = null,
     val successDelivered: Boolean = false,
-    val discardConfirmationVisible: Boolean = false
+    val discardConfirmationVisible: Boolean = false,
+    val warningRefreshInFlight: Boolean = false
 ) {
     private val selectedProject: ProjectItem?
         get() = choices.selectedProject(draft)
@@ -95,10 +96,10 @@ internal data class TaskEditorUpdateState(
         )
 
     val canSubmit: Boolean
-        get() = !choices.loading && !submitting && validation.canSubmit
+        get() = !choices.loading && !submitting && !warningRefreshInFlight && validation.canSubmit
 
     val editingEnabled: Boolean
-        get() = !submitting
+        get() = !submitting && !warningRefreshInFlight
 
     fun withDraft(next: TaskEditorDraft): TaskEditorUpdateState {
         val normalizedNext = normalizeTaskEditorUpdateDraft(previous = draft, next = next)
@@ -132,6 +133,23 @@ internal data class TaskEditorUpdateState(
         )
     } else {
         this
+    }
+
+    /** The warning-refresh button is disabled while any refresh is already in flight. */
+    fun beginWarningRefresh(): TaskEditorUpdateState = if (warningRefreshInFlight) {
+        this
+    } else {
+        copy(warningRefreshInFlight = true)
+    }
+
+    /**
+     * Clears the warning only when the authoritative refresh actually succeeded; a failed
+     * refresh keeps the existing warning message visible and simply unlocks the surface again.
+     */
+    fun completeWarningRefresh(succeeded: Boolean): TaskEditorUpdateState = if (succeeded) {
+        copy(warningRefreshInFlight = false, resultMessage = null)
+    } else {
+        copy(warningRefreshInFlight = false)
     }
 }
 
@@ -316,6 +334,7 @@ internal fun TaskEditorUpdateScreen(
     checklistContent: @Composable (enabled: Boolean, errorMessage: String?) -> Unit,
     footerContent: @Composable () -> Unit,
     onRetryChoices: () -> Unit,
+    onRefreshWarning: suspend () -> Unit = {},
     contentValidation: () -> TaskEditorUpdateContentValidation = { TaskEditorUpdateContentValidation() },
     isDirty: (TaskEditorDraft) -> Boolean,
     onUpdate: suspend (TaskEditorDraft) -> CoordinatorActionResult,
@@ -374,6 +393,24 @@ internal fun TaskEditorUpdateScreen(
         }
     }
 
+    fun refreshWarning() {
+        if (state.warningRefreshInFlight) return
+        state = state.beginWarningRefresh()
+        scope.launch {
+            state = try {
+                onRefreshWarning()
+                state.completeWarningRefresh(succeeded = true)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AppLog.warn(
+                    "task_editor_update warning_refresh_failed type=${error::class.simpleName} message=${error.message}"
+                )
+                state.completeWarningRefresh(succeeded = false)
+            }
+        }
+    }
+
     BackHandler(enabled = state.discardConfirmationVisible) {
         state = state.copy(discardConfirmationVisible = false)
     }
@@ -403,10 +440,11 @@ internal fun TaskEditorUpdateScreen(
             {
                 app.buzer.android.ui.components.SessionWarningBanner(
                     message = msg,
-                    onRefresh = onRetryChoices,
+                    onRefresh = ::refreshWarning,
                     onOpenTodoist = {
                         app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchTask(context, task.todoistTaskId)
-                    }
+                    },
+                    refreshing = state.warningRefreshInFlight
                 )
             }
         }

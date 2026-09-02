@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
                     onToggleCurrentChild = ::toggleCurrentChild,
                     deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
                     onUpdateTask = ::updateTask,
+                    onRefreshWarningSnapshot = ::refreshWarningSnapshot,
                     morningReviewBannerVisible = morningReviewAvailability?.bannerVisible ?: false,
                     morningReviewBlockingCount = morningReviewBlockingCount(),
                     onOpenMorningReview = ::openHomeMorningReview,
@@ -340,6 +341,16 @@ class MainActivity : ComponentActivity() {
             refreshMorningReviewAvailability()
         }
         return result
+    }
+
+    /**
+     * The authoritative Refresh action behind a mutation-warning banner (Add/Edit). Throws on
+     * failure so the caller keeps the warning visible; applies and reconciles on success only.
+     */
+    private suspend fun refreshWarningSnapshot() {
+        val activeCoordinator = requireCoordinator("mutation warning refresh")
+        snapshotViewState = SnapshotReducer.reduce(activeCoordinator.forceSyncAndReconcile())
+        refreshMorningReviewAvailability()
     }
 
     private fun toggleCurrentChild(taskId: String, childId: String, checked: Boolean) {

@@ -50,6 +50,7 @@ fun BuzerApp(
     onUpdateTask: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
         CoordinatorActionResult.Warning("unavailable", "Task editing is unavailable", null)
     },
+    onRefreshWarningSnapshot: suspend () -> Unit = {},
     morningReviewBannerVisible: Boolean = false,
     morningReviewBlockingCount: Int? = null,
     onOpenMorningReview: () -> Unit = {},
@@ -110,7 +111,8 @@ fun BuzerApp(
 
                 AppSection.Add -> AddTaskScreen(
                     onBack = { section = AppSection.Home },
-                    onTaskCreated = onTaskCreated
+                    onTaskCreated = onTaskCreated,
+                    onRefreshWarning = onRefreshWarningSnapshot
                 )
 
                 AppSection.Edit -> {
@@ -125,7 +127,8 @@ fun BuzerApp(
                             deviceId = deviceId,
                             initialAddedDrafts = emptyList(),
                             onBack = { section = AppSection.Home },
-                            onUpdate = onUpdateTask
+                            onUpdate = onUpdateTask,
+                            onRefreshWarning = onRefreshWarningSnapshot
                         )
                     }
                 }

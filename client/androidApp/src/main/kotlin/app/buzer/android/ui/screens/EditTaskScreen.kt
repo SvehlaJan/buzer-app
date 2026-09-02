@@ -88,6 +88,7 @@ fun EditTaskScreen(
     initialAddedDrafts: List<ChecklistEditorDraft> = emptyList(),
     onBack: () -> Unit,
     onUpdate: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
+    onRefreshWarning: suspend () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() },
@@ -218,6 +219,7 @@ fun EditTaskScreen(
             },
             footerContent = { ActivityLogSection(task) },
             onRetryChoices = ::retryProjects,
+            onRefreshWarning = onRefreshWarning,
             contentValidation = {
                 val checklistValidation = validateChecklistDrafts(
                     if (checklistMutationsAllowed) addedDrafts else emptyList()

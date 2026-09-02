@@ -49,6 +49,35 @@ class TaskEditorUpdateScreenStateTest {
     }
 
     @Test
+    fun warningRefreshLocksTheWholeSurfaceAndClearsTheWarningOnlyOnSuccess() {
+        val initial = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
+        val warning = reduceTaskEditorUpdateResult(
+            initial.beginSubmission(),
+            CoordinatorActionResult.Warning("busy", "Server busy", null)
+        ).state
+
+        val refreshing = warning.beginWarningRefresh()
+        assertTrue(refreshing.warningRefreshInFlight)
+        // Locking must cover the primary submit action too, not only the refresh button itself.
+        assertFalse(refreshing.canSubmit)
+        assertFalse(refreshing.editingEnabled)
+        assertEquals("Server busy", refreshing.resultMessage)
+
+        // A second refresh while one is already in flight is a no-op.
+        assertEquals(refreshing, refreshing.beginWarningRefresh())
+
+        val keptOnFailure = refreshing.completeWarningRefresh(succeeded = false)
+        assertFalse(keptOnFailure.warningRefreshInFlight)
+        assertEquals("Server busy", keptOnFailure.resultMessage)
+        assertTrue(keptOnFailure.canSubmit)
+
+        val clearedOnSuccess = keptOnFailure.beginWarningRefresh().completeWarningRefresh(succeeded = true)
+        assertFalse(clearedOnSuccess.warningRefreshInFlight)
+        assertEquals(null, clearedOnSuccess.resultMessage)
+        assertTrue(clearedOnSuccess.canSubmit)
+    }
+
+    @Test
     fun conflictResultRetainsDraft() {
         val original = initialTaskEditorUpdateState(task = task(), choices = readyChoices())
         val changed = original.withDraft(original.draft.copy(title = "Updated title"))

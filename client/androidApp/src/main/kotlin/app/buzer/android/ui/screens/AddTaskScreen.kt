@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.enforcement.EnforcementDependencies
+import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.selectAddTaskProject
 import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
@@ -49,7 +50,9 @@ import app.buzer.android.ui.taskeditor.ValidationExposure
 import app.buzer.android.ui.taskeditor.VisibleTaskEditorValidation
 import app.buzer.android.ui.taskeditor.primaryActionLabel
 import app.buzer.android.ui.taskeditor.validateTaskEditor
+import app.buzer.shared.api.BuzerApiException
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ProjectCollaborator
@@ -57,10 +60,40 @@ import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
+import java.io.IOException
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+
+/**
+ * Mirrors [app.buzer.android.enforcement.EnforcementCoordinator]'s operational-vs-internal
+ * classification: expected backend/Todoist/network uncertainty stays warning-only, everything
+ * else (parse defects, unexpected runtime exceptions) is Add Task's own owned local defect.
+ */
+internal fun isAddTaskOperationalFailure(error: Throwable): Boolean {
+    if (error is BuzerApiException) {
+        val operationalCodes = setOf(
+            "backend_busy",
+            "todoist_command_rejected",
+            "todoist_delivery_unknown",
+            "todoist_accepted_snapshot_stale",
+            "forced_refresh_failed",
+            "rate_limited",
+            "validation_error",
+            "invalid_request"
+        )
+        if (error.code in operationalCodes) return true
+        if (error.status in 400..499) return true
+        return false
+    }
+    if (error is IOException) return true
+    val className = error::class.qualifiedName.orEmpty()
+    return className.contains("Timeout") ||
+        className.contains("Connect") ||
+        className.contains("UnresolvedAddress")
+}
 
 internal fun addTaskEditorFingerprint(
     draft: TaskEditorDraft,
@@ -212,6 +245,7 @@ internal fun retainAddTaskCreateRequest(
 fun AddTaskScreen(
     onBack: () -> Unit,
     onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
+    onRefreshWarning: suspend () -> Unit = {},
     createTask: suspend (CreateTaskRequest) -> app.buzer.shared.model.MutationResponse = AddTaskDependencies.createTaskAction(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
@@ -252,6 +286,7 @@ fun AddTaskScreen(
     var submitAttempted by remember { mutableStateOf(false) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
+    var warningRefreshInFlight by remember { mutableStateOf(false) }
     var pendingCreateRequest by remember { mutableStateOf<CreateTaskRequest?>(null) }
     var checklistDrafts by remember { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
     var discardConfirmationVisible by remember { mutableStateOf(false) }
@@ -342,7 +377,9 @@ fun AddTaskScreen(
     }
 
     fun submitRequest(request: CreateTaskRequest) {
-        if (submitting) return
+        // Locking is normally enforced by the primary button's own `enabled` state, but guard
+        // here too so a caller that bypasses that button can never submit and refresh at once.
+        if (submitting || warningRefreshInFlight) return
         submitting = true
         submitDialogMessage = null
         scope.launch {
@@ -359,12 +396,29 @@ fun AddTaskScreen(
                     onBack = onBack
                 )
                 AppLog.info("add_task create_success")
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
-                AppLog.error(
-                    "add_task create_failed type=${error::class.simpleName} message=${error.message}",
-                    error
-                )
                 val message = error.message ?: "Task creation failed"
+                if (isAddTaskOperationalFailure(error)) {
+                    AppLog.warn(
+                        "add_task create_failed type=${error::class.simpleName} message=${error.message}",
+                        error
+                    )
+                } else {
+                    // Not an expected backend/Todoist/network uncertainty: this is Add Task's own
+                    // owned defect (response parsing, unexpected invariant), so it gets exactly
+                    // one Sentry Issue here rather than only a local log line.
+                    AppLog.error(
+                        "add_task create_failed type=${error::class.simpleName} message=${error.message}",
+                        error
+                    )
+                    ObservabilityRuntime.instance.captureHandled(
+                        "add_task.create_failed",
+                        error,
+                        DiagnosticCorrelation(appSection = "AddTask")
+                    )
+                }
                 submitDialogMessage = message
             } finally {
                 AppLog.debug("add_task create_finished submitting=false")
@@ -373,8 +427,27 @@ fun AddTaskScreen(
         }
     }
 
+    fun refreshWarning() {
+        if (warningRefreshInFlight) return
+        warningRefreshInFlight = true
+        scope.launch {
+            try {
+                onRefreshWarning()
+                submitDialogMessage = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                AppLog.warn(
+                    "add_task warning_refresh_failed type=${error::class.simpleName} message=${error.message}"
+                )
+            } finally {
+                warningRefreshInFlight = false
+            }
+        }
+    }
+
     fun validateAndSubmit() {
-        if (submitting) return
+        if (submitting || warningRefreshInFlight) return
         submitAttempted = true
         val checklistValidation = validateChecklistDrafts(checklistDrafts)
         val submissionState = addTaskEditorState(
@@ -493,7 +566,7 @@ fun AddTaskScreen(
             onPrimaryAction = ::validateAndSubmit,
             onCancel = ::requestExit,
             validation = visibleValidation,
-            enabled = editorState.editingEnabled,
+            enabled = editorState.editingEnabled && !warningRefreshInFlight,
             primaryActionInProgress = submitting,
             titleModifier = Modifier.testTag("titleInput"),
             modifier = Modifier.fillMaxSize(),
@@ -501,10 +574,11 @@ fun AddTaskScreen(
                 {
                     app.buzer.android.ui.components.SessionWarningBanner(
                         message = msg,
-                        onRefresh = ::retryProjects,
+                        onRefresh = ::refreshWarning,
                         onOpenTodoist = {
                             app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchToday(context)
-                        }
+                        },
+                        refreshing = warningRefreshInFlight
                     )
                 }
             }

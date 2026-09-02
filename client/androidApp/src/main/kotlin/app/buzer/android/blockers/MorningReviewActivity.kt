@@ -93,6 +93,17 @@ class MorningReviewActivity : ComponentActivity() {
             }
         }
 
+        /**
+         * The authoritative Refresh action behind the Repair sub-editor's own mutation-warning
+         * banner. Throws on failure so the caller keeps the warning visible; applies and caches
+         * the fresh snapshot on success only, distinct from the session-level [runForcedRefresh].
+         */
+        suspend fun refreshRepairWarningSnapshot() {
+            val currentCoordinator = coordinator
+                ?: throw IllegalStateException("Task editing is unavailable")
+            session.cache(SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()))
+        }
+
         fun finishWith(result: MorningReviewResult) {
             setResult(RESULT_OK, MorningReviewContract.resultIntent(result))
             finish()
@@ -189,6 +200,7 @@ class MorningReviewActivity : ComponentActivity() {
                     }
                 },
                 onRepairSuccess = { _ -> coordinator?.let(::reloadCached) },
+                onRefreshRepairWarning = ::refreshRepairWarningSnapshot,
                 onStart = ::acknowledge,
                 onSnooze = ::snooze,
                 onOverdueDone = ::runOverdueDone,

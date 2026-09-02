@@ -144,6 +144,7 @@ fun DeadlineBlockerScreen(
     onUpdate: suspend (UpdateTaskRequest) -> CoordinatorActionResult = {
         CoordinatorActionResult.Warning("unavailable", "Reschedule is unavailable", null)
     },
+    onRefreshUpdateWarning: suspend () -> Unit = {},
     onUpdateSuccess: () -> Unit = onBack,
     onRefreshTask: () -> Unit = {},
     occurrenceKey: String = "test-occurrence-key",
@@ -245,6 +246,7 @@ fun DeadlineBlockerScreen(
                 choices = choices,
                 onRetryChoices = ::retryProjects,
                 onUpdate = onUpdate,
+                onRefreshWarning = onRefreshUpdateWarning,
                 onSuccess = onUpdateSuccess,
                 onCancel = { rescheduleRequested = false }
             )
@@ -430,6 +432,7 @@ private fun DeadlineBlockerUpdateEditor(
     choices: TaskEditorUpdateChoices,
     onRetryChoices: () -> Unit,
     onUpdate: suspend (UpdateTaskRequest) -> CoordinatorActionResult,
+    onRefreshWarning: suspend () -> Unit,
     onSuccess: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -496,6 +499,7 @@ private fun DeadlineBlockerUpdateEditor(
             },
             footerContent = { ActivityLogSection(task) },
             onRetryChoices = onRetryChoices,
+            onRefreshWarning = onRefreshWarning,
             contentValidation = {
                 val checklistValidation = validateChecklistDrafts(
                     if (checklistMutationsAllowed) addedDrafts else emptyList()

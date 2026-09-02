@@ -232,6 +232,10 @@ class DeadlineBlockerActivity : ComponentActivity() {
                         coordinator.updateTask(taskId, request)
                     }
                 },
+                onRefreshUpdateWarning = {
+                    val snapshot = coordinator.forceSyncAndReconcile()
+                    updateModelFromSnapshot(snapshot, taskId, occurrenceKey, snapshotConfirmed = true)
+                },
                 onUpdateSuccess = { finish() },
                 onRefreshTask = { forceRefreshBlocker(coordinator, taskId, occurrenceKey) },
                 occurrenceKey = occurrenceKey,

@@ -80,6 +80,7 @@ fun MorningReviewScreen(
         CoordinatorActionResult.Warning("unavailable", "Repair is unavailable", null)
     },
     onRepairSuccess: (String) -> Unit = {},
+    onRefreshRepairWarning: suspend () -> Unit = {},
     onStart: () -> Unit = {},
     onSnooze: () -> Unit = {},
     onOverdueDone: (String) -> Unit = {},
@@ -152,6 +153,7 @@ fun MorningReviewScreen(
             choices = choices,
             onRetryChoices = ::retryProjects,
             onRepair = onRepair,
+            onRefreshWarning = onRefreshRepairWarning,
             presentation = editorPresentation,
             onSuccess = {
                 repairingTask = completeMorningReviewEditorSelection()
@@ -294,6 +296,7 @@ private fun MorningReviewRepairEditor(
     choices: TaskEditorUpdateChoices,
     onRetryChoices: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
+    onRefreshWarning: suspend () -> Unit,
     presentation: TaskEditorPresentation,
     onSuccess: () -> Unit,
     onCancel: () -> Unit,
@@ -376,6 +379,7 @@ private fun MorningReviewRepairEditor(
             },
             footerContent = { ActivityLogSection(task) },
             onRetryChoices = onRetryChoices,
+            onRefreshWarning = onRefreshWarning,
             contentValidation = {
                 val checklistValidation = validateChecklistDrafts(
                     if (checklistMutationsAllowed) addedDrafts else emptyList()

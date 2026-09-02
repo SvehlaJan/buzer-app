@@ -8,14 +8,18 @@ import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import app.buzer.shared.diagnostics.DiagnosticRedactor
 import io.sentry.Breadcrumb
 import io.sentry.Sentry
+import io.sentry.SentryAttribute
+import io.sentry.SentryAttributes
 import io.sentry.SentryEvent
 import io.sentry.SentryFeedbackOptions
 import io.sentry.SentryLevel
 import io.sentry.SentryLogEvent
 import io.sentry.SentryLogEventAttributeValue
+import io.sentry.SentryLogLevel
 import io.sentry.SentryOptions
 import io.sentry.android.core.SentryAndroid
 import io.sentry.android.core.SentryAndroidOptions
+import io.sentry.logger.SentryLogParameters
 import io.sentry.protocol.Contexts
 
 object SentryEventSanitizer {
@@ -135,22 +139,22 @@ class SentryAndroidObservability : AndroidObservability {
         }
         Sentry.addBreadcrumb(breadcrumb)
 
-        val message = buildString {
-            append(record.message)
-            if (record.attributes.isNotEmpty()) {
-                record.attributes.forEach { (key, value) ->
-                    append(" ").append(key).append("=").append(value)
-                }
-            }
-            record.throwableType?.let { append(" throwable_type=").append(it) }
-            record.throwableMessage?.let { append(" throwable_message=").append(it) }
+        val structuredAttributes = buildList {
+            record.attributes.forEach { (key, value) -> add(SentryAttribute.stringAttribute(key, value)) }
+            record.throwableType?.let { add(SentryAttribute.stringAttribute("throwable_type", it)) }
+            record.throwableMessage?.let { add(SentryAttribute.stringAttribute("throwable_message", it)) }
         }
-        when (record.severity.lowercase()) {
-            "error" -> Sentry.logger().error(message)
-            "warn", "warning" -> Sentry.logger().warn(message)
-            "debug" -> Sentry.logger().debug(message)
-            else -> Sentry.logger().info(message)
+        val logLevel = when (record.severity.lowercase()) {
+            "error" -> SentryLogLevel.ERROR
+            "warn", "warning" -> SentryLogLevel.WARN
+            "debug" -> SentryLogLevel.DEBUG
+            else -> SentryLogLevel.INFO
         }
+        Sentry.logger().log(
+            logLevel,
+            SentryLogParameters.create(SentryAttributes.of(*structuredAttributes.toTypedArray())),
+            record.message
+        )
     }
 
     override fun captureHandled(

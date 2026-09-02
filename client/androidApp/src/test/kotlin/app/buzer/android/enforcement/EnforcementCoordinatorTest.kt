@@ -134,6 +134,78 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun operationalWarningIgnoresAlreadyCachedNewerSnapshotAndReturnsWinningSnapshotInstead() = runBlocking {
+        val newerCached = snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true), snapshotGeneration = 9)
+        val staleReturned = snapshot(task("task-1", state = CommitmentState.started), snapshotGeneration = 8)
+        val scheduler = RecordingAlarmScheduler()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(
+                snapshot(task("task-1")),
+                startHandler = {
+                    throw BuzerApiException(
+                        status = 429,
+                        code = "backend_busy",
+                        message = "Server busy",
+                        retryAfterSeconds = 5,
+                        snapshot = staleReturned
+                    )
+                }
+            ),
+            snapshotStore = FakeSnapshotStore(newerCached),
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
+
+        // The caller must never see (or be able to reapply) the stale response snapshot: the
+        // Warning still carries the operation's own code/message, but its snapshot is the
+        // already-cached newer authority, and the cache/alarms are left untouched.
+        val warning = result as CoordinatorActionResult.Warning
+        assertEquals("backend_busy", warning.code)
+        assertEquals("Server busy", warning.message)
+        assertEquals(newerCached, warning.snapshot)
+        assertEquals(newerCached, coordinator.loadLatestSnapshot())
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertTrue(scheduler.cancelled.isEmpty())
+    }
+
+    @Test
+    fun operationalWarningSurfacesLocalReconciliationFailureInsteadOfDiscardingIt() = runBlocking {
+        val returnedSnapshot = snapshot(task("task-1", state = CommitmentState.started))
+        val reporter = RecordingErrorReporter()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(
+                snapshot(task("task-1")),
+                startHandler = {
+                    throw BuzerApiException(
+                        status = 429,
+                        code = "backend_busy",
+                        message = "Server busy",
+                        retryAfterSeconds = 5,
+                        snapshot = returnedSnapshot
+                    )
+                }
+            ),
+            snapshotStore = FakeSnapshotStore(throwOnSave = true),
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.startTask("task-1", action("occurrence-task-1"))
+
+        // A local reconciliation defect while applying an operational warning's own snapshot
+        // must be surfaced to the caller (and owned via the error reporter), not silently
+        // replaced by a generic Warning that hides the failed reconciliation.
+        assertTrue(result is CoordinatorActionResult.LocalReconciliationFailed)
+        assertEquals(returnedSnapshot, (result as CoordinatorActionResult.LocalReconciliationFailed).snapshot)
+        assertEquals(1, reporter.errors.size)
+        assertEquals(BlockerAction.REFRESH_SNAPSHOT, reporter.errors.first().action)
+    }
+
+    @Test
     fun transportFailureReturnsTransportFailureWithoutReportingSentryError() = runBlocking {
         val reporter = RecordingErrorReporter()
         val api = FakeBuzerApi(

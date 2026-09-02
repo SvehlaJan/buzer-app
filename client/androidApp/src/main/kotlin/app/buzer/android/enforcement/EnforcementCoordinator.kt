@@ -235,6 +235,13 @@ class EnforcementCoordinator(
         taskId: String,
         occurrenceKey: String,
         snapshot: TasksSnapshotResponse,
+        onStale: (TasksSnapshotResponse) -> CoordinatorActionResult = { cached ->
+            CoordinatorActionResult.Conflict(
+                code = "stale_snapshot",
+                message = "A newer authoritative snapshot is already applied",
+                snapshot = cached
+            )
+        },
         result: (TasksSnapshotResponse) -> CoordinatorActionResult
     ): CoordinatorActionResult = synchronized(snapshotApplicationLock) {
         try {
@@ -246,11 +253,7 @@ class EnforcementCoordinator(
                             "incomingGeneration=${snapshot.snapshotGeneration} " +
                             "cachedGeneration=${application.snapshot.snapshotGeneration}"
                     )
-                    CoordinatorActionResult.Conflict(
-                        code = "stale_snapshot",
-                        message = "A newer authoritative snapshot is already applied",
-                        snapshot = application.snapshot
-                    )
+                    onStale(application.snapshot)
                 }
 
                 application.applied -> {
@@ -365,11 +368,6 @@ class EnforcementCoordinator(
                 }
 
                 isOperationalFailure(error) -> {
-                    if (snapshot != null) {
-                        applyAuthoritativeSnapshot(taskId, occurrenceKey, snapshot) {
-                            CoordinatorActionResult.Success
-                        }
-                    }
                     val code = error.code ?: "operational_error"
                     val message = error.message ?: "Operational error"
                     AppLog.warn(
@@ -382,7 +380,25 @@ class EnforcementCoordinator(
                         )
                     )
                     logger("action warning action=$action taskId=$taskId occurrence=$occurrenceKey code=$code message=$message")
-                    CoordinatorActionResult.Warning(code = code, message = message, snapshot = snapshot)
+                    if (snapshot != null) {
+                        // Apply this operation's own authoritative snapshot exactly once and use
+                        // whichever snapshot local reconciliation actually settled on (this one,
+                        // an already-cached newer one, or none on local reconciliation failure).
+                        // Never let the raw, possibly-stale response snapshot be returned to a
+                        // caller that would reapply it outside this authority check.
+                        applyAuthoritativeSnapshot(
+                            taskId = taskId,
+                            occurrenceKey = occurrenceKey,
+                            snapshot = snapshot,
+                            onStale = { cachedSnapshot ->
+                                CoordinatorActionResult.Warning(code = code, message = message, snapshot = cachedSnapshot)
+                            }
+                        ) { appliedSnapshot ->
+                            CoordinatorActionResult.Warning(code = code, message = message, snapshot = appliedSnapshot)
+                        }
+                    } else {
+                        CoordinatorActionResult.Warning(code = code, message = message, snapshot = null)
+                    }
                 }
 
                 else -> {
