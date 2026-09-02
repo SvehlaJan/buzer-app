@@ -102,21 +102,7 @@ export class TaskMutationRunner {
       attributes?: Record<string, unknown>;
     };
     let pendingTerminalLog: TerminalLog | undefined;
-    let startLogged = false;
     let terminalLogged = false;
-    const emitStart = (commandCount: number): void => {
-      if (startLogged) {
-        return;
-      }
-      startLogged = true;
-      this.observability.info?.("todoist_operation_started", {
-        operation: options.operation,
-        command_count: commandCount,
-        ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-        ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-        ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-      });
-    };
     const emitTerminal = (terminal: TerminalLog): void => {
       if (terminalLogged) {
         return;
@@ -136,9 +122,20 @@ export class TaskMutationRunner {
       }
     };
 
-    if (options.commands !== undefined) {
-      emitStart(options.commands.length);
-    }
+    // The lifecycle contract requires exactly one start record and one terminal
+    // record per invocation, including pre-send exits (admission busy, caller
+    // cancellation, prepared-path validation conflicts, internal preparation
+    // failures). prepareCommands only runs inside the FIFO immediately before
+    // the first send, so its true command count is not known yet here; use the
+    // documented bounded estimate of 0 for that case. Callers that already know
+    // their commands report the real count.
+    this.observability.info?.("todoist_operation_started", {
+      operation: options.operation,
+      command_count: options.commands?.length ?? 0,
+      ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
+      ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
+      ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
+    });
 
     try {
       const result: MutationRunResult = await this.queue.run(
@@ -152,7 +149,6 @@ export class TaskMutationRunner {
         async (ctx: QueueExecutionContext) => {
           const executionDeadlineMs = this.now() + ctx.remainingMs;
           const commands = options.prepareCommands?.() ?? options.commands ?? [];
-          emitStart(commands.length);
           const resolvedTempIds = new Map<string, string>();
 
           for (const [i, originalCommand] of commands.entries()) {
@@ -278,37 +274,31 @@ export class TaskMutationRunner {
       }
 
       if (error instanceof DomainError || isExpectedValidationFailure(error)) {
-        if (startLogged) {
-          emitTerminal({
-            level: "warn",
-            marker: "todoist_operation_validation_failed",
-            attributes: {
-              error_code: error.code
-            }
-          });
-        }
+        emitTerminal({
+          level: "warn",
+          marker: "todoist_operation_validation_failed",
+          attributes: {
+            error_code: error.code
+          }
+        });
         throw error;
       }
 
       if (options.signal?.aborted && error === options.signal.reason) {
-        if (startLogged) {
-          emitTerminal({
-            level: "warn",
-            marker: "todoist_operation_cancelled"
-          });
-        }
+        emitTerminal({
+          level: "warn",
+          marker: "todoist_operation_cancelled"
+        });
         throw error;
       }
 
-      if (startLogged) {
-        emitTerminal({
-          level: "warn",
-          marker: "todoist_operation_failed",
-          attributes: {
-            error_kind: error instanceof TodoistOperationError ? error.kind : "internal"
-          }
-        });
-      }
+      emitTerminal({
+        level: "warn",
+        marker: "todoist_operation_failed",
+        attributes: {
+          error_kind: error instanceof TodoistOperationError ? error.kind : "internal"
+        }
+      });
 
       if (!isOperationalFailure(error)) {
         this.captureDefect(error, "mutation_runner_internal_defect", options);
