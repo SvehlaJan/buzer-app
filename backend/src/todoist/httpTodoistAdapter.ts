@@ -304,28 +304,38 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       ...(options?.signal !== undefined ? { signal: options.signal } : {})
     });
     const status = response.sync_status?.[uuid];
-    if (status !== "ok") {
-      const safeAttributes: Record<string, string | number> = {
-        command_type: type
-      };
-      if (typeof status === "object" && status !== null) {
-        const statusRecord = status as Record<string, unknown>;
-        if (typeof statusRecord.error_code === "number") {
-          safeAttributes.error_code = statusRecord.error_code;
-        }
-        if (typeof statusRecord.error_tag === "string") {
-          safeAttributes.error_tag = statusRecord.error_tag;
-        } else if (typeof statusRecord.error === "string") {
-          safeAttributes.error_tag = statusRecord.error;
-        }
-      } else if (status === undefined) {
-        safeAttributes.error_tag = "missing_status";
-      } else if (typeof status === "string") {
-        safeAttributes.error_tag = status;
+    if (status === "ok") {
+      return response;
+    }
+
+    const safeAttributes: Record<string, string | number> = { command_type: type };
+    if (status === undefined) {
+      throw new TodoistOperationError("parse", undefined, {
+        ...safeAttributes,
+        response_shape: "missing_sync_status"
+      });
+    }
+    if (typeof status === "string" && status.trim().length > 0) {
+      throw new TodoistOperationError("command_rejected", undefined, {
+        ...safeAttributes,
+        error_tag: status
+      });
+    }
+    if (isExplicitCommandRejection(status)) {
+      if (typeof status.error_code === "number") {
+        safeAttributes.error_code = status.error_code;
+      }
+      if (typeof status.error_tag === "string") {
+        safeAttributes.error_tag = status.error_tag;
+      } else if (typeof status.error === "string") {
+        safeAttributes.error_tag = status.error;
       }
       throw new TodoistOperationError("command_rejected", undefined, safeAttributes);
     }
-    return response;
+    throw new TodoistOperationError("parse", undefined, {
+      ...safeAttributes,
+      response_shape: "malformed_sync_status"
+    });
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
@@ -473,6 +483,16 @@ export class HttpTodoistAdapter implements TodoistAdapter {
       updatedAt: state.updated_at ?? fallbackUpdatedAt
     };
   }
+}
+
+function isExplicitCommandRejection(status: unknown): status is Record<string, unknown> {
+  if (typeof status !== "object" || status === null || Array.isArray(status)) {
+    return false;
+  }
+  const record = status as Record<string, unknown>;
+  return typeof record.error_code === "number"
+    || (typeof record.error_tag === "string" && record.error_tag.trim().length > 0)
+    || (typeof record.error === "string" && record.error.trim().length > 0);
 }
 
 

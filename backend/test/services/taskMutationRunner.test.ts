@@ -10,6 +10,7 @@ import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.
 import { TodoistCommandExecutor } from "../../src/services/todoistCommandExecutor.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import type { TodoistAdapter, TodoistCommand } from "../../src/todoist/todoistAdapter.js";
+import { DomainError } from "../../src/domain/errors.js";
 import { RecordingBackendObservability } from "../fakes/recordingBackendObservability.js";
 
 function createMockSnapshot(overrides?: Partial<TaskSnapshot>): TaskSnapshot {
@@ -247,6 +248,317 @@ describe("TaskMutationRunner", () => {
       }
     ]);
     expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("prepares commands only after entering the FIFO and pairs a start record with the validation-failed terminal for a pre-send conflict", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const prepareCommands = vi.fn((): TodoistCommand[] => {
+      throw DomainError.staleTask(snapshot);
+    });
+
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => snapshot,
+      observability: obs
+    });
+
+    await expect(runner.execute({
+      operation: "edit_task",
+      requestId: "req-prepare-conflict",
+      taskId: "task-1",
+      prepareCommands
+    })).rejects.toMatchObject({ code: "stale_task", statusCode: 409 });
+
+    expect(prepareCommands).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
+    expect(syncOnce).not.toHaveBeenCalled();
+    expect(obs.exceptions).toHaveLength(0);
+    expect(obs.logs).toEqual([
+      {
+        level: "info",
+        marker: "todoist_operation_started",
+        attributes: {
+          operation: "edit_task",
+          command_count: 0,
+          request_id: "req-prepare-conflict",
+          task_id: "task-1"
+        }
+      },
+      {
+        level: "warn",
+        marker: "todoist_operation_validation_failed",
+        attributes: {
+          operation: "edit_task",
+          error_code: "stale_task",
+          request_id: "req-prepare-conflict",
+          task_id: "task-1"
+        }
+      }
+    ]);
+  });
+
+  it("logs a start record before preparation, then the actual prepared command count on the succeeded terminal", async () => {
+    const queue = new TodoistOperationQueue();
+    const eventOrder: string[] = [];
+    const { adapter } = createMockAdapter({
+      itemUpdate: async () => { eventOrder.push("send"); }
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const obs = new RecordingBackendObservability();
+    const originalInfo = obs.info.bind(obs);
+    obs.info = (marker, attributes) => {
+      eventOrder.push(marker);
+      originalInfo(marker, attributes);
+    };
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => createMockSnapshot(),
+      observability: obs
+    });
+
+    const result = await runner.execute({
+      operation: "edit_task",
+      prepareCommands: () => {
+        eventOrder.push("prepare");
+        return [{
+          type: "item_update",
+          input: {
+            todoistTaskId: "task-1",
+            due: { kind: "preserve" },
+            assignment: { kind: "preserve" }
+          }
+        }];
+      }
+    });
+
+    expect(result.kind).toBe("success");
+    expect(eventOrder).toEqual([
+      "todoist_operation_started",
+      "prepare",
+      "send",
+      "todoist_operation_succeeded"
+    ]);
+    expect(obs.logs).toEqual([
+      {
+        level: "info",
+        marker: "todoist_operation_started",
+        attributes: { operation: "edit_task", command_count: 0 }
+      },
+      {
+        level: "info",
+        marker: "todoist_operation_succeeded",
+        attributes: { operation: "edit_task", command_count: 1 }
+      }
+    ]);
+  });
+
+  it("pairs a start record with backend_busy admission rejection even when commands are only prepared inside the FIFO", async () => {
+    let now = 1000;
+    const queue = new TodoistOperationQueue({ now: () => now });
+    const { adapter, calls } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const prepareCommands = vi.fn((): TodoistCommand[] => [
+      { type: "item_close", input: { todoistTaskId: "task-1" } }
+    ]);
+
+    let releaseBlocker: () => void;
+    const blockerPromise = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const blocker = queue.run(
+      { operation: "long_running", deadlineMs: 30_000 },
+      () => blockerPromise
+    );
+
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => snapshot,
+      observability: obs,
+      now: () => now
+    });
+
+    const mutationPromise = runner.execute({
+      operation: "close_task",
+      requestId: "req-busy-prepared",
+      prepareCommands,
+      deadlineMs: 13_000,
+      minimumExecutionBudgetMs: 5_000
+    });
+
+    // Advance time past budget (wait 9s -> remaining 4s < 5s min budget)
+    now += 9_000;
+
+    releaseBlocker!();
+    await blocker;
+
+    const result = await mutationPromise;
+
+    expect(result).toEqual({ kind: "busy" });
+    expect(prepareCommands).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+    expect(syncOnce).toHaveBeenCalledTimes(0);
+    expect(obs.logs).toEqual([
+      {
+        level: "info",
+        marker: "todoist_operation_started",
+        attributes: {
+          operation: "close_task",
+          command_count: 0,
+          request_id: "req-busy-prepared"
+        }
+      },
+      {
+        level: "warn",
+        marker: "backend_busy",
+        attributes: {
+          operation: "close_task",
+          request_id: "req-busy-prepared"
+        }
+      }
+    ]);
+    expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("pairs a start record with the cancelled terminal when the caller aborts before the FIFO admits the operation", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const obs = new RecordingBackendObservability();
+    const prepareCommands = vi.fn((): TodoistCommand[] => []);
+
+    // Occupy the FIFO so the mutation sits queued instead of running immediately.
+    let releaseBlocker: () => void;
+    const blockerPromise = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const blocker = queue.run(
+      { operation: "long_running", deadlineMs: 30_000 },
+      () => blockerPromise
+    );
+
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => createMockSnapshot(),
+      observability: obs
+    });
+
+    const controller = new AbortController();
+    const cancelReason = new Error("client disconnected");
+
+    const mutationPromise = runner.execute({
+      operation: "edit_task",
+      requestId: "req-cancel-1",
+      prepareCommands,
+      signal: controller.signal
+    });
+
+    controller.abort(cancelReason);
+
+    await expect(mutationPromise).rejects.toBe(cancelReason);
+
+    releaseBlocker!();
+    await blocker;
+
+    expect(prepareCommands).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+    expect(syncOnce).not.toHaveBeenCalled();
+    expect(obs.logs).toEqual([
+      {
+        level: "info",
+        marker: "todoist_operation_started",
+        attributes: {
+          operation: "edit_task",
+          command_count: 0,
+          request_id: "req-cancel-1"
+        }
+      },
+      {
+        level: "warn",
+        marker: "todoist_operation_cancelled",
+        attributes: {
+          operation: "edit_task",
+          request_id: "req-cancel-1"
+        }
+      }
+    ]);
+    expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("resolves a created root temp ID to its permanent Todoist ID before a later child request", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter({
+      itemAdd: async (input) => ({
+        todoistTaskId: input.kind === "root" ? "todoist-root-real" : "todoist-child-real"
+      })
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => createMockSnapshot(),
+      uuidFactory: (() => {
+        let id = 0;
+        return () => `uuid-${++id}`;
+      })()
+    });
+
+    const result = await runner.execute({
+      operation: "create_task",
+      commands: [
+        {
+          type: "item_add",
+          input: {
+            kind: "root",
+            tempId: "root-temp",
+            title: "Root",
+            description: null,
+            projectId: "project-1",
+            assigneeId: null,
+            due: { kind: "preserve" },
+            duration: null
+          }
+        },
+        {
+          type: "item_add",
+          input: {
+            kind: "child",
+            tempId: "child-temp",
+            title: "Child",
+            description: null,
+            projectId: "project-1",
+            parentTodoistTaskId: "root-temp"
+          }
+        }
+      ]
+    });
+
+    expect(result.kind).toBe("success");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({
+      method: "itemAdd",
+      input: {
+        kind: "child",
+        parentTodoistTaskId: "todoist-root-real"
+      }
+    });
   });
 
   // Scenario 3: Acknowledged no-op -> N commands, 1 sync success -> { kind: "success", snapshot } (no effect comparison)
@@ -950,6 +1262,132 @@ describe("TaskMutationRunner", () => {
     expect(obs.exceptions[0]?.context).toMatchObject({
       marker: "post_ack_sync_internal_defect",
       operation: "internal_defect_op"
+    });
+  });
+
+  it("captures an unexpected pre-send preparation defect once and completes the start/failed lifecycle pair", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const obs = new RecordingBackendObservability();
+    const defect = new TypeError("SQLite preparation invariant failed");
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => createMockSnapshot(),
+      observability: obs
+    });
+
+    await expect(runner.execute({
+      operation: "edit_task",
+      prepareCommands: () => { throw defect; }
+    })).rejects.toBe(defect);
+
+    expect(obs.exceptions).toHaveLength(1);
+    expect(obs.exceptions[0]).toMatchObject({
+      error: defect,
+      context: { marker: "mutation_runner_internal_defect", operation: "edit_task" }
+    });
+    expect(obs.logs).toEqual([
+      {
+        level: "info",
+        marker: "todoist_operation_started",
+        attributes: { operation: "edit_task", command_count: 0 }
+      },
+      {
+        level: "warn",
+        marker: "todoist_operation_failed",
+        attributes: { operation: "edit_task", error_kind: "internal" }
+      }
+    ]);
+  });
+
+  it.each(["", "   ", 123])("stops a dependent batch and captures once when root item_add returns malformed ID %j", async (todoistTaskId) => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter({
+      itemAdd: async () => ({ todoistTaskId } as any)
+    });
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor: new TodoistCommandExecutor(adapter),
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => snapshot,
+      observability: obs
+    });
+
+    const result = await runner.execute({
+      operation: "create_task",
+      commands: [
+        {
+          type: "item_add",
+          input: {
+            kind: "root",
+            tempId: "root-temp",
+            title: "Root",
+            description: null,
+            projectId: "project-1",
+            assigneeId: null,
+            due: { kind: "preserve" },
+            duration: null
+          }
+        },
+        {
+          type: "item_add",
+          input: {
+            kind: "child",
+            tempId: "child-temp",
+            title: "Child",
+            description: null,
+            projectId: "project-1",
+            parentTodoistTaskId: "root-temp"
+          }
+        }
+      ]
+    });
+
+    expect(result).toEqual({ kind: "delivery_unknown", snapshot });
+    expect(calls).toHaveLength(1);
+    expect(obs.exceptions).toHaveLength(1);
+    expect(obs.exceptions[0]?.context).toMatchObject({ marker: "todoist_command_parse_defect" });
+  });
+
+  it("captures a Todoist parse defect exactly once while returning visible delivery uncertainty", async () => {
+    const queue = new TodoistOperationQueue();
+    const parseError = new TodoistOperationError("parse", undefined, { http_code: 200 });
+    const { adapter } = createMockAdapter({
+      itemDelete: async () => {
+        throw parseError;
+      }
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => snapshot,
+      observability: obs
+    });
+
+    const result = await runner.execute({
+      operation: "delete_child",
+      requestId: "req-parse",
+      commands: [{ type: "item_delete", input: { todoistTaskId: "child-1" } }]
+    });
+
+    expect(result).toEqual({ kind: "delivery_unknown", snapshot });
+    expect(obs.exceptions).toHaveLength(1);
+    expect(obs.exceptions[0]).toMatchObject({
+      error: parseError,
+      context: {
+        marker: "todoist_command_parse_defect",
+        operation: "delete_child",
+        request_id: "req-parse"
+      }
     });
   });
 });

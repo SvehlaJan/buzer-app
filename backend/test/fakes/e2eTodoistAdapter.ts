@@ -335,8 +335,6 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     };
   }
 
-  private tempIdMap = new Map<string, string>();
-
   async itemAdd(input: TodoistItemAddInput): Promise<TodoistItemAddResult> {
     if (input.kind === "child" && this.failNextChildAdd) {
       this.failNextChildAdd = false;
@@ -347,11 +345,9 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     return this.runAcceptedCommand(input.commandUuid, () => {
       if (input.kind === "root") {
         const todoistTaskId = this.world.addRoot(input);
-        this.tempIdMap.set(input.tempId, todoistTaskId);
         return { todoistTaskId };
       }
-      const parentId = this.tempIdMap.get(input.parentTodoistTaskId) ?? input.parentTodoistTaskId;
-      const todoistTaskId = this.world.addChild({ ...input, parentTodoistTaskId: parentId });
+      const todoistTaskId = this.world.addChild(input);
       return { todoistTaskId };
     });
   }

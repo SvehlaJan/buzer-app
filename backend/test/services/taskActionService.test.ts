@@ -48,7 +48,9 @@ function setupTestService(options: {
   db?: Database.Database;
   sync?: () => Promise<void>;
   escalationSender?: AccountabilitySender;
+  escalationService?: EscalationService;
   requireMirrorReady?: boolean;
+  queue?: TodoistOperationQueue;
 } = {}) {
   const db = options.db ?? new Database(":memory:");
   migrate(db);
@@ -80,7 +82,7 @@ function setupTestService(options: {
   });
 
   const adapter = new FakeTodoistAdapter();
-  const queue = new TodoistOperationQueue();
+  const queue = options.queue ?? new TodoistOperationQueue();
   const executor = new TodoistCommandExecutor(adapter);
   const syncService = { syncOnce: options.sync ?? (async () => undefined) };
   const snapshotService = () => ({ tasks: repo.listAll() });
@@ -91,9 +93,9 @@ function setupTestService(options: {
     snapshotService: snapshotService as any
   });
 
-  const escalationService = options.escalationSender
+  const escalationService = options.escalationService ?? (options.escalationSender
     ? new EscalationService(db, repo, options.escalationSender, "wife-chat")
-    : null;
+    : null);
 
   const service = new TaskActionService(
     db,
@@ -106,7 +108,7 @@ function setupTestService(options: {
     options.requireMirrorReady ?? false
   );
 
-  return { service, repo, projects, adapter, runner, db, escalationService };
+  return { service, repo, projects, adapter, runner, db, escalationService, queue };
 }
 
 describe("TaskActionService", () => {
@@ -146,6 +148,9 @@ describe("TaskActionService", () => {
         description: "Fresh from bakery",
         projectId: "project-personal"
       });
+      const permanentRootId = `created-${adapter.itemAdds[0]!.tempId}`;
+      expect(adapter.itemAdds[1]).toMatchObject({ parentTodoistTaskId: permanentRootId });
+      expect(adapter.itemAdds[2]).toMatchObject({ parentTodoistTaskId: permanentRootId });
     });
 
     it("validates recurrence preset and scheduled duration before dispatching commands", async () => {
@@ -275,6 +280,30 @@ describe("TaskActionService", () => {
       expect(task?.startDismissCount).toBe(2);
       expect(task?.lastSnoozedAt).toBe("2026-05-08T16:10:00.000Z");
     });
+
+    it("preserves the local postpone but propagates unexpected escalation defects", async () => {
+      const internalDefect = new Error("whatsapp escalation invariant failed");
+      const escalationService = {
+        handleSecondDismissal: vi.fn().mockRejectedValue(internalDefect)
+      } as unknown as EscalationService;
+      const { service, repo } = setupTestService({ escalationService });
+      insertCommittedTask(repo);
+
+      await service.postponeTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        now: "2026-05-08T16:00:00Z"
+      });
+
+      await expect(service.postponeTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        now: "2026-05-08T16:05:00Z"
+      })).rejects.toBe(internalDefect);
+
+      expect(repo.getById("task-1")).toMatchObject({
+        startDismissCount: 2,
+        lastSnoozedAt: "2026-05-08T16:10:00.000Z"
+      });
+    });
   });
 
   describe("completeTask (done)", () => {
@@ -369,6 +398,28 @@ describe("TaskActionService", () => {
         statusCode: 409
       });
 
+      expect(adapter.itemCloses).toHaveLength(0);
+    });
+
+    it("rechecks completion eligibility inside the FIFO immediately before send", async () => {
+      const queue = new TodoistOperationQueue();
+      const { service, repo, adapter } = setupTestService({ queue });
+      insertCommittedTask(repo);
+      let releaseBlocker!: () => void;
+      const blocker = queue.run(
+        { operation: "blocking_poll", deadlineMs: 30_000 },
+        () => new Promise<void>((resolve) => { releaseBlocker = resolve; })
+      );
+
+      const mutation = service.completeTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1"
+      });
+
+      repo.markCompleted("task-1", "2026-05-08T16:01:00Z");
+      releaseBlocker();
+      await blocker;
+
+      await expect(mutation).rejects.toMatchObject({ code: "stale_occurrence", statusCode: 409 });
       expect(adapter.itemCloses).toHaveLength(0);
     });
   });
@@ -515,6 +566,36 @@ describe("TaskActionService", () => {
       });
 
       expect(adapter.itemUpdates).toHaveLength(0);
+    });
+
+    it("rechecks the root revision inside the FIFO immediately before the first send", async () => {
+      const queue = new TodoistOperationQueue();
+      const { service, repo, adapter } = setupTestService({ queue });
+      insertCommittedTask(repo);
+      const expectedRevision = `r:${repo.getById("task-1")?.mirrorRevision}`;
+      let releaseBlocker!: () => void;
+      const blocker = queue.run(
+        { operation: "blocking_poll", deadlineMs: 30_000 },
+        () => new Promise<void>((resolve) => { releaseBlocker = resolve; })
+      );
+
+      const mutation = service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: {
+          expectedTaskRevision: expectedRevision,
+          title: "Queued edit",
+          assigneeId: null
+        },
+        childMutations: []
+      });
+
+      repo.updateTaskSchedule("task-1", "2026-05-08T16:00:00Z", 45, "2026-05-08T10:30:00Z");
+      releaseBlocker();
+      await blocker;
+
+      await expect(mutation).rejects.toMatchObject({ code: "stale_task", statusCode: 409 });
+      expect(adapter.itemUpdates).toHaveLength(0);
+      expect(adapter.itemMoves).toHaveLength(0);
     });
 
     it("rejects edit when root revision is malformed attaching snapshot", async () => {

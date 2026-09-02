@@ -67,26 +67,27 @@ export class TodoistChecklistService {
 
   async mutate(rootTaskId: string, request: ChecklistMutationRequest): Promise<MutationRunResult> {
     assertRequestShape(request.mutations);
-    this.assertProjectedTree(rootTaskId);
-
-    const root = this.requireRoot(rootTaskId);
-    if (
-      request.expectedOccurrenceKey !== undefined &&
-      request.expectedOccurrenceKey !== null &&
-      request.expectedOccurrenceKey !== root.occurrenceKey
-    ) {
-      throw DomainError.staleOccurrence(this.snapshotProvider());
-    }
-
-    this.validateMutations(root, request.mutations);
-    const commands = this.buildChildCommands(root, request.mutations);
 
     return await this.runner.execute({
       operation: "mutate_checklist",
       ...(request.requestId !== undefined ? { requestId: request.requestId } : {}),
       taskId: rootTaskId,
-      ...(root.occurrenceKey !== null ? { occurrenceKey: root.occurrenceKey } : {}),
-      commands,
+      ...(request.expectedOccurrenceKey !== undefined && request.expectedOccurrenceKey !== null
+        ? { occurrenceKey: request.expectedOccurrenceKey }
+        : {}),
+      prepareCommands: () => {
+        this.assertProjectedTree(rootTaskId);
+        const root = this.requireRoot(rootTaskId);
+        if (
+          request.expectedOccurrenceKey !== undefined &&
+          request.expectedOccurrenceKey !== null &&
+          request.expectedOccurrenceKey !== root.occurrenceKey
+        ) {
+          throw DomainError.staleOccurrence(this.snapshotProvider());
+        }
+        this.validateMutations(root, request.mutations);
+        return this.buildChildCommands(root, request.mutations);
+      },
       ...(request.deadlineMs !== undefined ? { deadlineMs: request.deadlineMs } : {}),
       ...(request.minimumExecutionBudgetMs !== undefined ? { minimumExecutionBudgetMs: request.minimumExecutionBudgetMs } : {}),
       ...(request.signal !== undefined ? { signal: request.signal } : {})

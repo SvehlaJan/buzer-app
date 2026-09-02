@@ -114,6 +114,34 @@ describe("TodoistChecklistService", () => {
     expect(adapter.itemUpdates).toHaveLength(0);
   });
 
+  it("rechecks the child revision inside the FIFO immediately before the first send", async () => {
+    const { service, adapter, repo, queue } = setup({ children: [child("one")] });
+    const expectedRevision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+    let releaseBlocker!: () => void;
+    const blocker = queue.run(
+      { operation: "blocking_poll", deadlineMs: 30_000 },
+      () => new Promise<void>((resolve) => { releaseBlocker = resolve; })
+    );
+
+    const mutation = service.mutate("root", {
+      mutations: [{
+        type: "edit",
+        clientMutationId: "edit-queued",
+        childId: "child-one",
+        expectedChildRevision: expectedRevision,
+        title: "Queued edit",
+        description: null
+      }]
+    });
+
+    repo.updateChecklistChild("local-child-one", "Changed elsewhere", null, "2026-07-15T09:45:00Z");
+    releaseBlocker();
+    await blocker;
+
+    await expect(mutation).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
+    expect(adapter.itemUpdates).toHaveLength(0);
+  });
+
   it("rejects a stale occurrence key before dispatching any command", async () => {
     const { service, adapter, repo } = setup({ children: [child("one")] });
     const revision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
@@ -330,7 +358,7 @@ function setup(input: { children?: ReturnType<typeof child>[]; sync?: () => Prom
 
   const service = new TodoistChecklistService(repo, runner, snapshotService as any);
 
-  return { service, adapter, repo, db };
+  return { service, adapter, repo, db, queue };
 }
 
 function add(clientMutationId: string, title: string, description: string | null = null): Extract<ChildMutation, { type: "add" }> {
