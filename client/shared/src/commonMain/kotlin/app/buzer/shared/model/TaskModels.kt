@@ -481,13 +481,6 @@ data class FocusedChecklistMutationRequest(
     }
 }
 
-sealed interface MutationOutcome {
-    data class Success(val snapshot: TasksSnapshotResponse, val snoozedUntil: String? = null) : MutationOutcome
-    data class Warning(val code: String, val message: String, val snapshot: TasksSnapshotResponse?) : MutationOutcome
-    data class Conflict(val code: String, val message: String, val snapshot: TasksSnapshotResponse) : MutationOutcome
-    data class TransportFailure(val isConnected: Boolean, val message: String) : MutationOutcome
-}
-
 @Serializable
 data class MutationResponse(
     val snapshot: TasksSnapshotResponse,

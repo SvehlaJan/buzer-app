@@ -13,7 +13,6 @@ import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.ChecklistMutation
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.MutationOutcome
 import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
