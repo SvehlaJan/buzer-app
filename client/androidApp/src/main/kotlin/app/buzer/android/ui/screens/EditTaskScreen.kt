@@ -84,7 +84,6 @@ internal fun captureEditTaskUpdate(
 @Composable
 fun EditTaskScreen(
     task: TaskSnapshotItem,
-    deviceId: String,
     initialAddedDrafts: List<ChecklistEditorDraft> = emptyList(),
     onBack: () -> Unit,
     onUpdate: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
@@ -256,8 +255,7 @@ fun EditTaskScreen(
                         recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
-                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),
-                        deviceId = deviceId
+                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList()
                     )
                 }
                 capturedUpdate = nextCapture
@@ -300,8 +298,7 @@ internal fun updateRequest(
     recurrencePreset: RecurrencePreset?,
     existingDrafts: List<ExistingChecklistDraft>,
     deletedChildren: Set<String>,
-    addedDrafts: List<ChecklistEditorDraft>,
-    deviceId: String = ""
+    addedDrafts: List<ChecklistEditorDraft>
 ): UpdateTaskRequest {
     check(schedule.isEmpty() || schedule.isComplete()) { "Update requests require a complete or empty schedule" }
     val originalById = task.checklistItems.associateBy { it.id }

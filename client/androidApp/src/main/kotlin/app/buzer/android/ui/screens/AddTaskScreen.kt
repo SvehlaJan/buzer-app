@@ -31,7 +31,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.buzer.android.tasks.AddTaskDependencies
-import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
 import app.buzer.android.ui.addtask.selectAddTaskProject
@@ -281,9 +280,6 @@ fun AddTaskScreen(
     var initialFingerprint by remember { mutableStateOf(AddTaskDraftFingerprint.empty(projectId = null)) }
     var initialProjectBaselineCaptured by remember { mutableStateOf(false) }
     val now = remember(nowProvider) { nowProvider() }
-    val deviceId = remember(context) {
-        EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
-    }
     val projectLoadStatusMessage = AddTaskProjectLoadFeedback.message(
         projectsLoading = projectsLoading,
         projects = projects,

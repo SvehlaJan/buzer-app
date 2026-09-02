@@ -111,8 +111,7 @@ class DeadlineBlockerUpdateStateTest {
                     title = "New checklist item",
                     description = null
                 )
-            ),
-            deviceId = "device-1"
+            )
         )
 
         assertEquals(3, request.childMutations.size)

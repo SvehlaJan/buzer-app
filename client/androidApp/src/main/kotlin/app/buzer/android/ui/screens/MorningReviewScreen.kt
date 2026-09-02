@@ -32,7 +32,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.components.TaskDetailsBlock
@@ -92,9 +91,6 @@ fun MorningReviewScreen(
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
     val context = LocalContext.current
-    val deviceId = remember(context) {
-        EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
-    }
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
@@ -149,7 +145,6 @@ fun MorningReviewScreen(
     repairingTask?.let { task ->
         MorningReviewRepairEditor(
             task = task,
-            deviceId = deviceId,
             choices = choices,
             onRetryChoices = ::retryProjects,
             onRepair = onRepair,
@@ -292,7 +287,6 @@ internal fun ActivityLogSection(task: TaskSnapshotItem) {
 @Composable
 private fun MorningReviewRepairEditor(
     task: TaskSnapshotItem,
-    deviceId: String,
     choices: TaskEditorUpdateChoices,
     onRetryChoices: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
@@ -413,8 +407,7 @@ private fun MorningReviewRepairEditor(
                         recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
-                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),
-                        deviceId = deviceId
+                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList()
                     )
                 }
                 capturedUpdate = nextCapture

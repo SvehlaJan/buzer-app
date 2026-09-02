@@ -57,8 +57,7 @@ class EditTaskScreenRequestTest {
                 ExistingChecklistDraft("child-2", "child-r2", "Second", null, checked = false)
             ),
             deletedChildren = setOf("child-2"),
-            addedDrafts = listOf(ChecklistEditorDraft("add-1", "New child")),
-            deviceId = "device-1"
+            addedDrafts = listOf(ChecklistEditorDraft("add-1", "New child"))
         )
 
         assertEquals("root-r1", request.rootPatch?.expectedTaskRevision)
@@ -82,8 +81,7 @@ class EditTaskScreenRequestTest {
             recurrencePreset = RecurrencePreset.never,
             existingDrafts = emptyList(),
             deletedChildren = emptySet(),
-            addedDrafts = emptyList(),
-            deviceId = "device-1"
+            addedDrafts = emptyList()
         )
 
         assertEquals("project-test", request.rootPatch?.projectId)
@@ -102,8 +100,7 @@ class EditTaskScreenRequestTest {
             recurrencePreset = RecurrencePreset.weekly,
             existingDrafts = emptyList(),
             deletedChildren = emptySet(),
-            addedDrafts = emptyList(),
-            deviceId = "device-1"
+            addedDrafts = emptyList()
         )
 
         assertEquals(NullablePatch.Value(null), request.rootPatch?.dueDatetime)
@@ -132,8 +129,7 @@ class EditTaskScreenRequestTest {
             recurrencePreset = RecurrencePreset.never,
             existingDrafts = emptyList(),
             deletedChildren = emptySet(),
-            addedDrafts = emptyList(),
-            deviceId = "device-1"
+            addedDrafts = emptyList()
         )
 
         assertEquals(NullablePatch.Value(null), request.rootPatch?.assigneeId)
@@ -182,8 +178,7 @@ class EditTaskScreenRequestTest {
                         recurrencePreset = state.draft.recurrencePreset,
                         existingDrafts = emptyList(),
                         deletedChildren = emptySet(),
-                        addedDrafts = emptyList(),
-                        deviceId = "device-1"
+                        addedDrafts = emptyList()
                     )
                 }
             )
@@ -232,8 +227,7 @@ class EditTaskScreenRequestTest {
         recurrencePreset = recurrencePreset,
         existingDrafts = listOf(ExistingChecklistDraft("child-1", "child-r1", "Child", null, false)),
         deletedChildren = emptySet(),
-        addedDrafts = emptyList(),
-        deviceId = "device-1"
+        addedDrafts = emptyList()
     )
 
     private fun task() = TaskSnapshotItem(

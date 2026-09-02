@@ -75,8 +75,7 @@ class BlockerActionStateTest {
             recurrencePreset = RecurrencePreset.never,
             existingDrafts = emptyList(),
             deletedChildren = emptySet(),
-            addedDrafts = emptyList(),
-            deviceId = "device-test"
+            addedDrafts = emptyList()
         )
 
         val patch = requireNotNull(request.rootPatch)

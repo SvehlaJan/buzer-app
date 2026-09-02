@@ -327,7 +327,6 @@ class UnifiedTaskEditorRealBackendTest {
             ).getSnapshot().tasks.first { it.id == taskId }
         }
         val coordinator = EnforcementDependencies.coordinator(context)
-        val deviceId = EnforcementDependencies.deviceIdentityStore(context).deviceId()
         val exited = mutableStateOf(false)
         composeRule.setContent {
             if (exited.value) {
@@ -335,7 +334,6 @@ class UnifiedTaskEditorRealBackendTest {
             } else {
                 EditTaskScreen(
                     task = task,
-                    deviceId = deviceId,
                     onBack = { exited.value = true },
                     onUpdate = coordinator::updateTask
                 )

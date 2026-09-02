@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.ui.components.BlockerSurface
 import app.buzer.android.ui.components.ChecklistEditor
@@ -165,9 +164,6 @@ fun DeadlineBlockerScreen(
     }
 
     val context = LocalContext.current
-    val deviceId = remember(context) {
-        EnforcementDependencies.deviceIdentityStore(context.applicationContext).deviceId()
-    }
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
@@ -242,7 +238,6 @@ fun DeadlineBlockerScreen(
         is DeadlineBlockerRecoveryState.Editor -> {
             DeadlineBlockerUpdateEditor(
                 task = recovery.task,
-                deviceId = deviceId,
                 choices = choices,
                 onRetryChoices = ::retryProjects,
                 onUpdate = onUpdate,
@@ -428,7 +423,6 @@ internal fun deadlineBlockerDraftFingerprint(
 @Composable
 private fun DeadlineBlockerUpdateEditor(
     task: TaskSnapshotItem,
-    deviceId: String,
     choices: TaskEditorUpdateChoices,
     onRetryChoices: () -> Unit,
     onUpdate: suspend (UpdateTaskRequest) -> CoordinatorActionResult,
@@ -533,8 +527,7 @@ private fun DeadlineBlockerUpdateEditor(
                         recurrencePreset = draft.recurrencePresetForUpdate(),
                         existingDrafts = existingDrafts,
                         deletedChildren = deletedChildren,
-                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList(),
-                        deviceId = deviceId
+                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList()
                     )
                 }
                 capturedUpdate = nextCapture

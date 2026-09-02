@@ -124,7 +124,6 @@ fun BuzerApp(
                     } else {
                         EditTaskScreen(
                             task = task,
-                            deviceId = deviceId,
                             initialAddedDrafts = emptyList(),
                             onBack = { section = AppSection.Home },
                             onUpdate = onUpdateTask,

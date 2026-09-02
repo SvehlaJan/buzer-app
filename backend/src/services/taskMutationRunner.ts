@@ -59,33 +59,14 @@ export class TaskMutationRunner {
   private readonly uuidFactory: () => string;
   private readonly now: () => number;
 
-  constructor(
-    queueOrDeps: TodoistOperationQueue | TaskMutationRunnerDependencies,
-    executor?: TodoistCommandExecutor,
-    syncService?: SyncOnceService,
-    snapshotService?: SnapshotProvider,
-    observability?: BackendObservability,
-    uuidFactory?: () => string,
-    now?: () => number
-  ) {
-    if ("queue" in queueOrDeps && !("run" in queueOrDeps)) {
-      const deps = queueOrDeps as TaskMutationRunnerDependencies;
-      this.queue = deps.queue;
-      this.executor = deps.executor;
-      this.syncService = deps.syncService;
-      this.snapshotService = deps.snapshotService;
-      this.observability = deps.observability ?? backendObservability;
-      this.uuidFactory = deps.uuidFactory ?? randomUUID;
-      this.now = deps.now ?? Date.now;
-    } else {
-      this.queue = queueOrDeps as TodoistOperationQueue;
-      this.executor = executor!;
-      this.syncService = syncService!;
-      this.snapshotService = snapshotService!;
-      this.observability = observability ?? backendObservability;
-      this.uuidFactory = uuidFactory ?? randomUUID;
-      this.now = now ?? Date.now;
-    }
+  constructor(deps: TaskMutationRunnerDependencies) {
+    this.queue = deps.queue;
+    this.executor = deps.executor;
+    this.syncService = deps.syncService;
+    this.snapshotService = deps.snapshotService;
+    this.observability = deps.observability ?? backendObservability;
+    this.uuidFactory = deps.uuidFactory ?? randomUUID;
+    this.now = deps.now ?? Date.now;
   }
 
   async execute(options: MutationRunOptions): Promise<MutationRunResult> {
