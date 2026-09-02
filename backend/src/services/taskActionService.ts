@@ -315,15 +315,7 @@ export class TaskActionService {
     });
 
     if (escalationTriggered && this.escalationService !== null && task.escalationSentAt === null) {
-      try {
-        if (typeof (this.escalationService as any).handleSecondDismissal === "function") {
-          await (this.escalationService as any).handleSecondDismissal(taskId);
-        } else {
-          await this.escalationService.sendForTask(taskId, nextDismissCount);
-        }
-      } catch {
-        // If escalation fails, do not roll back SQLite postponement; return success snapshot.
-      }
+      await this.escalationService.handleSecondDismissal(taskId);
     }
 
     return {
@@ -366,7 +358,17 @@ export class TaskActionService {
       ...(opts.requestId !== undefined ? { requestId: opts.requestId } : {}),
       taskId,
       ...(task.occurrenceKey !== null ? { occurrenceKey: task.occurrenceKey } : {}),
-      commands,
+      prepareCommands: () => {
+        const current = this.requireCompletableTask(taskId);
+        if (
+          opts.expectedOccurrenceKey !== undefined &&
+          opts.expectedOccurrenceKey !== null &&
+          opts.expectedOccurrenceKey !== current.occurrenceKey
+        ) {
+          throw DomainError.staleOccurrence(this.getSnapshot());
+        }
+        return commands;
+      },
       ...(opts.signal !== undefined ? { signal: opts.signal } : {})
     });
   }
@@ -426,7 +428,29 @@ export class TaskActionService {
       ...(opts.requestId !== undefined ? { requestId: opts.requestId } : {}),
       taskId,
       ...(task.occurrenceKey !== null ? { occurrenceKey: task.occurrenceKey } : {}),
-      commands,
+      prepareCommands: () => {
+        const current = this.requireSchedulableTask(taskId);
+        if (current.isRecurring) {
+          throw Object.assign(new Error("Recurring commitments cannot be extended"), {
+            code: "recurring_extension_unsupported",
+            statusCode: 422
+          });
+        }
+        if (
+          opts.expectedOccurrenceKey !== undefined &&
+          opts.expectedOccurrenceKey !== null &&
+          opts.expectedOccurrenceKey !== current.occurrenceKey
+        ) {
+          throw DomainError.staleOccurrence(this.getSnapshot());
+        }
+        if (
+          opts.expectedTaskRevision !== undefined &&
+          this.parseRevision(opts.expectedTaskRevision) !== current.mirrorRevision
+        ) {
+          throw DomainError.staleTask(this.getSnapshot());
+        }
+        return commands;
+      },
       ...(opts.signal !== undefined ? { signal: opts.signal } : {})
     });
   }
@@ -533,7 +557,23 @@ export class TaskActionService {
       ...(request.requestId !== undefined ? { requestId: request.requestId } : {}),
       taskId,
       ...(task.occurrenceKey !== null ? { occurrenceKey: task.occurrenceKey } : {}),
-      commands,
+      prepareCommands: () => {
+        const current = this.requireTask(taskId);
+        if (
+          request.expectedOccurrenceKey !== undefined &&
+          request.expectedOccurrenceKey !== null &&
+          request.expectedOccurrenceKey !== current.occurrenceKey
+        ) {
+          throw DomainError.staleOccurrence(this.getSnapshot());
+        }
+        if (this.parseRevision(request.rootPatch!.expectedTaskRevision) !== current.mirrorRevision) {
+          throw DomainError.staleTask(this.getSnapshot());
+        }
+        if (childMutations.length > 0) {
+          this.checklistService.validateMutations(current, childMutations);
+        }
+        return commands;
+      },
       ...(request.signal !== undefined ? { signal: request.signal } : {})
     });
   }

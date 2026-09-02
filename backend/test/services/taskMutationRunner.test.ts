@@ -10,6 +10,7 @@ import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.
 import { TodoistCommandExecutor } from "../../src/services/todoistCommandExecutor.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import type { TodoistAdapter, TodoistCommand } from "../../src/todoist/todoistAdapter.js";
+import { DomainError } from "../../src/domain/errors.js";
 import { RecordingBackendObservability } from "../fakes/recordingBackendObservability.js";
 
 function createMockSnapshot(overrides?: Partial<TaskSnapshot>): TaskSnapshot {
@@ -247,6 +248,102 @@ describe("TaskMutationRunner", () => {
       }
     ]);
     expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("prepares commands only after entering the FIFO and treats validation conflicts as expected terminal outcomes", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const prepareCommands = vi.fn((): TodoistCommand[] => {
+      throw DomainError.staleTask(snapshot);
+    });
+
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => snapshot,
+      observability: obs
+    });
+
+    await expect(runner.execute({
+      operation: "edit_task",
+      requestId: "req-prepare-conflict",
+      taskId: "task-1",
+      prepareCommands
+    })).rejects.toMatchObject({ code: "stale_task", statusCode: 409 });
+
+    expect(prepareCommands).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
+    expect(syncOnce).not.toHaveBeenCalled();
+    expect(obs.exceptions).toHaveLength(0);
+    expect(obs.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_operation_validation_failed"
+    ]);
+  });
+
+  it("resolves a created root temp ID to its permanent Todoist ID before a later child request", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter({
+      itemAdd: async (input) => ({
+        todoistTaskId: input.kind === "root" ? "todoist-root-real" : "todoist-child-real"
+      })
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => createMockSnapshot(),
+      uuidFactory: (() => {
+        let id = 0;
+        return () => `uuid-${++id}`;
+      })()
+    });
+
+    const result = await runner.execute({
+      operation: "create_task",
+      commands: [
+        {
+          type: "item_add",
+          input: {
+            kind: "root",
+            tempId: "root-temp",
+            title: "Root",
+            description: null,
+            projectId: "project-1",
+            assigneeId: null,
+            due: { kind: "preserve" },
+            duration: null
+          }
+        },
+        {
+          type: "item_add",
+          input: {
+            kind: "child",
+            tempId: "child-temp",
+            title: "Child",
+            description: null,
+            projectId: "project-1",
+            parentTodoistTaskId: "root-temp"
+          }
+        }
+      ]
+    });
+
+    expect(result.kind).toBe("success");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({
+      method: "itemAdd",
+      input: {
+        kind: "child",
+        parentTodoistTaskId: "todoist-root-real"
+      }
+    });
   });
 
   // Scenario 3: Acknowledged no-op -> N commands, 1 sync success -> { kind: "success", snapshot } (no effect comparison)
@@ -950,6 +1047,73 @@ describe("TaskMutationRunner", () => {
     expect(obs.exceptions[0]?.context).toMatchObject({
       marker: "post_ack_sync_internal_defect",
       operation: "internal_defect_op"
+    });
+  });
+
+  it("captures an unexpected in-queue preparation defect once and emits one terminal lifecycle log", async () => {
+    const queue = new TodoistOperationQueue();
+    const { adapter } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    const obs = new RecordingBackendObservability();
+    const defect = new TypeError("SQLite preparation invariant failed");
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => createMockSnapshot(),
+      observability: obs
+    });
+
+    await expect(runner.execute({
+      operation: "edit_task",
+      prepareCommands: () => { throw defect; }
+    })).rejects.toBe(defect);
+
+    expect(obs.exceptions).toHaveLength(1);
+    expect(obs.exceptions[0]).toMatchObject({
+      error: defect,
+      context: { marker: "mutation_runner_internal_defect", operation: "edit_task" }
+    });
+    expect(obs.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_operation_failed"
+    ]);
+  });
+
+  it("captures a Todoist parse defect exactly once while returning visible delivery uncertainty", async () => {
+    const queue = new TodoistOperationQueue();
+    const parseError = new TodoistOperationError("parse", undefined, { http_code: 200 });
+    const { adapter } = createMockAdapter({
+      itemDelete: async () => {
+        throw parseError;
+      }
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const obs = new RecordingBackendObservability();
+    const snapshot = createMockSnapshot();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce: vi.fn().mockResolvedValue(undefined) },
+      snapshotService: () => snapshot,
+      observability: obs
+    });
+
+    const result = await runner.execute({
+      operation: "delete_child",
+      requestId: "req-parse",
+      commands: [{ type: "item_delete", input: { todoistTaskId: "child-1" } }]
+    });
+
+    expect(result).toEqual({ kind: "delivery_unknown", snapshot });
+    expect(obs.exceptions).toHaveLength(1);
+    expect(obs.exceptions[0]).toMatchObject({
+      error: parseError,
+      context: {
+        marker: "todoist_command_parse_defect",
+        operation: "delete_child",
+        request_id: "req-parse"
+      }
     });
   });
 });

@@ -294,6 +294,37 @@ describe("TodoistCommandExecutor", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("treats a successful item_add response without a permanent ID as a parse defect", async () => {
+    const { adapter, calls } = createMockAdapter({
+      itemAdd: async () => ({ todoistTaskId: null })
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+
+    const result = await executor.executeCommand({
+      command: {
+        type: "item_add",
+        input: {
+          kind: "root",
+          tempId: "root-temp",
+          title: "Root",
+          description: null,
+          projectId: "project-1",
+          assigneeId: null,
+          due: { kind: "preserve" },
+          duration: null
+        }
+      },
+      commandUuid: "missing-temp-mapping",
+      deadlineMs: Date.now() + 10_000
+    });
+
+    expect(result.outcome).toBe("delivery_unknown");
+    if (result.outcome === "delivery_unknown") {
+      expect(result.error.kind).toBe("parse");
+    }
+    expect(calls).toHaveLength(1);
+  });
+
   it("honors Retry-After ms from 429 responses when wait and retry fit deadline", async () => {
     let currentTime = 1000;
     const sleptMs: number[] = [];

@@ -84,6 +84,14 @@ export class TodoistCommandExecutor {
 
       try {
         const result = await this.dispatch(command, commandUuid, attemptController.signal);
+        if (
+          command.type === "item_add" &&
+          (result === undefined || result.todoistTaskId === null)
+        ) {
+          throw new TodoistOperationError("parse", undefined, {
+            response_shape: "missing_temp_id_mapping"
+          });
+        }
         return {
           outcome: "success",
           ...(result && "todoistTaskId" in result ? { todoistTaskId: result.todoistTaskId } : {})

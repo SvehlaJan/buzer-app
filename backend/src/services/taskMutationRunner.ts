@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
+import { DomainError } from "../domain/errors.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
 import type { TodoistCommand } from "../todoist/todoistAdapter.js";
 import type { TodoistCommandExecutor } from "./todoistCommandExecutor.js";
@@ -24,7 +25,8 @@ export interface MutationRunOptions {
   requestId?: string;
   taskId?: string;
   occurrenceKey?: string;
-  commands: TodoistCommand[];
+  commands?: TodoistCommand[];
+  prepareCommands?: () => TodoistCommand[];
   deadlineMs?: number;
   minimumExecutionBudgetMs?: number;
   signal?: AbortSignal;
@@ -122,7 +124,7 @@ export class TaskMutationRunner {
 
     this.observability.info?.("todoist_operation_started", {
       operation: options.operation,
-      command_count: options.commands.length,
+      ...(options.commands !== undefined ? { command_count: options.commands.length } : {}),
       ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
       ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
       ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
@@ -139,8 +141,11 @@ export class TaskMutationRunner {
         },
         async (ctx: QueueExecutionContext) => {
           const executionDeadlineMs = this.now() + ctx.remainingMs;
+          const commands = options.prepareCommands?.() ?? options.commands ?? [];
+          const resolvedTempIds = new Map<string, string>();
 
-          for (const [i, command] of options.commands.entries()) {
+          for (const [i, originalCommand] of commands.entries()) {
+            const command = resolveTemporaryIds(originalCommand, resolvedTempIds);
             const commandUuid = this.uuidFactory();
 
             const cmdResult = await this.executor.executeCommand({
@@ -167,6 +172,10 @@ export class TaskMutationRunner {
                 }
               };
 
+              if (cmdResult.error.kind === "parse") {
+                this.captureDefect(cmdResult.error, "todoist_command_parse_defect", options);
+              }
+
               // Best-effort post-failure syncOnce to refresh SQLite
               let snapshot: TaskSnapshot | undefined;
               try {
@@ -183,6 +192,14 @@ export class TaskMutationRunner {
                 ...(snapshot !== undefined ? { snapshot } : {})
               };
             }
+
+            if (
+              cmdResult.outcome === "success" &&
+              command.type === "item_add" &&
+              typeof cmdResult.todoistTaskId === "string"
+            ) {
+              resolvedTempIds.set(command.input.tempId, cmdResult.todoistTaskId);
+            }
           }
 
           // All commands in the batch succeeded (or 0 commands).
@@ -195,7 +212,7 @@ export class TaskMutationRunner {
             pendingTerminalLog = {
               level: "info",
               marker: "todoist_operation_succeeded",
-              attributes: { command_count: options.commands.length }
+              attributes: { command_count: commands.length }
             };
 
             return {
@@ -206,7 +223,7 @@ export class TaskMutationRunner {
             pendingTerminalLog = {
               level: "warn",
               marker: "todoist_accepted_snapshot_stale",
-              attributes: { command_count: options.commands.length }
+              attributes: { command_count: commands.length }
             };
 
             if (!isOperationalFailure(syncError)) {
@@ -249,9 +266,32 @@ export class TaskMutationRunner {
         return { kind: "busy" };
       }
 
-      if (options.signal?.aborted && error === options.signal.reason) {
+      if (error instanceof DomainError || isExpectedValidationFailure(error)) {
+        emitTerminal({
+          level: "warn",
+          marker: "todoist_operation_validation_failed",
+          attributes: {
+            error_code: error.code
+          }
+        });
         throw error;
       }
+
+      if (options.signal?.aborted && error === options.signal.reason) {
+        emitTerminal({
+          level: "warn",
+          marker: "todoist_operation_cancelled"
+        });
+        throw error;
+      }
+
+      emitTerminal({
+        level: "warn",
+        marker: "todoist_operation_failed",
+        attributes: {
+          error_kind: error instanceof TodoistOperationError ? error.kind : "internal"
+        }
+      });
 
       if (!isOperationalFailure(error)) {
         this.captureDefect(error, "mutation_runner_internal_defect", options);
@@ -290,4 +330,35 @@ export class TaskMutationRunner {
       );
     }
   }
+}
+
+function resolveTemporaryIds(
+  command: TodoistCommand,
+  resolvedTempIds: ReadonlyMap<string, string>
+): TodoistCommand {
+  if (command.type !== "item_add" || command.input.kind !== "child") {
+    return command;
+  }
+  const permanentParentId = resolvedTempIds.get(command.input.parentTodoistTaskId);
+  if (permanentParentId === undefined) {
+    return command;
+  }
+  return {
+    ...command,
+    input: {
+      ...command.input,
+      parentTodoistTaskId: permanentParentId
+    }
+  };
+}
+
+function isExpectedValidationFailure(error: unknown): error is { code: string; statusCode: number } {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const candidate = error as { code?: unknown; statusCode?: unknown };
+  return typeof candidate.code === "string"
+    && typeof candidate.statusCode === "number"
+    && candidate.statusCode >= 400
+    && candidate.statusCode < 500;
 }
