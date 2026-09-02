@@ -3,24 +3,55 @@
 Date: 2026-09-02  
 Integration branch: `feature/level-1-mutation-simplification`  
 Integration worktree: `/Users/svehla/playground/buzer-app/.worktrees/level-1-mutation-simplification`  
-Current integration HEAD: `b43777f` (`fix: repair stale androidTest suite and a retry-masking bug it found`)
+Current integration HEAD: `59ed5c4` (`cleanup: remove context locals left dead by the deviceId removal`)
 
-## Update (this continuation session)
+## Update (this continuation session) — session complete
 
-The mutation-semantics repair's outstanding P2 lifecycle-logging finding
-(below, kept for record) is fixed, independently re-reviewed (PASS), and
-merged into the integration branch. Backend work for both the queue/deadline
-repair and the mutation-semantics repair is now fully integrated.
+Everything the previous handoff called out as outstanding is now done,
+independently reviewed, and device-verified. Commit sequence this session
+(all on this same integration branch, in this same worktree — no separate
+Android branch was used, per explicit instruction):
 
-**Android work for all four findings is now done, independently reviewed
-(PASS), and committed directly on this integration branch** (worked in this
-same worktree, not a separate branch, per explicit instruction) as `1f945cf`
-(the four findings + their tests) and `70f6fc6` (dead `MutationOutcome`
-type removal — the first cleanup-list item). See "Android work — done this
-session" below for what changed and "Recommended next action" at the bottom
-for what's still outstanding (remaining cleanup items, device-based
-`androidTest`/`scripts/e2e-real-backend.sh` verification, and correcting the
-2026-08-30 plan/handoff completion claims).
+1. `1449772` — backend lifecycle-log start/terminal pairing fix. Independent
+   review: PASS. Merged as `d7bb8eb`.
+2. `1f945cf` — all four Android mutation-warning-surface findings (warning
+   refresh authority, coordinator snapshot discard, AddTask error ownership,
+   structured Sentry attributes). Independent review: PASS.
+3. `70f6fc6` — dead `MutationOutcome` type removed (cleanup item 1).
+4. `b43777f` — the three originally-flagged stale `androidTest` files fixed
+   *and device-verified* (not just compiled), plus the backend
+   `e2eServer.ts` fixes this required, plus a real retry-masking product bug
+   found and fixed along the way. Independent review: PASS, two minor
+   non-blocking findings, both addressed in commits 6-7 below.
+5. `6c9cb48` — dead `deviceId` wire-threading removed (cleanup item 2);
+   `EnforcementCoordinator`'s child mutex investigated and confirmed *not*
+   redundant, left alone; `TaskMutationRunner`'s compatibility constructor
+   simplified (cleanup item 3, backend). Independent review: PASS.
+6. `6ab00b7` — corrected the 2026-08-30 plan and implementation handoff's
+   overstated Checkpoint E / "all tasks complete" claims.
+7. `59ed5c4` — removed two dead `context` locals the review in step 4/5
+   flagged (Kotlin only warns on unused locals, so these survived
+   compilation; not a functional issue, just residue).
+
+Also done this session, beyond the three flagged files: **the entire
+`androidTest` suite — 115 tests across every instrumentation class in the
+project — was run (not just compiled) on a real Android emulator against a
+real `backend/test/e2eServer.ts` process: 115/115 PASS.** This is the first
+time in this whole initiative that real-backend Android instrumentation was
+actually executed rather than only compiled; see "Final verification —
+status" below.
+
+One item flagged by the final independent review, worth surfacing rather
+than silently fixing: `b43777f` broadened `AddTaskScreen.kt`'s
+`isAddTaskOperationalFailure` from "`BuzerApiException` with a known
+operational code or 4xx status" to "any `BuzerApiException`" — this was a
+deliberate correctness fix (it now matches `BlockerErrorReporter`'s own
+`is BuzerApiException -> return false` guard, so AddTask no longer creates a
+spurious local Sentry Issue for a backend-owned non-4xx failure the backend
+already reports itself), covered by `AddTaskOperationalFailureTest.kt`, but
+the commit message's bullet points focused on the dialog→banner UI change
+and didn't call this out explicitly. Recorded here for the record; not
+re-litigated or amended into the original commit.
 
 ## Objective and product constraints
 
@@ -287,31 +318,39 @@ After behavior is correct, remove only verified residue:
 - [x] Stale `androidTest` expectations (`/tasks/sync`, `"Retry"` dialog
       pattern, dead `AddTaskFailurePresentation.kt` + its own test) — done
       and device-verified (`b43777f`).
-- [ ] Unused mutation-screen `deviceId` plumbing; preserve device identity
-      where check-in/observability still needs it. Confirmed so far (this
-      session, not yet acted on): `updateRequest(...)`'s `deviceId`
-      parameter (threaded from `MainActivity` → `App.kt` →
-      `EditTaskScreen`/`MorningReviewScreen`/`BlockerScreens`) is accepted
-      but never read inside the function body — genuinely dead wire
-      threading. `AddTaskScreen.kt`'s own local `deviceId` val is computed
-      but never referenced at all. `EnforcementDependencies.deviceIdentityStore`
-      itself and `DiagnosticCorrelation.deviceId` (the legitimate
-      observability channel, currently populated by zero call sites) should
-      stay untouched — only the confirmed-dead mutation-screen threading
-      should go.
-- [ ] Redundant child mutex/result state if whole-surface locking has made
-      it obsolete. Not yet investigated this session — `EnforcementCoordinator`'s
-      `childActionMutex`/`inFlightChildren` (used by `runFocusedChildAction`)
-      is the candidate; verify it isn't protecting a real race the UI-level
-      `enabled` state can't fully prevent before touching it.
-- [ ] Compatibility constructors/aliases only when all usages/tests have
-      migrated.
+- [x] Unused mutation-screen `deviceId` plumbing — done (`6c9cb48`,
+      dead-local follow-up `59ed5c4`). Removed `updateRequest(...)`'s
+      `deviceId` parameter (never read inside the function body — the wire
+      request never carried it) and the dead threading feeding it
+      (`EditTaskScreen`'s own param, `MorningReviewScreen`'s/`BlockerScreens`'
+      local vals, `AddTaskScreen`'s unused local val). Left `App.kt`'s own
+      `deviceId` param and its `deviceId.isBlank()` Edit-readiness gate
+      alone (a separate, legitimate use), and left
+      `EnforcementDependencies.deviceIdentityStore`/`DiagnosticCorrelation.deviceId`
+      (the real observability channel) untouched.
+- [x] Child mutex/result state — investigated (`6c9cb48`), confirmed **not**
+      redundant, deliberately left alone. `EnforcementCoordinator`'s
+      `childActionMutex`/`inFlightChildren` is the only protection against a
+      rapid double-tap on the same Home-screen checklist item —
+      `MainActivity.toggleCurrentChild` never sets any UI-level in-flight
+      state of its own (the pre-existing `state.interactionInFlight` guard
+      on `HomeScreen`'s checklist toggle is driven by unrelated actions),
+      and nothing in this session's whole-surface-locking work touches that
+      code path at all.
+- [x] Compatibility constructors/aliases — done (`6c9cb48`, backend).
+      `TaskMutationRunner`'s dual-mode constructor (positional args or a
+      deps object) simplified to deps-object-only after confirming via grep
+      that all 27 call sites (2 production, 25 test) already used the
+      object form, and via `tsc --noEmit` after (would fail on any
+      remaining positional-style caller). A broader sweep for the same
+      pattern elsewhere in the backend found no other instance. No
+      equivalent pattern found on the Android side.
 
-Do not turn cleanup into a redesign. Run `rg` before every removal and keep commits reviewable.
+Every cleanup-list item is now closed.
 
 ## Final verification — status
 
-Run this session, against the combined repaired branch at `b43777f`:
+Run this session, against the combined repaired branch (final HEAD `59ed5c4`):
 
 ```bash
 cd /Users/svehla/playground/buzer-app/.worktrees/level-1-mutation-simplification/backend
@@ -321,34 +360,37 @@ npm run build       # PASS
 
 cd /Users/svehla/playground/buzer-app/.worktrees/level-1-mutation-simplification/client
 ./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug
-# PASS (98 shared tests, 414 androidApp tests, assembleDebug succeeds)
+# PASS (98 shared tests, 413-414 androidApp tests depending on exact count
+# taken, assembleDebug succeeds)
 
 # Emulator (Buzer_API_34, started this session via `android emulator start`) +
 # backend/test/e2eServer.ts started directly (not through the wrapper script):
 ANDROID_SERIAL=emulator-5554 ./gradlew :androidApp:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.package=app.buzer.android.blockers,app.buzer.android.addtask \
   -PBUZER_BACKEND_BASE_URL=http://10.0.2.2:18433 -PBUZER_BACKEND_TOKEN=test-token \
   -PBUZER_ASSIGNEE_ME_ID=user-me -PBUZER_ASSIGNEE_WIFE_ID=user-wife \
   -PFAKE_BACKEND_BASE_URL=http://10.0.2.2:18433
-# 63/63 PASS (BlockerActivityFakeBackendTest 43, EditTaskFakeBackendTest 2,
-# AddTaskFakeBackendTest 11, RealBackendScenarioTest 7)
+# Run with NO class/package filter -- the entire androidTest suite:
+# 115/115 PASS. (An earlier, narrower run targeting just
+# app.buzer.android.blockers + app.buzer.android.addtask had already gone
+# 63/63; the unfiltered run supersedes and includes it.)
 
 git diff --check     # PASS
 git status --short   # clean
 ```
 
-**Not run this session, and still required before any production canary:**
-`scripts/e2e-real-backend.sh` itself (the wrapper script) was not used —
-its underlying pieces (emulator, e2e backend, `connectedDebugAndroidTest`,
-the same gradle properties) were run manually/directly instead, for faster
-iteration on the `BlockerActivityFakeBackendTest`/`EditTaskFakeBackendTest`/
-`AddTaskFakeBackendTest` packages only. The **other** `androidTest` classes
-(`readiness/`, `taskeditor/`, `ui/screens/*HostTest`, `observability/`, the
-`UnifiedTaskEditorRealBackendTest`, etc.) have not been run this session at
-all — only compiled. Do not assume they pass; run the full suite (the
-wrapper script, or `connectedDebugAndroidTest` with no class/package filter)
-before claiming the design's full rollout gate ("Pass all backend, shared,
-Android, and full real-backend instrumentation suites") is met.
+**`scripts/e2e-real-backend.sh` itself (the wrapper script) was still not
+used** — its underlying pieces (emulator, e2e backend,
+`connectedDebugAndroidTest`, the same gradle properties) were run
+manually/directly instead, for faster control over the e2e server process
+across multiple iterations. Functionally equivalent to running the wrapper
+script (same task, same properties, same effect), but if the wrapper script
+itself has ever drifted from what it invokes, that drift wouldn't have been
+caught. Worth running the actual wrapper once before a production canary,
+as a final sanity check on the script itself rather than its pieces.
+
+The design's full rollout gate ("Pass all backend, shared, Android, and
+full real-backend instrumentation suites") is now met for the first time in
+this initiative.
 
 The `Buzer_API_34` emulator and a manually-started `e2eServer.ts` process
 (port 18433) were left running at the end of this session for continued
@@ -360,28 +402,61 @@ them directly.
 - [x] Fix Fastify request cancellation and enforce the total queue/sync deadline.
 - [x] Finish and integrate mutation pre-send validation, checklist parent IDs, backend internal-error ownership, and the lifecycle-log start/terminal pairing fix.
 - [x] Fix Android warning refresh, authority propagation, local error ownership, and structured Sentry attributes. (`1f945cf`, independently reviewed PASS.)
-- [ ] Remove simplification residue and migrate stale instrumentation. (`MutationOutcome` and the three stale `androidTest` files done and device-verified; `deviceId` plumbing, child mutex, and compatibility aliases remain — see "Cleanup still pending".)
-- [ ] Run combined backend/JVM/build/full E2E verification. (Backend, Android JVM/build, and the three targeted `androidTest` packages — 63/63 — all pass, verified on a real emulator this session. The rest of the `androidTest` suite and the actual `scripts/e2e-real-backend.sh` wrapper have not been run this session.)
-- [ ] Run final read-only review and correct plan/handoff completion claims.
+- [x] Remove simplification residue and migrate stale instrumentation. All four cleanup-list items closed (`70f6fc6`, `b43777f`, `6c9cb48`, `59ed5c4`) — see "Cleanup still pending" above.
+- [x] Run combined backend/JVM/build/full E2E verification. Backend (482 tests), client JVM (shared 98 + androidApp ~414), `assembleDebug`, and the **complete, unfiltered** `androidTest` suite (115/115) all PASS, verified on a real emulator against a real e2e backend this session.
+- [x] Run final read-only review and correct plan/handoff completion claims. Independent review of the two commits that hadn't had one yet: PASS. The 2026-08-30 plan and implementation handoff's overstated Checkpoint E / "all tasks complete" claims corrected in `6ab00b7`.
+
+Every item on this handoff's own checklist is now done. What remains is
+entirely outside this handoff's scope: **Checkpoint E / Task 16 — production
+deployment, canary, and Sentry Issue closure** — see "Recommended next
+action" below.
 
 ## Manual verification, skipped checks, and assumptions
 
 - Android device verification this session used a local emulator
   (`Buzer_API_34`) and a directly-started `e2eServer.ts` process, not a
-  physical device and not the `scripts/e2e-real-backend.sh` wrapper itself —
-  see "Final verification — status" above for exactly what ran and what
-  didn't.
+  physical device and not the `scripts/e2e-real-backend.sh` wrapper script
+  itself (its underlying pieces were run directly instead) — see "Final
+  verification — status" above.
 - No production Todoist mutation, deployment, Sentry canary, or Sentry Issue closure was performed.
 - CI was not checked because no branch was pushed.
 - Backend work relied on unit/integration tests and real TCP HTTP regression coverage; no live Todoist destructive test was used.
-- The Android mutation-warning-surface fix's independent review (earlier in this session) verified wiring and Sentry SDK API correctness by reading source and the pinned SDK jar, and ran the full JVM/build gate, before any device became available — it explicitly did not run the app on a device; that gap was closed later this same session by the androidTest work above.
+- The Android mutation-warning-surface fix's independent review (earlier in this session) verified wiring and Sentry SDK API correctness by reading source and the pinned SDK jar, and ran the full JVM/build gate, before any device became available — it explicitly did not run the app on a device; that gap was closed later this same session by the androidTest work.
 - Assumption: the existing Level 1 product decisions remain authoritative; the user explicitly said to keep the current repair scope.
 
 ## Recommended next action
 
-Both backend repairs, all four Android mutation-warning-surface findings, and the three originally-flagged stale `androidTest` files (plus a real bug they surfaced) are now integrated on `feature/level-1-mutation-simplification` at `b43777f`, in this same worktree, and verified — including on a real emulator against a real e2e backend, not just compiled. What's left:
+All backend and Android repair work, all cleanup, and full verification
+(backend + client JVM + the complete real-backend `androidTest` suite,
+115/115 on a real emulator) are done and integrated on
+`feature/level-1-mutation-simplification` at `59ed5c4`, in this same
+worktree. The only thing left in the entire Level 1 mutation-simplification
+initiative is **Checkpoint E / Task 16 from the plan** — production rollout:
 
-1. Finish the remaining cleanup-list items: unused mutation-screen `deviceId` plumbing, the `EnforcementCoordinator` child-mutex redundancy question, and compatibility constructors/aliases — see "Cleanup still pending" above for what's already been scoped out this session versus not yet investigated.
-2. Run the **rest** of the `androidTest` suite (not just the 3 packages covered this session) — either the full `scripts/e2e-real-backend.sh` wrapper, or `connectedDebugAndroidTest` with no class/package filter, against the `Buzer_API_34` emulator (already running) or a fresh one.
-3. Only after that, run a final read-only review of the whole combined branch and correct the 2026-08-30 plan/handoff completion claims. Do not mark the production canary checkpoint complete locally. After any push, check the push-triggered `ci.yml` run before claiming completion.
-3. Only after both of those pass, run a final read-only review of the whole combined branch and correct the 2026-08-30 plan/handoff completion claims.
+1. Back up and verify production SQLite (`.backup` before deploying).
+2. Deploy the backend commit; verify the v7 schema migration ran cleanly and
+   the one-minute poller is healthy in production logs.
+3. Install the matching Android release build on a primary device.
+4. Run production canaries for every action (Create, Edit, checklist,
+   Extend, one-time Done, recurring Done, Start, Postpone) and each warning
+   family (busy-before-send, rejection, delivery-unknown, accepted-stale,
+   forced-refresh failure), confirming normal controls reappear immediately
+   after every outcome and nothing destructive double-fires.
+5. Verify structured logs and component-owned internal Issues appear
+   correctly in Sentry for real production traffic.
+6. Only after each individual gate passes, resolve the four Sentry Issues
+   through Sentry MCP (`BUZER-ANDROID-4`, `-5`, `-7`, `-8`) per their
+   specific verification criteria in the design doc. If Sentry MCP
+   authentication is unavailable, ask the user to reauthenticate — do not
+   bypass API access with browser automation.
+
+Do not mark this checkpoint complete locally without having actually done
+the deployment and canary. If a branch is ever pushed for this work, check
+the push-triggered `ci.yml` run before claiming CI passes — it has not been
+checked this entire initiative because no branch has been pushed yet.
+
+Housekeeping: the `Buzer_API_34` emulator and a manually-started
+`e2eServer.ts` process (port 18433) were left running at the end of this
+session — stop them (`android emulator stop Buzer_API_34`; kill the
+`e2eServer.ts` node process) if picking this up later in a clean state, or
+reuse them directly for the Android release-build canary above.
