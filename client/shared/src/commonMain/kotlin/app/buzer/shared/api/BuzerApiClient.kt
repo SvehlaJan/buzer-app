@@ -322,4 +322,9 @@ internal fun defaultHttpClient(
 internal val buzerApiJson: Json = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
+    // Non-nullable fields with defaults (e.g. TaskSnapshotItem.occurrenceKey, .taskRevision)
+    // must tolerate an explicit JSON `null` from the backend, not just an absent key.
+    // explicitNulls only governs encoding; without this, decoding an explicit null into
+    // a non-nullable default-valued property throws instead of falling back to the default.
+    coerceInputValues = true
 }
