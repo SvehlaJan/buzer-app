@@ -31,7 +31,7 @@ export interface MutationRunOptions {
 }
 
 export interface SyncOnceService {
-  syncOnce(): Promise<unknown>;
+  syncOnce(options?: { signal?: AbortSignal }): Promise<unknown>;
 }
 
 export type SnapshotProvider =
@@ -91,10 +91,33 @@ export class TaskMutationRunner {
     const minimumExecutionBudgetMs = options.minimumExecutionBudgetMs ?? MUTATION_MINIMUM_EXECUTION_BUDGET_MS;
     const activeDeadlineState: {
       outcome: "delivery_unknown" | "rejected" | "accepted_stale";
-      logged: boolean;
     } = {
-      outcome: "delivery_unknown",
-      logged: false
+      outcome: "delivery_unknown"
+    };
+    type TerminalLog = {
+      level: "info" | "warn";
+      marker: string;
+      attributes?: Record<string, unknown>;
+    };
+    let pendingTerminalLog: TerminalLog | undefined;
+    let terminalLogged = false;
+    const emitTerminal = (terminal: TerminalLog): void => {
+      if (terminalLogged) {
+        return;
+      }
+      terminalLogged = true;
+      const attributes = {
+        operation: options.operation,
+        ...(terminal.attributes ?? {}),
+        ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
+        ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
+        ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
+      };
+      if (terminal.level === "info") {
+        this.observability.info?.(terminal.marker, attributes);
+      } else {
+        this.observability.warn?.(terminal.marker, attributes);
+      }
     };
 
     this.observability.info?.("todoist_operation_started", {
@@ -106,7 +129,7 @@ export class TaskMutationRunner {
     });
 
     try {
-      return await this.queue.run(
+      const result: MutationRunResult = await this.queue.run(
         {
           operation: options.operation,
           ...(options.requestId !== undefined ? { requestId: options.requestId } : {}),
@@ -134,21 +157,20 @@ export class TaskMutationRunner {
                 ? "todoist_command_rejected"
                 : "todoist_delivery_unknown";
 
-              this.observability.warn?.(marker, {
-                operation: options.operation,
-                command_type: command.type,
-                command_index: i,
-                error_kind: cmdResult.error.kind,
-                ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-                ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-                ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-              });
-              activeDeadlineState.logged = true;
+              pendingTerminalLog = {
+                level: "warn",
+                marker,
+                attributes: {
+                  command_type: command.type,
+                  command_index: i,
+                  error_kind: cmdResult.error.kind
+                }
+              };
 
               // Best-effort post-failure syncOnce to refresh SQLite
               let snapshot: TaskSnapshot | undefined;
               try {
-                await this.syncService.syncOnce();
+                await this.syncService.syncOnce({ signal: ctx.signal });
                 snapshot = this.getSnapshot();
               } catch (syncError) {
                 if (!isOperationalFailure(syncError)) {
@@ -167,29 +189,25 @@ export class TaskMutationRunner {
           // Perform post-command syncOnce exactly once.
           activeDeadlineState.outcome = "accepted_stale";
           try {
-            await this.syncService.syncOnce();
+            await this.syncService.syncOnce({ signal: ctx.signal });
             const snapshot = this.getSnapshot();
 
-            this.observability.info?.("todoist_operation_succeeded", {
-              operation: options.operation,
-              command_count: options.commands.length,
-              ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-              ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-              ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-            });
+            pendingTerminalLog = {
+              level: "info",
+              marker: "todoist_operation_succeeded",
+              attributes: { command_count: options.commands.length }
+            };
 
             return {
               kind: "success",
               snapshot
             };
           } catch (syncError) {
-            this.observability.warn?.("todoist_accepted_snapshot_stale", {
-              operation: options.operation,
-              command_count: options.commands.length,
-              ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-              ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-              ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-            });
+            pendingTerminalLog = {
+              level: "warn",
+              marker: "todoist_accepted_snapshot_stale",
+              attributes: { command_count: options.commands.length }
+            };
 
             if (!isOperationalFailure(syncError)) {
               this.captureDefect(syncError, "post_ack_sync_internal_defect", options);
@@ -201,25 +219,25 @@ export class TaskMutationRunner {
           }
         }
       );
+      if (pendingTerminalLog !== undefined) {
+        emitTerminal(pendingTerminalLog);
+      }
+      return result;
     } catch (error) {
       if (
         error instanceof TodoistOperationError &&
         error.safeAttributes?.failure_stage === "active"
       ) {
-        if (!activeDeadlineState.logged) {
-          const marker = activeDeadlineState.outcome === "rejected"
-            ? "todoist_command_rejected"
-            : activeDeadlineState.outcome === "accepted_stale"
-              ? "todoist_accepted_snapshot_stale"
-              : "todoist_delivery_unknown";
-          this.observability.warn?.(marker, {
-            operation: options.operation,
-            failure_stage: "active",
-            ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-            ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-            ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-          });
-        }
+        const marker = activeDeadlineState.outcome === "rejected"
+          ? "todoist_command_rejected"
+          : activeDeadlineState.outcome === "accepted_stale"
+            ? "todoist_accepted_snapshot_stale"
+            : "todoist_delivery_unknown";
+        emitTerminal({
+          level: "warn",
+          marker,
+          attributes: { failure_stage: "active" }
+        });
         return { kind: activeDeadlineState.outcome };
       }
 
@@ -227,12 +245,7 @@ export class TaskMutationRunner {
         error instanceof TodoistOperationError &&
         error.safeAttributes?.error_code === "backend_busy"
       ) {
-        this.observability.warn?.("backend_busy", {
-          operation: options.operation,
-          ...(options.requestId !== undefined ? { request_id: options.requestId } : {}),
-          ...(options.taskId !== undefined ? { task_id: options.taskId } : {}),
-          ...(options.occurrenceKey !== undefined ? { occurrence_key: options.occurrenceKey } : {})
-        });
+        emitTerminal({ level: "warn", marker: "backend_busy" });
         return { kind: "busy" };
       }
 

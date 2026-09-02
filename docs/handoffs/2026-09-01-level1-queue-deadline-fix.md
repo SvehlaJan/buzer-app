@@ -1,7 +1,7 @@
 # Level 1 queue deadline and request-signal repair handoff
 
-Date: 2026-09-01
-Status: DONE_WITH_CONCERNS
+Date: 2026-09-02
+Status: DONE
 
 ## Task and plan status
 
@@ -32,6 +32,15 @@ Status: DONE_WITH_CONCERNS
   to `TodoistAdapter.sync`. The poller and forced refresh route pass their queue execution
   signals to raw sync. The HTTP adapter already forwarded read-sync signals to `fetch`; a
   focused characterization test now locks that behavior.
+- TaskMutationRunner now passes the queue-owned execution signal to both post-command sync
+  paths. Abort-aware sync cancellation releases FIFO ownership after the caller receives
+  the active-deadline result, so the next waiting operation can start without overlap.
+- Mutation lifecycle terminal logging is emitted only after the queue outcome is
+  authoritative and is guarded to exactly once. Late callback settlement after an active
+  deadline cannot append `delivery_unknown`, `accepted_stale`, or success logs.
+- The queue rechecks elapsed total time after an awaited callback outcome wins the race,
+  so a starved JavaScript timer cannot let work completed at or beyond the deadline report
+  success.
 - Forced refresh returns operational network/timeout failures as warning-only typed
   responses, while parse/state/SQLite/internal failures are captured through backend
   observability before the warning response. Active refresh deadline timeout maps to
@@ -97,12 +106,27 @@ Verification:
 - Evidence: 17 TaskMutationRunner tests passed; active deadlines now preserve accepted,
   rejected, and unresolved-delivery phases.
 
+## Quality-review follow-up red/green evidence
+
+Verification:
+- Command: `npm test -- --run test/services/todoistOperationQueue.test.ts test/services/taskMutationRunner.test.ts`
+- Result: FAIL (expected RED)
+- Evidence: four focused failures proved both post-command sync paths omitted the queue
+  signal, a late command rejection appended a second terminal mutation log, and an awaited
+  callback outcome could report success after the injected clock crossed the deadline.
+
+Verification:
+- Command: `npm test -- --run test/services/todoistOperationQueue.test.ts test/services/taskMutationRunner.test.ts`
+- Result: PASS (GREEN)
+- Evidence: 2 test files and 32 tests passed. The accepted-sync timeout test also proves
+  cooperative abort settles the active callback and starts the next FIFO entry.
+
 ## Final verification
 
 Verification:
 - Command: `npm test`
 - Result: PASS
-- Evidence: 38 test files and 455 tests passed after all review repairs.
+- Evidence: 38 test files and 456 tests passed after all review repairs.
 
 Verification:
 - Command: `npm run typecheck`
@@ -142,14 +166,10 @@ Verification:
   not push it.
 - `npm ci` warns that the repository declares Node 22.x while the regression host is Node
   v26.4.0; the Node 26 host is intentional for reproducing the reviewed request-signal bug.
-- TaskMutationRunner post-sync signal propagation remains assigned to the next task. This
-  repair changes only its narrow deadline phase/outcome mapping. Until signal propagation
-  lands, a stuck post-sync retains the FIFO after its caller receives the phase-correct
-  `accepted_stale`, `rejected`, or `delivery_unknown`; later entries expire waiting and
-  never overlap it.
 - A callback that ignores cooperative cancellation deliberately retains queue ownership
   until it settles. This preserves the one-active-operation invariant at the cost of queue
-  availability; owned poll and forced-refresh paths honor the execution signal.
+  availability; poll, forced-refresh, mutation command, and mutation post-sync paths all
+  honor the queue execution signal.
 - `.agents/tasks/level1-queue-deadline-fix.yaml` remains available locally but is ignored
   and removed from the tracked index, matching the workspace protocol.
 
@@ -159,6 +179,12 @@ Verification:
   `backend_busy` / `waiting` says nothing was sent.
 - Confirmed active deadline handling preserves acknowledged commands as accepted-stale and
   explicit rejection as rejected; only unresolved command delivery becomes unknown.
+- Confirmed both mutation post-sync paths receive the queue-owned signal and an abort-aware
+  hanging sync settles before the next FIFO operation starts.
+- Confirmed each tested mutation has one start and one terminal lifecycle marker; late
+  completion/rejection after the active deadline cannot emit a second terminal or success.
+- Confirmed the post-await injected-clock case is classified as an active deadline even
+  when the callback outcome wins before the timer callback can run.
 - Confirmed client cancellation remains effective for queued entries but no longer cancels
   already-dequeued work.
 - Confirmed operational forced-refresh failures create warning logs and zero Issues, while
@@ -168,6 +194,5 @@ Verification:
 
 ## Next recommended step
 
-Integrate these commits before or together with the separately owned TaskMutationRunner
-repair that passes `ctx.signal` to both post-command sync paths. Active-vs-waiting deadline
-classification and known outcome preservation are already repaired here.
+Integrate commits `f5d7cdd`, `2f9684e`, `e35ea76`, and the final quality-review repair
+commit from `feature/level1-fix-queue-deadline` into the Level 1 mutation branch.

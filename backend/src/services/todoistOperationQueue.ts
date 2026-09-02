@@ -205,6 +205,16 @@ export class TodoistOperationQueue {
           firstOutcome = await Promise.race([callbackOutcome, deadlinePromise]);
         }
 
+        if (
+          firstOutcome.kind !== "deadline" &&
+          Math.max(0, this.now() - item.enqueuedAt) >= item.options.deadlineMs
+        ) {
+          const error = this.createExecutionTimeoutError(item.options);
+          resolveDeadline?.({ kind: "deadline", error });
+          executionController.abort(error);
+          firstOutcome = { kind: "deadline", error };
+        }
+
         if (firstOutcome.kind === "deadline") {
           item.reject(firstOutcome.error);
           // The caller receives the deadline promptly, but this drain loop retains the

@@ -547,10 +547,10 @@ describe("TaskMutationRunner", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     await expect(result).resolves.toEqual({ kind: "delivery_unknown" });
-    expect(observability.logs).toContainEqual(expect.objectContaining({
-      level: "warn",
-      marker: "todoist_delivery_unknown"
-    }));
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_delivery_unknown"
+    ]);
     expect(observability.logs).not.toContainEqual(expect.objectContaining({
       marker: "backend_busy"
     }));
@@ -560,6 +560,13 @@ describe("TaskMutationRunner", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(syncOnce).toHaveBeenCalledTimes(1);
     expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_delivery_unknown"
+    ]);
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "todoist_operation_succeeded"
+    }));
   });
 
   it("preserves acknowledged commands as accepted_stale when post-command sync hits the active deadline", async () => {
@@ -567,7 +574,17 @@ describe("TaskMutationRunner", () => {
     const queue = new TodoistOperationQueue();
     const { adapter, calls } = createMockAdapter();
     const executor = new TodoistCommandExecutor(adapter);
-    const syncOnce = vi.fn(async () => await new Promise<void>(() => {}));
+    let syncSignal: AbortSignal | undefined;
+    const syncOnce = vi.fn(async (options?: { signal?: AbortSignal }) => {
+      syncSignal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        if (syncSignal?.aborted) {
+          reject(syncSignal.reason);
+          return;
+        }
+        syncSignal?.addEventListener("abort", () => reject(syncSignal?.reason), { once: true });
+      });
+    });
     const observability = new RecordingBackendObservability();
     const runner = new TaskMutationRunner({
       queue,
@@ -585,21 +602,26 @@ describe("TaskMutationRunner", () => {
       minimumExecutionBudgetMs: 0
     });
     await vi.advanceTimersByTimeAsync(0);
+    const nextCallback = vi.fn().mockResolvedValue("next-ran");
+    const next = queue.run({ operation: "next", deadlineMs: 5000 }, nextCallback);
 
     expect(calls).toHaveLength(1);
     expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(syncSignal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1000);
 
     await expect(result).resolves.toEqual({ kind: "accepted_stale" });
-    expect(observability.logs).toContainEqual(expect.objectContaining({
-      level: "warn",
-      marker: "todoist_accepted_snapshot_stale"
-    }));
+    await expect(next).resolves.toBe("next-ran");
+    expect(syncSignal?.aborted).toBe(true);
+    expect(nextCallback).toHaveBeenCalledOnce();
+    expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_accepted_snapshot_stale"
+    ]);
     expect(observability.logs).not.toContainEqual(expect.objectContaining({
-      marker: "todoist_delivery_unknown"
-    }));
-    expect(observability.logs).not.toContainEqual(expect.objectContaining({
-      marker: "backend_busy"
+      marker: "todoist_operation_succeeded"
     }));
   });
 
@@ -612,7 +634,17 @@ describe("TaskMutationRunner", () => {
       }
     });
     const executor = new TodoistCommandExecutor(adapter);
-    const syncOnce = vi.fn(async () => await new Promise<void>(() => {}));
+    let syncSignal: AbortSignal | undefined;
+    const syncOnce = vi.fn(async (options?: { signal?: AbortSignal }) => {
+      syncSignal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        if (syncSignal?.aborted) {
+          reject(syncSignal.reason);
+          return;
+        }
+        syncSignal?.addEventListener("abort", () => reject(syncSignal?.reason), { once: true });
+      });
+    });
     const observability = new RecordingBackendObservability();
     const runner = new TaskMutationRunner({
       queue,
@@ -633,18 +665,18 @@ describe("TaskMutationRunner", () => {
 
     expect(calls).toHaveLength(1);
     expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
     await vi.advanceTimersByTimeAsync(1000);
 
     await expect(result).resolves.toEqual({ kind: "rejected" });
-    expect(observability.logs).toContainEqual(expect.objectContaining({
-      level: "warn",
-      marker: "todoist_command_rejected"
-    }));
+    expect(syncSignal?.aborted).toBe(true);
+    expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_command_rejected"
+    ]);
     expect(observability.logs).not.toContainEqual(expect.objectContaining({
-      marker: "todoist_delivery_unknown"
-    }));
-    expect(observability.logs).not.toContainEqual(expect.objectContaining({
-      marker: "backend_busy"
+      marker: "todoist_operation_succeeded"
     }));
   });
 

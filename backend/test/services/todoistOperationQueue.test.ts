@@ -484,4 +484,29 @@ describe("TodoistOperationQueue", () => {
     });
     expect(executionSignal?.aborted).toBe(true);
   });
+
+  it("rechecks the active deadline after an awaited callback outcome wins", async () => {
+    let now = 1000;
+    const queue = new TodoistOperationQueue({ now: () => now });
+    let executionSignal: AbortSignal | undefined;
+
+    const result = queue.run(
+      { operation: "starved_deadline_timer", deadlineMs: 1000 },
+      async (ctx) => {
+        executionSignal = ctx.signal;
+        await Promise.resolve();
+        now = 2001;
+        return "too-late";
+      }
+    );
+
+    await expect(result).rejects.toMatchObject({
+      kind: "timeout",
+      safeAttributes: {
+        error_code: "todoist_operation_deadline",
+        failure_stage: "active"
+      }
+    });
+    expect(executionSignal?.aborted).toBe(true);
+  });
 });
