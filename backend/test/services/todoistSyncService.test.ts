@@ -8,6 +8,24 @@ import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("TodoistSyncService", () => {
+  it("propagates an optional AbortSignal to the raw Todoist read sync", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const adapter = new FakeTodoistAdapter();
+    const syncSpy = vi.spyOn(adapter, "sync");
+    const signal = new AbortController().signal;
+    const service = new TodoistSyncService(
+      db,
+      new TaskRepository(db),
+      new ProjectRepository(db),
+      adapter
+    );
+
+    await service.syncOnce({ signal });
+
+    expect(syncSpy).toHaveBeenCalledWith("*", { signal });
+  });
+
   it("stores synced tasks and updates sync token", async () => {
     const db = new Database(":memory:");
     migrate(db);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MUTATION_DEADLINE_MS,
   MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
@@ -67,6 +67,10 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
 }
 
 describe("TaskMutationRunner", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("exports default constants MUTATION_DEADLINE_MS = 13_000 and MUTATION_MINIMUM_EXECUTION_BUDGET_MS = 5_000", () => {
     expect(MUTATION_DEADLINE_MS).toBe(13_000);
     expect(MUTATION_MINIMUM_EXECUTION_BUDGET_MS).toBe(5_000);
@@ -505,6 +509,175 @@ describe("TaskMutationRunner", () => {
       }
     });
     expect(obs.exceptions).toHaveLength(0);
+  });
+
+  it("maps an active queue deadline after command dispatch to delivery_unknown, never backend_busy", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    let rejectDispatchedCommand: ((error: TodoistOperationError) => void) | undefined;
+    const dispatchedCommand = new Promise<void>((_resolve, reject) => {
+      rejectDispatchedCommand = reject;
+    });
+    const { adapter, calls } = createMockAdapter({
+      itemClose: async () => await dispatchedCommand
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    const syncOnce = vi.fn().mockResolvedValue(undefined);
+    const observability = new RecordingBackendObservability();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => createMockSnapshot(),
+      observability
+    });
+
+    const result = runner.execute({
+      operation: "complete_task",
+      requestId: "req-active-deadline",
+      taskId: "task-1",
+      occurrenceKey: "occurrence-1",
+      commands: [{ type: "item_close", input: { todoistTaskId: "todoist-1" } }],
+      deadlineMs: 1000,
+      minimumExecutionBudgetMs: 0
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(result).resolves.toEqual({ kind: "delivery_unknown" });
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_delivery_unknown"
+    ]);
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "backend_busy"
+    }));
+    expect(queue.activeCount).toBe(1);
+
+    rejectDispatchedCommand?.(new TodoistOperationError("timeout"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_delivery_unknown"
+    ]);
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "todoist_operation_succeeded"
+    }));
+  });
+
+  it("preserves acknowledged commands as accepted_stale when post-command sync hits the active deadline", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter();
+    const executor = new TodoistCommandExecutor(adapter);
+    let syncSignal: AbortSignal | undefined;
+    const syncOnce = vi.fn(async (options?: { signal?: AbortSignal }) => {
+      syncSignal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        if (syncSignal?.aborted) {
+          reject(syncSignal.reason);
+          return;
+        }
+        syncSignal?.addEventListener("abort", () => reject(syncSignal?.reason), { once: true });
+      });
+    });
+    const observability = new RecordingBackendObservability();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => createMockSnapshot(),
+      observability
+    });
+
+    const result = runner.execute({
+      operation: "complete_task",
+      requestId: "req-accepted-deadline",
+      commands: [{ type: "item_close", input: { todoistTaskId: "todoist-1" } }],
+      deadlineMs: 1000,
+      minimumExecutionBudgetMs: 0
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const nextCallback = vi.fn().mockResolvedValue("next-ran");
+    const next = queue.run({ operation: "next", deadlineMs: 5000 }, nextCallback);
+
+    expect(calls).toHaveLength(1);
+    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(syncSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(result).resolves.toEqual({ kind: "accepted_stale" });
+    await expect(next).resolves.toBe("next-ran");
+    expect(syncSignal?.aborted).toBe(true);
+    expect(nextCallback).toHaveBeenCalledOnce();
+    expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_accepted_snapshot_stale"
+    ]);
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "todoist_operation_succeeded"
+    }));
+  });
+
+  it("preserves explicit command rejection when best-effort sync hits the active deadline", async () => {
+    vi.useFakeTimers();
+    const queue = new TodoistOperationQueue();
+    const { adapter, calls } = createMockAdapter({
+      itemClose: async () => {
+        throw new TodoistOperationError("command_rejected");
+      }
+    });
+    const executor = new TodoistCommandExecutor(adapter);
+    let syncSignal: AbortSignal | undefined;
+    const syncOnce = vi.fn(async (options?: { signal?: AbortSignal }) => {
+      syncSignal = options?.signal;
+      await new Promise<void>((_resolve, reject) => {
+        if (syncSignal?.aborted) {
+          reject(syncSignal.reason);
+          return;
+        }
+        syncSignal?.addEventListener("abort", () => reject(syncSignal?.reason), { once: true });
+      });
+    });
+    const observability = new RecordingBackendObservability();
+    const runner = new TaskMutationRunner({
+      queue,
+      executor,
+      syncService: { syncOnce },
+      snapshotService: () => createMockSnapshot(),
+      observability
+    });
+
+    const result = runner.execute({
+      operation: "complete_task",
+      requestId: "req-rejected-deadline",
+      commands: [{ type: "item_close", input: { todoistTaskId: "todoist-1" } }],
+      deadlineMs: 1000,
+      minimumExecutionBudgetMs: 0
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(calls).toHaveLength(1);
+    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    await expect(result).resolves.toEqual({ kind: "rejected" });
+    expect(syncSignal?.aborted).toBe(true);
+    expect(queue.activeCount).toBe(0);
+    expect(observability.logs.map(({ marker }) => marker)).toEqual([
+      "todoist_operation_started",
+      "todoist_command_rejected"
+    ]);
+    expect(observability.logs).not.toContainEqual(expect.objectContaining({
+      marker: "todoist_operation_succeeded"
+    }));
   });
 
   // Scenario 8: Retry succeeds -> max 2 attempts reusing same UUID -> { kind: "success", snapshot }

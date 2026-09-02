@@ -26,6 +26,10 @@ export interface TodoistSyncSummary {
   changedCollaboratorCount: number;
 }
 
+export interface TodoistSyncOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * Raw non-queuing sync service for Todoist synchronization.
  *
@@ -63,19 +67,19 @@ export class TodoistSyncService {
     };
   }
 
-  syncNow(): Promise<TodoistSyncSummary> {
+  syncNow(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {
     if (this.manualSyncInFlight !== null) return this.manualSyncInFlight;
-    const run = this.syncOnce().finally(() => {
+    const run = this.syncOnce(options).finally(() => {
       if (this.manualSyncInFlight === run) this.manualSyncInFlight = null;
     });
     this.manualSyncInFlight = run;
     return run;
   }
 
-  async syncOnce(): Promise<TodoistSyncSummary> {
+  async syncOnce(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {
     const start = Date.now();
     try {
-      const summary = await this.performSync();
+      const summary = await this.performSync(options);
       this.lastSyncAt = new Date().toISOString();
       this.lastOutcome = "success";
       this.lastDurationMs = Date.now() - start;
@@ -90,7 +94,7 @@ export class TodoistSyncService {
     }
   }
 
-  private async performSync(): Promise<TodoistSyncSummary> {
+  private async performSync(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {
     const preSyncTasks = this.tasks.listAll();
     const preSyncPolicy = new TaskEnforcementPolicy({
       currentUserId: this.currentUserId,
@@ -105,7 +109,9 @@ export class TodoistSyncService {
     const syncToken = requiresFullSync || this.projects.listActive().length === 0
       ? "*"
       : current?.syncToken ?? "*";
-    const result = await this.todoist.sync(syncToken);
+    const result = options?.signal === undefined
+      ? await this.todoist.sync(syncToken)
+      : await this.todoist.sync(syncToken, { signal: options.signal });
     const now = new Date().toISOString();
     const previousByTodoistId = new Map(
       preSyncTasks.map((task) => [task.todoistTaskId, task])

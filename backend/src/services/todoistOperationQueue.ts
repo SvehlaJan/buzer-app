@@ -35,8 +35,11 @@ interface QueueItem<T = unknown> {
  * 4. Admission control: operations whose deadline has expired or whose remaining
  *    execution budget is insufficient (< minimumExecutionBudgetMs) are rejected
  *    before execution with a typed TodoistOperationError("timeout", ..., { error_code: "backend_busy" }).
- * 5. Immediate cancellation / dequeue if an operation's AbortSignal fires while waiting.
- * 6. Pure non-durable in-memory drain loop without SQLite tables, journals, or root mutexes.
+ * 5. Immediate cancellation / dequeue if a client's AbortSignal fires while waiting.
+ * 6. A queue-owned execution signal aborts active work at the remaining total deadline.
+ *    The caller receives that deadline promptly, while the exclusive slot remains held
+ *    until the callback settles; client disconnection no longer controls dequeued work.
+ * 7. Pure non-durable in-memory drain loop without SQLite tables, journals, or root mutexes.
  *
  * NON-REENTRANCY WARNING:
  * This queue is strictly non-reentrant. Top-level entry points (HTTP mutation handlers,
@@ -155,17 +158,81 @@ export class TodoistOperationQueue {
       }
 
       this.isProcessing = true;
+      let executionTimer: NodeJS.Timeout | null = null;
       try {
+        const executionController = new AbortController();
         const ctx: QueueExecutionContext = {
-          signal: item.options.signal ?? new AbortController().signal,
+          signal: executionController.signal,
           remainingMs,
           queueWaitMs,
         };
-        const result = await item.callback(ctx);
-        item.resolve(result);
+        type CallbackOutcome =
+          | { kind: "success"; value: unknown }
+          | { kind: "failure"; error: unknown };
+        type DeadlineOutcome = { kind: "deadline"; error: TodoistOperationError };
+        let resolveDeadline: ((outcome: DeadlineOutcome) => void) | undefined;
+        const deadlinePromise = new Promise<DeadlineOutcome>((resolve) => {
+          resolveDeadline = resolve;
+          if (!Number.isFinite(remainingMs)) {
+            return;
+          }
+          executionTimer = setTimeout(() => {
+            const error = this.createExecutionTimeoutError(item.options);
+            resolve({ kind: "deadline", error });
+            executionController.abort(error);
+          }, remainingMs);
+          executionTimer.unref?.();
+        });
+        let callbackPromise: Promise<unknown>;
+        try {
+          callbackPromise = Promise.resolve(item.callback(ctx));
+        } catch (error) {
+          callbackPromise = Promise.reject(error);
+        }
+        const callbackOutcome: Promise<CallbackOutcome> = callbackPromise.then(
+          (value) => ({ kind: "success", value }),
+          (error: unknown) => ({ kind: "failure", error })
+        );
+
+        const elapsedAfterInvocation = Math.max(0, this.now() - item.enqueuedAt);
+        let firstOutcome: CallbackOutcome | DeadlineOutcome;
+        if (elapsedAfterInvocation >= item.options.deadlineMs) {
+          const error = this.createExecutionTimeoutError(item.options);
+          resolveDeadline?.({ kind: "deadline", error });
+          executionController.abort(error);
+          firstOutcome = { kind: "deadline", error };
+        } else {
+          firstOutcome = await Promise.race([callbackOutcome, deadlinePromise]);
+        }
+
+        if (
+          firstOutcome.kind !== "deadline" &&
+          Math.max(0, this.now() - item.enqueuedAt) >= item.options.deadlineMs
+        ) {
+          const error = this.createExecutionTimeoutError(item.options);
+          resolveDeadline?.({ kind: "deadline", error });
+          executionController.abort(error);
+          firstOutcome = { kind: "deadline", error };
+        }
+
+        if (firstOutcome.kind === "deadline") {
+          item.reject(firstOutcome.error);
+          // The caller receives the deadline promptly, but this drain loop retains the
+          // exclusive slot until cooperative cancellation actually settles the callback.
+          // Mapping both branches consumes a late rejection without surfacing it as an
+          // unhandled promise rejection.
+          await callbackOutcome;
+        } else if (firstOutcome.kind === "failure") {
+          item.reject(firstOutcome.error);
+        } else {
+          item.resolve(firstOutcome.value);
+        }
       } catch (err) {
         item.reject(err);
       } finally {
+        if (executionTimer !== null) {
+          clearTimeout(executionTimer);
+        }
         this.isProcessing = false;
       }
     }
@@ -174,6 +241,19 @@ export class TodoistOperationQueue {
   private createTimeoutError(options: QueueRunOptions): TodoistOperationError {
     const safeAttributes: Record<string, string | number> = {
       error_code: "backend_busy",
+      failure_stage: "waiting",
+      operation: options.operation,
+    };
+    if (options.requestId) {
+      safeAttributes.request_id = options.requestId;
+    }
+    return new TodoistOperationError("timeout", undefined, safeAttributes);
+  }
+
+  private createExecutionTimeoutError(options: QueueRunOptions): TodoistOperationError {
+    const safeAttributes: Record<string, string | number> = {
+      error_code: "todoist_operation_deadline",
+      failure_stage: "active",
       operation: options.operation,
     };
     if (options.requestId) {

@@ -15,6 +15,7 @@ import {
   type TaskSnapshot
 } from "../services/taskMutationRunner.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
+import { isOperationalFailure } from "../services/todoistPoller.js";
 import type { BuildServerOptions } from "../server.js";
 import { isBearerTokenValid, requireBearerToken } from "./auth.js";
 import { backendObservability } from "../diagnostics/backendObservability.js";
@@ -181,8 +182,8 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
               minimumExecutionBudgetMs: MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
               ...(signal !== undefined ? { signal } : {})
             },
-            async () => {
-              await services.synchronizer.syncOnce();
+            async ({ signal: executionSignal }) => {
+              await services.synchronizer.syncOnce({ signal: executionSignal });
             }
           );
         } else {
@@ -198,7 +199,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
       } catch (error) {
         if (
           error instanceof TodoistOperationError &&
-          (error.safeAttributes?.error_code === "backend_busy" || error.kind === "timeout")
+          error.safeAttributes?.error_code === "backend_busy"
         ) {
           obs.warn?.("backend_busy", {
             operation: "force_refresh",
@@ -206,7 +207,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
           });
           reply.status(503).send({
             code: "backend_busy",
-            message: "Buzer is currently processing another Todoist operation. Please try again shortly.",
+            message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly.",
             snapshot: services.snapshots.getSnapshot(new Date().toISOString())
           });
           return;
@@ -217,16 +218,31 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
           request_id: request.id
         });
 
+        const operational = isOperationalFailure(error);
+        if (!operational) {
+          obs.captureException(error, {
+            marker: "forced_refresh_internal_defect",
+            operation: "force_refresh",
+            request_id: request.id
+          });
+        }
+
         let currentSnapshot: TaskSnapshot | undefined;
         try {
           currentSnapshot = services.snapshots.getSnapshot(new Date().toISOString());
-        } catch {
-          // ignore
+        } catch (snapshotError) {
+          obs.captureException(snapshotError, {
+            marker: "forced_refresh_snapshot_internal_defect",
+            operation: "force_refresh",
+            request_id: request.id
+          });
         }
 
         reply.status(503).send({
           code: "forced_refresh_failed",
-          message: error instanceof Error ? error.message : "Failed to refresh snapshot from Todoist.",
+          message: operational && error instanceof Error
+            ? error.message
+            : "Failed to refresh snapshot from Todoist.",
           ...(currentSnapshot !== undefined ? { snapshot: currentSnapshot } : {})
         });
         return;
@@ -415,7 +431,7 @@ function projectCollaborators(
 }
 
 function getRequestSignal(request: FastifyRequest): AbortSignal | undefined {
-  return (request.raw as unknown as { signal?: AbortSignal }).signal;
+  return request.signal;
 }
 
 function sendMutationResult(
@@ -435,7 +451,7 @@ function sendMutationResult(
     case "busy":
       return reply.status(503).send({
         code: "backend_busy",
-        message: "Buzer is currently processing another Todoist operation. Please try again shortly."
+        message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly."
       });
     case "rejected":
       return reply.status(502).send({

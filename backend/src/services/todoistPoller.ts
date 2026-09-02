@@ -1,13 +1,13 @@
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
 import { TodoistOperationQueue } from "./todoistOperationQueue.js";
-import type { TodoistSyncSummary } from "./todoistSyncService.js";
+import type { TodoistSyncOptions, TodoistSyncSummary } from "./todoistSyncService.js";
 
 export const DEFAULT_POLL_INTERVAL_MS = 60_000;
 export const POLL_DEADLINE_MS = 13_000;
 
 export interface SyncOnceService {
-  syncOnce(): Promise<TodoistSyncSummary | void>;
+  syncOnce(options?: TodoistSyncOptions): Promise<TodoistSyncSummary | void>;
 }
 
 export interface TodoistPollerDiagnostics {
@@ -84,8 +84,8 @@ export class TodoistPoller {
           operation: "poll",
           deadlineMs: POLL_DEADLINE_MS
         },
-        async () => {
-          return await this.service.syncOnce();
+        async ({ signal }) => {
+          return await this.service.syncOnce({ signal });
         }
       );
 
