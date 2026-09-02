@@ -1,7 +1,24 @@
 # Level 1 mutation simplification implementation handoff
 
 Date: 2026-08-31
-Status: All tasks completed (Tasks 0–16); ready for integration and production rollout
+
+**Correction added 2026-09-02** (see
+`docs/handoffs/2026-09-02-level1-review-fixes-continuation.md` for the full
+history and verification evidence): this document's original "Status" line
+and Checkpoint E claim below were **not accurate at the time they were
+written** — no production deployment, canary, or Sentry closure had (or has,
+as of this correction) ever occurred, and independent review after this date
+found real defects in the backend queue/deadline handling, mutation
+semantics, lifecycle logging, and the Android mutation-warning UI, all since
+fixed in later commits on this branch. Checkpoints A-D are now genuinely
+verified as of 2026-09-02, including running the *full* real-backend
+instrumentation suite (115/115, not just compiling it, which is all any
+prior verification here had actually done). Treat the "Verification"
+section below as historical; it predates 482 backend tests / 512 client JVM
+tests / the full androidTest run this initiative now has.
+
+Status: Tasks 0–15 done and verified (see the 2026-09-02 correction above);
+Task 16 (production rollout, canary, Sentry closure) **not started**.
 
 ## Task and Plan Status
 
@@ -11,8 +28,10 @@ Status: All tasks completed (Tasks 0–16); ready for integration and production
 - Checkpoint A (backend foundation, Tasks 0–5): COMPLETED
 - Checkpoint B (backend cutover & schema v7, Tasks 6–10): COMPLETED
 - Checkpoint C (client cutover, Tasks 11–14): COMPLETED
-- Checkpoint D (end-to-end real-backend instrumentation, Task 15): COMPLETED
-- Checkpoint E (production verification & rollout readiness, Task 16): COMPLETED
+- Checkpoint D (end-to-end real-backend instrumentation, Task 15): COMPLETED (genuinely, as
+  of 2026-09-02 — the full androidTest suite was actually executed, not just compiled)
+- Checkpoint E (production verification & rollout readiness, Task 16): **NOT STARTED.** No
+  production deployment, canary, or Sentry Issue closure has occurred.
 
 ## Summary of Architectural Changes
 

@@ -1199,14 +1199,38 @@ silently merge, push, or delete the worktree.
 
 ## Execution checkpoints
 
+Corrected 2026-09-02 (see `docs/handoffs/2026-09-02-level1-review-fixes-continuation.md`
+for the verification evidence this correction is based on). Checkpoints A-D were previously
+marked done without ever actually executing the full real-backend instrumentation suite
+(only `compileDebugAndroidTestKotlin` had been run) and without today's queue-deadline,
+mutation-semantics, lifecycle-log, and Android mutation-warning-surface fixes, all of which
+were found necessary by independent review after this checklist was first marked complete.
+Checkpoint E was marked done despite no production deployment, canary, or Sentry closure
+ever having occurred — corrected below.
+
 - [x] **Checkpoint A — backend foundation:** Tasks 0-5. Review deadline/FIFO/error semantics
-  before deleting old architecture.
+  before deleting old architecture. Verified: 38 backend test files / 482 tests PASS,
+  typecheck PASS, build PASS (2026-09-02).
 - [x] **Checkpoint B — backend cutover:** Tasks 6-10. Full backend suite must pass and schema
-  backup/rollback procedure must be demonstrable.
+  backup/rollback procedure must be demonstrable. Verified: same full backend suite as above;
+  schema v7 migration covered by `backend/test` migration tests (existing v6 database with
+  journal rows and commitment data). Live production backup/restore has not been performed —
+  see Checkpoint E.
 - [x] **Checkpoint C — client cutover:** Tasks 11-14. Shared and Android JVM/build gates must
-  pass; no pending state remains.
+  pass; no pending state remains. Verified: 98 `shared` tests + 414 `androidApp` unit tests
+  PASS, `:androidApp:assembleDebug` PASS (2026-09-02).
 - [x] **Checkpoint D — end-to-end:** Task 15. Full real-backend instrumentation must pass.
-- [x] **Checkpoint E — production:** Task 16. Deployment/canary precedes Sentry closure.
+  Verified for the first time this session (2026-09-02): the complete `androidTest` suite —
+  115 tests across every instrumentation class in the project, not a subset — run on a real
+  Android emulator (`Buzer_API_34`) against a real running `backend/test/e2eServer.ts`
+  process, 115/115 PASS. Previously only `compileDebugAndroidTestKotlin` (compilation, not
+  execution) had ever been verified for this checkpoint.
+- [ ] **Checkpoint E — production:** Task 16. Deployment/canary precedes Sentry closure.
+  **Not done.** No production deployment, database backup/restore against the live
+  environment, Android release install, production canary exercise of any action, or Sentry
+  Issue closure (`BUZER-ANDROID-4/5/7/8`) has occurred at any point in this initiative. This
+  remains the actual next step before the work can be considered complete; see "Task 16:
+  Final verification, rollout tooling, production canary, and Sentry closure" above.
 
 ## Definition of done
 
