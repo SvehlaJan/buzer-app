@@ -192,7 +192,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun startBlocker_backendFailureShowsRetryDialogAndWritesErrorLog() {
+    fun startBlocker_backendFailureShowsWarningBannerAndWritesErrorLog() {
         resetTestState()
         fakeBackend.setFailActions(true)
         try {
@@ -204,8 +204,8 @@ class BlockerActivityFakeBackendTest {
 
                 waitForRecordedCall("/tasks/task-start-fail/start")
                 waitForErrorLog("action=START_TASK taskId=task-start-fail", "forced_failure")
-                waitForText("Action failed")
-                assertFailureDialogSurvivesBack(scenario)
+                waitForTag("session-warning-banner")
+                assertSessionWarningBannerSurvivesBack(scenario)
             } finally {
                 scenario.close()
             }
@@ -229,12 +229,12 @@ class BlockerActivityFakeBackendTest {
 
                 waitForRecordedCall("/tasks/task-reschedule-fail/update")
                 waitForErrorLog("action=UPDATE_TASK taskId=task-reschedule-fail", "forced_failure")
-                waitForExactText("Task update")
-                waitForExactText("Task update failed. Your draft is still here; retry.")
-                composeRule.onNodeWithText("Task update").assertIsDisplayed()
-                composeRule.onNodeWithText("Task update failed. Your draft is still here; retry.").assertIsDisplayed()
-                composeRule.onNodeWithText("Retry").assertIsDisplayed()
-                composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
+                // A backend-owned reschedule failure surfaces through EnforcementCoordinator as
+                // a typed Warning (never a thrown exception, so TaskEditorUpdateScreen's own
+                // generic catch clause never fires) and shows as the inline session-warning
+                // banner, not a dialog.
+                waitForTag("session-warning-banner")
+                composeRule.onNodeWithTag("session-warning-message").assertTextContains("forced_failure", substring = true)
                 assertActivityNotDestroyed(scenario)
             } finally {
                 scenario.close()
@@ -245,7 +245,7 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun deadlineBlocker_backendFailureShowsRetryDialogAndWritesErrorLog() {
+    fun deadlineBlocker_backendFailureShowsWarningBannerAndWritesErrorLog() {
         resetTestState()
         fakeBackend.setFailActions(true)
         try {
@@ -257,8 +257,8 @@ class BlockerActivityFakeBackendTest {
 
                 waitForRecordedCall("/tasks/task-deadline-fail/done")
                 waitForErrorLog("action=COMPLETE_TASK taskId=task-deadline-fail", "forced_failure")
-                waitForText("Action failed")
-                assertFailureDialogSurvivesBack(scenario)
+                waitForTag("session-warning-banner")
+                assertSessionWarningBannerSurvivesBack(scenario)
             } finally {
                 scenario.close()
             }
@@ -343,12 +343,12 @@ class BlockerActivityFakeBackendTest {
             waitForAnyText("Incomplete checklist task")
             fakeBackend.setFailSnapshot(true)
             invokeRefreshTasksAccessibilityAction()
-            waitForRecordedCallCount("/tasks/sync", 1)
+            waitForRecordedCallCount("/tasks/snapshot", 1)
             waitForText("Retry")
             composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
 
             composeRule.onNodeWithText("Retry").assertIsDisplayed().performClick()
-            waitForRecordedCallCount("/tasks/sync", 2)
+            waitForRecordedCallCount("/tasks/snapshot", 2)
             composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
         } finally {
             fakeBackend.setFailSnapshot(false)
@@ -515,8 +515,8 @@ class BlockerActivityFakeBackendTest {
         }
 
         composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
-        waitForRecordedCall("/tasks/sync")
-        fakeBackend.assertRecorded("/tasks/sync")
+        waitForRecordedCall("/tasks/snapshot")
+        fakeBackend.assertRecorded("/tasks/snapshot")
     }
 
     @Test
@@ -533,7 +533,7 @@ class BlockerActivityFakeBackendTest {
             composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
 
             fakeBackend.releaseSync()
-            waitForBackendResponseCompleted("/tasks/sync")
+            waitForBackendResponseCompleted("/tasks/snapshot")
             composeRule.onNodeWithText("Incomplete checklist task").assertIsDisplayed()
         } finally {
             fakeBackend.releaseSync()
@@ -549,8 +549,8 @@ class BlockerActivityFakeBackendTest {
         waitForAnyText("Incomplete checklist task")
         invokeRefreshTasksAccessibilityAction()
 
-        waitForRecordedCall("/tasks/sync")
-        fakeBackend.assertRecorded("/tasks/sync")
+        waitForRecordedCall("/tasks/snapshot")
+        fakeBackend.assertRecorded("/tasks/snapshot")
     }
 
     @Test
@@ -627,12 +627,11 @@ class BlockerActivityFakeBackendTest {
 
             waitForRecordedCall("/tasks/task-invalid/update")
             waitForErrorLog("action=UPDATE_TASK taskId=task-invalid", "forced_failure")
-            waitForExactText("Task update")
-            waitForExactText("Task update failed. Your draft is still here; retry.")
-            composeRule.onNodeWithText("Task update").assertIsDisplayed()
-            composeRule.onNodeWithText("Task update failed. Your draft is still here; retry.").assertIsDisplayed()
-            composeRule.onNodeWithText("Retry").assertIsDisplayed()
-            composeRule.onNodeWithText("Dismiss").assertIsDisplayed()
+            // A backend-owned repair failure surfaces through EnforcementCoordinator as a typed
+            // Warning and shows as the inline session-warning banner, not a dialog; the repair
+            // editor stays open with the draft preserved.
+            waitForTag("session-warning-banner")
+            composeRule.onNodeWithTag("session-warning-message").assertTextContains("forced_failure", substring = true)
             assertActivityNotDestroyed(scenario)
         } finally {
             fakeBackend.setFailActions(false)
@@ -737,21 +736,23 @@ class BlockerActivityFakeBackendTest {
     }
 
     @Test
-    fun morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSync() {
+    fun morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot() {
         resetTestState("invalid")
         val scenario = launchMorningReview()
         try {
             waitForText("Invalid assigned fixture")
             fakeBackend.setFailSnapshot(true)
             scenario.recreate()
-            waitForRecordedCall("/tasks/sync")
-            waitForText("Retry refresh")
+            waitForRecordedCall("/tasks/snapshot")
+            // A failed forced refresh shows the inline session-warning banner (no "Retry
+            // refresh" dialog); the cached invalid task stays visible.
+            waitForTag("session-warning-banner")
             composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
             fakeBackend.setFailSnapshot(false)
             fakeBackend.reset("clean")
-            composeRule.onNodeWithText("Retry refresh").performClick()
-            waitForRecordedCall("/tasks/sync")
-            composeRule.onNodeWithText("Retry refresh").assertDoesNotExist()
+            composeRule.onNodeWithTag("session-warning-refresh").performClick()
+            waitForRecordedCall("/tasks/snapshot")
+            composeRule.onNodeWithTag("session-warning-banner").assertDoesNotExist()
             composeRule.onNodeWithTag("morning-start-day").assertIsEnabled()
         } finally { fakeBackend.setFailSnapshot(false); scenario.close() }
     }
@@ -854,7 +855,7 @@ class BlockerActivityFakeBackendTest {
             waitForContentDescription("Add task")
             fakeBackend.reset("invalid")
             invokeRefreshTasksAccessibilityAction()
-            waitForRecordedCall("/tasks/sync")
+            waitForRecordedCall("/tasks/snapshot")
             waitForText("Review")
             composeRule.onNodeWithText("Start day").assertDoesNotExist()
         } finally { home.close() }
@@ -964,9 +965,9 @@ class BlockerActivityFakeBackendTest {
                     durationMillis = 500
                 )
             }
-            waitForRecordedCall("/tasks/sync")
+            waitForRecordedCall("/tasks/snapshot")
             Log.i(CORRELATION_TAG, "home_sync backend_request_received")
-            val syncAuthority = waitForBackendResponseAuthority("/tasks/sync")
+            val syncAuthority = waitForBackendResponseAuthority("/tasks/snapshot")
             Log.i(CORRELATION_TAG, "home_sync backend_response_completed")
             waitForPersistedSnapshotAuthority(snapshotFile, syncAuthority)
             Log.i(CORRELATION_TAG, "home_sync android_coordinator_applied")
@@ -1017,6 +1018,14 @@ class BlockerActivityFakeBackendTest {
         composeRule.waitUntil(timeoutMillis = 15_000) {
             runCatching {
                 composeRule.onNodeWithContentDescription(contentDescription).assertIsDisplayed()
+            }.isSuccess
+        }
+    }
+
+    private fun waitForTag(tag: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            runCatching {
+                composeRule.onNodeWithTag(tag).assertIsDisplayed()
             }.isSuccess
         }
     }
@@ -1208,19 +1217,20 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun assertFailureDialogSurvivesBack(
-        scenario: ActivityScenario<out android.app.Activity>,
-        title: String = "Action failed"
+    /**
+     * A backend-owned action failure shows the inline session-warning banner (no dialog); a
+     * full-screen production blocker must not be dismissible via system Back while it is shown.
+     */
+    private fun assertSessionWarningBannerSurvivesBack(
+        scenario: ActivityScenario<out android.app.Activity>
     ) {
-        composeRule.onNodeWithText(title).assertIsDisplayed()
-        composeRule.onNodeWithText("Retry").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Dismiss").assertCountEquals(0)
+        composeRule.onNodeWithTag("session-warning-banner").assertIsDisplayed()
+        composeRule.onNodeWithTag("session-warning-refresh").assertIsDisplayed()
 
         scenario.onActivity { (it as OnBackPressedDispatcherOwner).onBackPressedDispatcher.onBackPressed() }
 
-        composeRule.onNodeWithText(title).assertIsDisplayed()
-        composeRule.onNodeWithText("Retry").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Dismiss").assertCountEquals(0)
+        composeRule.onNodeWithTag("session-warning-banner").assertIsDisplayed()
+        composeRule.onNodeWithTag("session-warning-refresh").assertIsDisplayed()
         assertActivityNotDestroyed(scenario)
     }
 

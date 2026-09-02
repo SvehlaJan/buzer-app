@@ -212,17 +212,26 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
     const path = request.url.split("?")[0] ?? request.url;
     if (path.startsWith("/__")) return;
 
+    const query = typeof request.query === "object" && request.query !== null
+      ? (request.query as Record<string, unknown>)
+      : {};
+
     if (request.method === "POST" && (path.startsWith("/tasks") || path.startsWith("/review"))) {
       const body = typeof request.body === "object" && request.body !== null
         ? request.body as Record<string, unknown>
+        : {};
+      // Update requests nest expectedTaskRevision under rootPatch rather than at the top level
+      // (predates this simplification); fall back to it so metadata extraction still finds it.
+      const nestedRootPatch = typeof body.rootPatch === "object" && body.rootPatch !== null
+        ? body.rootPatch as Record<string, unknown>
         : {};
       const call: RecordedCall = {
         method: request.method,
         path,
         body: Object.fromEntries(
           ACTION_METADATA_KEYS
-            .filter((key) => body[key] !== undefined)
-            .map((key) => [key, body[key]])
+            .map((key) => [key, body[key] ?? nestedRootPatch[key]])
+            .filter(([, value]) => value !== undefined)
         ),
         at: new Date().toISOString(),
         responseCompletedAt: null,
@@ -240,9 +249,26 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       }
     }
 
-    const query = typeof request.query === "object" && request.query !== null
-      ? (request.query as Record<string, unknown>)
-      : {};
+    // GET /tasks/snapshot?forceRefresh=true is Android's explicit refresh/sync mechanism; tests
+    // assert it was actually called the same way they assert a POST mutation was, so it needs
+    // the same call/correlation recording. The default (non-forced) read is routine background
+    // polling, not a tracked "call" -- recording it too would make every incidental snapshot
+    // fetch (including this file's own test helpers) show up as a spurious recorded call.
+    if (request.method === "GET" && path === "/tasks/snapshot" && query.forceRefresh === "true") {
+      const call: RecordedCall = {
+        method: request.method,
+        path,
+        body: { forceRefresh: query.forceRefresh },
+        at: new Date().toISOString(),
+        responseCompletedAt: null,
+        responseStatusCode: null,
+        responseAuthority: null
+      };
+      calls.push(call);
+      fullCalls.push({ ...call, payload: structuredClone(query) });
+      correlatedCalls.set(request.id, call);
+    }
+
     if (request.method === "GET" && path === "/tasks/snapshot" && query.forceRefresh === "true" && controls.syncHold?.state === "armed") {
       const hold = controls.syncHold;
       hold.state = "waiting";

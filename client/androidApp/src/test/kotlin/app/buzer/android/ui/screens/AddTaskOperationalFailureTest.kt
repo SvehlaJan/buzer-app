@@ -9,9 +9,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Add Task must classify errors exactly like [app.buzer.android.enforcement.EnforcementCoordinator]:
- * expected backend/Todoist/network uncertainty stays warning-only, everything else is Add Task's
- * own owned local defect (captured once via Sentry).
+ * Add Task must classify errors like the combined effect of EnforcementCoordinator and
+ * BlockerErrorReporter: any structured backend response is the backend's own responsibility,
+ * so it stays warning-only regardless of its code or HTTP status. Only a genuinely local
+ * exception (no BuzerApiException at all) is Add Task's own owned defect (captured once via
+ * Sentry).
  */
 class AddTaskOperationalFailureTest {
 
@@ -40,10 +42,12 @@ class AddTaskOperationalFailureTest {
     }
 
     @Test
-    fun aBuzerApiExceptionOutsideTheOperationalRangeIsAnOwnedDefect() {
-        // Only 4xx statuses are treated as operational; a stray non-4xx status without a
-        // recognized code is Add Task's own local defect, not expected backend uncertainty.
-        assertFalse(isAddTaskOperationalFailure(BuzerApiException(status = 200, code = "unexpected")))
+    fun anUnrecognizedBackendResponseIsStillTheBackendsOwnResponsibility() {
+        // A structured backend error the backend itself already owns (e.g. an unexpected 500
+        // with no recognized code) must never become a duplicate Android-owned Issue -- Android
+        // never re-captures any BuzerApiException, matching BlockerErrorReporter's own guard.
+        assertTrue(isAddTaskOperationalFailure(BuzerApiException(status = 500, code = "forced_failure")))
+        assertTrue(isAddTaskOperationalFailure(BuzerApiException(status = 200, code = "unexpected")))
     }
 
     @Test
@@ -54,7 +58,9 @@ class AddTaskOperationalFailureTest {
     }
 
     @Test
-    fun anUnexpectedRuntimeDefectIsOwnedByAddTaskNotOperational() {
+    fun anUnexpectedRuntimeDefectWithNoBackendResponseIsOwnedByAddTask() {
+        // No BuzerApiException means the backend never got a chance to own this: it is Add
+        // Task's own local defect (response parsing, an unexpected invariant).
         assertFalse(isAddTaskOperationalFailure(IllegalStateException("response parsing invariant failed")))
         assertFalse(isAddTaskOperationalFailure(NullPointerException("unexpected null field")))
     }

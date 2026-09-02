@@ -97,9 +97,10 @@ class FakeBackendClient(
                 ?.jsonPrimitive
                 ?.longOrNull
                 ?: return@mapNotNull null
+            // Not method-specific: GET /tasks/snapshot (the current refresh/sync mechanism) and
+            // POST mutations both correlate a response authority the same way.
             RecordedResponseAuthority(serverTime, snapshotGeneration).takeIf {
-                callObject["method"]?.jsonPrimitive?.contentOrNull == "POST" &&
-                    callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
+                callObject["path"]?.jsonPrimitive?.contentOrNull == path &&
                     callObject["responseCompletedAt"]?.jsonPrimitive?.contentOrNull != null &&
                     callObject["responseStatusCode"]?.jsonPrimitive?.longOrNull in 200L..299L
             }

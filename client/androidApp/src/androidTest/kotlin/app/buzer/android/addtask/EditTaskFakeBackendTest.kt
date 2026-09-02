@@ -103,29 +103,18 @@ class EditTaskFakeBackendTest {
                     .performTextInput(" updated")
                 clickSaveBlockRange()
                 waitForRecordedCall("/tasks/task-one-time-empty/update")
-                waitForExactText("Task update")
-                composeRule.onNodeWithText("Retry").performClick()
+
+                // A failed mutation shows the inline session-warning banner, not a dialog; the
+                // normal action button becomes available again immediately, and retrying means
+                // pressing it again -- it must resend the exact same captured request.
+                composeRule.onNodeWithTag("session-warning-banner").assertIsDisplayed()
+                clickSaveBlockRange()
                 waitForUpdateCallCount(2)
                 val retriedPayloads = fullUpdatePayloads()
                 assertEquals(2, retriedPayloads.size)
                 assertEquals(retriedPayloads.first().getValue("rootPatch"), retriedPayloads.last().getValue("rootPatch"))
                 assertEquals(retriedPayloads.first().getValue("childMutations"), retriedPayloads.last().getValue("childMutations"))
 
-                // The dismiss TextButton's Text("Dismiss") is absorbed into its parent's merged
-                // semantics node (standard Compose AlertDialog dismissButton behavior), so it is
-                // only addressable as its own node via the unmerged tree -- confirmed by reading
-                // ErrorAlertDialog (StatusComponents.kt): exactly one Dismiss control can be
-                // present here, this is not papering over a duplicate/overlapping dialog.
-                // waitForUpdateCallCount above only confirms the fake backend recorded the retry's
-                // HTTP call; it says nothing about whether the app has finished processing that
-                // response and recomposed the failure dialog yet, so wait for the (unmerged) node
-                // to actually exist before clicking it.
-                composeRule.waitUntil(timeoutMillis = 15_000) {
-                    composeRule.onAllNodesWithText("Dismiss", useUnmergedTree = true)
-                        .fetchSemanticsNodes()
-                        .isNotEmpty()
-                }
-                composeRule.onNodeWithText("Dismiss", useUnmergedTree = true).performClick()
                 composeRule.onNodeWithText("Cancel").performClick()
                 waitForText("Discard changes?")
                 composeRule.onNodeWithText("Keep editing").performClick()
@@ -221,12 +210,6 @@ class EditTaskFakeBackendTest {
     private fun waitForText(text: String) {
         composeRule.waitUntil(timeoutMillis = 15_000) {
             runCatching { composeRule.onNodeWithText(text, substring = true).assertIsDisplayed() }.isSuccess
-        }
-    }
-
-    private fun waitForExactText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 15_000) {
-            runCatching { composeRule.onNodeWithText(text).assertIsDisplayed() }.isSuccess
         }
     }
 

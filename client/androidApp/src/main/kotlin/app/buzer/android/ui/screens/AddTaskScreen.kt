@@ -68,26 +68,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
- * Mirrors [app.buzer.android.enforcement.EnforcementCoordinator]'s operational-vs-internal
- * classification: expected backend/Todoist/network uncertainty stays warning-only, everything
- * else (parse defects, unexpected runtime exceptions) is Add Task's own owned local defect.
+ * Mirrors the combined effect of [app.buzer.android.enforcement.EnforcementCoordinator] and
+ * [app.buzer.android.enforcement.BlockerErrorReporter]: any structured backend HTTP response
+ * ([BuzerApiException], expected code or not) is the backend's own responsibility to own and
+ * report -- Android never creates a duplicate Issue for it. Only a genuinely local exception
+ * (response parsing, an unexpected invariant in Add Task's own code) is Add Task's owned defect.
  */
 internal fun isAddTaskOperationalFailure(error: Throwable): Boolean {
-    if (error is BuzerApiException) {
-        val operationalCodes = setOf(
-            "backend_busy",
-            "todoist_command_rejected",
-            "todoist_delivery_unknown",
-            "todoist_accepted_snapshot_stale",
-            "forced_refresh_failed",
-            "rate_limited",
-            "validation_error",
-            "invalid_request"
-        )
-        if (error.code in operationalCodes) return true
-        if (error.status in 400..499) return true
-        return false
-    }
+    if (error is BuzerApiException) return true
     if (error is IOException) return true
     val className = error::class.qualifiedName.orEmpty()
     return className.contains("Timeout") ||

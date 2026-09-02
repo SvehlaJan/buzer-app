@@ -153,12 +153,13 @@ class AddTaskFakeBackendTest {
                 clickAddBlockRange()
 
                 waitForRecordedCall("/tasks")
-                // "Task was not saved" / "Retry" are AlertDialog content (AddTaskFailurePresentation),
-                // not inline form content — there is no scrollable ancestor to scroll to.
-                composeRule.onNodeWithText("Task was not saved").assertIsDisplayed()
-                composeRule.onNodeWithText("Retry").assertIsDisplayed()
+                // A failed create shows the inline session-warning banner (no dialog); the form
+                // stays open with the entered title preserved and the normal Add button
+                // available again immediately.
+                composeRule.onNodeWithTag("session-warning-banner").assertIsDisplayed()
                 composeRule.onAllNodesWithText("forced_failure", substring = true).assertCountEquals(1)
                 composeRule.onAllNodesWithText("System error", substring = true).assertCountEquals(0)
+                composeRule.onNodeWithTag("titleInput").assertTextContains("Buy milk")
             } finally {
                 scenario.close()
             }
@@ -215,7 +216,12 @@ class AddTaskFakeBackendTest {
     }
 
     @Test
-    fun addTask_partialChildFailureOpensCreatedRootWithOnlyFailedDraft() {
+    fun addTask_transientChildAddFailureRetriesOnceInsideTheSameRequestAndSucceeds() {
+        // Per the command-executor's retry contract (one retry, same UUID, for a transport-shaped
+        // failure), a single simulated child-add failure is invisible to the user: the backend
+        // retries it inside the same mutation run, so Android sends exactly one HTTP request and
+        // the create completes as a normal success -- there is no partial-failure draft to keep
+        // open (that durable-partial-failure UX predates the retry contract and no longer exists).
         resetTestState()
         fakeBackend.setFailNextChildAdd(true)
 
@@ -227,12 +233,16 @@ class AddTaskFakeBackendTest {
             selectAssignee("Me")
             selectDefaultSchedule()
             openChecklist()
-            addChecklistDraft(1, "Failed child")
+            addChecklistDraft(1, "Retried child")
             clickAddBlockRange()
 
-            waitForScrollableText("Checklist item 1")
-            waitForScrollableText("Failed child")
+            waitForRecordedCall("/tasks")
             assertEquals(1, recordedCreateBodies().size)
+            // AddTaskScreen navigates back to Home in place (MainActivity itself isn't
+            // recreated), so completion is "the Add form is gone", not activity destruction.
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                composeRule.onAllNodesWithTag("titleInput").fetchSemanticsNodes().isEmpty()
+            }
         } finally {
             scenario.close()
             fakeBackend.setFailNextChildAdd(false)
