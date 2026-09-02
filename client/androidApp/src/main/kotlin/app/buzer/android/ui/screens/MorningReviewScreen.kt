@@ -24,7 +24,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
@@ -90,7 +89,6 @@ fun MorningReviewScreen(
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {

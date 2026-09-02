@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.buzer.android.enforcement.CoordinatorActionResult
@@ -163,7 +162,6 @@ fun DeadlineBlockerScreen(
         // Production full-screen blockers must stay open until a blocker action resolves them.
     }
 
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val projectRepository = remember(loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
