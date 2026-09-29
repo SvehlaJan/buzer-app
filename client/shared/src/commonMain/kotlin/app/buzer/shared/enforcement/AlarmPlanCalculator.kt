@@ -4,6 +4,7 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.time.parseSnapshotInstantOrNull
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -35,7 +36,9 @@ data class DesiredAlarm(
 
 data class AlarmPlan(
     val alarms: List<DesiredAlarm>,
-    val cancelTaskIds: Set<String>
+    val cancelTaskIds: Set<String>,
+    /** Tasks skipped because a snapshot time could not be parsed (a backend contract violation). */
+    val invalidTimeTaskIds: Set<String> = emptySet()
 )
 
 object AlarmPlanCalculator {
@@ -43,6 +46,7 @@ object AlarmPlanCalculator {
         val now = Instant.parse(nowIso)
         val alarms = mutableListOf<DesiredAlarm>()
         val cancelTaskIds = mutableSetOf<String>()
+        val invalidTimeTaskIds = mutableSetOf<String>()
 
         for (task in snapshot.tasks) {
             if (task.shouldCancelAlarms()) {
@@ -58,7 +62,12 @@ object AlarmPlanCalculator {
                 continue
             }
 
-            alarms += desiredAlarmsFor(task, now)
+            val taskAlarms = desiredAlarmsFor(task, now)
+            if (taskAlarms == null) {
+                invalidTimeTaskIds += task.id
+                continue
+            }
+            alarms += taskAlarms
         }
 
         return AlarmPlan(
@@ -67,7 +76,8 @@ object AlarmPlanCalculator {
                     .thenBy { it.taskId }
                     .thenBy { it.kind.name }
             ),
-            cancelTaskIds = cancelTaskIds
+            cancelTaskIds = cancelTaskIds,
+            invalidTimeTaskIds = invalidTimeTaskIds
         )
     }
 
@@ -77,9 +87,10 @@ object AlarmPlanCalculator {
             state == CommitmentState.completed ||
             state == CommitmentState.deleted
 
-    private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm> {
-        val startAt = task.startAt?.let(Instant::parse)
-        val dueAt = task.dueDatetime?.let(Instant::parse)
+    /** Returns null when the task carries a time the strict snapshot parser rejects. */
+    private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm>? {
+        val startAt = task.startAt?.let { parseSnapshotInstantOrNull(it) ?: return null }
+        val dueAt = task.dueDatetime?.let { parseSnapshotInstantOrNull(it) ?: return null }
         val durationMinutes = task.durationMinutes
         val deadlineAt = if (dueAt != null && durationMinutes != null) {
             dueAt.plus(durationMinutes.minutes)

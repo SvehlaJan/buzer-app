@@ -1,12 +1,11 @@
 package app.buzer.android.ui.agenda
 
+import app.buzer.android.time.parseSnapshotJavaInstantOrNull
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
 import java.time.ZoneId
 
 data class OwnerAgendaEntry(
@@ -44,7 +43,7 @@ fun selectOwnerAgenda(
         .asSequence()
         .filterNot { it.id in blockingIds }
         .filter { it.hierarchyStatus != HierarchyStatus.unsupported }
-        .mapNotNull { task -> task.toAgendaEntry(zoneId) }
+        .mapNotNull { task -> task.toAgendaEntry() }
         .toList()
 
     return OwnerAgendaBuckets(
@@ -71,21 +70,9 @@ private fun isTerminal(task: TaskSnapshotItem): Boolean =
         task.state == CommitmentState.completed ||
         task.state == CommitmentState.deleted
 
-private fun TaskSnapshotItem.toAgendaEntry(zoneId: ZoneId): OwnerAgendaEntry? {
-    val due = dueDatetime?.let { parseAgendaInstant(it, zoneId) } ?: return null
+private fun TaskSnapshotItem.toAgendaEntry(): OwnerAgendaEntry? {
+    val due = dueDatetime?.let(::parseSnapshotJavaInstantOrNull) ?: return null
     val duration = durationMinutes?.takeIf { it > 0 } ?: return null
     val end = runCatching { due.plusSeconds(duration * 60L) }.getOrNull() ?: return null
     return OwnerAgendaEntry(task = this, start = due, end = end)
-}
-
-private fun parseAgendaInstant(value: String, zoneId: ZoneId): Instant? {
-    val normalized = value.substringBefore('[')
-    return runCatching { Instant.parse(normalized) }
-        .getOrElse {
-            runCatching { OffsetDateTime.parse(normalized).toInstant() }
-                .getOrElse {
-                    runCatching { LocalDateTime.parse(normalized).atZone(zoneId).toInstant() }
-                        .getOrNull()
-                }
-        }
 }

@@ -14,6 +14,7 @@ import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotDiagnostics
 import java.io.IOException
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +47,7 @@ class EnforcementCoordinator(
      * outside this lock so independent child mutations can be sent concurrently.
      */
     private val snapshotApplicationLock = Any()
+    private val reportedInvalidTimeTaskIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private data class AuthorityApplication(
         val snapshot: TasksSnapshotResponse,
@@ -180,6 +182,7 @@ class EnforcementCoordinator(
 
     private fun reconcile(snapshot: TasksSnapshotResponse) {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowProvider())
+        reportInvalidTimes(plan.invalidTimeTaskIds)
         val scheduledAlarms = plan.alarms
             .map(AndroidEnforcementMapper::toScheduledAlarm)
         scheduledAlarmRegistry.reconcile(scheduledAlarms, alarmScheduler)
@@ -187,8 +190,24 @@ class EnforcementCoordinator(
             "reconcile complete scheduled=${plan.alarms.size} " +
                 "preStart=${plan.alarms.count { it.kind == DesiredAlarmKind.PRE_START_WARNING }} " +
                 "start=${plan.alarms.count { it.kind == DesiredAlarmKind.START_BLOCKER }} " +
-                "deadline=${plan.alarms.count { it.kind == DesiredAlarmKind.DEADLINE_BLOCKER }}"
+                "deadline=${plan.alarms.count { it.kind == DesiredAlarmKind.DEADLINE_BLOCKER }} " +
+                "invalidTime=${plan.invalidTimeTaskIds.size}"
         )
+    }
+
+    /** A snapshot time without an offset is a backend contract violation; report each task once per process. */
+    private fun reportInvalidTimes(taskIds: Set<String>) {
+        for (taskId in taskIds) {
+            if (!reportedInvalidTimeTaskIds.add(taskId)) continue
+            val message = "snapshot task time has no offset; no alarms scheduled for it"
+            errorReporter.report(
+                action = BlockerAction.REFRESH_SNAPSHOT,
+                taskId = taskId,
+                message = message,
+                showNotification = false,
+                throwable = IllegalStateException(message)
+            )
+        }
     }
 
     /**

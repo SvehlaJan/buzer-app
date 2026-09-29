@@ -498,6 +498,28 @@ class EnforcementCoordinatorTest {
         )
     }
 
+    @Test
+    fun taskWithOffsetLessTimeIsSkippedAndReportedOncePerProcess() {
+        val scheduler = RecordingAlarmScheduler()
+        val reporter = RecordingErrorReporter()
+        val cached = snapshot(task("task-1"), task("floating", dueDatetime = "2026-05-28T12:00:00"))
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(cached),
+            snapshotStore = FakeSnapshotStore(cached),
+            alarmScheduler = scheduler,
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        assertTrue(coordinator.reconcileLatestSnapshot())
+        assertTrue(coordinator.reconcileLatestSnapshot())
+
+        assertTrue(scheduler.scheduled.none { it.taskId == "floating" })
+        assertTrue(scheduler.scheduled.any { it.taskId == "task-1" })
+        assertEquals(listOf<String?>("floating"), reporter.errors.map { it.taskId })
+        assertEquals(BlockerAction.REFRESH_SNAPSHOT, reporter.errors.single().action)
+    }
+
     private fun snapshot(
         vararg tasks: TaskSnapshotItem,
         scheduleVersion: Long = 1,

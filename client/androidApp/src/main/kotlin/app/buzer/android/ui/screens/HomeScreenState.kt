@@ -4,6 +4,7 @@ import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
+import app.buzer.android.time.parseSnapshotJavaInstantOrNull
 import app.buzer.android.ui.agenda.selectOwnerAgenda
 import app.buzer.shared.ui.home.HomeAgendaRow
 import app.buzer.shared.ui.home.HomeAgendaRowState
@@ -14,8 +15,6 @@ import app.buzer.shared.ui.home.homeTaskProgress
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -118,7 +117,7 @@ fun buildHomeScreenState(
         )
     }
 
-    val updatedLabel = parseInstant(snapshot.serverTime, zoneId)?.let {
+    val updatedLabel = parseSnapshotJavaInstantOrNull(snapshot.serverTime)?.let {
         "Updated " + DateTimeFormatter.ofPattern("HH:mm", Locale.US).format(it.atZone(zoneId))
     }
     val refreshAttention = refreshError?.let {
@@ -155,12 +154,12 @@ fun buildHomeScreenState(
         .filter { !it.isAssignedToUser && it.assigneeId == null }
         .filterNot { reviewIds.contains(it.id) }
         .sortedWith(
-            compareByDescending<TaskSnapshotItem> { parseInstant(it.updatedAt, zoneId) ?: Instant.EPOCH }
+            compareByDescending<TaskSnapshotItem> { parseSnapshotJavaInstantOrNull(it.updatedAt) ?: Instant.EPOCH }
                 .thenBy { it.id }
         )
     val unassignedRows = unassignedTasks.map { task ->
         val progress = homeTaskProgress(task)
-        val dueInstant = task.dueDatetime?.let { parseInstant(it, zoneId) }
+        val dueInstant = task.dueDatetime?.let(::parseSnapshotJavaInstantOrNull)
         val duration = task.durationMinutes
         val timeLabel = if (dueInstant != null && duration != null && duration > 0) {
             formatTimeWindow(dueInstant, dueInstant.plusSeconds(duration * 60L), zoneId)
@@ -322,18 +321,6 @@ fun buildHomeScreenState(
         futureGroups = futureGroups,
         allClear = allClear
     )
-}
-
-private fun parseInstant(value: String, zoneId: ZoneId = ZoneId.of("UTC")): Instant? {
-    val normalized = value.substringBefore('[')
-    return runCatching { Instant.parse(normalized) }
-        .getOrElse {
-            runCatching { OffsetDateTime.parse(normalized).toInstant() }
-                .getOrElse {
-                    runCatching { LocalDateTime.parse(normalized).atZone(zoneId).toInstant() }
-                        .getOrNull()
-                }
-        }
 }
 
 private fun formatTimeWindow(start: Instant, end: Instant, zoneId: ZoneId): String {
