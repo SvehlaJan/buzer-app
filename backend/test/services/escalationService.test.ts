@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
+import type { AccountabilitySender, EscalationInput } from "../../src/accountability/accountabilitySender.js";
 import { DryRunSender } from "../../src/accountability/dryRunSender.js";
 import { migrate } from "../../src/db/migrations.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
@@ -110,5 +111,36 @@ describe("EscalationService", () => {
       { occurrenceKey: currentKey },
       { occurrenceKey: "next-opaque-occurrence" }
     ]);
+  });
+
+  it("computes the escalation deadline of a floating task in the owner's timezone", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1",
+      todoistTaskId: "todoist-1",
+      title: "Visit",
+      description: null,
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-10-11T09:00:00",
+      durationMinutes: 15,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-09-27T08:50:18Z"
+    });
+    const inputs: EscalationInput[] = [];
+    const sender: AccountabilitySender = {
+      sendEscalation: async (input) => { inputs.push(input); },
+      getHealth: async () => ({ connected: true, detail: "test" })
+    };
+    const service = new EscalationService(db, repo, sender, "wife-chat", { ownerTimeZone: () => "Europe/Bratislava" });
+
+    await service.sendForTask("task-1", 2);
+
+    expect(inputs.map((input) => input.deadlineAt)).toEqual(["2026-10-11T07:15:00.000Z"]);
   });
 });

@@ -53,6 +53,51 @@ describe("TaskSnapshotService", () => {
     expect(snapshot.snapshotGeneration).toBeGreaterThan(1);
   });
 
+  it("resolves floating Todoist times in the owner's Todoist timezone", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-floating",
+      todoistTaskId: "todoist-floating",
+      title: "Visit",
+      description: null,
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-10-11T09:00:00",
+      durationMinutes: 15,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-09-27T08:50:18Z"
+    });
+    repo.upsertTodoistTask({
+      id: "task-fixed",
+      todoistTaskId: "todoist-fixed",
+      title: "Fixed",
+      description: null,
+      projectId: null,
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-10-11T07:00:00Z",
+      durationMinutes: 15,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-09-27T08:50:18Z"
+    });
+    const collaborators = { getTimeZone: (id: string) => (id === "user-self" ? "Asia/Tokyo" : null) };
+
+    const service = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self", false, collaborators);
+    const byId = new Map(service.getSnapshot("2026-09-29T06:00:00Z").tasks.map((task) => [task.id, task]));
+
+    expect(byId.get("task-floating")?.dueDatetime).toBe("2026-10-11T00:00:00.000Z");
+    expect(byId.get("task-floating")?.startAt).toBe("2026-10-11T00:00:00.000Z");
+    expect(byId.get("task-fixed")?.dueDatetime).toBe("2026-10-11T07:00:00Z");
+    expect(byId.get("task-fixed")?.startAt).toBe("2026-10-11T07:00:00.000Z");
+  });
+
   it("returns a newer global generation after any projected commitment-state mutation", () => {
     const db = new Database(":memory:");
     migrate(db);

@@ -63,4 +63,34 @@ describe("CollaboratorRepository", () => {
     expect(repo.isActiveMember("project-test", "user-wife")).toBe(true);
     expect(repo.isActiveMember("project-test", "user-former")).toBe(false);
   });
+
+  it("returns a non-deleted collaborator's timezone", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new CollaboratorRepository(db);
+    repo.upsertCollaborator({
+      todoistUserId: "user-me",
+      fullName: "Me",
+      email: null,
+      timeZone: "Europe/Warsaw",
+      imageId: null,
+      isDeleted: false,
+      rawJson: {},
+      updatedAt: "2026-09-29T10:00:00Z"
+    });
+    repo.upsertCollaborator({
+      todoistUserId: "user-gone",
+      fullName: "Gone",
+      email: null,
+      timeZone: "Asia/Tokyo",
+      imageId: null,
+      isDeleted: true,
+      rawJson: {},
+      updatedAt: "2026-09-29T10:00:00Z"
+    });
+
+    expect(repo.getTimeZone("user-me")).toBe("Europe/Warsaw");
+    expect(repo.getTimeZone("user-gone")).toBeNull();
+    expect(repo.getTimeZone("user-unknown")).toBeNull();
+  });
 });

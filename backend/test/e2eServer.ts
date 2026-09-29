@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { DryRunSender } from "../src/accountability/dryRunSender.js";
 import { migrate } from "../src/db/migrations.js";
+import { CollaboratorRepository } from "../src/repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../src/repositories/projectRepository.js";
 import { TaskRepository } from "../src/repositories/taskRepository.js";
 import { buildServer } from "../src/server.js";
@@ -63,7 +64,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
   const projects = new ProjectRepository(db);
   const todoistQueue = new TodoistOperationQueue();
   const synchronizer = new TodoistSyncService(db, tasks, projects, adapter, CURRENT_USER_ID);
-  const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true);
+  const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true, new CollaboratorRepository(db));
   const escalationService = new EscalationService(db, tasks, new DryRunSender(), "e2e-recipient");
   const observability = new RecordingBackendObservability();
   const app = buildServer({
