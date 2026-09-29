@@ -23,6 +23,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,6 +31,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class EnforcementCoordinatorTest {
+    @BeforeTest
+    fun resetProcessWideState() {
+        EnforcementCoordinator.resetReportedInvalidTimesForTests()
+    }
+
     @Test
     fun successfulActionAppliesReturnedSnapshotWithoutFollowUpFetch() = runBlocking {
         val returnedSnapshot = snapshot(task("task-1", state = CommitmentState.started))
@@ -503,16 +509,21 @@ class EnforcementCoordinatorTest {
         val scheduler = RecordingAlarmScheduler()
         val reporter = RecordingErrorReporter()
         val cached = snapshot(task("task-1"), task("floating", dueDatetime = "2026-05-28T12:00:00"))
-        val coordinator = EnforcementCoordinator(
+        // Entry points (activities, services, boot) each build their own coordinator, so the
+        // once-per-process guarantee must hold across instances, not just within one.
+        fun newCoordinator() = EnforcementCoordinator(
             api = FakeBuzerApi(cached),
             snapshotStore = FakeSnapshotStore(cached),
             alarmScheduler = scheduler,
             errorReporter = reporter,
             nowProvider = { "2026-05-28T09:30:00Z" }
         )
+        val first = newCoordinator()
+        val second = newCoordinator()
 
-        assertTrue(coordinator.reconcileLatestSnapshot())
-        assertTrue(coordinator.reconcileLatestSnapshot())
+        assertTrue(first.reconcileLatestSnapshot())
+        assertTrue(first.reconcileLatestSnapshot())
+        assertTrue(second.reconcileLatestSnapshot())
 
         assertTrue(scheduler.scheduled.none { it.taskId == "floating" })
         assertTrue(scheduler.scheduled.any { it.taskId == "task-1" })

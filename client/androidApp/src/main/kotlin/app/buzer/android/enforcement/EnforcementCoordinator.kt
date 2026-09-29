@@ -47,7 +47,6 @@ class EnforcementCoordinator(
      * outside this lock so independent child mutations can be sent concurrently.
      */
     private val snapshotApplicationLock = Any()
-    private val reportedInvalidTimeTaskIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private data class AuthorityApplication(
         val snapshot: TasksSnapshotResponse,
@@ -491,5 +490,17 @@ class EnforcementCoordinator(
         return className.contains("Timeout") ||
             className.contains("Connect") ||
             className.contains("UnresolvedAddress")
+    }
+
+    companion object {
+        /**
+         * Process-wide on purpose: every entry point (activities, services, boot) builds its own
+         * coordinator, so an instance field would re-report a persistently bad task per lifecycle.
+         */
+        private val reportedInvalidTimeTaskIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        internal fun resetReportedInvalidTimesForTests() {
+            reportedInvalidTimeTaskIds.clear()
+        }
     }
 }
