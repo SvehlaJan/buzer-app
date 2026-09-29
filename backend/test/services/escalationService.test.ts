@@ -137,10 +137,10 @@ describe("EscalationService", () => {
       sendEscalation: async (input) => { inputs.push(input); },
       getHealth: async () => ({ connected: true, detail: "test" })
     };
-    const service = new EscalationService(db, repo, sender, "wife-chat", { ownerTimeZone: () => "Europe/Bratislava" });
+    const service = new EscalationService(db, repo, sender, "wife-chat", { ownerTimeZone: () => "Asia/Tokyo" });
 
     await service.sendForTask("task-1", 2);
 
-    expect(inputs.map((input) => input.deadlineAt)).toEqual(["2026-10-11T07:15:00.000Z"]);
+    expect(inputs.map((input) => input.deadlineAt)).toEqual(["2026-10-11T00:15:00.000Z"]);
   });
 });

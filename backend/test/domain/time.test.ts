@@ -70,7 +70,7 @@ describe("computeStartAt", () => {
   });
 
   it("resolves a floating due datetime in the owner's timezone", () => {
-    expect(computeStartAt("2026-10-11T09:00:00", 15, TZ)).toBe("2026-10-11T07:00:00.000Z");
+    expect(computeStartAt("2026-10-11T09:00:00", 15, "Asia/Tokyo")).toBe("2026-10-11T00:00:00.000Z");
   });
 
   it("rejects non-positive durations", () => {
@@ -88,7 +88,7 @@ describe("computeDeadlineAt", () => {
   });
 
   it("resolves a floating due datetime before adding the duration", () => {
-    expect(computeDeadlineAt("2026-10-11T09:00:00", 15, TZ)).toBe("2026-10-11T07:15:00.000Z");
+    expect(computeDeadlineAt("2026-10-11T09:00:00", 15, "Asia/Tokyo")).toBe("2026-10-11T00:15:00.000Z");
   });
 
   it("rejects non-positive durations", () => {
