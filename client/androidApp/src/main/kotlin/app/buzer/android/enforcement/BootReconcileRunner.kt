@@ -7,21 +7,18 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 
 /**
  * Background-safe boot recovery. Runs short work off a [BroadcastReceiver.goAsync] result so
  * alarms are rescheduled after reboot without starting an activity (which Android blocks from
  * the background with BAL_BLOCK).
  *
- * Cached reconciliation is the guaranteed path; the live refresh is best-effort and bounded by
- * [REFRESH_TIMEOUT_MS] so it can never prevent [BroadcastReceiver.PendingResult.finish].
+ * Only the cached reconcile runs here (decision 2026-09-29-reminder-reliability): the network
+ * refresh outlived the 60 s boot-broadcast window (BUZER-ANDROID-D). The next app open
+ * refreshes as usual.
  */
 object BootReconcileRunner {
-    private const val REFRESH_TIMEOUT_MS = 8_000L
-
     fun run(
         context: Context,
         pendingResult: BroadcastReceiver.PendingResult,
@@ -49,21 +46,9 @@ object BootReconcileRunner {
         }
     }
 
+    @Suppress("RedundantSuspendModifier")
     private suspend fun runProductionWork(context: Context) {
-        val coordinator = EnforcementDependencies.coordinator(context)
-        val cached = coordinator.reconcileLatestSnapshot()
+        val cached = EnforcementDependencies.coordinator(context).reconcileLatestSnapshot()
         AppLog.info("boot_reconcile cached=$cached")
-        try {
-            withTimeout(REFRESH_TIMEOUT_MS) {
-                coordinator.refreshAndReconcile()
-            }
-            AppLog.info("boot_reconcile refresh=success")
-        } catch (timeout: TimeoutCancellationException) {
-            AppLog.warn("boot_reconcile refresh=timeout afterMs=$REFRESH_TIMEOUT_MS")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            AppLog.warn("boot_reconcile refresh=failed ${error.message}", error)
-        }
     }
 }
