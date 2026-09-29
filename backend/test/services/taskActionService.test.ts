@@ -617,5 +617,84 @@ describe("TaskActionService", () => {
 
       expect(adapter.itemUpdates).toHaveLength(0);
     });
+
+    it("does not rewrite an unchanged floating due time echoed back as an instant", async () => {
+      const { service, repo, adapter } = setupTestService();
+      repo.upsertTodoistTask({
+        id: "task-floating",
+        todoistTaskId: "todoist-floating",
+        title: "Visit",
+        description: null,
+        projectId: "project-personal",
+        assigneeId: null,
+        creatorId: "user-self",
+        dueDatetime: "2026-10-11T09:00:00",
+        durationMinutes: 15,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: "{}",
+        updatedAt: "2026-09-27T08:50:18Z"
+      });
+      repo.initializeOccurrence("task-floating", {
+        occurrenceKey: "occurrence-floating",
+        occurrenceDueDatetime: "2026-10-11T09:00:00",
+        occurrenceRecurrenceFingerprint: "one-time",
+        updatedAt: "2026-09-27T08:50:18Z"
+      });
+
+      const result = await service.editTask("task-floating", {
+        expectedOccurrenceKey: "occurrence-floating",
+        rootPatch: {
+          expectedTaskRevision: `r:${repo.getById("task-floating")?.mirrorRevision}`,
+          title: "Visit grandparents",
+          dueDatetime: "2026-10-11T07:00:00.000Z",
+          durationMinutes: 15
+        },
+        childMutations: []
+      });
+
+      expect(result.kind).toBe("success");
+      expect(adapter.itemUpdates).toHaveLength(1);
+      expect(adapter.itemUpdates[0]).toMatchObject({ title: "Visit grandparents", due: { kind: "preserve" } });
+    });
+
+    it("writes a changed due time for a floating task as the new instant", async () => {
+      const { service, repo, adapter } = setupTestService();
+      repo.upsertTodoistTask({
+        id: "task-floating",
+        todoistTaskId: "todoist-floating",
+        title: "Visit",
+        description: null,
+        projectId: "project-personal",
+        assigneeId: null,
+        creatorId: "user-self",
+        dueDatetime: "2026-10-11T09:00:00",
+        durationMinutes: 15,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: "{}",
+        updatedAt: "2026-09-27T08:50:18Z"
+      });
+      repo.initializeOccurrence("task-floating", {
+        occurrenceKey: "occurrence-floating",
+        occurrenceDueDatetime: "2026-10-11T09:00:00",
+        occurrenceRecurrenceFingerprint: "one-time",
+        updatedAt: "2026-09-27T08:50:18Z"
+      });
+
+      await service.editTask("task-floating", {
+        expectedOccurrenceKey: "occurrence-floating",
+        rootPatch: {
+          expectedTaskRevision: `r:${repo.getById("task-floating")?.mirrorRevision}`,
+          dueDatetime: "2026-10-11T08:00:00.000Z",
+          durationMinutes: 15
+        },
+        childMutations: []
+      });
+
+      expect(adapter.itemUpdates[0]).toMatchObject({
+        due: { kind: "replace", datetime: "2026-10-11T08:00:00.000Z" }
+      });
+    });
   });
 });
