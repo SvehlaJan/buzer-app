@@ -52,7 +52,7 @@ class MorningReviewScheduler(
         replaceAlarm(previous, consumed, calculator.desiredAlarm(consumed, now, zoneId))
     }
 
-    /** Defers only the currently persisted occurrence while Start/Deadline blocker priority exists. */
+    /** Defers only the currently persisted occurrence while an active Start blocker has priority. */
     fun deferForPriority(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
         val previous = stateStore.read()
         if (previous.scheduledAlarm != fired) return

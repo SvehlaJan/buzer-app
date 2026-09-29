@@ -13,8 +13,10 @@ data class MorningReviewAvailability(
     val nextReevaluationAt: Instant
 )
 
+internal val DEFAULT_MORNING_REVIEW_TIME: LocalTime = LocalTime.of(8, 0)
+
 class MorningReviewScheduleCalculator(
-    private val reviewTime: LocalTime = LocalTime.of(8, 0)
+    private val reviewTime: LocalTime = DEFAULT_MORNING_REVIEW_TIME
 ) {
     fun desiredAlarm(
         state: MorningReviewLocalState,

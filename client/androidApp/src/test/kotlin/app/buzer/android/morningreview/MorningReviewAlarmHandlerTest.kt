@@ -113,15 +113,30 @@ class MorningReviewAlarmHandlerTest {
     }
 
     @Test
-    fun activeDeadlineDefersReview() {
+    fun overdueTaskNeverDefersReview() {
         val daily = alarm(MorningReviewAlarmReason.Daily, now)
         val fixture = fixture(
             MorningReviewLocalState(scheduledAlarm = daily),
             snapshot = snapshot(task(start = "2026-08-03T06:00:00Z", durationMinutes = 120))
         )
 
-        assertEquals(MorningReviewAlarmDecision.Deferred, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Defer(daily)), fixture.actions.calls)
+        assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
+        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+    }
+
+    @Test
+    fun activeStartStopsDeferringFifteenMinutesAfterReviewTime() {
+        val activeStart = snapshot(task(start = "2026-08-03T07:00:00Z", durationMinutes = 120))
+        val justBefore = Instant.parse("2026-08-03T08:14:59Z")
+        val atCap = Instant.parse("2026-08-03T08:15:00Z")
+        val earlyRetry = alarm(MorningReviewAlarmReason.PriorityRetry, justBefore)
+        val lateRetry = alarm(MorningReviewAlarmReason.PriorityRetry, atCap)
+        val early = fixture(MorningReviewLocalState(scheduledAlarm = earlyRetry), now = justBefore, snapshot = activeStart)
+        val late = fixture(MorningReviewLocalState(scheduledAlarm = lateRetry), now = atCap, snapshot = activeStart)
+
+        assertEquals(MorningReviewAlarmDecision.Deferred, early.handler.handle(identity(earlyRetry)))
+        assertEquals(MorningReviewAlarmDecision.Launch, late.handler.handle(identity(lateRetry)))
+        assertEquals(listOf<Call>(Consume(lateRetry)), late.actions.calls)
     }
 
     @Test
@@ -191,6 +206,7 @@ class MorningReviewAlarmHandlerTest {
 
     private fun fixture(
         initialState: MorningReviewLocalState,
+        now: Instant = this.now,
         snapshot: SnapshotViewState? = snapshot(),
         zone: ZoneId = this.zone,
         loader: (() -> SnapshotViewState?)? = null,

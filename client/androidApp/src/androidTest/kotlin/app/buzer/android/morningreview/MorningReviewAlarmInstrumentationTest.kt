@@ -24,6 +24,7 @@ import java.io.FileInputStream
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -135,32 +136,24 @@ class MorningReviewAlarmInstrumentationTest {
     }
 
     @Test
-    fun cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery() {
-        listOf("priorityStart", "priorityDeadline").forEach { scenario ->
+    fun cachedOverdueTasksNeverDeferReview() {
         clearMorningReviewState()
-        fakeBackend.reset(scenario)
+        fakeBackend.reset("overdue")
         runBlocking { EnforcementDependencies.coordinator(context).forceSyncAndReconcile() }
         grantNotifications()
-        val scheduler = MorningReviewDependencies.scheduler(context)
-        val now = Instant.now()
-        val zone = ZoneId.systemDefault()
-        scheduler.snooze(now, zone)
+        MorningReviewDependencies.scheduler(context).snooze(Instant.now(), ZoneId.systemDefault())
         val fired = requireNotNull(stateStore.read().scheduledAlarm)
-        val receiver = AlarmReceiver()
         val notifications = context.getSystemService(NotificationManager::class.java)
-        val initialNotification = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
+        val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
 
-        receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW))
-        val retry = requireNotNull(stateStore.read().scheduledAlarm)
-        assertEquals(MorningReviewAlarmReason.PriorityRetry, retry.reason)
-        assertTrue(notifications.activeNotifications.none { it.id == initialNotification })
+        AlarmReceiver().onReceive(
+            context,
+            AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
+        )
 
-        File(context.filesDir, "latest_snapshot.json").delete()
-        receiver.onReceive(context, AlarmIntentFactory.receiverIntent(context, MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW))
-        val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, retry.occurrenceKey, AlarmKind.MORNING_REVIEW)
         assertEquals(1, waitForNotification(notifications, notificationId).size)
+        assertNotEquals(MorningReviewAlarmReason.PriorityRetry, stateStore.read().scheduledAlarm?.reason)
         notifications.cancel(notificationId)
-        }
     }
 
     private fun grantNotifications() {
