@@ -173,11 +173,11 @@ Before launching Morning Review from `AlarmReceiver`, a focused handler must:
 2. ignore/reconcile an alarm whose review date is no longer the current local date after a timezone/date change;
 3. ignore/reconcile a daily alarm if today is already acknowledged;
 4. clear matching pending Snooze metadata when a Snooze fires;
-5. enforce blocker priority `Deadline > Start > Morning Review` from the latest cached snapshot;
+5. enforce blocker priority from the latest cached snapshot: only an active Start blocker outranks Morning Review, and only until 15 minutes after the review date's 08:00 (amended by `docs/decisions/2026-09-29-reminder-reliability.md`);
 6. when a higher blocker exists, replace Morning Review with an internal one-minute `PriorityRetry` alarm and do not launch;
 7. otherwise consume the fired alarm, schedule the next daily occurrence, and allow the existing overlay/full-screen notification path to launch review.
 
-Derive higher priority from unfinished, valid owner tasks using the same half-open interval as Home: deadline when `now >= start + duration`; start when `start <= now < end` and `startedAt == null`. Deadline wins across all tasks. Exclude invalid, pending, unassigned, completed, and deleted entries. If no cached snapshot exists, allow Morning Review rather than suppressing it on a guess.
+Derive priority from unfinished, valid owner tasks using the same half-open interval as Home: start when `start <= now < end` and `startedAt == null`. Overdue work (`now >= end`) never outranks the review (amended 2026-09-29; the original "deadline when `now >= start + duration`" rule suppressed the review all day whenever any task was overdue). Exclude invalid, pending, unassigned, completed, and deleted entries. If no cached snapshot exists, allow Morning Review rather than suppressing it on a guess.
 
 ### No new backend review state
 

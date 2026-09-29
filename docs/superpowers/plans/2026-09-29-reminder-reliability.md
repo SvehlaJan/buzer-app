@@ -83,24 +83,24 @@ The following were checked and need no migration:
 
 **Files:** none (environment only)
 
-- [ ] **Step 1: Confirm the worktree and branch**
+- [x] **Step 1: Confirm the worktree and branch**
 
 Run: `git -C .worktrees/reminder-reliability status --short --branch`
 Expected: the first line is `## feature/reminder-reliability`. The only untracked files are
 `docs/decisions/2026-09-29-reminder-reliability.md` and this plan.
 
-- [ ] **Step 2: Install backend dependencies**
+- [x] **Step 2: Install backend dependencies**
 
 Run (from `.worktrees/reminder-reliability/backend`): `npm ci`
 Expected: exits 0.
 
-- [ ] **Step 3: Baseline backend tests**
+- [x] **Step 3: Baseline backend tests**
 
 Run (from `backend`): `npm test`
 Expected: all tests pass. If anything fails before you change code, stop and record it in the
 handoff.
 
-- [ ] **Step 4: Baseline client JVM tests**
+- [x] **Step 4: Baseline client JVM tests**
 
 Run (from `.worktrees/reminder-reliability/client`):
 ```bash
@@ -109,7 +109,7 @@ export ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/sv
 ```
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit the spec and plan**
+- [x] **Step 5: Commit the spec and plan**
 
 ```bash
 git add docs/decisions/2026-09-29-reminder-reliability.md docs/superpowers/plans/2026-09-29-reminder-reliability.md
@@ -141,7 +141,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `resolveOwnerTimeZone(source: CollaboratorTimeZoneSource | null, currentUserId: string, fallback?: string): string`
   - `CollaboratorRepository.getTimeZone(todoistUserId: string): string | null`
 
-- [ ] **Step 1: Write the failing time tests**
+- [x] **Step 1: Write the failing time tests**
 
 Replace the whole of `backend/test/domain/time.test.ts` with:
 
@@ -245,7 +245,7 @@ describe("computeDeadlineAt", () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing owner-timezone tests**
+- [x] **Step 2: Write the failing owner-timezone tests**
 
 Create `backend/test/domain/ownerTimeZone.test.ts`:
 
@@ -276,7 +276,7 @@ describe("resolveOwnerTimeZone", () => {
 });
 ```
 
-- [ ] **Step 3: Write the failing collaborator repository test**
+- [x] **Step 3: Write the failing collaborator repository test**
 
 Add inside the existing `describe("CollaboratorRepository", ...)` block of `backend/test/repositories/collaboratorRepository.test.ts`:
 
@@ -312,13 +312,13 @@ Add inside the existing `describe("CollaboratorRepository", ...)` block of `back
   });
 ```
 
-- [ ] **Step 4: Run the tests to verify they fail**
+- [x] **Step 4: Run the tests to verify they fail**
 
 Run (from `backend`): `npm test -- test/domain/time.test.ts test/domain/ownerTimeZone.test.ts test/repositories/collaboratorRepository.test.ts`
 Expected: FAIL. `resolveDueInstant`/`normalizeDueDatetime`/`sameDueInstant` are not exported,
 `ownerTimeZone.js` is missing, and `repo.getTimeZone` is not a function.
 
-- [ ] **Step 5: Implement the resolver**
+- [x] **Step 5: Implement the resolver**
 
 Replace the whole of `backend/src/domain/time.ts` with:
 
@@ -431,7 +431,7 @@ function zoneOffsetMs(timeZone: string, epochMs: number): number {
 }
 ```
 
-- [ ] **Step 6: Implement the owner timezone lookup**
+- [x] **Step 6: Implement the owner timezone lookup**
 
 In `backend/src/domain/taskRecurrence.ts`, change `function isIanaTimeZone(timeZone: string): boolean {` to `export function isIanaTimeZone(timeZone: string): boolean {`.
 
@@ -476,7 +476,7 @@ In `backend/src/repositories/collaboratorRepository.ts`, add this method to `Col
   }
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 Run (from `backend`): `npm test -- test/domain/time.test.ts test/domain/ownerTimeZone.test.ts test/repositories/collaboratorRepository.test.ts`
 Expected: PASS.
@@ -504,7 +504,7 @@ together.
   - `new TaskSnapshotService(tasks, projects, currentUserId, requireMirrorReady = false, collaborators: CollaboratorTimeZoneSource | null = null)`
   - `EscalationServiceOptions.ownerTimeZone?: () => string`
 
-- [ ] **Step 1: Write the failing snapshot test**
+- [x] **Step 1: Write the failing snapshot test**
 
 Add to `backend/test/services/taskSnapshotService.test.ts`, inside the top-level `describe`:
 
@@ -558,7 +558,7 @@ Add to `backend/test/services/taskSnapshotService.test.ts`, inside the top-level
 (Asia/Tokyo is UTC+9 with no DST, so floating 09:00 becomes 00:00Z. Using a non-default zone
 proves the collaborator timezone is actually used.)
 
-- [ ] **Step 2: Write the failing escalation test**
+- [x] **Step 2: Write the failing escalation test**
 
 Add to `backend/test/services/escalationService.test.ts`. Add these imports at the top:
 
@@ -601,13 +601,13 @@ Then add inside the top-level `describe`:
   });
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run (from `backend`): `npm test -- test/services/taskSnapshotService.test.ts test/services/escalationService.test.ts`
 Expected: FAIL. The snapshot returns the raw floating value, and `EscalationService` ignores
 `ownerTimeZone` (it doesn't compile yet).
 
-- [ ] **Step 4: Implement the snapshot change**
+- [x] **Step 4: Implement the snapshot change**
 
 In `backend/src/services/taskSnapshotService.ts`:
 
@@ -679,7 +679,7 @@ import { computeStartAt, normalizeDueDatetime } from "../domain/time.js";
    Leave the `validateTaskStrictness({ dueDatetime: task.dueDatetime, ... })` call unchanged:
    validation only checks presence.
 
-- [ ] **Step 5: Implement the escalation change**
+- [x] **Step 5: Implement the escalation change**
 
 In `backend/src/services/escalationService.ts`:
 
@@ -722,7 +722,7 @@ export interface EscalationServiceOptions {
    Then replace both `deadlineAt: computeDeadlineAt(dueDatetime, durationMinutes),` entries with
    `deadlineAt,`.
 
-- [ ] **Step 6: Wire production and e2e**
+- [x] **Step 6: Wire production and e2e**
 
 In `backend/src/server.ts`:
 - Add the import `import { resolveOwnerTimeZone } from "./domain/ownerTimeZone.js";`.
@@ -740,7 +740,7 @@ In `backend/test/e2eServer.ts`:
 - Add the import `import { CollaboratorRepository } from "../src/repositories/collaboratorRepository.js";` (skip it if already imported).
 - Line 66: `const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true, new CollaboratorRepository(db));`
 
-- [ ] **Step 7: Run the tests and typecheck**
+- [x] **Step 7: Run the tests and typecheck**
 
 Run (from `backend`): `npm test -- test/services/taskSnapshotService.test.ts test/services/escalationService.test.ts test/domain`
 Expected: PASS.
@@ -751,7 +751,7 @@ Expected: exits 0.
 Run: `grep -rn "new Date(.*due" src | grep -v "src/domain/time.ts"`
 Expected: no output.
 
-- [ ] **Step 8: Commit Tasks 1 and 2**
+- [x] **Step 8: Commit Tasks 1 and 2**
 
 ```bash
 git add backend/src/domain/time.ts backend/src/domain/ownerTimeZone.ts backend/src/domain/taskRecurrence.ts backend/src/repositories/collaboratorRepository.ts backend/src/services/taskSnapshotService.ts backend/src/services/escalationService.ts backend/src/server.ts backend/test/e2eServer.ts backend/test/domain/time.test.ts backend/test/domain/ownerTimeZone.test.ts backend/test/repositories/collaboratorRepository.test.ts backend/test/services/taskSnapshotService.test.ts backend/test/services/escalationService.test.ts
@@ -772,7 +772,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `sameDueInstant` (Task 1), `resolveOwnerTimeZone` (Task 1), `CollaboratorRepository.getTimeZone` (Task 1)
 - Produces: `recurrenceForUpdate(task, input, ownerTimeZone: string)` (module-private)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add inside `describe("editTask (update)", ...)` in `backend/test/services/taskActionService.test.ts`:
 
@@ -861,13 +861,13 @@ Add inside `describe("editTask (update)", ...)` in `backend/test/services/taskAc
 the owner's real floating tasks are unassigned too. The owner timezone resolves to the
 `Europe/Bratislava` default because the test DB has no collaborator row for `user-self`.)
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run (from `backend`): `npm test -- test/services/taskActionService.test.ts -t "floating"`
 Expected: the first test FAILS (`due.kind` is `"replace"`, not `"preserve"`). The second may
 already pass; that's fine, it guards the change.
 
-- [ ] **Step 3: Implement the comparison**
+- [x] **Step 3: Implement the comparison**
 
 In `backend/src/services/taskActionService.ts`:
 
@@ -915,7 +915,7 @@ function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit, 
 }
 ```
 
-- [ ] **Step 4: Run the whole backend suite**
+- [x] **Step 4: Run the whole backend suite**
 
 Run (from `backend`): `npm test`
 Expected: PASS. If an existing edit test fails because it expected `due.kind === "replace"`
@@ -925,7 +925,7 @@ intended behavior change (decision 3). Record the test name in the handoff.
 Run: `npm run typecheck`
 Expected: exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/services/taskActionService.ts backend/test/services/taskActionService.test.ts
@@ -955,7 +955,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `fun parseSnapshotJavaInstantOrNull(value: String): java.time.Instant?` (package `app.buzer.android.time`)
   - `AlarmPlan.invalidTimeTaskIds: Set<String>` (defaults to empty)
 
-- [ ] **Step 1: Write the failing parser test**
+- [x] **Step 1: Write the failing parser test**
 
 Create `client/shared/src/commonTest/kotlin/app/buzer/shared/time/SnapshotInstantTest.kt`:
 
@@ -990,7 +990,7 @@ class SnapshotInstantTest {
 }
 ```
 
-- [ ] **Step 2: Write the failing planner test**
+- [x] **Step 2: Write the failing planner test**
 
 Add to `AlarmPlanCalculatorTest`:
 
@@ -1011,7 +1011,7 @@ Add to `AlarmPlanCalculatorTest`:
     }
 ```
 
-- [ ] **Step 3: Write the failing coordinator test**
+- [x] **Step 3: Write the failing coordinator test**
 
 Add to `EnforcementCoordinatorTest`:
 
@@ -1039,7 +1039,7 @@ Add to `EnforcementCoordinatorTest`:
     }
 ```
 
-- [ ] **Step 4: Run the tests to verify they fail**
+- [x] **Step 4: Run the tests to verify they fail**
 
 Run (from `client`, with `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported):
 ```bash
@@ -1047,7 +1047,7 @@ Run (from `client`, with `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported):
 ```
 Expected: compilation FAILS (`parseSnapshotInstantOrNull` and `invalidTimeTaskIds` are unresolved).
 
-- [ ] **Step 5: Implement the shared parser**
+- [x] **Step 5: Implement the shared parser**
 
 Create `client/shared/src/commonMain/kotlin/app/buzer/shared/time/SnapshotInstant.kt`:
 
@@ -1065,7 +1065,7 @@ fun parseSnapshotInstantOrNull(value: String): Instant? =
     runCatching { Instant.parse(value.substringBefore('[')) }.getOrNull()
 ```
 
-- [ ] **Step 6: Implement planner isolation**
+- [x] **Step 6: Implement planner isolation**
 
 In `AlarmPlanCalculator.kt`:
 
@@ -1105,12 +1105,12 @@ data class AlarmPlan(
         val dueAt = task.dueDatetime?.let { parseSnapshotInstantOrNull(it) ?: return null }
 ```
 
-- [ ] **Step 7: Run the shared tests**
+- [x] **Step 7: Run the shared tests**
 
 Run: `./gradlew :shared:testAndroidHostTest`
 Expected: PASS.
 
-- [ ] **Step 8: Implement the Android bridge and coordinator report**
+- [x] **Step 8: Implement the Android bridge and coordinator report**
 
 Create `client/androidApp/src/main/kotlin/app/buzer/android/time/SnapshotJavaInstant.kt`:
 
@@ -1162,7 +1162,7 @@ In `EnforcementCoordinator.kt`:
     }
 ```
 
-- [ ] **Step 9: Switch Home and agenda to the strict parser**
+- [x] **Step 9: Switch Home and agenda to the strict parser**
 
 In `HomeScreenState.kt`:
 - Add the import `import app.buzer.android.time.parseSnapshotJavaInstantOrNull`.
@@ -1188,12 +1188,12 @@ private fun TaskSnapshotItem.toAgendaEntry(): OwnerAgendaEntry? {
 
 - Delete the imports `java.time.LocalDateTime` and `java.time.OffsetDateTime`. Keep `java.time.ZoneId` only if `grep -n "ZoneId" OwnerAgendaSelector.kt` still shows a use.
 
-- [ ] **Step 10: Run the client JVM tests**
+- [x] **Step 10: Run the client JVM tests**
 
 Run: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest`
 Expected: PASS, including `taskWithOffsetLessTimeIsSkippedAndReportedOncePerProcess`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add client/shared/src/commonMain/kotlin/app/buzer/shared/time/SnapshotInstant.kt client/shared/src/commonTest/kotlin/app/buzer/shared/time/SnapshotInstantTest.kt client/shared/src/commonMain/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculator.kt client/shared/src/commonTest/kotlin/app/buzer/shared/enforcement/AlarmPlanCalculatorTest.kt client/androidApp/src/main/kotlin/app/buzer/android/time/SnapshotJavaInstant.kt client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementCoordinatorTest.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/HomeScreenState.kt client/androidApp/src/main/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelector.kt
@@ -1223,7 +1223,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `internal val MORNING_REVIEW_PRIORITY_CAP: Duration`
   - `MorningReviewAlarmHandler(..., reviewTime: LocalTime = DEFAULT_MORNING_REVIEW_TIME)`
 
-- [ ] **Step 1: Migrate the resolver tests (failing)**
+- [x] **Step 1: Migrate the resolver tests (failing)**
 
 In `BlockerPriorityResolverTest.kt`, replace `deadlineBeatsAnActiveStartBlocker` and `intervalEndIsDeadlineRatherThanStart` with:
 
@@ -1260,7 +1260,7 @@ In `BlockerPriorityResolverTest.kt`, replace `deadlineBeatsAnActiveStartBlocker`
     }
 ```
 
-- [ ] **Step 2: Migrate the handler tests (failing)**
+- [x] **Step 2: Migrate the handler tests (failing)**
 
 In `MorningReviewAlarmHandlerTest.kt`:
 
@@ -1300,13 +1300,13 @@ In `MorningReviewAlarmHandlerTest.kt`:
 
    (`zone` is UTC in this test class, so the review time is 08:00Z and the cap ends at 08:15Z.)
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run (from `client`): `./gradlew :androidApp:testDebugUnitTest --tests '*BlockerPriorityResolverTest*' --tests '*MorningReviewAlarmHandlerTest*'`
 Expected: FAIL: `overdueTasksAloneNeverProducePriority` returns `Deadline`,
 `overdueTaskNeverDefersReview` returns `Deferred`, and so on.
 
-- [ ] **Step 4: Implement the rule**
+- [x] **Step 4: Implement the rule**
 
 In `MorningReviewScheduleCalculator.kt`, add this above the class and use it as the default:
 
@@ -1382,13 +1382,13 @@ object BlockerPriorityResolver {
 In `MorningReviewScheduler.kt:55`, change the doc comment to
 `/** Defers only the currently persisted occurrence while an active Start blocker has priority. */`.
 
-- [ ] **Step 5: Run the JVM tests**
+- [x] **Step 5: Run the JVM tests**
 
 Run: `./gradlew :androidApp:testDebugUnitTest`
 Expected: PASS. Fix any remaining compile references to `ActiveBlockerPriority.Deadline`
 (`grep -rn "ActiveBlockerPriority.Deadline" client` must print nothing).
 
-- [ ] **Step 6: Migrate the instrumentation test and e2e fixtures**
+- [x] **Step 6: Migrate the instrumentation test and e2e fixtures**
 
 In `MorningReviewAlarmInstrumentationTest.kt`, replace the whole
 `cachedStartAndDeadlinePriorityDeferReviewThenClearedCacheAllowsRetryDelivery` test (lines 137–164)
@@ -1429,7 +1429,7 @@ In `backend/test/fakes/e2eFixtures.test.ts`, delete lines 56–59 (the four `pri
 
 In `backend/test/e2eServer.ts:204`, delete `|| value === "priorityStart" || value === "priorityDeadline"`.
 
-- [ ] **Step 7: Verify backend and instrumentation**
+- [x] **Step 7: Verify backend and instrumentation**
 
 Run (from `backend`): `npm test -- test/fakes/e2eFixtures.test.ts` and then `npm run typecheck`
 Expected: PASS / exits 0.
@@ -1441,7 +1441,7 @@ ANDROID_SERIAL=emulator-5554 ANDROID_TEST_CLASS=app.buzer.android.morningreview.
 Expected: all tests in the class PASS. On the old code, `cachedOverdueTasksNeverDeferReview`
 would fail, because the review would be deferred as `PriorityRetry`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandler.kt client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduleCalculator.kt client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewScheduler.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/BlockerPriorityResolverTest.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewAlarmHandlerTest.kt client/androidApp/src/androidTest/kotlin/app/buzer/android/morningreview/MorningReviewAlarmInstrumentationTest.kt backend/test/fakes/e2eFixtures.ts backend/test/fakes/e2eFixtures.test.ts backend/test/e2eServer.ts
@@ -1462,7 +1462,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `suspend fun MorningReviewSessionController.forceSyncWithRetry(retryDelayMillis: Long, operation: suspend () -> SnapshotViewState): Exception?` (replaces `forceSync`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `MorningReviewSessionStateTest` (add imports `kotlin.test.assertFalse`, `kotlin.test.assertNull` and `kotlin.test.assertTrue` if missing):
 
@@ -1504,12 +1504,12 @@ Add to `MorningReviewSessionStateTest` (add imports `kotlin.test.assertFalse`, `
     }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run (from `client`): `./gradlew :androidApp:testDebugUnitTest --tests '*MorningReviewSessionStateTest*'`
 Expected: compilation FAILS (`forceSyncWithRetry` is unresolved).
 
-- [ ] **Step 3: Implement the retry**
+- [x] **Step 3: Implement the retry**
 
 In `MorningReviewSessionState.kt`, add the import `import kotlinx.coroutines.delay`, and replace
 `suspend fun forceSync(...)` (lines 43–54) with:
@@ -1568,12 +1568,12 @@ imports. Then replace `fun runForcedRefresh()` (lines 85–94) with:
         }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `./gradlew :androidApp:testDebugUnitTest`
 Expected: PASS. `grep -rn "\.forceSync {" client/androidApp/src` must print nothing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewSessionState.kt client/androidApp/src/main/kotlin/app/buzer/android/blockers/MorningReviewActivity.kt client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewSessionStateTest.kt
@@ -1592,7 +1592,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 There is no existing test, and `runProductionWork` needs a real `Context`. Verification is by
 compiling, the JVM suite, and Task 8's e2e run. The change is a deletion.
 
-- [ ] **Step 1: Remove the refresh**
+- [x] **Step 1: Remove the refresh**
 
 Replace the whole file with:
 
@@ -1653,12 +1653,12 @@ object BootReconcileRunner {
 }
 ```
 
-- [ ] **Step 2: Build and test**
+- [x] **Step 2: Build and test**
 
 Run (from `client`): `./gradlew :androidApp:assembleDebug :androidApp:testDebugUnitTest`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BootReconcileRunner.kt
@@ -1677,7 +1677,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `docs/notes/vps-deployment.md` (Environment block)
 - Create: `docs/handoffs/2026-09-29-reminder-reliability-implementation.md`
 
-- [ ] **Step 1: Update the Morning Review plan text**
+- [x] **Step 1: Update the Morning Review plan text**
 
 In `docs/superpowers/plans/2026-08-02-daily-morning-review.md`, replace item 5
 (`enforce blocker priority \`Deadline > Start > Morning Review\` ...`) with:
@@ -1692,7 +1692,7 @@ Replace the paragraph that starts `Derive higher priority from unfinished, valid
 Derive priority from unfinished, valid owner tasks using the same half-open interval as Home: start when `start <= now < end` and `startedAt == null`. Overdue work (`now >= end`) never outranks the review (amended 2026-09-29; the original "deadline when `now >= start + duration`" rule suppressed the review all day whenever any task was overdue). Exclude invalid, pending, unassigned, completed, and deleted entries. If no cached snapshot exists, allow Morning Review rather than suppressing it on a guess.
 ```
 
-- [ ] **Step 2: Document where backend operational failures live**
+- [x] **Step 2: Document where backend operational failures live**
 
 In `docs/runbooks/observability-triage.md`, add at the end of §4, after "3. **By Timestamp & Release**":
 
@@ -1707,7 +1707,7 @@ In `docs/runbooks/observability-triage.md`, add at the end of §4, after "3. **B
      these requests (method, URL, status, response time).
 ```
 
-- [ ] **Step 3: Document the owner-timezone fallback**
+- [x] **Step 3: Document the owner-timezone fallback**
 
 In `docs/notes/vps-deployment.md`, add this to the `.env` "Expected shape" block, after
 `SENTRY_ENVIRONMENT=production-vps`:
@@ -1717,12 +1717,12 @@ In `docs/notes/vps-deployment.md`, add this to the `.env` "Expected shape" block
 OWNER_TIMEZONE=Europe/Bratislava
 ```
 
-- [ ] **Step 4: Full backend verification**
+- [x] **Step 4: Full backend verification**
 
 Run (from `backend`): `npm test` and then `npm run typecheck`
 Expected: PASS / exits 0.
 
-- [ ] **Step 5: Full client JVM verification**
+- [x] **Step 5: Full client JVM verification**
 
 Run (from `client`): `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 Expected: BUILD SUCCESSFUL.
@@ -1738,13 +1738,22 @@ Expected: the whole suite PASSES, with no `ANDROID_TEST_CLASS` filter. If
 it: those fixtures use offset-less times that only the unchanged editor should read. Migrate
 the fixture to `"2026-07-24T09:00:00Z"` only if the failure shows a strict parser reading it.
 
-- [ ] **Step 7: Write the handoff**
+> **Not ticked (2026-09-29):** the full run (emulator-5554, with
+> `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433`) ran 115 tests. Two failures are real and
+> caused by Task 6's 30 s retry: `BlockerActivityFakeBackendTest.morningReview_cleanAndNoDataStartAcknowledgeAndClose`
+> and `.morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot` (both wait 15 s for
+> a failed-sync UI state). This plan's "existing suites" table missed them. Two other failures
+> were flakes that passed on a class re-run. `MorningReviewRepairHostTest` and
+> `DeadlineBlockerUpdateHostTest` passed. Details:
+> `docs/handoffs/2026-09-29-reminder-reliability-implementation.md`.
+
+- [x] **Step 7: Write the handoff**
 
 Create `docs/handoffs/2026-09-29-reminder-reliability-implementation.md` following AGENTS.md
 "Handoff Requirements". It must include a `Verification:` block for each of Steps 4–6, the
 checkbox status of Tasks 0–8, and any test whose expectation was changed in Task 3 Step 4.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add docs/superpowers/plans/2026-08-02-daily-morning-review.md docs/runbooks/observability-triage.md docs/notes/vps-deployment.md docs/handoffs/2026-09-29-reminder-reliability-implementation.md docs/superpowers/plans/2026-09-29-reminder-reliability.md

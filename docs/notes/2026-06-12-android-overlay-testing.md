@@ -77,7 +77,10 @@ Expected:
 
 - `boot_reconcile received` appears in the log.
 - `boot_reconcile cached=true` when a cached snapshot exists; otherwise `cached=false`.
-- Either `boot_reconcile refresh=success` or a bounded `refresh=timeout` / `refresh=failed`.
+- `boot_reconcile complete` follows (or `boot_reconcile failed <message>` if the cached
+  reconcile throws). Boot no longer refreshes from the backend, so there is no
+  `boot_reconcile refresh=...` line; it runs only the cached reconcile to stay inside the
+  broadcast window (`docs/decisions/2026-09-29-reminder-reliability.md`).
 - No `BAL_BLOCK` for `MainActivity`.
 - `dumpsys alarm` shows Buzer alarms restored when the cached snapshot has scheduled tasks.
 
