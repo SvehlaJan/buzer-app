@@ -817,8 +817,8 @@ function recurrenceForScheduleUpdate(task: TaskWithCommitment, dueDatetime: stri
 }
 
 function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit, ownerTimeZone: string) {
-  const scheduleChanged = !sameDueInstant(task.dueDatetime, input.dueDatetime, ownerTimeZone)
-    || task.durationMinutes !== input.durationMinutes;
+  const timeChanged = !sameDueInstant(task.dueDatetime, input.dueDatetime, ownerTimeZone);
+  const scheduleChanged = timeChanged || task.durationMinutes !== input.durationMinutes;
   if (input.dueDatetime === null || input.durationMinutes === null) {
     return { kind: "clear" as const };
   }
@@ -836,11 +836,11 @@ function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit, 
       ? { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null }
       : { kind: "replace" as const, datetime: input.dueDatetime, ...recurrence };
   }
+  if (!task.isRecurring) {
+    return timeChanged ? { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null } : { kind: "preserve" as const };
+  }
   if (!scheduleChanged) {
     return { kind: "preserve" as const };
-  }
-  if (!task.isRecurring) {
-    return { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null };
   }
   return recurrenceForScheduleUpdate(task, input.dueDatetime);
 }
