@@ -3,6 +3,7 @@ package app.buzer.android.morningreview
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
+import kotlinx.coroutines.delay
 
 /** Small activity-owned state machine: cache is always retained across failed forced sync. */
 data class MorningReviewSessionState(
@@ -40,18 +41,31 @@ class MorningReviewSessionController(
     }
     fun forceSyncSucceeded(snapshot: SnapshotViewState) = update(state.forceSyncSucceeded(snapshot))
     fun forceSyncFailed(message: String) = update(state.forceSyncFailed(message))
-    suspend fun forceSync(operation: suspend () -> SnapshotViewState): Exception? {
+    /**
+     * Forced sync that absorbs one transient failure: Todoist's 5xx spike at the top of the hour
+     * usually clears within seconds (decision 2026-09-29). Only a second failure is surfaced.
+     */
+    suspend fun forceSyncWithRetry(
+        retryDelayMillis: Long,
+        operation: suspend () -> SnapshotViewState
+    ): Exception? {
         if (!beginForcedSync()) return null
-        return try {
+        attemptForcedSync(operation) ?: return null
+        delay(retryDelayMillis)
+        val error = attemptForcedSync(operation) ?: return null
+        forceSyncFailed(error.message ?: "snapshot refresh failed")
+        return error
+    }
+
+    private suspend fun attemptForcedSync(operation: suspend () -> SnapshotViewState): Exception? =
+        try {
             forceSyncSucceeded(operation())
             null
         } catch (error: kotlinx.coroutines.CancellationException) {
             throw error
         } catch (error: Exception) {
-            forceSyncFailed(error.message ?: "snapshot refresh failed")
             error
         }
-    }
     fun beginAction(): Boolean = state.beginAction()?.let { update(it); true } ?: false
     fun finishAction() = update(state.finishAction())
     fun localActionFailed(message: String, retryAction: () -> Unit) {

@@ -32,6 +32,8 @@ import app.buzer.shared.state.SnapshotReducer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+private const val FORCED_SYNC_RETRY_DELAY_MILLIS = 30_000L
+
 class MorningReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,10 +87,19 @@ class MorningReviewActivity : ComponentActivity() {
         fun runForcedRefresh() {
             val currentCoordinator = coordinator ?: return
             lifecycleScope.launch {
-                session.forceSync { SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()) }?.let { error ->
+                session.forceSyncWithRetry(FORCED_SYNC_RETRY_DELAY_MILLIS) {
+                    SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile())
+                }?.let { error ->
                     val message = error.message ?: "snapshot refresh failed"
                     AppLog.error("morning_review forced sync failed", error)
-                    errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
+                    // The inline refresh warning already tells the owner; no system notification.
+                    errorReporter.report(
+                        BlockerAction.REFRESH_SNAPSHOT,
+                        null,
+                        message,
+                        showNotification = false,
+                        throwable = error
+                    )
                 }
             }
         }

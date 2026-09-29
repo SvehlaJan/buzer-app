@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MorningReviewSessionStateTest {
@@ -110,6 +111,42 @@ class MorningReviewSessionStateTest {
         assertFalse(controller.state.actionInFlight)
         assertEquals("storage failed", controller.state.actionError)
         assertTrue(controller.hasRetryAction)
+    }
+
+    @Test
+    fun forcedSyncRetriesOnceSilentlyAfterAFailure() = runBlocking {
+        val fresh = snapshot(scheduleVersion = 2)
+        val published = mutableListOf<MorningReviewSessionState>()
+        val controller = MorningReviewSessionController({ published += it }, MorningReviewSessionState().cache(snapshot()))
+        var calls = 0
+
+        val failure = controller.forceSyncWithRetry(retryDelayMillis = 1) {
+            calls += 1
+            if (calls == 1) error("todoist 503") else fresh
+        }
+
+        assertNull(failure)
+        assertEquals(2, calls)
+        assertEquals(fresh, controller.state.snapshot)
+        assertTrue(published.none { it.refreshError != null })
+    }
+
+    @Test
+    fun forcedSyncShowsTheErrorOnlyAfterTheRetryFails() = runBlocking {
+        val cached = snapshot()
+        val controller = MorningReviewSessionController({}, MorningReviewSessionState().cache(cached))
+        var calls = 0
+
+        val failure = controller.forceSyncWithRetry(retryDelayMillis = 1) {
+            calls += 1
+            error("todoist 503 #$calls")
+        }
+
+        assertEquals("todoist 503 #2", failure?.message)
+        assertEquals(2, calls)
+        assertEquals("todoist 503 #2", controller.state.refreshError)
+        assertEquals(cached, controller.state.snapshot)
+        assertFalse(controller.state.refreshInFlight)
     }
 
     private fun snapshot(scheduleVersion: Long = 1) = SnapshotViewState(
