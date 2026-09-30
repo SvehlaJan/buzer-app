@@ -44,6 +44,21 @@ function markCollaboratorMirrorReady(db: Database.Database): void {
   `).run();
 }
 
+// The owner's timezone comes from the collaborator mirror; seed it so floating-time tests do not
+// depend on the OWNER_TIMEZONE environment fallback.
+function seedOwnerTimeZone(db: Database.Database, timeZone = "Europe/Bratislava"): void {
+  new CollaboratorRepository(db).upsertCollaborator({
+    todoistUserId: "user-self",
+    fullName: "Owner",
+    email: null,
+    timeZone,
+    imageId: null,
+    isDeleted: false,
+    rawJson: {},
+    updatedAt: "2026-09-29T10:00:00Z"
+  });
+}
+
 function setupTestService(options: {
   db?: Database.Database;
   sync?: () => Promise<void>;
@@ -619,7 +634,8 @@ describe("TaskActionService", () => {
     });
 
     it("does not rewrite an unchanged floating due time echoed back as an instant", async () => {
-      const { service, repo, adapter } = setupTestService();
+      const { service, repo, adapter, db } = setupTestService();
+      seedOwnerTimeZone(db);
       repo.upsertTodoistTask({
         id: "task-floating",
         todoistTaskId: "todoist-floating",
@@ -659,7 +675,8 @@ describe("TaskActionService", () => {
     });
 
     it("writes a changed due time for a floating task as the new instant", async () => {
-      const { service, repo, adapter } = setupTestService();
+      const { service, repo, adapter, db } = setupTestService();
+      seedOwnerTimeZone(db);
       repo.upsertTodoistTask({
         id: "task-floating",
         todoistTaskId: "todoist-floating",
@@ -698,7 +715,8 @@ describe("TaskActionService", () => {
     });
 
     it("does not rewrite an unchanged floating due time on a duration-only edit", async () => {
-      const { service, repo, adapter } = setupTestService();
+      const { service, repo, adapter, db } = setupTestService();
+      seedOwnerTimeZone(db);
       repo.upsertTodoistTask({
         id: "task-floating",
         todoistTaskId: "todoist-floating",
