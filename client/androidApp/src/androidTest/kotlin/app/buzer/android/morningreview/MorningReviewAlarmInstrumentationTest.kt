@@ -18,6 +18,7 @@ import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.blockers.FakeBackendClient
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.io.File
 import java.io.FileInputStream
@@ -141,7 +142,16 @@ class MorningReviewAlarmInstrumentationTest {
         fakeBackend.reset("overdue")
         runBlocking { EnforcementDependencies.coordinator(context).forceSyncAndReconcile() }
         grantNotifications()
-        MorningReviewDependencies.scheduler(context).snooze(Instant.now(), ZoneId.systemDefault())
+        // Pin the Morning Review clock before the 08:15 priority-cap end so only the overdue
+        // rule (not the cap) can decide the outcome. The fixture tasks are overdue relative to
+        // the real "now", so the pinned instant must be later than that: tomorrow 08:05 local
+        // is before the cap on its own date and after every fixture interval at any wall-clock
+        // time (today 08:05 would precede the fixtures on most days and could not fail on the
+        // old overdue-priority code).
+        val zone = ZoneId.systemDefault()
+        val pinned = LocalDate.now(zone).plusDays(1).atTime(8, 5).atZone(zone).toInstant()
+        MorningReviewRuntimeClock.setForTests { pinned to zone }
+        MorningReviewDependencies.scheduler(context).snooze(pinned, zone)
         val fired = requireNotNull(stateStore.read().scheduledAlarm)
         val notifications = context.getSystemService(NotificationManager::class.java)
         val notificationId = AlarmIntentFactory.requestCode(MORNING_REVIEW_TASK_ID, fired.occurrenceKey, AlarmKind.MORNING_REVIEW)
