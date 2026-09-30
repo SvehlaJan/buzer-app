@@ -1727,7 +1727,7 @@ Expected: PASS / exits 0.
 Run (from `client`): `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 6: Full instrumentation verification (required: UI and user-visible behavior changed)**
+- [x] **Step 6: Full instrumentation verification (required: UI and user-visible behavior changed)**
 
 Run (from the worktree root; emulator booted):
 ```bash
@@ -1738,13 +1738,15 @@ Expected: the whole suite PASSES, with no `ANDROID_TEST_CLASS` filter. If
 it: those fixtures use offset-less times that only the unchanged editor should read. Migrate
 the fixture to `"2026-07-24T09:00:00Z"` only if the failure shows a strict parser reading it.
 
-> **Not ticked (2026-09-29):** the full run (emulator-5554, with
-> `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433`) ran 115 tests. Two failures are real and
+> **Result (2026-09-29/30):** the first full run (emulator-5554, with
+> `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433`) ran 115 tests, 111 passed. Two failures were real and
 > caused by Task 6's 30 s retry: `BlockerActivityFakeBackendTest.morningReview_cleanAndNoDataStartAcknowledgeAndClose`
-> and `.morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot` (both wait 15 s for
-> a failed-sync UI state). This plan's "existing suites" table missed them. Two other failures
+> and `.morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot` (both waited 15 s for
+> a failed-sync UI state). This plan's "existing suites" table missed `BlockerActivityFakeBackendTest`.
+> They were migrated (45 s waits, test-only) and the class re-run passed 43/43. Two other failures
 > were flakes that passed on a class re-run. `MorningReviewRepairHostTest` and
-> `DeadlineBlockerUpdateHostTest` passed. Details:
+> `DeadlineBlockerUpdateHostTest` passed. No single full-suite run exists after the migration; re-run
+> the full suite once before merge. Details:
 > `docs/handoffs/2026-09-29-reminder-reliability-implementation.md`.
 
 - [x] **Step 7: Write the handoff**
