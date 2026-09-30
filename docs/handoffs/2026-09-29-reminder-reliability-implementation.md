@@ -1,6 +1,6 @@
 # Handoff: Reminder reliability implementation (Tasks 0-8)
 
-Date: 2026-09-29
+Date: 2026-09-29 (Task 8 fix rounds 1 and 2: 2026-09-30)
 Agent: Claude (subagent-driven execution: controller Claude Opus 5.5; Task 8 docs/verification/handoff by Claude Sonnet 5.5; implementers and reviewers were Sonnet and Haiku subagents)
 Plan: `docs/superpowers/plans/2026-09-29-reminder-reliability.md`
 Decision: `docs/decisions/2026-09-29-reminder-reliability.md`
@@ -19,10 +19,10 @@ the review's opening forced sync hitting Todoist's top-of-the-hour 5xx spike; th
 decision 8).
 
 **Status: complete.** The first full instrumentation run had 2 real failures caused by Task 6's 30 s
-retry in `BlockerActivityFakeBackendTest`. They were fixed by migrating those two tests (fix round 1;
-no production code changed), and the class re-run is green (43/43). Two other failures in the first
-run were flakes that passed on a class re-run. A final full-suite re-run was NOT done after the fix
-(see "Open issues").
+retry in `BlockerActivityFakeBackendTest`. They were fixed by migrating those two tests (fix round 1,
+`4c60da7`; test-only, no production code changed), and the class re-run was green (43/43). Two other
+failures in the first run were flakes that passed on a class re-run. The controller then ran the full
+unfiltered suite at `4c60da7`: 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s` (see "Verification").
 
 ## Checkbox status
 
@@ -36,7 +36,7 @@ run were flakes that passed on a class re-run. A final full-suite re-run was NOT
 | 5 Morning Review priority is Start-only and capped | 1-8 | all ticked |
 | 6 Morning Review sync retries once, silently | 1-5 | all ticked |
 | 7 Boot runs only the cached reconcile | 1-3 | all ticked |
-| 8 Docs, full verification, handoff | 1-8 | all ticked (Step 6 after fix round 1: the two real failures were migrated and the class re-run passed; see Verification) |
+| 8 Docs, full verification, handoff | 1-8 | all ticked (Step 6 is backed by the full unfiltered suite passing at `4c60da7`; see Verification) |
 
 ## Commits (per task)
 
@@ -49,7 +49,7 @@ run were flakes that passed on a class re-run. A final full-suite re-run was NOT
 | 5 | `2cd4592` fix: let only an active start blocker delay the morning review, for at most 15 minutes |
 | 6 | `79be78f` fix: retry the morning review sync once and drop its system notification |
 | 7 | `dd71945` fix: run only the cached reconcile at boot to stay inside the broadcast window |
-| 8 | `12b9f79` docs: record reminder reliability rollout notes and handoff; then, fix round 1, `test: wait past the morning review sync retry in blocker e2e tests` (the commit that also updates this file) |
+| 8 | `12b9f79` docs: record reminder reliability rollout notes and handoff; fix round 1: `4c60da7` test: wait past the morning review sync retry in blocker e2e tests; fix round 2 (this file's final form): `docs: complete the reminder reliability handoff` |
 
 ## Files changed
 
@@ -163,9 +163,17 @@ retry call needs no adaptation. All other assertions are unchanged.
 - Result: PASS
 - Evidence: `BUILD SUCCESSFUL in 17s`.
 
-Caveat: after the fix there was no single full-suite run. The claim for Step 6 rests on: full run (111/115 pass,
-failures triaged) + class re-run of the three failing classes + this class re-run of the fixed class. The migration only
-changes two waits in one class, so the 72 tests in other classes are unaffected by it.
+Step 6 final full unfiltered run after the fix, run by the controller (not by the Task 8 implementer) at commit
+`4c60da7` on 2026-09-30, from the worktree root, emulator `emulator-5554`. This is the run that backs the Step 6 tick.
+The first-run (111/115) and class re-run blocks above are kept as history.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 scripts/e2e-real-backend.sh` (no `ANDROID_TEST_CLASS`)
+- Result: PASS
+- Evidence: `Starting 115 tests on Buzer_API_36(AVD) - 16` / `Finished 115 tests`, 0 failed, `BUILD SUCCESSFUL in 5m 47s`,
+  exit 0 (controller log `.superpowers/sdd/2026-09-29-reminder-reliability/e2e-full-final.log`, not committed). The two
+  earlier flakes (`EditTaskFakeBackendTest.editTask_retryPreservesTheCapturedRootRequestAndDirtyExitConfirmsDiscard`,
+  `ForegroundReadinessScreenTest.systemBackDoesNotDismissTheGate`) did not recur. The script again left its e2e-server
+  node backend listening on 18433 (killed afterwards; port free).
 
 ## Tests whose expectations changed
 
@@ -202,10 +210,16 @@ Controller rulings made during execution (copied verbatim from the ledger):
 - Ruling: decision 6's "never posts the Backend action failed notification" covers the review's forced-sync failure only; MorningReviewActivity.kt:70 (coordinator create failure) and :84 (cached load failure) keep their notification — they are local configuration failures, not sync failures, and are not in the brief — costs two rare notifications if the owner meant "never" literally.
 - Ruling: ⚠️ 30 s wait has no automated coverage — accepted; only a real failing backend could exercise it — costs untested timing, covered by unit tests with 1 ms delay.
 - Ruling: Task 8 dispatch also updates docs/notes/2026-06-12-android-overlay-testing.md:80 (expected boot logs still list `boot_reconcile refresh=...`) — Task 7 made it stale and the checklist would mislead boot verification — costs one doc file outside Task 8's list.
+- Ruling: fix the 2 BlockerActivityFakeBackendTest failures by migrating the tests (raise their waits above the 30 s retry, ~45 s, and adjust any backend-call-count assertion to the extra automatic retry), not by adding a test-only delay hook to production — Task 6 changed this behavior and AGENTS.md requires migrating the suites that assert it in the same plan; keeps production simple — costs ~30 s extra per affected test run.
+- Ruling: after that fix, re-running `BlockerActivityFakeBackendTest` alone (plus the earlier full run: 111 pass, 2 flakes that pass on class re-run) counts as Task 8 Step 6 evidence — the fix touches only that class — costs a missed interaction elsewhere, which the final review can call for.
 
 Task 8 controller rulings: (1) also update the overlay-testing note (done); (2) the full e2e run must use the emulator
 backend override and no class filter (done); (3) on e2e failure re-run the class once, do not fix product code, record
-precisely and report DONE_WITH_CONCERNS (done; the instrumentation tests were also left untouched).
+precisely and report DONE_WITH_CONCERNS (done: the two real failures were recorded, not fixed in that round). The two
+real `BlockerActivityFakeBackendTest` failures were then migrated in fix round 1 (`4c60da7`; test-only, no production
+code changed), per the two rulings above. The second of those rulings (class re-run counts as Step 6 evidence) was
+superseded in practice: the controller also ran the full unfiltered suite at `4c60da7` and it passed (115/115, see
+Verification).
 
 ## Known limitations / deferred findings
 
@@ -241,6 +255,10 @@ Deferred minor review findings (none block the merge):
 - Retry: the first sync failure leaves no `AppLog` breadcrumb, so masked Todoist 5xx spikes are invisible in Sentry
   Logs; test gaps for the happy path (1 call, no delay), `refreshInFlight` during the wait and cancellation during
   the delay; style nits in `MorningReviewSessionState.kt` (inverted null-means-success helper, missing blank lines).
+- Docs: `docs/superpowers/plans/2026-08-02-daily-morning-review.md` still says Deadline outranks Start at lines
+  ~347, 351, 365, 758 and 887, contradicting the amended item 5 (outside the brief's edit range).
+- E2E test: `FORCED_SYNC_RETRY_WAIT_MILLIS = 45_000L` duplicates the production retry delay (private `30_000` in
+  `MorningReviewActivity.kt`) and can drift if that delay changes.
 
 ## Open issues
 
@@ -248,19 +266,18 @@ Deferred minor review findings (none block the merge):
    Task 6's 30 s retry: the inline warning / "Start day without data" appear only after the second attempt fails, and
    both tests waited 15 s. Fixed by migrating the tests (45 s waits); the class now passes 43/43. No production code
    changed.
-2. No full-suite run exists after the fix. Before merge, run the full `scripts/e2e-real-backend.sh` once more (same
-   environment as in Verification) and confirm 115/115; ~5.5 min plus about 30 s per migrated test.
-3. Two flakes in the first full run (both passed on class re-run):
+2. (Resolved.) There was no full-suite run after the fix. The controller ran the full unfiltered suite at `4c60da7` on
+   2026-09-30: 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s` (see the final Step 6 block in Verification).
+3. Two flakes in the first full run (both passed on class re-run and did not recur in the final full run):
    `EditTaskFakeBackendTest.editTask_retryPreservesTheCapturedRootRequestAndDirtyExitConfirmsDiscard` (banner not
    displayed) and `ForegroundReadinessScreenTest.systemBackDoesNotDismissTheGate` (no window focus for 10 s). Cause
-   unknown. Watch for them on the final full run; treat a repeat as a real defect. (Scenarios launched by
-   `BlockerActivityFakeBackendTest` are tracked and closed in its `@After`, so a leaked activity from the timed-out
-   tests is not a likely explanation.)
+   unknown; treat a future repeat as a real defect. (Scenarios launched by `BlockerActivityFakeBackendTest` are
+   tracked and closed in its `@After`, so a leaked activity from the timed-out tests is not a likely explanation.)
 4. CI was not checked: nothing was pushed (per instruction).
 
 ## Manual verification performed
 
-Emulator only (`emulator-5554`, Android 16), through the instrumentation suite above. Nothing was run on a physical
+Emulator only (`emulator-5554`, Android 16), through the instrumentation suite above (final full run: 115/115 pass). Nothing was run on a physical
 phone, against live Todoist, or on the VPS. The backend was not deployed and nothing was pushed or merged.
 
 ## Environment notes
@@ -285,8 +302,8 @@ phone, against live Todoist, or on the VPS. The backend was not deployed and not
 
 ## Next step
 
-1. Run the full `scripts/e2e-real-backend.sh` suite once more (Open issues 2) and confirm it is green.
-2. Then review and, with the owner's explicit go-ahead, follow the plan's Rollout: merge to `master` and push, check
+1. Whole-branch review (merge base `6e18826`), including the deferred findings above.
+2. Then, with the owner's explicit go-ahead, follow the plan's Rollout: merge to `master` and push, check
    `gh run list --workflow=ci.yml --limit 1`, deploy the backend (`scripts/deploy-vps.sh`, which alone stops
    BUZER-ANDROID-E on the installed APK), install the new APK, and do the live Sentry checks (no new
    BUZER-ANDROID-E; `overlay_start skipped ... kind=MORNING_REVIEW` at 08:00; on 2026-10-11 the two floating tasks log

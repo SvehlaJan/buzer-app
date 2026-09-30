@@ -1745,9 +1745,9 @@ the fixture to `"2026-07-24T09:00:00Z"` only if the failure shows a strict parse
 > a failed-sync UI state). This plan's "existing suites" table missed `BlockerActivityFakeBackendTest`.
 > They were migrated (45 s waits, test-only) and the class re-run passed 43/43. Two other failures
 > were flakes that passed on a class re-run. `MorningReviewRepairHostTest` and
-> `DeadlineBlockerUpdateHostTest` passed. No single full-suite run exists after the migration; re-run
-> the full suite once before merge. Details:
-> `docs/handoffs/2026-09-29-reminder-reliability-implementation.md`.
+> `DeadlineBlockerUpdateHostTest` passed. The full unfiltered suite then passed at `4c60da7`
+> (2026-09-30): 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s`; the two earlier flakes did not recur.
+> Details: `docs/handoffs/2026-09-29-reminder-reliability-implementation.md`.
 
 - [x] **Step 7: Write the handoff**
 
