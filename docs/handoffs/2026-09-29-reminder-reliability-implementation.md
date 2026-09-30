@@ -53,7 +53,7 @@ unfiltered suite at `4c60da7`: 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s` (
 
 ## Files changed
 
-Whole branch (`git diff --stat 6e18826..dd71945`): 38 files, +2631/-154.
+Whole branch, final (`git diff --stat 6e18826..HEAD` at the last commit of the final fix wave): 47 files, +3152/-182.
 
 - Backend: `domain/time.ts` (resolver, `sameDueInstant`, tz param), new `domain/ownerTimeZone.ts`,
   `domain/taskRecurrence.ts` (export `isIanaTimeZone`), `repositories/collaboratorRepository.ts`
@@ -307,6 +307,68 @@ phone, against live Todoist, or on the VPS. The backend was not deployed and not
    `gh run list --workflow=ci.yml --limit 1`, deploy the backend (`scripts/deploy-vps.sh`, which alone stops
    BUZER-ANDROID-E on the installed APK), install the new APK, and do the live Sentry checks (no new
    BUZER-ANDROID-E; `overlay_start skipped ... kind=MORNING_REVIEW` at 08:00; on 2026-10-11 the two floating tasks log
-   `overlay_start attempted ... kind=START_BLOCKER` at 09:00 CEST).
+   `overlay_start attempted ... kind=START_BLOCKER` at 09:00 CEST). Rollout notes from the final review:
+   - **Deploy the backend before installing the new APK.** A new APK against the old backend gives floating
+     tasks no alarms and hides them from Home/agenda.
+   - Read-only check of the timezone the backend resolves for floating times:
+     `select time_zone from todoist_collaborators where todoist_user_id = '<TODOIST_USER_ID>'` (empty means the
+     `OWNER_TIMEZONE` env / `Europe/Bratislava` fallback applies).
+   - Migration 8 (added in the final fix wave) advances `snapshot_generations.generation` once on deploy, so a
+     phone whose cached generation equalled the backend's re-reconciles instead of keeping the poisoned floating
+     snapshot. Confirm with `select generation from snapshot_generations where id = 1` before and after the
+     deploy (higher by 1). The phone's `force_sync fetched ...` / `refresh fetched ...` line shows `scheduleVersion`
+     but not the generation, and `scheduleVersion` does not change with the migration; the phone-side signal is the
+     floating tasks appearing after the next refresh without a Todoist edit.
 3. Commit the two 2026-09-23 investigation docs from the primary checkout to `master` separately if the owner wants
    them kept.
+
+## Final review fix wave
+
+Fixes ruled "fix now" by the controller after the whole-branch review (base `a60f1a6`; brief and report are workspace
+scratch under `.superpowers/sdd/2026-09-29-reminder-reliability/`, not committed). Plan/task: the final fix wave
+of `docs/superpowers/plans/2026-09-29-reminder-reliability.md`, items F1-F4.
+
+| Item | Commit | Change |
+| --- | --- | --- |
+| F1 (Important) | `e500fae` fix: advance the snapshot generation once on deploy via migration 8 | `migrateToVersionEight` in `backend/src/db/migrations.ts` runs `update snapshot_generations set generation = generation + 1 where id = 1` once (idempotent by version). Without it the generation does not move on deploy (the poller's incremental sync writes nothing), so a phone whose cached generation equals the backend's would keep the poisoned floating snapshot (`EnforcementCoordinator.applySnapshotGeneration` treats equal as "keep cached"). |
+| F2a (Minor #2) | `1539bdc` fix: retry a manual Morning Review refresh immediately and pin the overdue test clock | `MorningReviewActivity.runForcedRefresh(retryDelayMillis = FORCED_SYNC_RETRY_DELAY_MILLIS)`; the opening sync keeps the 30 s default, the user-tapped Refresh passes `0L`. |
+| F2b (Minor #3) | same commit | `MorningReviewAlarmInstrumentationTest.cachedOverdueTasksNeverDeferReview` pins `MorningReviewRuntimeClock` (reset by the existing `@After`) to tomorrow 08:05 local, and uses it for `snooze(...)`. Tomorrow rather than today: the `overdue` fixture tasks are placed relative to the real "now", so a pinned time earlier than the fixtures means they are not overdue at that instant and the old overdue-priority code would not defer either (today 08:05 detects a regression only in a narrow wall-clock window). Tomorrow 08:05 is before the 08:15 cap on its own date and after every fixture interval at any wall-clock time; the snooze alarm (08:10 tomorrow) is also in the real future, so the platform never fires it during the test. |
+| F3 (Minor #7) | `f080532` test: seed the owner timezone in floating edit tests | `taskActionService.test.ts`: `seedOwnerTimeZone(db)` seeds a `user-self` collaborator (`Europe/Bratislava`) in the three floating edit tests. |
+| F4 (Minor #4, #6, #8) | the docs commit that contains this section | Amendment pointers in `2026-08-02-smart-home-morning-review-readiness-design.md` (top and blocker-priority list) and at the five stale Deadline-priority passages of `2026-08-02-daily-morning-review.md`; Rollout text in the plan and in "Next step" above (deploy backend before APK, resolved-timezone check, generation check); diff stat below updated. |
+
+Tests that assert migration versions or generation values were updated for version 8 in
+`backend/test/db/migrations.test.ts`: a fresh database now starts at generation 2 (1 from v3, +1 from v8), so the
+"durable global snapshot generation" test counts from that base; the two `schema_migrations` version lists gained
+`{ version: 8 }`. New test: "applies migration v8 once, advancing the snapshot generation ...". No other test asserted
+these values.
+
+Verification:
+- Command: `npm test --prefix backend -- test/db/migrations.test.ts` (before the migration existed)
+- Result: FAIL (expected, RED)
+- Evidence: `expected { generation: 41 } to deeply equal { generation: 42 }`.
+- Command: `npm test --prefix backend` and `npm run typecheck --prefix backend`
+- Result: PASS
+- Evidence: `Test Files 39 passed (39)`, `Tests 507 passed (507)`; `tsc --noEmit` exit 0. Also PASS with `OWNER_TIMEZONE=UTC npm test --prefix backend` (507/507); F3 was RED before the change (2 floating edit tests failed under `OWNER_TIMEZONE=UTC`).
+- Command: `./gradlew :androidApp:testDebugUnitTest` (from `client`, `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported)
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; result XML 419 tests, 0 failures, 0 errors, 0 skipped.
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 ANDROID_TEST_CLASS=app.buzer.android.morningreview.MorningReviewAlarmInstrumentationTest scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: `Finished 5 tests`, `BUILD SUCCESSFUL in 14s`, result XML `tests="5" failures="0"`. With a temporary mutation restoring overdue priority in `BlockerPriorityResolver` (reverted, not committed), the same class FAILED `cachedOverdueTasksNeverDeferReview` (`MorningReviewAlarmInstrumentationTest.kt:164`, `BUILD FAILED`), so the pinned test detects the regression.
+- Command: same environment, `ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest`
+- Result: PASS
+- Evidence: `Finished 43 tests`, `BUILD SUCCESSFUL in 3m 39s`, result XML `tests="43" failures="0" errors="0" skipped="0"`. After every e2e run the leftover e2e-server node processes (cwd = this worktree's `backend`) were killed and port 18433 confirmed free.
+- Not re-run: the full unfiltered instrumentation suite after this wave (only the two classes above, as scoped by the brief).
+
+Controller-deferred / ruled items from the whole-branch review (recorded, not changed here):
+- Minor #1: no per-task catch in the snapshot projection (`taskSnapshotService`); one task with an unresolvable
+  floating time still fails the whole snapshot. Deferred.
+- Minor #5: the decision doc cites the two uncommitted 2026-09-23 investigation files that live only in the
+  primary checkout (`docs/handoffs/2026-09-23-morning-review-delivery-investigation.md`,
+  `docs/notes/2026-09-23-morning-review-deferred-by-overdue-tasks.md`). The owner decides whether to commit them.
+- Minor #9: `79be78f` leaves two `BlockerActivityFakeBackendTest` e2e tests red until `4c60da7` migrates them. Merge with
+  `--no-ff` so the range is kept together, not squashed or cherry-picked partially.
+
+Superseded by this wave in the sections above: the Docs bullet under "Known limitations" (stale Deadline-priority
+passages in `2026-08-02-daily-morning-review.md`) is now annotated, and the `OWNER_TIMEZONE`-dependence of the first
+floating edit test is fixed (F3).

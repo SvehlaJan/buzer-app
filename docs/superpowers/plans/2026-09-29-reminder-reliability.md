@@ -1774,7 +1774,23 @@ These are outward-facing. Do each one only with the owner's explicit go-ahead.
    `gh run list --workflow=ci.yml --limit 1`.
 2. Deploy the backend: `ssh oc-vps.taila50381.ts.net /home/skclaw/buzer-app/scripts/deploy-vps.sh`,
    then `curl --fail https://oc-vps.taila50381.ts.net/buzer/health`. This alone stops
-   BUZER-ANDROID-E on the installed APK.
+   BUZER-ANDROID-E on the installed APK. Migration 8 advances `snapshot_generations.generation`
+   once, so the phone's next refresh sees a newer generation and re-reconciles instead of
+   keeping its cached floating-time snapshot.
+   - **Deploy the backend before installing the new APK.** A new APK against the old backend
+     gives floating tasks no alarms and hides them from Home/agenda (the old backend still
+     sends offset-less times, which the new client skips).
+   - Read-only check of which timezone the backend resolves for floating times (empty result
+     means the `OWNER_TIMEZONE` env / `Europe/Bratislava` fallback applies):
+     `select time_zone from todoist_collaborators where todoist_user_id = '<TODOIST_USER_ID>'`.
+   - Read-only check that the generation moved: before the deploy and after it,
+     `select generation from snapshot_generations where id = 1` (or `snapshotGeneration` in
+     `GET /tasks/snapshot`); the value after the deploy is higher by exactly 1 from the
+     migration (later Todoist changes add more). The phone's `force_sync fetched …` /
+     `refresh fetched …` line prints `scheduleVersion` but not the generation, and
+     `scheduleVersion` does not change with the migration; the phone-side confirmation is that
+     the floating tasks appear (Home/agenda, and `startingToday=` / `active=` counts in that
+     line) after the next refresh, without any Todoist edit.
 3. Build and install the new APK on the phone, using the same device-install path as release
    `e859f1e`.
 4. Live checks:

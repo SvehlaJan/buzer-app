@@ -346,9 +346,13 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
 
   Build complete `SnapshotViewState` fixtures. Assert Deadline beats Start, Start beats Morning Review, interval end is Deadline, started tasks do not produce Start, and invalid/pending/unassigned/completed/deleted tasks never suppress review.
 
+  > Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.
+
 - [x] **Step 2: Write RED alarm-handler decision tests.**
 
   Cover matching valid daily/Snooze -> `Launch`; stale identity -> `Ignore`; acknowledged daily -> `Ignore` and reconcile; wrong local date after timezone change -> `Ignore` and reconcile; matching Snooze clears pending metadata; Start/Deadline presence -> `Deferred` with one-minute replacement; and no cached snapshot -> `Launch`.
+
+  > Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.
 
 - [x] **Step 3: Confirm RED.**
 
@@ -364,6 +368,8 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   enum class MorningReviewAlarmDecision { Launch, Deferred, Ignore }
   enum class ActiveBlockerPriority { None, Start, Deadline }
   ```
+
+  > Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does (the `Deadline` value no longer exists).
 
   Inject store/scheduler, cached snapshot loader, clock, and zone provider. Keep all Android context construction in `MorningReviewDependencies`.
 
@@ -755,7 +761,7 @@ Do not add a backend acknowledgement table, API field, sync token, or action-jou
   - app-open after 08:00 launches automated review once;
   - invalid/pending owner work blocks Start, unassigned does not;
   - after acknowledgement, injecting/discovering a new invalid owner task restores only the Home banner;
-  - Start/Deadline priority defers Morning Review and later allows it after cached authority clears;
+  - Start/Deadline priority defers Morning Review and later allows it after cached authority clears; _(Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.)_
   - launching automated review over a dirty Add/Edit draft, then Start/Snooze, returns to the exact typed draft;
   - Task-free weekends use the same review flow.
 
@@ -884,7 +890,7 @@ Change 2 is complete only when:
 - pure tests lock local-date, timezone, DST, early-acknowledgement, Snooze, and catch-up rules;
 - exactly one Morning Review alarm is armed and Morning Review uses `setAlarmClock`;
 - boot/package/time/timezone broadcasts reconcile it;
-- Deadline and Start blockers defer Morning Review without losing the current day's review;
+- Deadline and Start blockers defer Morning Review without losing the current day's review; _(Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.)_
 - Home banner, automated 08:00 delivery, and post-08:00 app-open catch-up are the only entry surfaces;
 - cached and no-data acknowledgement behavior matches the accepted design;
 - invalid/pending owner tasks block Start, while overdue and unassigned work do not;
