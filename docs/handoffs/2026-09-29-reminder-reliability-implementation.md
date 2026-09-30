@@ -374,3 +374,41 @@ Controller-deferred / ruled items from the whole-branch review (recorded, not ch
 Superseded by this wave in the sections above: the Docs bullet under "Known limitations" (stale Deadline-priority
 passages in `2026-08-02-daily-morning-review.md`) is now annotated, and the `OWNER_TIMEZONE`-dependence of the first
 floating edit test is fixed (F3).
+
+## Rollout (2026-09-30)
+
+- Merged into `master` with `--no-ff` as `3150fc1`, pushed; CI `ci.yml` run 36771141884: success (5m45s).
+- APK built from merged `master` (primary checkout `client/local.properties`) and installed over the existing app on
+  the Pixel 10 (`56061FDCR005J0`) at 20:20Z, app data kept (`firstInstallTime` unchanged). Release
+  `app.buzer@0.1.0-dev+3150fc1d8781`, environment `production-device`.
+- Backend deployed by the owner at 20:43Z (`deploy-vps.sh`). From Claude's shell the script's `git fetch` needs
+  `ssh -A` plus a 1Password approval for the forwarded GitHub key; `ForwardAgent yes` in `~/.ssh/config` alone did
+  not forward the agent there.
+
+Verification:
+- Command: VPS read-only checks (`git log -1`, `docker inspect`, `printenv SENTRY_RELEASE`, `curl /health`, SQLite
+  `snapshot_generations` / `schema_migrations` / owner `time_zone`)
+- Result: PASS
+- Evidence: checkout `3150fc1`; container started 20:43:17Z, healthy; release `app.buzer@0.1.0+3150fc1d8781`;
+  migrations 1–8; generation 1114796 before → 1115803 after (migration 8 plus poller writes); owner timezone
+  `Europe/Warsaw`.
+- Command: live `GET /tasks/snapshot` from inside the container (token from container env, not printed)
+- Result: PASS
+- Evidence: 235 tasks, 0 offset-less `dueDatetime`/`startAt`; both 11 Oct floating tasks now `2026-10-11T07:00:00.000Z`
+  (09:00 CEST), valid, planned, assigned to the owner.
+- Command: Sentry Logs `reconcile complete` for release `3150fc1d8781`
+- Result: PASS
+- Evidence: before the deploy `scheduled=33 … invalidTime=2` (20:20Z, 20:30Z: the two floating tasks isolated as designed);
+  after the deploy `scheduled=39 … invalidTime=0` (20:59Z).
+- Command: Sentry errors for BUZER-ANDROID-E / BUZER-ANDROID-F
+- Result: PASS
+- Evidence: last BUZER-ANDROID-E events 20:19Z from the old release `e859f1e`, none from `3150fc1`; BUZER-ANDROID-F
+  ("snapshot task time has no offset") 4 events, all before the deploy, none after. No backend issues.
+- Command: `BUZER_DEVICE_SERIAL=56061FDCR005J0 scripts/adb-verify.sh alarms`
+- Result: PASS
+- Evidence: 11 Oct alarms present for both floating tasks — 2 at 06:00Z (pre-start), 2 at 07:00Z (start), 2 at 07:15Z
+  (deadline); 3 alarms at 2026-10-01T06:00Z (08:00 CEST, including the Morning Review).
+
+Remaining live checks: the 2026-10-01 08:00 Morning Review is delivered (`overlay_start skipped … kind=MORNING_REVIEW`
+at 06:00Z); on 2026-10-11 both floating tasks fire their Start blockers at 09:00 CEST. BUZER-ANDROID-E and
+BUZER-ANDROID-F can be resolved in Sentry once those pass.
