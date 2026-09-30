@@ -358,7 +358,9 @@ Verification:
 - Command: same environment, `ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest`
 - Result: PASS
 - Evidence: `Finished 43 tests`, `BUILD SUCCESSFUL in 3m 39s`, result XML `tests="43" failures="0" errors="0" skipped="0"`. After every e2e run the leftover e2e-server node processes (cwd = this worktree's `backend`) were killed and port 18433 confirmed free.
-- Not re-run: the full unfiltered instrumentation suite after this wave (only the two classes above, as scoped by the brief).
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 scripts/e2e-real-backend.sh` (full, unfiltered; run by the controller at `f1cdb6d`, 2026-09-30)
+- Result: PASS
+- Evidence: `Finished 115 tests on Buzer_API_36(AVD) - 16`, 0 failed, `BUILD SUCCESSFUL in 5m 58s`, exit 0. The script again left its e2e-server node backend listening on 18433 (cwd = this worktree's `backend`); killed afterwards.
 
 Controller-deferred / ruled items from the whole-branch review (recorded, not changed here):
 - Minor #1: no per-task catch in the snapshot projection (`taskSnapshotService`); one task with an unresolvable
