@@ -48,6 +48,11 @@ export function migrate(db: Database.Database): void {
       migrateToVersionSeven(db);
       db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(7, new Date().toISOString());
     }
+    const migrationEightApplied = db.prepare("select 1 from schema_migrations where version = 8").get() !== undefined;
+    if (!migrationEightApplied) {
+      migrateToVersionEight(db);
+      db.prepare("insert into schema_migrations (version, applied_at) values (?, ?)").run(8, new Date().toISOString());
+    }
   });
 
   tx();
@@ -203,6 +208,12 @@ function migrateToVersionSeven(db: Database.Database): void {
   db.exec("drop table if exists task_action_commands");
   db.exec("drop table if exists task_action_journal");
   dropColumnIfExists(db, "commitment_states", "reconciliation_status");
+}
+
+function migrateToVersionEight(db: Database.Database): void {
+  // The projection of floating due times changed (decision 2026-09-29-reminder-reliability),
+  // so clients must see a newer snapshot generation once after this deploy.
+  db.exec("update snapshot_generations set generation = generation + 1 where id = 1");
 }
 
 function backfillOccurrences(db: Database.Database): void {

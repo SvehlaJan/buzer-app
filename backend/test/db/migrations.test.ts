@@ -8,7 +8,9 @@ describe("migrate", () => {
 
     migrate(db);
 
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 1 });
+    // A fresh database starts at generation 1 and migration v8 advances it once (2).
+    const base = 2;
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base });
     const rolledBackWrite = db.transaction(() => {
       db.prepare(`
         insert into todoist_projects (
@@ -19,25 +21,25 @@ describe("migrate", () => {
       throw new Error("force rollback");
     });
     expect(rolledBackWrite).toThrow("force rollback");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 1 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base });
     db.prepare(`
       insert into todoist_projects (
         todoist_project_id, name, shared, can_assign_tasks, is_inbox_project,
         is_deleted, is_archived, raw_json, updated_at
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run("project-generation", "Generation", 0, 1, 0, 0, 0, "{}", "2026-07-16T10:00:00Z");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 2 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 1 });
     db.prepare("update todoist_projects set name = ? where todoist_project_id = ?").run("Renamed", "project-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 3 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 2 });
     db.prepare("delete from todoist_projects where todoist_project_id = ?").run("project-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 4 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 3 });
     db.prepare(`
       insert into todoist_tasks (id, todoist_task_id, title, raw_json, updated_at)
       values (?, ?, ?, ?, ?)
     `).run("task-generation", "todoist-task-generation", "Task", "{}", "2026-07-16T10:00:00Z");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 5 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 4 });
     db.prepare("update todoist_tasks set title = ? where id = ?").run("Renamed task", "task-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 6 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 5 });
     const rolledBackCommitmentWrite = db.transaction(() => {
       db.prepare(`
         insert into commitment_states (task_id, state, updated_at)
@@ -46,18 +48,18 @@ describe("migrate", () => {
       throw new Error("rollback commitment");
     });
     expect(rolledBackCommitmentWrite).toThrow("rollback commitment");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 6 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 5 });
     db.prepare(`
       insert into commitment_states (task_id, state, updated_at)
       values (?, ?, ?)
     `).run("task-generation", "planned", "2026-07-16T10:00:00Z");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 7 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 6 });
     db.prepare("update commitment_states set state = ? where task_id = ?").run("started", "task-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 8 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 7 });
     db.prepare("delete from commitment_states where task_id = ?").run("task-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 9 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 8 });
     db.prepare("delete from todoist_tasks where id = ?").run("task-generation");
-    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 10 });
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: base + 9 });
   });
 
   it("applies the explicit v3 generation migration to an existing v2 database", () => {
@@ -86,6 +88,24 @@ describe("migrate", () => {
       values (?, ?, ?, ?, ?)
     `).run("v2-task", "v2-todoist-task", "V2 task", "{}", "2026-07-16T10:00:00Z");
     expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 2 });
+  });
+
+  it("applies migration v8 once, advancing the snapshot generation so clients re-reconcile after the floating-time projection change", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.exec(`
+      delete from schema_migrations where version = 8;
+      update snapshot_generations set generation = 41 where id = 1;
+    `);
+
+    migrate(db);
+
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 42 });
+    expect(db.prepare("select version from schema_migrations where version = 8").get()).toEqual({ version: 8 });
+
+    migrate(db);
+
+    expect(db.prepare("select generation from snapshot_generations where id = 1").get()).toEqual({ generation: 42 });
   });
 
   it("creates core tables and enables WAL", () => {
@@ -267,7 +287,7 @@ describe("migrate", () => {
     });
   });
 
-  it("creates a fresh v7 database from schema.sql without journal tables or reconciliation_status", () => {
+  it("creates a fresh v8 database from schema.sql without journal tables or reconciliation_status", () => {
     const db = new Database(":memory:");
     migrate(db);
 
@@ -278,7 +298,8 @@ describe("migrate", () => {
       { version: 4 },
       { version: 5 },
       { version: 6 },
-      { version: 7 }
+      { version: 7 },
+      { version: 8 }
     ]);
 
     const tables = db.prepare("select name from sqlite_master where type = 'table' order by name").all() as Array<{ name: string }>;
@@ -697,7 +718,8 @@ describe("migrate", () => {
       { version: 4 },
       { version: 5 },
       { version: 6 },
-      { version: 7 }
+      { version: 7 },
+      { version: 8 }
     ]);
 
     const activeOccurrenceKey = occurrences[0]?.occurrenceKey;
