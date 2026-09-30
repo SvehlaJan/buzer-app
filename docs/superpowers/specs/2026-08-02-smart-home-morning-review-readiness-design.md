@@ -18,6 +18,8 @@ changes:
 Each change receives its own implementation plan, branch/worktree, test migration,
 and verification. They are not one big-bang implementation.
 
+> Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.
+
 ## Purpose
 
 Make Home answer four questions without becoming a second Todoist client:
@@ -297,6 +299,8 @@ Explicit blocker priority remains:
 1. deadline blocker;
 2. start blocker;
 3. Morning Review.
+
+> Amended by docs/decisions/2026-09-29-reminder-reliability.md: only an active Start blocker delays the Morning Review, for at most 15 minutes after 08:00; overdue work never does.
 
 If review fires over an active editor, it appears above the editor and returns to the
 preserved draft after acknowledgement or Snooze.

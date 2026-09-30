@@ -34,6 +34,21 @@ class AlarmPlanCalculatorTest {
     }
 
     @Test
+    fun taskWithUnparseableTimeIsSkippedWithoutDroppingOtherTasks() {
+        val plan = AlarmPlanCalculator.calculate(
+            snapshot(
+                task(id = "floating", dueDatetime = "2026-05-28T12:00:00"),
+                task(id = "valid")
+            ),
+            nowIso = "2026-05-28T09:30:00Z"
+        )
+
+        assertEquals(setOf("floating"), plan.invalidTimeTaskIds)
+        assertTrue(plan.alarms.none { it.taskId == "floating" })
+        assertTrue(plan.alarms.any { it.taskId == "valid" })
+    }
+
+    @Test
     fun desiredAlarmRejectsBlankOccurrenceKey() {
         assertFailsWith<IllegalArgumentException> {
             DesiredAlarm("task-1", DesiredAlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z", " ")

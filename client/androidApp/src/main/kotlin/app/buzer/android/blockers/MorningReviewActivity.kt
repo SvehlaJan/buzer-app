@@ -32,6 +32,8 @@ import app.buzer.shared.state.SnapshotReducer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+private const val FORCED_SYNC_RETRY_DELAY_MILLIS = 30_000L
+
 class MorningReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,13 +84,24 @@ class MorningReviewActivity : ComponentActivity() {
             errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
         }
 
-        fun runForcedRefresh() {
+        // The 30 s retry absorbs Todoist's top-of-the-hour spike for the opening sync only; a
+        // user-tapped Refresh passes 0 so its single retry is immediate.
+        fun runForcedRefresh(retryDelayMillis: Long = FORCED_SYNC_RETRY_DELAY_MILLIS) {
             val currentCoordinator = coordinator ?: return
             lifecycleScope.launch {
-                session.forceSync { SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile()) }?.let { error ->
+                session.forceSyncWithRetry(retryDelayMillis) {
+                    SnapshotReducer.reduce(currentCoordinator.forceSyncAndReconcile())
+                }?.let { error ->
                     val message = error.message ?: "snapshot refresh failed"
                     AppLog.error("morning_review forced sync failed", error)
-                    errorReporter.report(BlockerAction.REFRESH_SNAPSHOT, null, message, throwable = error)
+                    // The inline refresh warning already tells the owner; no system notification.
+                    errorReporter.report(
+                        BlockerAction.REFRESH_SNAPSHOT,
+                        null,
+                        message,
+                        showNotification = false,
+                        throwable = error
+                    )
                 }
             }
         }
@@ -205,7 +218,7 @@ class MorningReviewActivity : ComponentActivity() {
                 onSnooze = ::snooze,
                 onOverdueDone = ::runOverdueDone,
                 onOverdueEdit = {},
-                onRetryRefresh = ::runForcedRefresh,
+                onRetryRefresh = { runForcedRefresh(retryDelayMillis = 0L) },
                 onOpenTodoist = { app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchToday(this@MorningReviewActivity) }
             )
         }

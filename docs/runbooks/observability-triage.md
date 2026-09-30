@@ -107,6 +107,14 @@ Because there is no custom paired capsule or distributed trace header, client an
    - Search either project for `task_id:<id>` or `occurrence_key:<key>` to find all related frontend actions, backend polling updates, or WhatsApp escalation events.
 3. **By Timestamp & Release**:
    - Filter events within a 5-minute window matching the release identifier `app.buzer@<version>+<sha>`.
+4. **Backend operational failures (Sentry Logs, not Issues)**:
+   - Expected upstream failures are not captured as issues. They are written to the
+     `buzer-backend` project's **Logs** as `warn` records: `forced_refresh_failed`
+     (attribute `request_id`) and `todoist_poll_failed` (attributes `error_kind` and
+     `consecutive_failure_count`). Search `request_id:<id>` there. For the phone side, search
+     the same id in `buzer-android` Logs, in the `backend_request_failed` line.
+   - The container stdout (`docker logs buzer-backend`) only has Fastify access lines for
+     these requests (method, URL, status, response time).
 
 ---
 

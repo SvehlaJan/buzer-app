@@ -7,6 +7,7 @@ import Fastify from "fastify";
 import type { FastifyError, FastifyRequest } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import { openDatabase } from "./db/connection.js";
+import { resolveOwnerTimeZone } from "./domain/ownerTimeZone.js";
 import { registerRoutes } from "./http/routes.js";
 import { CollaboratorRepository } from "./repositories/collaboratorRepository.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
@@ -128,7 +129,7 @@ export function buildServer(options: BuildServerOptions) {
   const tasks = new TaskRepository(options.db);
   const projects = new ProjectRepository(options.db);
   const collaborators = new CollaboratorRepository(options.db);
-  const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true);
+  const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true, collaborators);
   const synchronizer = options.synchronizer ?? new TodoistSyncService(
     options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
   );
@@ -201,7 +202,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     tasks,
     whatsappSender,
     whatsappRecipientId,
-    { observability: backendObservability }
+    {
+      observability: backendObservability,
+      ownerTimeZone: () => resolveOwnerTimeZone(collaborators, currentUserId)
+    }
   );
   const todoistQueue = new TodoistOperationQueue();
   const synchronizer = new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators);

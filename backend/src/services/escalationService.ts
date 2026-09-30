@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import type { AccountabilitySender } from "../accountability/accountabilitySender.js";
 import { buildEscalationMessage } from "../accountability/escalationMessage.js";
+import { resolveOwnerTimeZone } from "../domain/ownerTimeZone.js";
 import { computeDeadlineAt } from "../domain/time.js";
 import type { TaskRepository } from "../repositories/taskRepository.js";
 import { recurrenceFingerprint } from "./occurrenceReconciler.js";
@@ -14,10 +15,13 @@ export type EscalationResult =
 
 export interface EscalationServiceOptions {
   observability?: BackendObservability;
+  /** Owner timezone for floating due times (decision 2026-09-29-reminder-reliability). */
+  ownerTimeZone?: () => string;
 }
 
 export class EscalationService {
   private readonly observability: BackendObservability;
+  private readonly ownerTimeZone: () => string;
 
   constructor(
     private readonly db: Database.Database,
@@ -28,10 +32,10 @@ export class EscalationService {
   ) {
     if (options && "captureBackgroundFailure" in options) {
       this.observability = options;
-    } else if (options && "observability" in options && options.observability) {
-      this.observability = options.observability;
+      this.ownerTimeZone = () => resolveOwnerTimeZone(null, "");
     } else {
-      this.observability = backendObservability;
+      this.observability = options?.observability ?? backendObservability;
+      this.ownerTimeZone = options?.ownerTimeZone ?? (() => resolveOwnerTimeZone(null, ""));
     }
   }
 
@@ -73,9 +77,10 @@ export class EscalationService {
       throw new Error("Task occurrence initialization failed");
     }
 
+    const deadlineAt = computeDeadlineAt(dueDatetime, durationMinutes, this.ownerTimeZone());
     const message = buildEscalationMessage({
       taskTitle: task.title,
-      deadlineAt: computeDeadlineAt(dueDatetime, durationMinutes),
+      deadlineAt,
       dismissCount
     });
     const id = randomUUID();
@@ -99,7 +104,7 @@ export class EscalationService {
     try {
       await this.sender.sendEscalation({
         taskTitle: task.title,
-        deadlineAt: computeDeadlineAt(dueDatetime, durationMinutes),
+        deadlineAt,
         dismissCount,
         recipient: this.recipientId
       });

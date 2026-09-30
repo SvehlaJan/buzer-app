@@ -12,13 +12,20 @@ class BlockerPriorityResolverTest {
     private val now = Instant.parse("2026-08-03T08:00:00Z")
 
     @Test
-    fun deadlineBeatsAnActiveStartBlocker() {
+    fun overdueTaskDoesNotHideAnActiveStartBlocker() {
         val snapshot = snapshot(
             task(id = "start", start = "2026-08-03T07:00:00Z", durationMinutes = 120),
-            task(id = "deadline", start = "2026-08-03T06:00:00Z", durationMinutes = 120)
+            task(id = "overdue", start = "2026-08-03T05:00:00Z", durationMinutes = 60)
         )
 
-        assertEquals(ActiveBlockerPriority.Deadline, BlockerPriorityResolver.resolve(snapshot, now))
+        assertEquals(ActiveBlockerPriority.Start, BlockerPriorityResolver.resolve(snapshot, now))
+    }
+
+    @Test
+    fun overdueTasksAloneNeverProducePriority() {
+        val snapshot = snapshot(task(start = "2026-08-03T05:00:00Z", durationMinutes = 60))
+
+        assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
     }
 
     @Test
@@ -29,10 +36,17 @@ class BlockerPriorityResolverTest {
     }
 
     @Test
-    fun intervalEndIsDeadlineRatherThanStart() {
+    fun taskAtItsIntervalEndIsNotABlocker() {
         val snapshot = snapshot(task(start = "2026-08-03T07:00:00Z", durationMinutes = 60))
 
-        assertEquals(ActiveBlockerPriority.Deadline, BlockerPriorityResolver.resolve(snapshot, now))
+        assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
+    }
+
+    @Test
+    fun taskWithOffsetLessTimeNeverProducesPriority() {
+        val snapshot = snapshot(task(start = "2026-08-03T07:00:00", durationMinutes = 120))
+
+        assertEquals(ActiveBlockerPriority.None, BlockerPriorityResolver.resolve(snapshot, now))
     }
 
     @Test

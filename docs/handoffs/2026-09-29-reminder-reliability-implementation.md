@@ -1,0 +1,376 @@
+# Handoff: Reminder reliability implementation (Tasks 0-8)
+
+Date: 2026-09-29 (Task 8 fix rounds 1 and 2: 2026-09-30)
+Agent: Claude (subagent-driven execution: controller Claude Opus 5.5; Task 8 docs/verification/handoff by Claude Sonnet 5.5; implementers and reviewers were Sonnet and Haiku subagents)
+Plan: `docs/superpowers/plans/2026-09-29-reminder-reliability.md`
+Decision: `docs/decisions/2026-09-29-reminder-reliability.md`
+Branch / worktree: `feature/reminder-reliability` at `.worktrees/reminder-reliability` (created from `6e18826`)
+
+## Scope
+
+All of Tasks 0-8 of the plan were attempted, in order. Task 8 (this session) attempted Steps 1-8:
+docs edits (Steps 1-3), full backend verification (Step 4), full client JVM verification (Step 5),
+full instrumentation verification (Step 6), this handoff (Step 7), one commit (Step 8).
+
+The five causes the decision addresses: Morning Review deferred all day by overdue tasks;
+floating Todoist due times aborting the whole alarm plan (BUZER-ANDROID-E) and being read as UTC;
+the review's opening forced sync hitting Todoist's top-of-the-hour 5xx spike; the boot ANR
+(BUZER-ANDROID-D); a post-08:00 reconcile scheduling tomorrow's review (accepted limitation,
+decision 8).
+
+**Status: complete.** The first full instrumentation run had 2 real failures caused by Task 6's 30 s
+retry in `BlockerActivityFakeBackendTest`. They were fixed by migrating those two tests (fix round 1,
+`4c60da7`; test-only, no production code changed), and the class re-run was green (43/43). Two other
+failures in the first run were flakes that passed on a class re-run. The controller then ran the full
+unfiltered suite at `4c60da7`: 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s` (see "Verification").
+
+## Checkbox status
+
+| Task | Steps | Status |
+| --- | --- | --- |
+| 0 Workspace setup | 1-5 | all ticked |
+| 1 Backend due-time resolver and owner timezone | 1-7 | all ticked |
+| 2 Snapshot and escalation use the owner timezone | 1-8 | all ticked |
+| 3 Edits compare schedules by instant | 1-5 | all ticked |
+| 4 Client strict parser and per-task isolation | 1-11 | all ticked |
+| 5 Morning Review priority is Start-only and capped | 1-8 | all ticked |
+| 6 Morning Review sync retries once, silently | 1-5 | all ticked |
+| 7 Boot runs only the cached reconcile | 1-3 | all ticked |
+| 8 Docs, full verification, handoff | 1-8 | all ticked (Step 6 is backed by the full unfiltered suite passing at `4c60da7`; see Verification) |
+
+## Commits (per task)
+
+| Task | Commits |
+| --- | --- |
+| 0 | `439b90d` docs: record reminder reliability decision and plan |
+| 1 + 2 (one unit) | `289ea7a` fix: resolve floating Todoist times in the owner's timezone; `ad98349` test: pin a non-local timezone in floating-time regression tests (fix round 1) |
+| 3 | `26c6126` fix: compare edited schedules by instant so unchanged times are not rewritten; `2ae0a75` fix: keep an unchanged due time on duration-only edits (fix round 1) |
+| 4 | `e288963` fix: skip and report tasks with unparseable snapshot times instead of aborting the alarm plan; `e755900` fix: report each invalid-time task once per process (fix round 1) |
+| 5 | `2cd4592` fix: let only an active start blocker delay the morning review, for at most 15 minutes |
+| 6 | `79be78f` fix: retry the morning review sync once and drop its system notification |
+| 7 | `dd71945` fix: run only the cached reconcile at boot to stay inside the broadcast window |
+| 8 | `12b9f79` docs: record reminder reliability rollout notes and handoff; fix round 1: `4c60da7` test: wait past the morning review sync retry in blocker e2e tests; fix round 2 (this file's final form): `docs: complete the reminder reliability handoff` |
+
+## Files changed
+
+Whole branch, final (`git diff --stat 6e18826..HEAD` at the last commit of the final fix wave): 47 files, +3152/-182.
+
+- Backend: `domain/time.ts` (resolver, `sameDueInstant`, tz param), new `domain/ownerTimeZone.ts`,
+  `domain/taskRecurrence.ts` (export `isIanaTimeZone`), `repositories/collaboratorRepository.ts`
+  (`getTimeZone`), `services/taskSnapshotService.ts`, `services/escalationService.ts`,
+  `services/taskActionService.ts`, `server.ts`, and tests (`time`, `ownerTimeZone`,
+  `collaboratorRepository`, `taskSnapshotService`, `escalationService`, `taskActionService`,
+  `e2eFixtures` + `e2eServer.ts`).
+- Shared: new `time/SnapshotInstant.kt`, `enforcement/AlarmPlanCalculator.kt` (+ tests).
+- Android: new `time/SnapshotJavaInstant.kt`, `EnforcementCoordinator.kt`, `HomeScreenState.kt`,
+  `OwnerAgendaSelector.kt`, `MorningReviewAlarmHandler.kt`, `MorningReviewScheduleCalculator.kt`,
+  `MorningReviewScheduler.kt`, `MorningReviewSessionState.kt`, `MorningReviewActivity.kt`,
+  `BootReconcileRunner.kt` (+ unit tests and `MorningReviewAlarmInstrumentationTest`).
+- Task 8 fix round 1 (test only): `client/androidApp/src/androidTest/kotlin/app/buzer/android/blockers/BlockerActivityFakeBackendTest.kt`
+  (see "Verification" and "Tests whose expectations changed"), plus this handoff and the plan checkbox.
+- Task 8 commit `12b9f79` (docs only):
+  - `docs/superpowers/plans/2026-08-02-daily-morning-review.md` (priority text amended)
+  - `docs/runbooks/observability-triage.md` (new §4 item 4: backend failures live in Sentry Logs)
+  - `docs/notes/vps-deployment.md` (`OWNER_TIMEZONE` in the `.env` shape)
+  - `docs/notes/2026-06-12-android-overlay-testing.md` (boot log expectations, controller ruling)
+  - `docs/superpowers/plans/2026-09-29-reminder-reliability.md` (checkboxes + Step 6 note)
+  - `docs/handoffs/2026-09-29-reminder-reliability-implementation.md` (this file)
+
+Doc facts were checked against the code: `forced_refresh_failed` (`backend/src/http/routes.ts:216`),
+`todoist_poll_failed` with `error_kind` and `consecutive_failure_count`
+(`backend/src/services/todoistPoller.ts:128-131`), `backend_request_failed`
+(`client/shared/.../api/BuzerApiClient.kt:186`), `OWNER_TIMEZONE` (`backend/src/domain/ownerTimeZone.ts`),
+boot log lines (`BootReconcileRunner.kt:29-52`).
+
+## Verification
+
+Step 4 (backend), run from `backend`:
+
+- Command: `npm test`
+- Result: PASS
+- Evidence: `Test Files 39 passed (39)`, `Tests 506 passed (506)` (baseline at Task 0 was 482 tests in 38 files).
+
+- Command: `npm run typecheck`
+- Result: PASS
+- Evidence: `tsc -p tsconfig.json --noEmit`, exit 0, no output.
+
+Step 5 (client JVM), run from `client` with `ANDROID_HOME`/`ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk`:
+
+- Command: `./gradlew :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL` (first run: 1 s, 68 of 74 tasks up to date, so the test tasks did not actually
+  execute). They were therefore re-forced with `./gradlew :shared:testAndroidHostTest --rerun :androidApp:testDebugUnitTest --rerun :androidApp:assembleDebug`
+  (`BUILD SUCCESSFUL in 2s`). Result XML (timestamps from the re-run): shared 105 tests, androidApp 419 tests,
+  0 failures, 0 errors, 0 skipped. `assembleDebug` executed `packageDebug` in the first run.
+
+Step 6 (full instrumentation), first full run, from the worktree root, emulator `emulator-5554` (AVD `Buzer_API_36`, Android 16), no `ANDROID_TEST_CLASS`:
+115 tests run, 111 passed; the 4 failures were 2 real failures (fixed by the test migration below) and 2 flakes
+(passed on class re-run).
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 scripts/e2e-real-backend.sh`
+- Result: **FAIL** (exit 1; 115 tests, 4 failed, 111 passed; `BUILD FAILED in 5m 14s`)
+- Evidence (log: `.superpowers/sdd/2026-09-29-reminder-reliability/e2e-full.log`, not committed):
+  1. `BlockerActivityFakeBackendTest.morningReview_cleanAndNoDataStartAcknowledgeAndClose`:
+     `ComposeTimeoutException: Condition still not satisfied after 15000 ms` at
+     `waitForText(...)` called from `BlockerActivityFakeBackendTest.kt:699`
+     (`waitForText("Start day without data")` after `fakeBackend.setFailSnapshot(true)`).
+  2. `BlockerActivityFakeBackendTest.morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot`:
+     `ComposeTimeoutException: Condition still not satisfied after 15000 ms` at
+     `waitForTag(...)` called from `BlockerActivityFakeBackendTest.kt:749`
+     (`waitForTag("session-warning-banner")` after `setFailSnapshot(true)` + `scenario.recreate()`).
+  3. `EditTaskFakeBackendTest.editTask_retryPreservesTheCapturedRootRequestAndDirtyExitConfirmsDiscard`:
+     `Assert failed: The component with TestTag = 'session-warning-banner' is not displayed!` at
+     `EditTaskFakeBackendTest.kt:110`.
+  4. `ForegroundReadinessScreenTest.systemBackDoesNotDismissTheGate`:
+     `RootViewWithoutFocusException: Waited for the root of the view hierarchy to have window focus ... for 10 seconds`
+     at `ForegroundReadinessScreenTest.kt:79` (`Espresso.pressBack`).
+- `MorningReviewRepairHostTest` and `DeadlineBlockerUpdateHostTest` (the two the plan watched for
+  time-label failures) both passed; no fixture migration was needed.
+
+Step 6 re-run to separate flakes from real failures (per controller ruling 3), the three failing classes once:
+
+- Command: `ANDROID_HOME=... ANDROID_SDK_ROOT=... ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 ANDROID_TEST_CLASS=app.buzer.android.addtask.EditTaskFakeBackendTest,app.buzer.android.blockers.BlockerActivityFakeBackendTest,app.buzer.android.readiness.ForegroundReadinessScreenTest scripts/e2e-real-backend.sh`
+- Result: FAIL (57 tests, 2 failed, 55 passed; log `e2e-rerun.log`)
+- Evidence: `EditTaskFakeBackendTest` (both tests) and `ForegroundReadinessScreenTest` (all 12) PASSED, so
+  failures 3 and 4 are flakes. Failures 1 and 2 reproduced with the identical assertions, so they are real.
+
+Step 6 diagnosis of failures 1 and 2 (single test with logcat, `e2e-diag.log` / `e2e-diag-logcat.log`):
+
+- Command: same environment, `ANDROID_TEST_CLASS='app.buzer.android.blockers.BlockerActivityFakeBackendTest#morningReview_cleanAndNoDataStartAcknowledgeAndClose'`, with `adb -s emulator-5554 logcat -v time -s Buzer` captured beside it.
+- Result: FAIL (same 15 s timeout)
+- Evidence: the log shows `force_sync start` then `backend_request_failed ... route=/tasks/snapshot status_code=500` at
+  23:41:16.058 and no second `force_sync start` before the test gave up 15 s later. The second attempt is
+  scheduled 30 s later by `forceSyncWithRetry(FORCED_SYNC_RETRY_DELAY_MILLIS = 30_000)` (Task 6).
+
+Step 6 fix round 1 (2026-09-30; controller ruling: migrate the tests, no production change). Change, in
+`BlockerActivityFakeBackendTest.kt` only: `waitForText` and `waitForTag` gained a `timeoutMillis` parameter
+(default still `15_000`); a named constant `FORCED_SYNC_RETRY_WAIT_MILLIS = 45_000L` (with a comment citing decision
+2026-09-29) is passed at exactly two call sites: `waitForText("Start day without data", ...)` in
+`morningReview_cleanAndNoDataStartAcknowledgeAndClose` and `waitForTag("session-warning-banner", ...)` in
+`morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot` (plus a comment there). Both tests were read to
+the end: neither asserts a call count or sequence for `/tasks/snapshot`. The only call-related waits are
+`waitForRecordedCall("/tasks/snapshot")`, which is satisfied by the first (failing) call and, after the test's
+`fakeBackend.reset("clean")` (which clears the recorded calls), by the successful refresh call, so the extra automatic
+retry call needs no adaptation. All other assertions are unchanged.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: `Starting 43 tests`, `Finished 43 tests`, `BUILD SUCCESSFUL in 3m 28s`, exit 0; result XML
+  `tests="43" failures="0" errors="0" skipped="0"`. The two migrated tests ran 31.6 s
+  (`morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot`) and 37.7 s
+  (`morningReview_cleanAndNoDataStartAcknowledgeAndClose`), consistent with the 30 s retry. Log: `e2e-fix1-class.log`.
+- Command: `./gradlew :androidApp:compileDebugAndroidTestKotlin` (from `client`)
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL in 17s`.
+
+Step 6 final full unfiltered run after the fix, run by the controller (not by the Task 8 implementer) at commit
+`4c60da7` on 2026-09-30, from the worktree root, emulator `emulator-5554`. This is the run that backs the Step 6 tick.
+The first-run (111/115) and class re-run blocks above are kept as history.
+
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 scripts/e2e-real-backend.sh` (no `ANDROID_TEST_CLASS`)
+- Result: PASS
+- Evidence: `Starting 115 tests on Buzer_API_36(AVD) - 16` / `Finished 115 tests`, 0 failed, `BUILD SUCCESSFUL in 5m 47s`,
+  exit 0 (controller log `.superpowers/sdd/2026-09-29-reminder-reliability/e2e-full-final.log`, not committed). The two
+  earlier flakes (`EditTaskFakeBackendTest.editTask_retryPreservesTheCapturedRootRequestAndDirtyExitConfirmsDiscard`,
+  `ForegroundReadinessScreenTest.systemBackDoesNotDismissTheGate`) did not recur. The script again left its e2e-server
+  node backend listening on 18433 (killed afterwards; port free).
+
+## Tests whose expectations changed
+
+- Task 3 Step 4 (edit tests expecting `due.kind === "replace"` for an unchanged schedule): none. No existing
+  test needed its expectation changed; the suite stayed green at 505/505 after the change.
+- Other migrated suites (all listed in the plan's table): `backend/test/domain/time.test.ts` (3-arg
+  `computeStartAt`/`computeDeadlineAt`); `backend/test/fakes/e2eFixtures.test.ts` (`priorityStart`/`priorityDeadline`
+  scenarios removed); `BlockerPriorityResolverTest` and `MorningReviewAlarmHandlerTest` (overdue no longer
+  defers; 15-minute cap); `MorningReviewAlarmInstrumentationTest` (old priority test replaced by
+  `cachedOverdueTasksNeverDeferReview`). In fix rounds, the floating-time and escalation regression tests were
+  pinned to `Asia/Tokyo` so they fail on old code on a CET/CEST host.
+- `BlockerActivityFakeBackendTest` was an additional suite asserting the old sync-failure timing (a failed Morning
+  Review sync surfaced its UI state within 15 s) that the plan's migration table missed. Its two morning-review
+  tests (`morningReview_cleanAndNoDataStartAcknowledgeAndClose`,
+  `morningReview_refreshRetainsCachedInvalidAndRetryUsesTasksSnapshot`) were migrated in Task 8 fix round 1 by waiting
+  45 s (`FORCED_SYNC_RETRY_WAIT_MILLIS`) for the failed-sync state. Home's refresh-failure test
+  (`homeScreenShowsRefreshFailureBanner`) is unaffected: Home does not retry.
+
+## Rulings
+
+Controller rulings made during execution (copied verbatim from the ledger):
+
+- Ruling 1: Controller performs Task 0 itself (npm ci, baselines, commit spec+plan) — it is workspace setup with no code — costs nothing if wrong beyond an unreviewed docs-only commit.
+- Ruling 2: Tasks 1 and 2 are dispatched, reviewed and committed as one unit — the plan mandates a single commit and T1 alone leaves typecheck red — costs a larger single review surface.
+- Ruling 3: Instrumentation runs use emulator-5554 (AVD Buzer_API_36, booted headless by controller with `-port 5554`); the plan's other flags follow docs/notes/2026-06-08-android-16-emulator-setup.md — if the emulator is unusable, the e2e steps are recorded as SKIPPED with the exact remaining command, not faked.
+- Ruling: fix the plan-mandated escalation test (and the two floating computeStartAt/computeDeadlineAt tests) to pin Asia/Tokyo — a regression test that cannot fail on the owner's own machine is not a regression test; the spec's intent (floating = owner zone, host-independent) is better served — costs one extra fix round if wrong.
+- Ruling: ⚠️ commit trailer — verified myself: `git log -1 --format=%B 289ea7a` ends with the Co-Authored-By trailer — no cost.
+- Ruling: ⚠️ pre-existing `Date.parse`/`new Date` in httpTodoistAdapter.ts:569,573 accepted — it only runs for values already carrying Z/offset (floating returns at :567), so there is no timezone ambiguity; the Global Constraint targets floating misreads — costs a literal-wording breach of the constraint if the owner reads it strictly.
+- Ruling: accept commit 26c6126's `Co-Authored-By: Claude Haiku 4.5` trailer, no history rewrite — it truthfully names the model that authored the commit; the plan's trailer line is attribution, not behavior — costs a trailer inconsistency the owner can reword before merge.
+- Ruling: fix duration-only edits for NON-recurring tasks (due → preserve unless the resolved instant changed); leave the recurring path treating a duration change as a schedule change — spec decision 3 forbids rewriting an unchanged time, but Todoist recurring due strings can embed durations ("for 15 min"), so changing recurring behavior is riskier and out of scope — costs: recurring duration-only edits still rewrite the recurrence as before.
+- Ruling: fix — move the dedupe set to a companion object (process-wide, like BlockerErrorReporter.capturedThrowables) with an internal test reset hook, and add a two-instance test — the spec says "once per app process" and the plan's instance field was the plan's own defect — costs global mutable state in tests (mitigated by the reset hook).
+- Ruling: every emulator e2e run in this plan (Task 8 Step 6 included) adds `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433` — with ANDROID_SERIAL set, scripts/e2e-real-backend.sh defaults the app to 127.0.0.1:18433, which the emulator app rejects as cleartext; the script documents this override — costs nothing (script unchanged); record in handoff.
+- Ruling: Tasks 6 and 7 go to ONE implementer dispatch (two commits, one review) — both are small Android edits with complete code in their briefs and no shared files; one dispatch saves a context rebuild — costs a slightly larger review surface.
+- Ruling: decision 6's "never posts the Backend action failed notification" covers the review's forced-sync failure only; MorningReviewActivity.kt:70 (coordinator create failure) and :84 (cached load failure) keep their notification — they are local configuration failures, not sync failures, and are not in the brief — costs two rare notifications if the owner meant "never" literally.
+- Ruling: ⚠️ 30 s wait has no automated coverage — accepted; only a real failing backend could exercise it — costs untested timing, covered by unit tests with 1 ms delay.
+- Ruling: Task 8 dispatch also updates docs/notes/2026-06-12-android-overlay-testing.md:80 (expected boot logs still list `boot_reconcile refresh=...`) — Task 7 made it stale and the checklist would mislead boot verification — costs one doc file outside Task 8's list.
+- Ruling: fix the 2 BlockerActivityFakeBackendTest failures by migrating the tests (raise their waits above the 30 s retry, ~45 s, and adjust any backend-call-count assertion to the extra automatic retry), not by adding a test-only delay hook to production — Task 6 changed this behavior and AGENTS.md requires migrating the suites that assert it in the same plan; keeps production simple — costs ~30 s extra per affected test run.
+- Ruling: after that fix, re-running `BlockerActivityFakeBackendTest` alone (plus the earlier full run: 111 pass, 2 flakes that pass on class re-run) counts as Task 8 Step 6 evidence — the fix touches only that class — costs a missed interaction elsewhere, which the final review can call for.
+
+Task 8 controller rulings: (1) also update the overlay-testing note (done); (2) the full e2e run must use the emulator
+backend override and no class filter (done); (3) on e2e failure re-run the class once, do not fix product code, record
+precisely and report DONE_WITH_CONCERNS (done: the two real failures were recorded, not fixed in that round). The two
+real `BlockerActivityFakeBackendTest` failures were then migrated in fix round 1 (`4c60da7`; test-only, no production
+code changed), per the two rulings above. The second of those rulings (class re-run counts as Step 6 evidence) was
+superseded in practice: the controller also ran the full unfiltered suite at `4c60da7` and it passed (115/115, see
+Verification).
+
+## Known limitations / deferred findings
+
+Accepted by design (decision 8 and rulings):
+- A reconcile between 08:00 and 08:15 can move the next review to tomorrow; the in-app catch-up still shows today's.
+- Recurring tasks: a duration-only edit still rewrites the recurrence.
+- `MorningReviewActivity.kt:70` and `:84` still post the "Backend action failed" notification (local failures, not sync).
+- The 30 s retry wait has no automated timing coverage.
+- **An automated review with no cached snapshot now shows Loading for at least 30 s while the retry waits**
+  (no Start/Snooze, no Back during that time). Rare (needs no cache and a failing backend), but this is exactly
+  the path exercised by e2e failure 1 below.
+
+Deferred minor review findings (none block the merge):
+- Backend time: `time.ts:107-117` silently normalizes out-of-range floating components instead of rejecting them,
+  and a malformed non-offset value now throws inside `getSnapshot` (theoretical: the adapter guarantees shapes);
+  no DST-boundary tests (gap 2026-03-29T02:30, overlap 2026-10-25T02:30; behavior was probed correct);
+  a new `Intl.DateTimeFormat` per `zoneOffsetMs` call (about 4 per floating task per snapshot).
+- Backend wiring/tests: `server.ts` collaborator/`ownerTimeZone` wiring has no test; `escalationService` defaults to
+  `resolveOwnerTimeZone(null, "")` (empty-string sentinel); the first floating edit test depends on `OWNER_TIMEZONE`
+  being unset (seed a self collaborator row to pin it); a malformed client `dueDatetime` now throws a plain
+  `Error` (500) in `sameDueInstant` where `scheduleErrors` could return 422; missing tests for an unchanged fixed-UTC
+  no-op, an unchanged recurring floating task and the DST boundary.
+- Out of scope, pre-existing: `taskRepository.ts:237` orders by the raw `due_datetime` string, mis-sorting floating
+  against `Z` values.
+- Client: `selectOwnerAgenda(snapshot, now, zoneId)` keeps a now-unused `zoneId` (4 callers outside the brief); no
+  test locks Home/agenda dropping offset-less rows, none covers `parseSnapshotJavaInstantOrNull`, and the planner
+  test covers the `dueDatetime` path but not `startAt`; cosmetic import order in `HomeScreenState`.
+- Morning Review: `MorningReviewDependencies.kt:17` still hardcodes `LocalTime.of(8, 0)` for the calculator while the
+  handler uses `DEFAULT_MORNING_REVIEW_TIME`; no cap test with a non-UTC zone or non-default `reviewTime`;
+  `overdueTaskNeverDefersReview` ends exactly at `now` (boundary, not clearly overdue) and the early half of the cap
+  test does not assert the Defer call; inconsistent KDoc decision references; no on-device coverage of the Start-defer
+  path (the JVM scheduler test covers it).
+- Retry: the first sync failure leaves no `AppLog` breadcrumb, so masked Todoist 5xx spikes are invisible in Sentry
+  Logs; test gaps for the happy path (1 call, no delay), `refreshInFlight` during the wait and cancellation during
+  the delay; style nits in `MorningReviewSessionState.kt` (inverted null-means-success helper, missing blank lines).
+- Docs: `docs/superpowers/plans/2026-08-02-daily-morning-review.md` still says Deadline outranks Start at lines
+  ~347, 351, 365, 758 and 887, contradicting the amended item 5 (outside the brief's edit range).
+- E2E test: `FORCED_SYNC_RETRY_WAIT_MILLIS = 45_000L` duplicates the production retry delay (private `30_000` in
+  `MorningReviewActivity.kt`) and can drift if that delay changes.
+
+## Open issues
+
+1. (Resolved in Task 8 fix round 1.) Two real instrumentation failures in `BlockerActivityFakeBackendTest`, caused by
+   Task 6's 30 s retry: the inline warning / "Start day without data" appear only after the second attempt fails, and
+   both tests waited 15 s. Fixed by migrating the tests (45 s waits); the class now passes 43/43. No production code
+   changed.
+2. (Resolved.) There was no full-suite run after the fix. The controller ran the full unfiltered suite at `4c60da7` on
+   2026-09-30: 115 run, 0 failed, `BUILD SUCCESSFUL in 5m 47s` (see the final Step 6 block in Verification).
+3. Two flakes in the first full run (both passed on class re-run and did not recur in the final full run):
+   `EditTaskFakeBackendTest.editTask_retryPreservesTheCapturedRootRequestAndDirtyExitConfirmsDiscard` (banner not
+   displayed) and `ForegroundReadinessScreenTest.systemBackDoesNotDismissTheGate` (no window focus for 10 s). Cause
+   unknown; treat a future repeat as a real defect. (Scenarios launched by `BlockerActivityFakeBackendTest` are
+   tracked and closed in its `@After`, so a leaked activity from the timed-out tests is not a likely explanation.)
+4. CI was not checked: nothing was pushed (per instruction).
+
+## Manual verification performed
+
+Emulator only (`emulator-5554`, Android 16), through the instrumentation suite above (final full run: 115/115 pass). Nothing was run on a physical
+phone, against live Todoist, or on the VPS. The backend was not deployed and nothing was pushed or merged.
+
+## Environment notes
+
+- `scripts/e2e-real-backend.sh` with `ANDROID_SERIAL` targeting an emulator needs
+  `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433`. Without it the app is pointed at `127.0.0.1:18433`, which the
+  emulator app rejects as cleartext (`Cleartext HTTP traffic to 127.0.0.1 not permitted`).
+- The script leaves its node backend (`npm run e2e-server` -> `tsx` -> `node test/e2eServer.ts`) running after exit.
+  After every run, check `lsof -nP -iTCP:18433 -sTCP:LISTEN` and kill only processes whose cwd is this worktree's
+  `backend` (all runs in this session were cleaned up; port 18433 was free at the end).
+- Worktree builds need `ANDROID_HOME` and `ANDROID_SDK_ROOT` exported (`client/local.properties` is gitignored).
+- Gradle reports the JVM test tasks `UP-TO-DATE` when inputs are unchanged; use `--rerun` on the task to force real execution.
+
+## Assumptions
+
+- The retry tests' 15 s waits were the only cause of the two real failures (supported by the logcat trace: no second
+  sync attempt within the 15 s window, and by both tests passing once the waits were raised to 45 s).
+- `.superpowers/` (ledger, briefs, logs) is workspace scratch and is intentionally not committed.
+- `docs/notes/2026-09-23-morning-review-deferred-by-overdue-tasks.md` and
+  `docs/handoffs/2026-09-23-morning-review-delivery-investigation.md` remain untracked in the primary checkout; the
+  decision doc links to them. They were not committed from this branch, as the plan says.
+
+## Next step
+
+1. Whole-branch review (merge base `6e18826`), including the deferred findings above.
+2. Then, with the owner's explicit go-ahead, follow the plan's Rollout: merge to `master` and push, check
+   `gh run list --workflow=ci.yml --limit 1`, deploy the backend (`scripts/deploy-vps.sh`, which alone stops
+   BUZER-ANDROID-E on the installed APK), install the new APK, and do the live Sentry checks (no new
+   BUZER-ANDROID-E; `overlay_start skipped ... kind=MORNING_REVIEW` at 08:00; on 2026-10-11 the two floating tasks log
+   `overlay_start attempted ... kind=START_BLOCKER` at 09:00 CEST). Rollout notes from the final review:
+   - **Deploy the backend before installing the new APK.** A new APK against the old backend gives floating
+     tasks no alarms and hides them from Home/agenda.
+   - Read-only check of the timezone the backend resolves for floating times:
+     `select time_zone from todoist_collaborators where todoist_user_id = '<TODOIST_USER_ID>'` (empty means the
+     `OWNER_TIMEZONE` env / `Europe/Bratislava` fallback applies).
+   - Migration 8 (added in the final fix wave) advances `snapshot_generations.generation` once on deploy, so a
+     phone whose cached generation equalled the backend's re-reconciles instead of keeping the poisoned floating
+     snapshot. Confirm with `select generation from snapshot_generations where id = 1` before and after the
+     deploy (higher by 1). The phone's `force_sync fetched ...` / `refresh fetched ...` line shows `scheduleVersion`
+     but not the generation, and `scheduleVersion` does not change with the migration; the phone-side signal is the
+     floating tasks appearing after the next refresh without a Todoist edit.
+3. Commit the two 2026-09-23 investigation docs from the primary checkout to `master` separately if the owner wants
+   them kept.
+
+## Final review fix wave
+
+Fixes ruled "fix now" by the controller after the whole-branch review (base `a60f1a6`; brief and report are workspace
+scratch under `.superpowers/sdd/2026-09-29-reminder-reliability/`, not committed). Plan/task: the final fix wave
+of `docs/superpowers/plans/2026-09-29-reminder-reliability.md`, items F1-F4.
+
+| Item | Commit | Change |
+| --- | --- | --- |
+| F1 (Important) | `e500fae` fix: advance the snapshot generation once on deploy via migration 8 | `migrateToVersionEight` in `backend/src/db/migrations.ts` runs `update snapshot_generations set generation = generation + 1 where id = 1` once (idempotent by version). Without it the generation does not move on deploy (the poller's incremental sync writes nothing), so a phone whose cached generation equals the backend's would keep the poisoned floating snapshot (`EnforcementCoordinator.applySnapshotGeneration` treats equal as "keep cached"). |
+| F2a (Minor #2) | `1539bdc` fix: retry a manual Morning Review refresh immediately and pin the overdue test clock | `MorningReviewActivity.runForcedRefresh(retryDelayMillis = FORCED_SYNC_RETRY_DELAY_MILLIS)`; the opening sync keeps the 30 s default, the user-tapped Refresh passes `0L`. |
+| F2b (Minor #3) | same commit | `MorningReviewAlarmInstrumentationTest.cachedOverdueTasksNeverDeferReview` pins `MorningReviewRuntimeClock` (reset by the existing `@After`) to tomorrow 08:05 local, and uses it for `snooze(...)`. Tomorrow rather than today: the `overdue` fixture tasks are placed relative to the real "now", so a pinned time earlier than the fixtures means they are not overdue at that instant and the old overdue-priority code would not defer either (today 08:05 detects a regression only in a narrow wall-clock window). Tomorrow 08:05 is before the 08:15 cap on its own date and after every fixture interval at any wall-clock time; the snooze alarm (08:10 tomorrow) is also in the real future, so the platform never fires it during the test. |
+| F3 (Minor #7) | `f080532` test: seed the owner timezone in floating edit tests | `taskActionService.test.ts`: `seedOwnerTimeZone(db)` seeds a `user-self` collaborator (`Europe/Bratislava`) in the three floating edit tests. |
+| F4 (Minor #4, #6, #8) | the docs commit that contains this section | Amendment pointers in `2026-08-02-smart-home-morning-review-readiness-design.md` (top and blocker-priority list) and at the five stale Deadline-priority passages of `2026-08-02-daily-morning-review.md`; Rollout text in the plan and in "Next step" above (deploy backend before APK, resolved-timezone check, generation check); diff stat below updated. |
+
+Tests that assert migration versions or generation values were updated for version 8 in
+`backend/test/db/migrations.test.ts`: a fresh database now starts at generation 2 (1 from v3, +1 from v8), so the
+"durable global snapshot generation" test counts from that base; the two `schema_migrations` version lists gained
+`{ version: 8 }`. New test: "applies migration v8 once, advancing the snapshot generation ...". No other test asserted
+these values.
+
+Verification:
+- Command: `npm test --prefix backend -- test/db/migrations.test.ts` (before the migration existed)
+- Result: FAIL (expected, RED)
+- Evidence: `expected { generation: 41 } to deeply equal { generation: 42 }`.
+- Command: `npm test --prefix backend` and `npm run typecheck --prefix backend`
+- Result: PASS
+- Evidence: `Test Files 39 passed (39)`, `Tests 507 passed (507)`; `tsc --noEmit` exit 0. Also PASS with `OWNER_TIMEZONE=UTC npm test --prefix backend` (507/507); F3 was RED before the change (2 floating edit tests failed under `OWNER_TIMEZONE=UTC`).
+- Command: `./gradlew :androidApp:testDebugUnitTest` (from `client`, `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported)
+- Result: PASS
+- Evidence: `BUILD SUCCESSFUL`; result XML 419 tests, 0 failures, 0 errors, 0 skipped.
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 ANDROID_TEST_CLASS=app.buzer.android.morningreview.MorningReviewAlarmInstrumentationTest scripts/e2e-real-backend.sh`
+- Result: PASS
+- Evidence: `Finished 5 tests`, `BUILD SUCCESSFUL in 14s`, result XML `tests="5" failures="0"`. With a temporary mutation restoring overdue priority in `BlockerPriorityResolver` (reverted, not committed), the same class FAILED `cachedOverdueTasksNeverDeferReview` (`MorningReviewAlarmInstrumentationTest.kt:164`, `BUILD FAILED`), so the pinned test detects the regression.
+- Command: same environment, `ANDROID_TEST_CLASS=app.buzer.android.blockers.BlockerActivityFakeBackendTest`
+- Result: PASS
+- Evidence: `Finished 43 tests`, `BUILD SUCCESSFUL in 3m 39s`, result XML `tests="43" failures="0" errors="0" skipped="0"`. After every e2e run the leftover e2e-server node processes (cwd = this worktree's `backend`) were killed and port 18433 confirmed free.
+- Command: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk ANDROID_SERIAL=emulator-5554 CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 scripts/e2e-real-backend.sh` (full, unfiltered; run by the controller at `f1cdb6d`, 2026-09-30)
+- Result: PASS
+- Evidence: `Finished 115 tests on Buzer_API_36(AVD) - 16`, 0 failed, `BUILD SUCCESSFUL in 5m 58s`, exit 0. The script again left its e2e-server node backend listening on 18433 (cwd = this worktree's `backend`); killed afterwards.
+
+Controller-deferred / ruled items from the whole-branch review (recorded, not changed here):
+- Minor #1: no per-task catch in the snapshot projection (`taskSnapshotService`); one task with an unresolvable
+  floating time still fails the whole snapshot. Deferred.
+- Minor #5: the decision doc cites the two uncommitted 2026-09-23 investigation files that live only in the
+  primary checkout (`docs/handoffs/2026-09-23-morning-review-delivery-investigation.md`,
+  `docs/notes/2026-09-23-morning-review-deferred-by-overdue-tasks.md`). The owner decides whether to commit them.
+- Minor #9: `79be78f` leaves two `BlockerActivityFakeBackendTest` e2e tests red until `4c60da7` migrates them. Merge with
+  `--no-ff` so the range is kept together, not squashed or cherry-picked partially.
+
+Superseded by this wave in the sections above: the Docs bullet under "Known limitations" (stale Deadline-priority
+passages in `2026-08-02-daily-morning-review.md`) is now annotated, and the `OWNER_TIMEZONE`-dependence of the first
+floating edit test is fixed (F3).

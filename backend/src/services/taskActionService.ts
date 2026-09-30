@@ -1,8 +1,9 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { addMinutes } from "../domain/time.js";
+import { addMinutes, sameDueInstant } from "../domain/time.js";
 import { appendExtension, decodeTaskDescription, reconstructTaskDescription } from "../domain/taskDescriptionCodec.js";
 import { describeRecurrence, translateRecurrencePreset, type RecurrencePreset } from "../domain/taskRecurrence.js";
+import { resolveOwnerTimeZone } from "../domain/ownerTimeZone.js";
 import { DomainError } from "../domain/errors.js";
 import type { ProjectRepository, TodoistProject } from "../repositories/projectRepository.js";
 import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
@@ -517,7 +518,7 @@ export class TaskActionService {
       });
     }
 
-    const due = recurrenceForUpdate(task, input);
+    const due = recurrenceForUpdate(task, input, resolveOwnerTimeZone(this.collaborators, this.currentUserId));
     const commands: TodoistCommand[] = [];
 
     if (task.projectId !== input.projectId) {
@@ -815,8 +816,9 @@ function recurrenceForScheduleUpdate(task: TaskWithCommitment, dueDatetime: stri
   return { kind: "replace" as const, datetime: dueDatetime, ...recurrence };
 }
 
-function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit) {
-  const scheduleChanged = task.dueDatetime !== input.dueDatetime || task.durationMinutes !== input.durationMinutes;
+function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit, ownerTimeZone: string) {
+  const timeChanged = !sameDueInstant(task.dueDatetime, input.dueDatetime, ownerTimeZone);
+  const scheduleChanged = timeChanged || task.durationMinutes !== input.durationMinutes;
   if (input.dueDatetime === null || input.durationMinutes === null) {
     return { kind: "clear" as const };
   }
@@ -835,10 +837,10 @@ function recurrenceForUpdate(task: TaskWithCommitment, input: ResolvedRootEdit) 
       : { kind: "replace" as const, datetime: input.dueDatetime, ...recurrence };
   }
   if (!task.isRecurring) {
-    return { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null };
+    return timeChanged ? { kind: "replace" as const, datetime: input.dueDatetime, string: null, lang: null, timezone: null } : { kind: "preserve" as const };
   }
-  if (scheduleChanged) {
-    return recurrenceForScheduleUpdate(task, input.dueDatetime);
+  if (!scheduleChanged) {
+    return { kind: "preserve" as const };
   }
-  return { kind: "preserve" as const };
+  return recurrenceForScheduleUpdate(task, input.dueDatetime);
 }

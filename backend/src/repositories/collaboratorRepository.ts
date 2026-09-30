@@ -22,6 +22,15 @@ export class CollaboratorRepository {
     return (row?.mirrorContractVersion ?? 0) >= 3;
   }
 
+  getTimeZone(todoistUserId: string): string | null {
+    const row = this.db.prepare(`
+      select time_zone as timeZone
+      from todoist_collaborators
+      where todoist_user_id = ? and is_deleted = 0
+    `).get(todoistUserId) as { timeZone: string | null } | undefined;
+    return row?.timeZone ?? null;
+  }
+
   upsertCollaborator(collaborator: TodoistCollaboratorMirror): void {
     this.db.prepare(`
       insert into todoist_collaborators (

@@ -47,6 +47,8 @@ WHATSAPP_SESSION_PATH=./whatsapp-sessions
 WHATSAPP_CLIENT_ID=buzer
 SENTRY_BACKEND_DSN=
 SENTRY_ENVIRONMENT=production-vps
+# Optional. Floating Todoist due times use the owner's Todoist timezone; this is only the fallback.
+OWNER_TIMEZONE=Europe/Bratislava
 ```
 
 Do not add `SENTRY_RELEASE` to this `.env`. `scripts/deploy-vps.sh` derives

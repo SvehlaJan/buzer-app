@@ -31,7 +31,7 @@ export interface E2EFixtureSeed {
 }
 
 /** Stable, small projections of the Change 1 fixture model for Morning Review E2E cases. */
-export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today" | "blockingMix" | "pendingOnly" | "unassigned" | "priorityStart" | "priorityDeadline";
+export type E2EMorningReviewScenario = "clean" | "invalid" | "overdue" | "today" | "blockingMix" | "pendingOnly" | "unassigned";
 
 const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonly string[]> = {
   clean: [],
@@ -40,9 +40,7 @@ const MORNING_REVIEW_SCENARIO_ROOT_IDS: Record<E2EMorningReviewScenario, readonl
   today: ["task-current-overlapping", "task-future-tomorrow"],
   blockingMix: ["task-invalid", "task-reconciliation-pending", "task-unassigned-root"],
   pendingOnly: ["task-reconciliation-pending"],
-  unassigned: ["task-unassigned-root"],
-  priorityStart: ["task-current-overlapping"],
-  priorityDeadline: ["task-overdue-1"]
+  unassigned: ["task-unassigned-root"]
 };
 
 const TIME_ZONE = "Europe/Bratislava";
@@ -516,11 +514,10 @@ export function e2eMorningReviewScenarioSeed(
     rootIds.has(task.id) || (task.mirror.parentId !== null && selectedTodoistIds.has(task.mirror.parentId))
   );
 
-  const omitPriorityAuthority = scenario === "priorityStart" || scenario === "priorityDeadline";
   return {
     ...seed,
     tasks,
-    nudges: seed.nudges.filter((nudge) => rootIds.has(nudge.id) && !omitPriorityAuthority),
-    occurrencePins: seed.occurrencePins.filter((pin) => rootIds.has(pin.id) && !omitPriorityAuthority)
+    nudges: seed.nudges.filter((nudge) => rootIds.has(nudge.id)),
+    occurrencePins: seed.occurrencePins.filter((pin) => rootIds.has(pin.id))
   };
 }

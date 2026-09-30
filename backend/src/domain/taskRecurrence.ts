@@ -249,7 +249,7 @@ function requiredPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeForma
   return value;
 }
 
-function isIanaTimeZone(timeZone: string): boolean {
+export function isIanaTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone }).format();
     return true;

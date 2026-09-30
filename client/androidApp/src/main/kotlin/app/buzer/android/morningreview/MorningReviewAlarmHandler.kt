@@ -1,11 +1,14 @@
 package app.buzer.android.morningreview
 
+import app.buzer.android.time.parseSnapshotJavaInstantOrNull
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Locale
 
@@ -19,24 +22,24 @@ internal fun morningReviewOccurrenceKey(
 
 enum class MorningReviewAlarmDecision { Launch, Deferred, Ignore }
 
-enum class ActiveBlockerPriority { None, Start, Deadline }
+/** How long after the review time an active Start blocker may still delay it (decision 2026-09-29). */
+internal val MORNING_REVIEW_PRIORITY_CAP: Duration = Duration.ofMinutes(15)
 
-/** Resolves the task blocker that must take precedence over a Morning Review delivery. */
+enum class ActiveBlockerPriority { None, Start }
+
+/**
+ * Only an unstarted owner task inside its active interval (a Start blocker) outranks the
+ * Morning Review. Overdue work never does: a Deadline blocker is only armed for a future
+ * deadline (decision 2026-09-29-reminder-reliability).
+ */
 object BlockerPriorityResolver {
     fun resolve(snapshot: SnapshotViewState, now: Instant): ActiveBlockerPriority {
-        var hasStartBlocker = false
         val authoritativeInvalidIds = snapshot.invalidTasks.mapTo(mutableSetOf()) { it.id }
-        for (task in snapshot.tasks) {
-            if (task.id in authoritativeInvalidIds) continue
-            val interval = task.activeIntervalOrNull() ?: continue
-            if (!now.isBefore(interval.end)) return ActiveBlockerPriority.Deadline
-            if (
+        val hasStartBlocker = snapshot.tasks.any { task ->
+            task.id !in authoritativeInvalidIds &&
                 task.startedAt == null &&
                 task.state != CommitmentState.started &&
-                !now.isBefore(interval.start)
-            ) {
-                hasStartBlocker = true
-            }
+                task.activeIntervalOrNull()?.let { !now.isBefore(it.start) && now.isBefore(it.end) } == true
         }
         return if (hasStartBlocker) ActiveBlockerPriority.Start else ActiveBlockerPriority.None
     }
@@ -55,7 +58,7 @@ object BlockerPriorityResolver {
         ) {
             return null
         }
-        val start = dueDatetime?.let { value -> runCatching { Instant.parse(value) }.getOrNull() } ?: return null
+        val start = dueDatetime?.let(::parseSnapshotJavaInstantOrNull) ?: return null
         val duration = durationMinutes?.takeIf { it > 0 } ?: return null
         return ActiveInterval(start, start.plusSeconds(duration * 60L))
     }
@@ -88,7 +91,8 @@ internal class MorningReviewAlarmHandler(
     private val cachedSnapshotLoader: () -> SnapshotViewState?,
     private val nowProvider: () -> Instant,
     private val zoneProvider: () -> ZoneId,
-    private val errorReporter: (operation: String, context: String, error: Exception) -> Unit
+    private val errorReporter: (operation: String, context: String, error: Exception) -> Unit,
+    private val reviewTime: LocalTime = DEFAULT_MORNING_REVIEW_TIME
 ) {
     fun handle(delivered: app.buzer.android.enforcement.ScheduledAlarmIdentity): MorningReviewAlarmDecision {
         val now = nowProvider()
@@ -124,7 +128,9 @@ internal class MorningReviewAlarmHandler(
             report("priority", fired, error)
             ActiveBlockerPriority.None
         }
-        if (priority != ActiveBlockerPriority.None) {
+        val priorityCapEnd = fired.reviewDate.atTime(reviewTime).atZone(zoneId).toInstant()
+            .plus(MORNING_REVIEW_PRIORITY_CAP)
+        if (priority == ActiveBlockerPriority.Start && now.isBefore(priorityCapEnd)) {
             try {
                 actions.deferForPriority(fired, now, zoneId)
             } catch (error: Exception) {

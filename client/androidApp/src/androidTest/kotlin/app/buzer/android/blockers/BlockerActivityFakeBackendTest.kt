@@ -696,7 +696,7 @@ class BlockerActivityFakeBackendTest {
         resetTestState("clean")
         fakeBackend.setFailSnapshot(true)
         val noData = launchMorningReview()
-        waitForText("Start day without data")
+        waitForText("Start day without data", FORCED_SYNC_RETRY_WAIT_MILLIS)
         composeRule.onNodeWithText("Start day without data").performClick()
         waitForActivityDestroyed(noData)
         check(MorningReviewLocalStateStore.fromContext(ApplicationProvider.getApplicationContext()).read().lastAcknowledgedDate != null)
@@ -745,8 +745,9 @@ class BlockerActivityFakeBackendTest {
             scenario.recreate()
             waitForRecordedCall("/tasks/snapshot")
             // A failed forced refresh shows the inline session-warning banner (no "Retry
-            // refresh" dialog); the cached invalid task stays visible.
-            waitForTag("session-warning-banner")
+            // refresh" dialog); the cached invalid task stays visible. The banner appears only
+            // after the forced sync's one 30 s retry also fails, hence the longer wait.
+            waitForTag("session-warning-banner", FORCED_SYNC_RETRY_WAIT_MILLIS)
             composeRule.onNodeWithText("Invalid assigned fixture").assertIsDisplayed()
             fakeBackend.setFailSnapshot(false)
             fakeBackend.reset("clean")
@@ -982,8 +983,8 @@ class BlockerActivityFakeBackendTest {
         composeRule.onNodeWithTag("morning-repair-task-invalid").performClick()
     }
 
-    private fun waitForText(text: String) {
-        composeRule.waitUntil(timeoutMillis = 15_000) {
+    private fun waitForText(text: String, timeoutMillis: Long = 15_000) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
             runCatching {
                 composeRule.onNodeWithText(text, substring = true).assertIsDisplayed()
             }.isSuccess
@@ -1022,8 +1023,8 @@ class BlockerActivityFakeBackendTest {
         }
     }
 
-    private fun waitForTag(tag: String) {
-        composeRule.waitUntil(timeoutMillis = 15_000) {
+    private fun waitForTag(tag: String, timeoutMillis: Long = 15_000) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
             runCatching {
                 composeRule.onNodeWithTag(tag).assertIsDisplayed()
             }.isSuccess
@@ -1279,6 +1280,11 @@ class BlockerActivityFakeBackendTest {
 
     private companion object {
         const val CORRELATION_TAG = "BuzerE2ECorrelation"
+
+        // The Morning Review's forced sync retries once after 30 s (decision 2026-09-29), so a
+        // failed-sync UI state appears only after the retry also fails. Waits for that state must
+        // outlast the retry delay.
+        const val FORCED_SYNC_RETRY_WAIT_MILLIS = 45_000L
         val WEEKDAY_LABELS = setOf(
             "Monday",
             "Tuesday",

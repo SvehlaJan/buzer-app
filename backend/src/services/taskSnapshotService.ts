@@ -1,7 +1,8 @@
 import { decodeTaskDescription } from "../domain/taskDescriptionCodec.js";
 import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
 import { describeRecurrence } from "../domain/taskRecurrence.js";
-import { computeStartAt } from "../domain/time.js";
+import { type CollaboratorTimeZoneSource, resolveOwnerTimeZone } from "../domain/ownerTimeZone.js";
+import { computeStartAt, normalizeDueDatetime } from "../domain/time.js";
 import { validateTaskStrictness } from "../domain/taskValidation.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
@@ -12,7 +13,8 @@ export class TaskSnapshotService {
     private readonly tasks: TaskRepository,
     private readonly projects: ProjectRepository,
     private readonly currentUserId: string,
-    private readonly requireMirrorReady = false
+    private readonly requireMirrorReady = false,
+    private readonly collaborators: CollaboratorTimeZoneSource | null = null
   ) {}
 
   getSnapshot(serverTime: string) {
@@ -26,6 +28,7 @@ export class TaskSnapshotService {
         currentUserId: this.currentUserId,
         projectsById
       });
+      const ownerTimeZone = resolveOwnerTimeZone(this.collaborators, this.currentUserId);
       const projections = new TaskHierarchyProjector(policy).project(rows);
       const items = projections.flatMap((projection) => {
         if (projection.classification === "NOT_OWNED" || projection.classification === "CHECKLIST_CHILD") {
@@ -37,7 +40,7 @@ export class TaskSnapshotService {
           checkedCount: projection.checkedCount,
           totalCount: projection.totalCount,
           isCompanionOwned: policy.isCompanionOwned(projection.root)
-        })];
+        }, ownerTimeZone)];
       });
 
       return {
@@ -59,7 +62,8 @@ export class TaskSnapshotService {
       checkedCount: number;
       totalCount: number;
       isCompanionOwned: boolean;
-    }
+    },
+    ownerTimeZone: string
   ) {
     const description = decodeTaskDescription(task.description);
     const recurrence = describeRecurrence({
@@ -83,11 +87,11 @@ export class TaskSnapshotService {
       projectId: task.projectId,
       assigneeId: task.assigneeId,
       creatorId: task.creatorId,
-      dueDatetime: task.dueDatetime,
+      dueDatetime: normalizeDueDatetime(task.dueDatetime, ownerTimeZone),
       dueDate: task.dueDate,
       durationMinutes: task.durationMinutes,
       startAt: task.dueDatetime !== null && task.durationMinutes !== null
-        ? computeStartAt(task.dueDatetime, task.durationMinutes)
+        ? computeStartAt(task.dueDatetime, task.durationMinutes, ownerTimeZone)
         : null,
       state: terminalState ?? (hierarchy.classification === "ROOT_COMMITMENT" || hierarchy.classification === "ROOT_UNASSIGNED" ? task.state : "invalid"),
       isAssignedToUser: task.assigneeId === this.currentUserId || isCompanionOwnedByUser,
