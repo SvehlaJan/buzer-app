@@ -42,7 +42,7 @@ masks all text by default. Structured logs already share the feedback's `trace_i
 | Compose Multiplatform | 1.11.1 | 1.12.1 |
 | AndroidX Compose UI test | 1.11.2 | 1.12.1 |
 | Lifecycle runtime KTX | 2.10.0 | 2.11.0 |
-| Ktor | 3.5.0 | 3.6.0 |
+| Ktor | 3.5.0 | 3.5.0 (held; 3.5.1+ regression, see below) |
 | Kermit | 2.1.0 | 2.2.0 |
 | Sentry Android | 8.53.0 | 8.58.0 |
 | Sentry Android Gradle plugin | 6.19.0 | 6.23.0 |
@@ -97,37 +97,42 @@ Node 22 (`@sentry/node` 11 needs >= 22.12; `better-sqlite3` 13 needs >= 22).
 
 ### Task 1: Feedback screen context
 
-- [ ] Add `ScreenContext(screen, taskId)` and `AndroidObservability.setScreenContext(ScreenContext?)`
+- [x] Add `ScreenContext(screen, taskId)` and `AndroidObservability.setScreenContext(ScreenContext?)`
       (NoOp, Recording, Sentry). Sentry applies/removes `screen` and `task_id` scope tags.
-- [ ] Write failing JVM tests: section-to-context mapping; scope tag apply/clear on a real
+- [x] Write failing JVM tests: section-to-context mapping; scope tag apply/clear on a real
       `io.sentry.Scope`; Recording double records the latest context.
-- [ ] Wire `BuzerApp`: lifecycle-aware effect sets context on start/section change, clears on
+- [x] Wire `BuzerApp`: lifecycle-aware effect sets context on start/section change, clears on
       stop/dispose; `MainActivity` forwards to `ObservabilityRuntime.instance`.
-- [ ] Log `ui navigate section=Edit source=home` with `task_id` (Add already logs its navigation).
-- [ ] Extend `BugReportFlowInstrumentationTest` (Home, then Add).
-- [ ] JVM tests green; commit.
+- [x] Log `ui navigate section=Edit source=home` with `task_id` (Add already logs its navigation).
+- [x] Extend `BugReportFlowInstrumentationTest` (Home, then Add).
+- [x] JVM tests green; commit.
 
 ### Task 2: Client dependency upgrade
 
-- [ ] Gradle wrapper 9.8.0; build green; commit.
-- [ ] AGP 9.4.1, Kotlin 2.4.20, CMP 1.12.1, Compose UI test 1.12.1, Lifecycle 2.11.0, Ktor 3.6.0,
+- [x] Gradle wrapper 9.8.0; build green; commit.
+- [x] AGP 9.4.1, Kotlin 2.4.20, CMP 1.12.1, Compose UI test 1.12.1, Lifecycle 2.11.0, Ktor 3.6.0,
       Kermit 2.2.0, Sentry 8.58.0, Sentry Gradle plugin 6.23.0, foojay 1.0.0; fix breakages
       (compileSdk, API deprecations) using Context7 docs; JVM tests + `assembleDebug` +
-      `assembleDebugAndroidTest` green; commit.
-- [ ] Assert `feedbackOptions.isEnableAttachScreenshot` in `AndroidObservabilityConfigTest`.
+      `assembleDebugAndroidTest` green; commit. Only breakage: Compose 1.12 needs compileSdk 37.
+- [x] Assert `feedbackOptions.isEnableAttachScreenshot` in `AndroidObservabilityConfigTest`.
+- [x] Full e2e on Ktor 3.6.0 failed 3/121 (`NetworkOnMainThreadException` from Ktor 3.5.1+
+      closing Android-engine responses on the cancelling main thread). Ktor held at 3.5.0;
+      see `docs/notes/2026-10-01-ktor-cancel-close-on-main-thread.md`.
 
 ### Task 3: Backend dependency upgrade
 
-- [ ] Pin targets, `npm install`, refresh transitive deps within range, `npm audit` review.
-- [ ] Sentry 11 migration: remove `enableLogs`, replace `sendDefaultPii` with the restrictive
+- [x] Pin targets, `npm install`, refresh transitive deps within range, `npm audit` review.
+- [x] Sentry 11 migration: remove `enableLogs`, replace `sendDefaultPii` with the restrictive
       `dataCollection` baseline, set `attachStacktrace: false`; check whether the default
-      integrations auto-capture Fastify errors (would duplicate `onError` capture).
-- [ ] Fix TypeScript 7 / Vitest 5 / other breakages; migrate `backendObservability.test.ts`.
-- [ ] `npm run typecheck`, `npm test`, `npm run build` green; commit.
+      integrations auto-capture Fastify errors (would duplicate `onError` capture). Finding: they
+      do, and their event wins the dedupe without our tags; disabled via `fastifyIntegration`.
+- [x] Fix TypeScript 7 / Vitest 5 / other breakages; migrate `backendObservability.test.ts`.
+      No breakages beyond the Sentry options.
+- [x] `npm run typecheck`, `npm test`, `npm run build` green; commit.
 
 ### Task 4: CI actions
 
-- [ ] Bump action majors in `ci.yml`; commit.
+- [x] Bump action majors in `ci.yml`; commit.
 
 ### Task 5: Verification and handoff
 
