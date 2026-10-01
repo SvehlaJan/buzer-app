@@ -7,6 +7,7 @@ import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import app.buzer.shared.diagnostics.DiagnosticRedactor
 import io.sentry.Breadcrumb
+import io.sentry.IScope
 import io.sentry.Sentry
 import io.sentry.SentryAttribute
 import io.sentry.SentryAttributes
@@ -181,7 +182,32 @@ class SentryAndroidObservability : AndroidObservability {
         Sentry.feedback().show()
     }
 
+    override fun setScreenContext(context: ScreenContext?) {
+        Sentry.configureScope { scope -> applyScreenContext(scope, context) }
+    }
+
 }
+
+/**
+ * Scope tags reach feedback reports, which carry no breadcrumbs, so a report names the screen
+ * and edited task it was sent from.
+ */
+internal fun applyScreenContext(scope: IScope, context: ScreenContext?) {
+    if (context == null) {
+        scope.removeTag(SCREEN_TAG)
+        scope.removeTag(TASK_ID_TAG)
+        return
+    }
+    scope.setTag(SCREEN_TAG, context.screen)
+    if (context.taskId != null) {
+        scope.setTag(TASK_ID_TAG, context.taskId)
+    } else {
+        scope.removeTag(TASK_ID_TAG)
+    }
+}
+
+private const val SCREEN_TAG = "screen"
+private const val TASK_ID_TAG = "task_id"
 
 object ObservabilityRuntime {
     @Volatile

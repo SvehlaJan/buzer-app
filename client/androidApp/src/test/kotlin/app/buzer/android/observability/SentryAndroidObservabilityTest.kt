@@ -3,10 +3,13 @@ package app.buzer.android.observability
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import io.sentry.Breadcrumb
+import io.sentry.Scope
 import io.sentry.SentryEvent
+import io.sentry.SentryOptions
 import io.sentry.protocol.Message
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -81,6 +84,38 @@ class SentryAndroidObservabilityTest {
         // (SentryAttribute/SentryAttributes/SentryLogParameters), not get flattened into the
         // message string.
         observability.addLog(record)
+    }
+
+    @Test
+    fun applyScreenContextSetsScreenAndTaskTags() {
+        val scope = Scope(SentryOptions())
+
+        applyScreenContext(scope, ScreenContext(screen = "Edit", taskId = "task-42"))
+
+        assertEquals("Edit", scope.tags["screen"])
+        assertEquals("task-42", scope.tags["task_id"])
+    }
+
+    @Test
+    fun applyScreenContextWithoutTaskRemovesAPreviousTaskTag() {
+        val scope = Scope(SentryOptions())
+        applyScreenContext(scope, ScreenContext(screen = "Edit", taskId = "task-42"))
+
+        applyScreenContext(scope, ScreenContext(screen = "Home", taskId = null))
+
+        assertEquals("Home", scope.tags["screen"])
+        assertFalse(scope.tags.containsKey("task_id"))
+    }
+
+    @Test
+    fun clearingScreenContextRemovesBothTags() {
+        val scope = Scope(SentryOptions())
+        applyScreenContext(scope, ScreenContext(screen = "Edit", taskId = "task-42"))
+
+        applyScreenContext(scope, null)
+
+        assertFalse(scope.tags.containsKey("screen"))
+        assertFalse(scope.tags.containsKey("task_id"))
     }
 
     @Test
