@@ -36,7 +36,7 @@ val sentryAuthToken = configValue("SENTRY_AUTH_TOKEN")
 
 android {
     namespace = "app.buzer.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.buzer.android"

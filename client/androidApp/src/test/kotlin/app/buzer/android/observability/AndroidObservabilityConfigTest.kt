@@ -138,6 +138,8 @@ class AndroidObservabilityConfigTest {
         assertFalse(feedback.isShowName)
         assertFalse(feedback.isShowEmail)
         assertFalse(feedback.isShowBranding)
+        // SDK 8.54+ "Add screenshot" button (photo picker); the owner chose it over automatic capture.
+        assertTrue(feedback.isEnableAttachScreenshot)
         assertEquals("Report a bug", feedback.formTitle)
         assertEquals("What went wrong?", feedback.messageLabel)
         assertEquals("What did you expect, and what happened?", feedback.messagePlaceholder)
