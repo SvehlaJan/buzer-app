@@ -15,23 +15,23 @@
     "sentry:sourcemaps": "sentry-cli sourcemaps inject --org \"${SENTRY_ORG:-jans-gi}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" ./dist && sentry-cli sourcemaps upload --org \"${SENTRY_ORG:-jans-gi}\" --project \"${SENTRY_PROJECT:-buzer-backend}\" --release \"${SENTRY_RELEASE:-app.buzer@0.1.0+local}\" ./dist"
   },
   "dependencies": {
-    "@fastify/rate-limit": "10.3.0",
-    "@fastify/sensible": "6.0.4",
-    "@sentry/node": "10.72.0",
-    "better-sqlite3": "12.10.0",
-    "dotenv": "17.4.2",
-    "fastify": "5.8.5",
+    "@fastify/rate-limit": "11.2.0",
+    "@fastify/sensible": "6.0.6",
+    "@sentry/node": "11.1.0",
+    "better-sqlite3": "13.0.3",
+    "dotenv": "18.0.5",
+    "fastify": "5.12.5",
     "qrcode-terminal": "0.12.0",
     "whatsapp-web.js": "1.34.7",
-    "zod": "4.4.3"
+    "zod": "4.6.5"
   },
   "devDependencies": {
-    "@sentry/cli": "3.6.2",
-    "@types/better-sqlite3": "7.6.13",
-    "@types/node": "22.19.20",
-    "tsx": "4.22.4",
-    "typescript": "6.0.3",
-    "vitest": "4.1.8"
+    "@sentry/cli": "3.8.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.4",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
   },
   "engines": {
     "node": "22.x"

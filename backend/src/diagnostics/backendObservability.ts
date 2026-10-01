@@ -162,6 +162,8 @@ export class NoOpBackendObservability implements BackendObservability {
   captureException(_error: unknown, _context?: InternalErrorContext | Record<string, unknown>): void {}
 }
 
+const SENSITIVE_KEY_FRAGMENTS = ["forwarded", "-ip", "remote-", "via", "-user"];
+
 export interface SentryObservabilityOptions {
   dsn: string;
   environment?: string | undefined;
@@ -182,8 +184,27 @@ export class SentryBackendObservability implements BackendObservability {
       dsn: options.dsn,
       environment: options.environment ?? "development-vps",
       release: options.release ?? "app.buzer@0.1.0+local",
-      sendDefaultPii: false,
-      enableLogs: true,
+      // SDK 11 replaced sendDefaultPii with dataCollection and widened its defaults; this is
+      // the documented equivalent of the v10 sendDefaultPii=false baseline.
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: {
+          request: { deny: SENSITIVE_KEY_FRAGMENTS },
+          response: { deny: SENSITIVE_KEY_FRAGMENTS }
+        },
+        httpBodies: [],
+        urlQueryParams: { deny: SENSITIVE_KEY_FRAGMENTS },
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        queues: false,
+        graphQL: { document: false, variables: false }
+      },
+      // SDK 11 defaults this to true, which regroups captureMessage issues.
+      attachStacktrace: false,
+      // SDK 11's default Fastify integration captures route errors itself; its event wins the
+      // dedupe and lacks the request_id/route/status_code tags the onError hook adds.
+      integrations: [Sentry.fastifyIntegration({ shouldHandleError: () => false })],
       beforeSendLog: (log) => sanitizeLog(log),
       beforeSend: (event) => {
         delete (event as { request?: unknown }).request;
