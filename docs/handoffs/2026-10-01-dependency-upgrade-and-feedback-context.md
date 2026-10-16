@@ -1,7 +1,7 @@
 # Handoff: Dependency Upgrade And Feedback Screen Context
 
 Date: 2026-10-01, follow-up 2026-10-16
-Branch: `feature/deps-and-feedback-context` (worktree `.worktrees/deps-and-feedback-context`), pushed, not merged
+Branch: `feature/deps-and-feedback-context` (worktree `.worktrees/deps-and-feedback-context`), merged to `master` as `447af22`
 Plan: `docs/superpowers/plans/2026-10-01-dependency-upgrade-and-feedback-context.md`
 
 ## Follow-up 2026-10-16: Audit Fix, Phone Install, Backend Deploy
@@ -62,12 +62,25 @@ Verification:
 - Evidence: `lastUpdateTime=2026-10-16 08:07:33`, `firstInstallTime` unchanged (data kept); no
   `client/` changes between the installed build (`11f4e37`) and `ae5daee`.
 
-State left behind: the VPS checkout is on `feature/deps-and-feedback-context` at `ae5daee`. The
-next normal `deploy-vps.sh` run (default branch `master`) switches it back.
+### Rollout (2026-10-16)
 
-Next: the owner tests on the Pixel 10 (shake on the task editor -> Sentry feedback should carry
-`screen=Edit` and `task_id`; the form has an "Add screenshot" button). Then merge to `master`,
-push, and redeploy from `master` so the VPS tracks `master` again.
+- Owner confirmed the "Add screenshot" button on the Pixel 10 and sent feedback
+  BUZER-ANDROID-P from the task editor. It carries `screen=Edit` and
+  `task_id=b13bdaea-d0d5-4caa-9e51-58c4ea41573d`; the app logged `ui navigate section=Edit
+  source=home` 20 s earlier. The SDK's own `view_names` / feedback URL said
+  `MorningReviewActivity`: the SDK sets the scope screen only in `onActivityCreated`, so it still
+  named the Morning Review activity opened at app start. The new tags are the reliable signal.
+- Merged with `--no-ff` as `447af22` (first parent `c9f48d3`, local `master`; tree identical to
+  the tested `cb01504`) and pushed to `origin/master` (fast-forward from `3150fc1`). Done from
+  this worktree on a detached HEAD; the primary checkout's local `master` ref was not moved and
+  needs `git pull --ff-only`.
+- CI run 38861608290 on `447af22`: client success, backend success.
+- Redeployed from `master` with `ssh -A ... deploy-vps.sh`: VPS checkout `master` at `447af22`,
+  release `app.buzer@0.1.0+447af224f8d9`, healthy, WhatsApp `connected: true, detail: ready`,
+  no warn/error log lines in the first 5 minutes.
+
+Next: remove this worktree (`git worktree remove .worktrees/deps-and-feedback-context`; it holds
+a gitignored copy of `client/local.properties`) and fast-forward the primary checkout's `master`.
 
 ## Task / Plan Status
 
