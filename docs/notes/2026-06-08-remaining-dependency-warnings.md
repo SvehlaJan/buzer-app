@@ -41,14 +41,26 @@ Backend install may report transitive deprecations for packages such as:
 
 These are not direct dependencies. Revisit when the direct package that brings them updates or if audit/build output starts failing.
 
-## npm Audit: puppeteer Chain (2026-10-01)
+## npm Audit: puppeteer Chain (2026-10-01, resolved 2026-10-16)
 
-After the 2026-10-01 upgrade, `npm audit` reports 5 high findings, all from
-`whatsapp-web.js` 1.34.7 (latest), which pins `puppeteer` 24.38.0 exactly. The vulnerable
-`extract-zip` sits in `@puppeteer/browsers`, the browser downloader. Production sets
-`PUPPETEER_SKIP_DOWNLOAD` and uses Debian's Chromium (`Dockerfile`), so that code does not run.
-npm's suggested "fix" is a downgrade to `whatsapp-web.js` 1.34.2; do not apply it. Revisit
-when `whatsapp-web.js` moves to a newer puppeteer.
+`whatsapp-web.js` 1.34.7 (latest) pins `puppeteer` 24.38.0 exactly. Every puppeteer up to
+24.43.1 pulls `@puppeteer/browsers` 2.x, which depends on `extract-zip` (symlink path
+traversal, no patched release exists) and `proxy-agent` -> `basic-ftp` (CPU DoS).
+
+Resolved on 2026-10-16 with an npm override in `backend/package.json`:
+
+```json
+"overrides": { "whatsapp-web.js": { "puppeteer": "25.14.0" } }
+```
+
+puppeteer 25 uses `@puppeteer/browsers` 3.x (no `extract-zip`, no `proxy-agent`); `npm audit`
+reports 0 vulnerabilities. puppeteer 25 is ESM-only and needs Node >= 22.12; whatsapp-web.js's
+CommonJS `require('puppeteer')` works through Node's `require(esm)`. It still reads
+`PUPPETEER_EXECUTABLE_PATH` and `PUPPETEER_SKIP_DOWNLOAD`, which the `Dockerfile` sets. Verified
+by launching a headless whatsapp-web.js `Client` to the `qr` event on Node 24 and 26.
+
+Remove the override once `whatsapp-web.js` itself depends on puppeteer 25+. npm's own suggested
+"fix" (downgrade to `whatsapp-web.js` 1.34.2) is wrong; do not apply it.
 
 ## npm 11 `allow-scripts` Warnings
 
