@@ -1,8 +1,73 @@
 # Handoff: Dependency Upgrade And Feedback Screen Context
 
-Date: 2026-10-01
-Branch: `feature/deps-and-feedback-context` (worktree `.worktrees/deps-and-feedback-context`), not pushed
+Date: 2026-10-01, follow-up 2026-10-16
+Branch: `feature/deps-and-feedback-context` (worktree `.worktrees/deps-and-feedback-context`), pushed, not merged
 Plan: `docs/superpowers/plans/2026-10-01-dependency-upgrade-and-feedback-context.md`
+
+## Follow-up 2026-10-16: Audit Fix, Phone Install, Backend Deploy
+
+Owner request: fix the npm audit finding, install on the Pixel 10, deploy the backend; the owner
+tests next.
+
+- `11f4e37` fix: override whatsapp-web.js's puppeteer to 25 to clear npm audit. By 2026-10-16
+  the audit also flagged `basic-ftp` (via `proxy-agent`); `extract-zip` has no patched release.
+  puppeteer 25 drops both. Details: `docs/notes/2026-06-08-remaining-dependency-warnings.md`.
+- `ae5daee` fix: install backend image dependencies without lifecycle scripts. The first VPS
+  deploy failed in the image build: npm runs an implicit `node-gyp rebuild` for better-sqlite3
+  13 on a clean install (npm 10 and 11 both did, reproduced locally), and node-gyp needs Python,
+  which `node:22-bookworm-slim` lacks. The library loads its bundled prebuild regardless. New
+  `backend/test/dockerImage.test.ts` pins the flag and its assumptions.
+- The Pixel 10 build used a copy of the primary checkout's gitignored `client/local.properties`
+  in this worktree.
+
+Verification:
+- Command: `npm audit` (backend)
+- Result: PASS
+- Evidence: `found 0 vulnerabilities`; tree has `puppeteer@25.14.0 overridden`, `@puppeteer/browsers@3.2.5`.
+- Command: temporary `backend/wwebjs-puppeteer25-smoke.cjs` (deleted): headless whatsapp-web.js `Client` with a throwaway `LocalAuth` dir
+- Result: PASS
+- Evidence: reached the `qr` event on Node 26.11.1 and Node 24.14.0.
+- Command: backend `npm run typecheck`, `npm test`, `npm run build`
+- Result: PASS
+- Evidence: typecheck exit 0; 40 files, 511 tests; build exit 0.
+- Command: clean-directory replay of the image build stage (`npm ci --ignore-scripts`, `npm run build`, `npm prune --omit=dev`)
+- Result: PASS
+- Evidence: no `better-sqlite3/build`; SQLite 3.53.4 loads from the prebuild; whatsapp-web.js loads.
+- Command: `gh run list --workflow=ci.yml` for `11f4e37`
+- Result: PASS
+- Evidence: run 38859341163, client success, backend success (Node 22).
+- Command: `ANDROID_SERIAL=56061FDCR005J0 ./gradlew :androidApp:installDebug`
+- Result: PASS
+- Evidence: `Installed on 1 device` (Pixel 10, Android 17); BuildConfig: production backend URL,
+  `production-device`, release `app.buzer@0.1.0-dev+11f4e37603ea`, token and DSN non-empty.
+- Command: `ssh -A oc-vps.taila50381.ts.net 'BUZER_DEPLOY_BRANCH=feature/deps-and-feedback-context /home/skclaw/buzer-app/scripts/deploy-vps.sh'` (first attempt, `11f4e37`)
+- Result: FAIL
+- Evidence: image build `npm ci` failed in `node-gyp rebuild` for better-sqlite3 ("Could not
+  find any Python installation"); the old container (`3150fc1`) kept running, healthy, WhatsApp ready.
+- Command: same deploy for `ae5daee`
+- Result: PASS
+- Evidence: `RUN npm ci --ignore-scripts`; container recreated; healthy on the first check;
+  source-map upload skipped (`SENTRY_AUTH_TOKEN` not set on the VPS).
+- Command: VPS read-only checks (`printenv SENTRY_RELEASE`, package versions, authenticated `/health`, `/tasks/snapshot`, logs)
+- Result: PASS
+- Evidence: release `app.buzer@0.1.0+ae5daee8246b`; Node v22.23.3, puppeteer 25.14.0,
+  better-sqlite3 13.0.3, @sentry/node 11.1.0; `database: ok`, WhatsApp `connected: true,
+  detail: ready` (session restored, no QR); snapshot 200 with 239 tasks, 0 offset-less times,
+  0 health warnings; no warn/error log lines in the first 10 minutes.
+- Command: `gh run list --workflow=ci.yml` for `ae5daee`
+- Result: PASS
+- Evidence: run 38860416905, client success, backend success.
+- Command: `adb -s 56061FDCR005J0 shell dumpsys package app.buzer.android`
+- Result: PASS
+- Evidence: `lastUpdateTime=2026-10-16 08:07:33`, `firstInstallTime` unchanged (data kept); no
+  `client/` changes between the installed build (`11f4e37`) and `ae5daee`.
+
+State left behind: the VPS checkout is on `feature/deps-and-feedback-context` at `ae5daee`. The
+next normal `deploy-vps.sh` run (default branch `master`) switches it back.
+
+Next: the owner tests on the Pixel 10 (shake on the task editor -> Sentry feedback should carry
+`screen=Edit` and `task_id`; the form has an "Add screenshot" button). Then merge to `master`,
+push, and redeploy from `master` so the VPS tracks `master` again.
 
 ## Task / Plan Status
 
