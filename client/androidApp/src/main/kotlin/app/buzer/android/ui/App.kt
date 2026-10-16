@@ -11,7 +11,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.LifecycleStartEffect
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.observability.ScreenContext
 import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.AddTaskScreen
 import app.buzer.android.ui.screens.EditTaskScreen
@@ -25,11 +27,17 @@ import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
 import java.time.ZoneId
 
-private enum class AppSection {
+internal enum class AppSection {
     Home,
     Add,
     Edit
 }
+
+internal fun screenContextFor(section: AppSection, editingTaskId: String?): ScreenContext =
+    ScreenContext(
+        screen = section.name,
+        taskId = editingTaskId.takeIf { section == AppSection.Edit }
+    )
 
 @Composable
 fun BuzerApp(
@@ -55,6 +63,7 @@ fun BuzerApp(
     morningReviewBlockingCount: Int? = null,
     onOpenMorningReview: () -> Unit = {},
     onReportBug: () -> Unit = {},
+    onScreenContextChanged: (ScreenContext?) -> Unit = {},
     nowProvider: () -> Instant = { Instant.now() },
     zoneIdProvider: () -> ZoneId = { ZoneId.systemDefault() }
 ) {
@@ -64,6 +73,13 @@ fun BuzerApp(
         var editingTaskId by remember { mutableStateOf<String?>(null) }
         var overdueExpanded by rememberSaveable { mutableStateOf(false) }
         var unassignedExpanded by rememberSaveable { mutableStateOf(false) }
+
+        // Cleared while stopped so a blocker activity on top does not report a stale Main screen.
+        val screenContext = screenContextFor(section, editingTaskId)
+        LifecycleStartEffect(screenContext) {
+            onScreenContextChanged(screenContext)
+            onStopOrDispose { onScreenContextChanged(null) }
+        }
 
         val homeState = buildBuzerHomeState(
             snapshot = snapshot,
@@ -89,6 +105,7 @@ fun BuzerApp(
                         section = AppSection.Add
                     },
                     onEditTask = { taskId ->
+                        AppLog.debug("ui navigate section=Edit source=home", mapOf("task_id" to taskId))
                         editingTaskId = taskId
                         section = AppSection.Edit
                     },

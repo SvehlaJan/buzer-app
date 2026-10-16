@@ -116,6 +116,7 @@ vi.mock("@sentry/node", () => ({
   init: vi.fn((options: any) => {
     sentryMockState.initOptions = options;
   }),
+  fastifyIntegration: vi.fn((options: any) => ({ name: "Fastify", options })),
   logger: {
     info: vi.fn((marker: string, attributes?: Record<string, unknown>) => {
       sentryMockState.loggerInfoCalls.push({ marker, attributes });
@@ -327,7 +328,7 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     sentryMockState.breadcrumbs = [];
   });
 
-  it("initializes Sentry with sendDefaultPii=false, enableLogs=true, beforeSendLog, canonical release, and without tracing", () => {
+  it("initializes Sentry with the v10 privacy baseline, beforeSendLog, canonical release, and without tracing", () => {
     new SentryBackendObservability({
       dsn: "https://public@sentry.example.com/1",
       environment: "staging-vps",
@@ -338,10 +339,41 @@ describe("SentryBackendObservability & Privacy Boundary", () => {
     expect(sentryMockState.initOptions.dsn).toBe("https://public@sentry.example.com/1");
     expect(sentryMockState.initOptions.environment).toBe("staging-vps");
     expect(sentryMockState.initOptions.release).toBe("app.buzer@0.1.0+gitsha");
-    expect(sentryMockState.initOptions.sendDefaultPii).toBe(false);
-    expect(sentryMockState.initOptions.enableLogs).toBe(true);
+    // SDK 11 collects user info, cookies, bodies and query data unless dataCollection says otherwise.
+    expect(sentryMockState.initOptions.dataCollection).toMatchObject({
+      userInfo: false,
+      cookies: false,
+      httpBodies: [],
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      graphQL: { document: false, variables: false }
+    });
+    expect(sentryMockState.initOptions.dataCollection.httpHeaders.request).toEqual({
+      deny: ["forwarded", "-ip", "remote-", "via", "-user"]
+    });
+    expect(sentryMockState.initOptions.dataCollection.httpHeaders.response).toEqual({
+      deny: ["forwarded", "-ip", "remote-", "via", "-user"]
+    });
+    expect(sentryMockState.initOptions.dataCollection.urlQueryParams).toEqual({
+      deny: ["forwarded", "-ip", "remote-", "via", "-user"]
+    });
+    expect(sentryMockState.initOptions.attachStacktrace).toBe(false);
+    expect(sentryMockState.initOptions).not.toHaveProperty("sendDefaultPii");
+    expect(sentryMockState.initOptions).not.toHaveProperty("enableLogs");
     expect(typeof sentryMockState.initOptions.beforeSendLog).toBe("function");
     expect(sentryMockState.initOptions.tracesSampleRate).toBeUndefined();
+  });
+
+  it("leaves 5xx capture to the onError hook instead of the SDK 11 Fastify integration", () => {
+    new SentryBackendObservability({ dsn: "https://public@sentry.example.com/1" });
+
+    // The integration's own capture wins the dedupe and drops request_id/route/status_code tags.
+    const fastify = sentryMockState.initOptions.integrations.find(
+      (integration: { name: string }) => integration.name === "Fastify"
+    );
+    expect(fastify).toBeDefined();
+    expect(fastify.options.shouldHandleError(new Error("boom"), {}, { statusCode: 500 })).toBe(false);
   });
 
   it("does not initialize Sentry when DSN is empty or whitespace", () => {

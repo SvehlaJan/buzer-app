@@ -91,11 +91,19 @@ class AndroidObservabilityConfigTest {
         recording.showFeedback()
         assertEquals(1, recording.feedbackShowCount)
 
-        // 4. reset
+        // 4. setScreenContext keeps the latest value, including a clear
+        recording.setScreenContext(ScreenContext(screen = "Edit", taskId = "task-99"))
+        assertEquals(ScreenContext(screen = "Edit", taskId = "task-99"), recording.screenContext)
+        recording.setScreenContext(null)
+        assertNull(recording.screenContext)
+
+        // 5. reset
+        recording.setScreenContext(ScreenContext(screen = "Home", taskId = null))
         recording.reset()
         assertEquals(0, recording.logs.size)
         assertEquals(0, recording.handledExceptions.size)
         assertEquals(0, recording.feedbackShowCount)
+        assertNull(recording.screenContext)
     }
 
     @Test
@@ -130,6 +138,8 @@ class AndroidObservabilityConfigTest {
         assertFalse(feedback.isShowName)
         assertFalse(feedback.isShowEmail)
         assertFalse(feedback.isShowBranding)
+        // SDK 8.54+ "Add screenshot" button (photo picker); the owner chose it over automatic capture.
+        assertTrue(feedback.isEnableAttachScreenshot)
         assertEquals("Report a bug", feedback.formTitle)
         assertEquals("What went wrong?", feedback.messageLabel)
         assertEquals("What did you expect, and what happened?", feedback.messagePlaceholder)
