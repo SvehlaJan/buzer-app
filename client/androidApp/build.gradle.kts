@@ -36,7 +36,7 @@ val sentryAuthToken = configValue("SENTRY_AUTH_TOKEN")
 
 android {
     namespace = "app.buzer.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.buzer.android"
@@ -104,6 +104,7 @@ kotlin {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)

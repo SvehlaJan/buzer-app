@@ -21,6 +21,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -62,6 +63,26 @@ class BugReportFlowInstrumentationTest {
         } finally {
             scenario.close()
         }
+    }
+
+    @Test
+    fun screenContextFollowsMainSectionsAndClearsWhenTheActivityStops() {
+        val scenario = ActivityScenario.launch(MainActivity::class.java)
+        try {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                fakeObservability.screenContext == ScreenContext(screen = "Home", taskId = null)
+            }
+
+            composeRule.onNodeWithContentDescription("Add task").assertIsDisplayed().performClick()
+
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                fakeObservability.screenContext == ScreenContext(screen = "Add", taskId = null)
+            }
+        } finally {
+            scenario.close()
+        }
+
+        assertNull(fakeObservability.screenContext)
     }
 
     private fun resetStartupState() {

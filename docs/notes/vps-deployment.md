@@ -10,7 +10,7 @@ oc-vps.taila50381.ts.net
 
 Current live deployment shape:
 
-- repository checkout: `/home/skclaw/buzer-app`
+- repository checkout: `/home/skclaw/PROJECTS/buzer-app` (moved from `/home/skclaw/buzer-app` on 2026-11-11; the folder basename is unchanged, so the Compose project and volume names below are unaffected)
 - Docker Compose project: `buzer-app`
 - service/container: `backend` / `buzer-backend`
 - host port: `18432`
@@ -30,7 +30,7 @@ The backend is intentionally exposed to the public internet **only** through Tai
 
 ## Environment
 
-Secrets live in `/home/skclaw/buzer-app/.env` on the VPS. Do not commit it.
+Secrets live in `/home/skclaw/PROJECTS/buzer-app/.env` on the VPS. Do not commit it.
 
 Expected shape:
 
@@ -68,7 +68,7 @@ Run from the VPS:
 
 ```bash
 ssh oc-vps.taila50381.ts.net
-/home/skclaw/buzer-app/scripts/deploy-vps.sh
+/home/skclaw/PROJECTS/buzer-app/scripts/deploy-vps.sh
 ```
 
 The deploy script:
@@ -79,7 +79,7 @@ The deploy script:
 - waits for `/health`
 - prints recent backend logs if health does not pass
 
-This script is allowed to overwrite local repository changes in `/home/skclaw/buzer-app`. Runtime data stays in Docker named volumes unless the volumes are explicitly removed.
+This script is allowed to overwrite local repository changes in `/home/skclaw/PROJECTS/buzer-app`. Runtime data stays in Docker named volumes unless the volumes are explicitly removed.
 
 ## Health Checks
 
@@ -117,7 +117,7 @@ With a valid `Authorization: Bearer <ANDROID_API_TOKEN>` header the response add
 
 ## Operational Commands
 
-Run from `/home/skclaw/buzer-app` on the VPS:
+Run from `/home/skclaw/PROJECTS/buzer-app` on the VPS:
 
 ```bash
 docker compose ps
@@ -144,7 +144,7 @@ Backups are written inside the existing `buzer-app_buzer-data` named volume unde
 Run manually:
 
 ```bash
-cd /home/skclaw/buzer-app
+cd /home/skclaw/PROJECTS/buzer-app
 scripts/backup-sqlite.sh
 ```
 
@@ -157,7 +157,7 @@ crontab -e
 Add:
 
 ```cron
-17 3 * * * cd /home/skclaw/buzer-app && scripts/backup-sqlite.sh >> /home/skclaw/buzer-app/backup.log 2>&1
+17 3 * * * cd /home/skclaw/PROJECTS/buzer-app && scripts/backup-sqlite.sh >> /home/skclaw/PROJECTS/buzer-app/backup.log 2>&1
 ```
 
 The script keeps 30 days of backups by default. Use `BUZER_BACKUP_RETENTION_DAYS` to adjust retention.
@@ -175,8 +175,8 @@ WHATSAPP_DRY_RUN=false
 Then redeploy and watch logs for the QR code:
 
 ```bash
-/home/skclaw/buzer-app/scripts/deploy-vps.sh
-cd /home/skclaw/buzer-app
+/home/skclaw/PROJECTS/buzer-app/scripts/deploy-vps.sh
+cd /home/skclaw/PROJECTS/buzer-app
 docker compose logs -f backend
 ```
 
@@ -187,7 +187,7 @@ Scan the QR once. The session is persisted in `buzer-app_buzer-whatsapp`, so nor
 Manual rollback is a git checkout plus redeploy:
 
 ```bash
-cd /home/skclaw/buzer-app
+cd /home/skclaw/PROJECTS/buzer-app
 git fetch origin
 git checkout <known-good-commit>
 docker compose up -d --build --remove-orphans

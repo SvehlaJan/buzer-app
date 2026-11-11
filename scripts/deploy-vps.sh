@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="${BUZER_REPO_DIR:-/home/skclaw/buzer-app}"
+repo_dir="${BUZER_REPO_DIR:-/home/skclaw/PROJECTS/buzer-app}"
 branch="${BUZER_DEPLOY_BRANCH:-master}"
 env_file="${BUZER_ENV_FILE:-$repo_dir/.env}"
 compose_file="${BUZER_COMPOSE_FILE:-$repo_dir/docker-compose.yml}"

@@ -8,7 +8,7 @@ For MVP, deployment remains manual through:
 
 ```bash
 ssh oc-vps.taila50381.ts.net
-/home/skclaw/buzer-app/scripts/deploy-vps.sh
+/home/skclaw/PROJECTS/buzer-app/scripts/deploy-vps.sh
 ```
 
 ## Future Option A: Tailscale In GitHub Actions
@@ -18,7 +18,7 @@ Add a workflow that:
 1. checks out the repo
 2. uses Tailscale's GitHub Action to join the tailnet with an OAuth client or ephemeral auth key
 3. SSHes to `oc-vps.taila50381.ts.net`
-4. runs `/home/skclaw/buzer-app/scripts/deploy-vps.sh`
+4. runs `/home/skclaw/PROJECTS/buzer-app/scripts/deploy-vps.sh`
 
 Required secrets would include:
 

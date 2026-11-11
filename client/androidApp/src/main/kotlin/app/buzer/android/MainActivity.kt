@@ -178,7 +178,8 @@ class MainActivity : ComponentActivity() {
                     morningReviewBannerVisible = morningReviewCoordinator.availability?.bannerVisible ?: false,
                     morningReviewBlockingCount = morningReviewCoordinator.blockingCount(snapshotViewState),
                     onOpenMorningReview = ::openHomeMorningReview,
-                    onReportBug = { ObservabilityRuntime.instance.showFeedback() }
+                    onReportBug = { ObservabilityRuntime.instance.showFeedback() },
+                    onScreenContextChanged = { context -> ObservabilityRuntime.instance.setScreenContext(context) }
                 )
                 ForegroundReadinessGate(
                     state = foregroundReadinessState,

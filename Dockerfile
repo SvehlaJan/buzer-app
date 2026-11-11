@@ -8,7 +8,10 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 COPY backend/package.json backend/package-lock.json ./backend/
 COPY backend/tsconfig.json backend/tsconfig.build.json ./backend/
 WORKDIR /app/backend
-RUN npm ci
+# better-sqlite3 13 loads its bundled prebuild, but npm still runs an implicit node-gyp rebuild
+# for it, which needs Python. The only other production install script is puppeteer's browser
+# download, which this image skips. backend/test/dockerImage.test.ts guards both assumptions.
+RUN npm ci --ignore-scripts
 
 COPY backend/src ./src
 RUN npm run build \

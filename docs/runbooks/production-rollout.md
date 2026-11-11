@@ -36,7 +36,7 @@ Phase 4: Live Canary Smoke Verification (Device + VPS)
    - `SENTRY_AUTH_TOKEN`: Created under Org/User Settings with scopes `project:read`, `project:releases`, `org:read`.
 3. **Configure Secrets**:
    - **Android Local Build**: Add `SENTRY_ANDROID_DSN=<dsn>` to `client/local.properties`, pass it as a Gradle property, or export it in the environment. Gradle resolves those sources in that order; the same order applies to `SENTRY_ENVIRONMENT` and `SENTRY_AUTH_TOKEN`.
-   - **VPS Environment**: Add `SENTRY_BACKEND_DSN=<dsn>` to `/home/skclaw/buzer-app/.env`.
+   - **VPS Environment**: Add `SENTRY_BACKEND_DSN=<dsn>` to `/home/skclaw/PROJECTS/buzer-app/.env`.
    - **CI / Local Release Environment**: Set `SENTRY_AUTH_TOKEN` in environment for ProGuard mapping and source map uploads.
    - Do not set `SENTRY_RELEASE` in `local.properties` or the VPS `.env`: Android derives it from its version and Git SHA, and the VPS deployment script derives it after checkout.
 
@@ -46,7 +46,7 @@ Phase 4: Live Canary Smoke Verification (Device + VPS)
 1. SSH into the VPS host:
    ```bash
    ssh skclaw@<vps-ip>
-   cd /home/skclaw/buzer-app
+   cd /home/skclaw/PROJECTS/buzer-app
    ```
 2. Verify `.env` contains only the backend Sentry connection and environment settings:
    ```dotenv
