@@ -1,8 +1,10 @@
 package app.buzer.android.tasks
 
+import app.buzer.android.enforcement.FailureClassifier
 import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
+import kotlinx.coroutines.CancellationException
 
 class AddTaskProjectRepository(
     private val apiClient: BuzerApiClient
@@ -14,7 +16,7 @@ class AddTaskProjectRepository(
     suspend fun loadProjectsOnce(): List<ProjectItem> {
         cachedProjects?.let { return it }
         AppLog.info("add_task projects load_start")
-        val projects = apiClient.getProjects().projects
+        val projects = fetchProjects("load")
         cachedProjects = projects.toList()
         AppLog.info("add_task projects load_success count=${projects.size}")
         return projects
@@ -22,9 +24,24 @@ class AddTaskProjectRepository(
 
     suspend fun refreshProjects(): List<ProjectItem> {
         AppLog.info("add_task projects refresh_start")
-        val projects = apiClient.getProjects().projects
+        val projects = fetchProjects("refresh")
         cachedProjects = projects.toList()
         AppLog.info("add_task projects refresh_success count=${projects.size}")
         return projects
     }
+
+    private suspend fun fetchProjects(operation: String): List<ProjectItem> =
+        try {
+            apiClient.getProjects().projects
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            val message = "add_task projects ${operation}_failed type=${error::class.simpleName} message=${error.message}"
+            if (FailureClassifier.isOperationalFailure(error)) {
+                AppLog.warn(message, error)
+            } else {
+                AppLog.error(message, error)
+            }
+            throw error
+        }
 }

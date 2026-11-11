@@ -1,21 +1,26 @@
 package app.buzer.android.ui.addtask
 
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.shared.model.CreateTaskRequest
-import app.buzer.shared.model.MutationResponse
-import app.buzer.shared.model.TasksSnapshotResponse
 
-internal sealed interface AddTaskCreateResult {
-    data object Created : AddTaskCreateResult
+internal sealed interface AddTaskCreateOutcome {
+    data object NavigatedBack : AddTaskCreateOutcome
+    data class ShowWarning(val message: String) : AddTaskCreateOutcome
 }
 
-internal suspend fun runSuccessfulAddTaskCreate(
+internal suspend fun runAddTaskCreate(
     request: CreateTaskRequest,
-    createTask: suspend (CreateTaskRequest) -> MutationResponse,
-    onTaskCreated: (TasksSnapshotResponse) -> Unit,
+    onCreateTask: suspend (CreateTaskRequest) -> CoordinatorActionResult,
     onBack: () -> Unit
-): AddTaskCreateResult {
-    val response = createTask(request)
-    onTaskCreated(response.snapshot)
-    onBack()
-    return AddTaskCreateResult.Created
+): AddTaskCreateOutcome = when (val result = onCreateTask(request)) {
+    CoordinatorActionResult.Success -> {
+        onBack()
+        AddTaskCreateOutcome.NavigatedBack
+    }
+    is CoordinatorActionResult.Warning -> AddTaskCreateOutcome.ShowWarning(result.message)
+    is CoordinatorActionResult.Conflict -> AddTaskCreateOutcome.ShowWarning(result.message)
+    is CoordinatorActionResult.TransportFailure -> AddTaskCreateOutcome.ShowWarning(result.message)
+    is CoordinatorActionResult.LocalReconciliationFailed -> AddTaskCreateOutcome.ShowWarning(result.message)
+    CoordinatorActionResult.ChildActionInFlight ->
+        AddTaskCreateOutcome.ShowWarning("Checklist update is already in progress")
 }

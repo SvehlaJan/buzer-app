@@ -36,6 +36,7 @@ import app.buzer.android.ui.status.setBuzerContent
 import app.buzer.android.observability.ObservabilityRuntime
 import app.buzer.android.widget.AddTaskWidgetProvider
 import app.buzer.shared.diagnostics.AppLog
+import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
@@ -99,6 +100,29 @@ class MainActivity : ComponentActivity() {
                     ?: return@HomeDoneActionHandler CoordinatorActionResult.Warning("unavailable", "Task completion failed", null)
                 coordinator.completeTask(taskId, request)
             },
+            toggleChecklistItem = { taskId, item ->
+                val activeCoordinator = coordinator
+                    ?: return@HomeDoneActionHandler CoordinatorActionResult.Warning("unavailable", "Checklist update failed", null)
+                val occurrenceKey = snapshotViewState
+                    ?.tasks
+                    ?.firstOrNull { it.id == taskId }
+                    ?.occurrenceKey
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@HomeDoneActionHandler CoordinatorActionResult.Warning(
+                        "stale_occurrence",
+                        "Task occurrence is no longer current",
+                        null
+                    )
+                val request = FocusedChecklistMutationRequest(
+                    expectedOccurrenceKey = occurrenceKey,
+                    expectedChildRevision = item.childRevision
+                )
+                if (item.checked) {
+                    activeCoordinator.uncheckChild(taskId, item.id, request)
+                } else {
+                    activeCoordinator.checkChild(taskId, item.id, request)
+                }
+            },
             latestSnapshot = {
                 coordinator?.loadLatestSnapshot()?.let(SnapshotReducer::reduce)
             },
@@ -146,11 +170,7 @@ class MainActivity : ComponentActivity() {
                     onOpenTodoist = { ExternalTodoistLauncher.launchToday(this@MainActivity) },
                     onDoneTask = ::completeHomeTask,
                     onDoneCurrentTask = ::completeHomeTask,
-                    onTaskCreated = { returnedSnapshot ->
-                        val applied = coordinator?.applyReturnedSnapshot(returnedSnapshot) ?: returnedSnapshot
-                        snapshotViewState = SnapshotReducer.reduce(applied)
-                        refreshMorningReviewAvailability()
-                    },
+                    onCreateTask = ::createTask,
                     onToggleCurrentChild = ::toggleCurrentChild,
                     deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
                     onUpdateTask = ::updateTask,
@@ -278,11 +298,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private suspend fun createTask(request: CreateTaskRequest): CoordinatorActionResult {
+        val activeCoordinator = coordinator
+            ?: return CoordinatorActionResult.Warning("unavailable", "Task creation is unavailable", null)
+        val result = activeCoordinator.createTask(request)
+        val latest = (result as? CoordinatorActionResult.LocalReconciliationFailed)?.snapshot
+            ?: activeCoordinator.loadLatestSnapshot()
+        latest?.let(SnapshotReducer::reduce)?.let {
+            snapshotViewState = it
+            refreshMorningReviewAvailability()
+        }
+        return result
+    }
+
     private suspend fun updateTask(taskId: String, request: UpdateTaskRequest): CoordinatorActionResult {
         val activeCoordinator = coordinator
             ?: return CoordinatorActionResult.Warning("unavailable", "Task editing is unavailable", null)
         val result = activeCoordinator.updateTask(taskId, request)
-        activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let {
+        val latest = (result as? CoordinatorActionResult.LocalReconciliationFailed)?.snapshot
+            ?: activeCoordinator.loadLatestSnapshot()
+        latest?.let(SnapshotReducer::reduce)?.let {
             snapshotViewState = it
             refreshMorningReviewAvailability()
         }
@@ -302,18 +337,9 @@ class MainActivity : ComponentActivity() {
     private fun toggleCurrentChild(taskId: String, childId: String, checked: Boolean) {
         val task = snapshotViewState?.tasks?.firstOrNull { it.id == taskId } ?: return
         val child = task.checklistItems.firstOrNull { it.id == childId } ?: return
-        val request = FocusedChecklistMutationRequest(
-            expectedOccurrenceKey = task.occurrenceKey,
-            expectedChildRevision = child.childRevision
-        )
+        val currentItem = if (child.checked == checked) child.copy(checked = !checked) else child
         lifecycleScope.launch {
-            val activeCoordinator = coordinator ?: return@launch
-            if (checked) activeCoordinator.checkChild(taskId, childId, request)
-            else activeCoordinator.uncheckChild(taskId, childId, request)
-            activeCoordinator.loadLatestSnapshot()?.let(SnapshotReducer::reduce)?.let {
-                snapshotViewState = it
-                refreshMorningReviewAvailability()
-            }
+            homeActionHandler.toggleChild(taskId, currentItem)
         }
     }
 

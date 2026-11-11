@@ -15,7 +15,6 @@ import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
-import app.buzer.shared.model.UpdateChecklistItemRequest
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.ContentType
@@ -339,13 +338,6 @@ class BuzerApiClientContractTest {
             ChecklistMutation.Edit(
                 clientMutationId = "edit-1",
                 childId = "child-1",
-                expectedChildRevision = "r:2",
-                title = " "
-            )
-        }
-        assertFailsWith<IllegalArgumentException> {
-            UpdateChecklistItemRequest(
-                expectedOccurrenceKey = "occurrence-1",
                 expectedChildRevision = "r:2",
                 title = " "
             )

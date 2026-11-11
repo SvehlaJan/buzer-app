@@ -1,58 +1,39 @@
 package app.buzer.android.tasks
 
 import android.content.Context
-import app.buzer.android.BuildConfig
+import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.enforcement.EnforcementDependencies
+import app.buzer.android.enforcement.FailureClassifier
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.model.CreateTaskRequest
-import app.buzer.shared.model.MutationResponse
+import kotlinx.coroutines.CancellationException
 
 object AddTaskDependencies {
     private var cachedProjectRepository: AddTaskProjectRepository? = null
 
-    fun projectRepository(): AddTaskProjectRepository {
+    fun projectRepository(context: Context? = null): AddTaskProjectRepository {
         cachedProjectRepository?.let { return it }
-        val baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/')
-        require(baseUrl.isNotBlank()) {
-            "BUZER_BACKEND_BASE_URL is missing from client/local.properties"
-        }
-        require(BuildConfig.BUZER_BACKEND_TOKEN.isNotBlank()) {
-            "BUZER_BACKEND_TOKEN is missing from client/local.properties"
-        }
         return AddTaskProjectRepository(
-            BuzerApiClient(
-                baseUrl = baseUrl,
-                token = BuildConfig.BUZER_BACKEND_TOKEN
-            )
+            EnforcementDependencies.apiClient(context)
         ).also { cachedProjectRepository = it }
     }
 
     fun projectSelectionStore(context: Context): ProjectSelectionStore =
         ProjectSelectionStore(context)
 
-    fun createTaskAction(): suspend (CreateTaskRequest) -> MutationResponse = { request ->
-        val baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/')
-        AppLog.info(
-            "add_task dependency create requested baseUrlConfigured=${baseUrl.isNotBlank()} " +
-                "tokenConfigured=${BuildConfig.BUZER_BACKEND_TOKEN.isNotBlank()} " +
-                "titleLength=${request.title.length} project=${request.projectId} assignee=${request.assigneeId} " +
-                "due=${request.dueDatetime} duration=${request.durationMinutes}"
-        )
-        require(baseUrl.isNotBlank()) {
-            "BUZER_BACKEND_BASE_URL is missing from client/local.properties"
-        }
-        require(BuildConfig.BUZER_BACKEND_TOKEN.isNotBlank()) {
-            "BUZER_BACKEND_TOKEN is missing from client/local.properties"
-        }
+    fun createTaskAction(context: Context): suspend (CreateTaskRequest) -> CoordinatorActionResult = { request ->
+        val appContext = context.applicationContext
         try {
-            val response = BuzerApiClient(
-                baseUrl = baseUrl,
-                token = BuildConfig.BUZER_BACKEND_TOKEN
-            ).createTask(request)
-            AppLog.info("add_task dependency create completed")
-            response
+            EnforcementDependencies.coordinator(appContext).createTask(request)
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            AppLog.error("add_task dependency create failed type=${error::class.simpleName} message=${error.message}", error)
+            val message = "add_task dependency create failed type=${error::class.simpleName} message=${error.message}"
+            if (FailureClassifier.isOperationalFailure(error)) {
+                AppLog.warn(message, error)
+            } else {
+                AppLog.error(message, error)
+            }
             throw error
         }
     }

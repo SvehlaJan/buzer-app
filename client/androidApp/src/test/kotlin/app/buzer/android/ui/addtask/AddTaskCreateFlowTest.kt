@@ -1,35 +1,51 @@
 package app.buzer.android.ui.addtask
 
+import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.shared.model.CreateTaskRequest
-import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class AddTaskCreateFlowTest {
     @Test
-    fun successfulCreateAppliesReturnedAuthorityBeforeReturningHome() = runBlocking {
+    fun successfulCreateNavigatesBack() = runBlocking {
         val events = mutableListOf<String>()
-        var appliedSnapshot: TasksSnapshotResponse? = null
 
-        runSuccessfulAddTaskCreate(
+        val outcome = runAddTaskCreate(
             request = request(),
-            createTask = {
+            onCreateTask = {
                 events += "create"
-                MutationResponse(
-                    snapshot = snapshot()
-                )
-            },
-            onTaskCreated = { snapshot ->
-                appliedSnapshot = snapshot
-                events += "apply"
+                CoordinatorActionResult.Success
             },
             onBack = { events += "back" }
         )
 
-        assertEquals(listOf("create", "apply", "back"), events)
-        assertEquals(1, appliedSnapshot?.snapshotGeneration)
+        assertEquals(AddTaskCreateOutcome.NavigatedBack, outcome)
+        assertEquals(listOf("create", "back"), events)
+    }
+
+    @Test
+    fun nonSuccessCreateOutcomesKeepDraftOpenAndSurfaceWarningMessage() = runBlocking {
+        var navigatedBack = false
+        val results = listOf(
+            CoordinatorActionResult.Warning("todoist_delivery_unknown", "Delivery uncertain", snapshot()) to "Delivery uncertain",
+            CoordinatorActionResult.Conflict("stale_task", "Task changed remotely", snapshot()) to "Task changed remotely",
+            CoordinatorActionResult.TransportFailure(false, "Offline") to "Offline",
+            CoordinatorActionResult.LocalReconciliationFailed(snapshot(), "Disk full") to "Disk full",
+            CoordinatorActionResult.ChildActionInFlight to "Checklist update is already in progress"
+        )
+
+        for ((result, expectedMessage) in results) {
+            val outcome = runAddTaskCreate(
+                request = request(),
+                onCreateTask = { result },
+                onBack = { navigatedBack = true }
+            )
+            assertEquals(AddTaskCreateOutcome.ShowWarning(expectedMessage), outcome)
+            assertFalse(navigatedBack)
+        }
     }
 
     private fun request(): CreateTaskRequest =

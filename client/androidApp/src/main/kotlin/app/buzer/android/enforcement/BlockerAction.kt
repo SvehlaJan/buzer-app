@@ -1,6 +1,7 @@
 package app.buzer.android.enforcement
 
 enum class BlockerAction {
+    CREATE_TASK,
     START_TASK,
     POSTPONE_START,
     COMPLETE_TASK,

@@ -154,7 +154,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "re
   - `HomeDoneActionHandler` (with added `toggleChild(rootId: String, item: ChecklistItem)` method alongside `refresh` and `completeTask`, all serialized under its `Mutex`).
   - `MorningReviewSessionController.handleOverdueResult` preserving `actionError = result.message` on `Warning`, `Conflict`, and `LocalReconciliationFailed` even when `result.snapshot != null`.
 
-- [ ] **Step 1: Write failing unit tests for the 3 live Level 1 bugs and `FailureClassifier`**
+- [x] **Step 1: Write failing unit tests for the 3 live Level 1 bugs and `FailureClassifier`**
 
 1. Create `FailureClassifierTest.kt` migrating operational vs defect cases from `AddTaskOperationalFailureTest.kt` plus `forced_refresh_failed`, `backend_busy`, `todoist_rejected`, `delivery_unknown`, `accepted_stale`, `sync_initializing`, and 500 `internal_error`.
 2. In `EnforcementCoordinatorTest.kt`:
@@ -165,12 +165,12 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "re
 4. In `MorningReviewSessionStateTest.kt`:
    - `overdueActionWarningWithSnapshotUpdatesSnapshotWhileKeepingActionErrorVisible` (verifies `session.state.snapshot` updates to the warning's snapshot AND `session.state.actionError == result.message`, `actionInFlight == false`).
 
-- [ ] **Step 2: Run `:shared:testAndroidHostTest` and `:androidApp:testDebugUnitTest` to verify failure**
+- [x] **Step 2: Run `:shared:testAndroidHostTest` and `:androidApp:testDebugUnitTest` to verify failure**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest`
 Expected: FAIL on missing `FailureClassifier`, missing `coordinator.createTask`, missing `toggleChild`, and `MorningReviewSessionStateTest` clearing `actionError` to `null`.
 
-- [ ] **Step 3: Remove dead APIs/wrappers, cache shared `BuzerApiClient`, implement `FailureClassifier`, and fix all 3 bugs**
+- [x] **Step 3: Remove dead APIs/wrappers, cache shared `BuzerApiClient`, implement `FailureClassifier`, and fix all 3 bugs**
 
 1. Remove `addChecklistItem`, `updateChecklistItem`, `deleteChecklistItem` from `BuzerApiClient.kt` and `AddChecklistItemRequest`, `UpdateChecklistItemRequest` from `TaskModels.kt` (updating `BuzerApiClientContractTest.kt` accordingly); have `BuzerApiClient` implement `TaskBackendClient` (`client/shared/src/commonMain/kotlin/app/buzer/shared/api/TaskBackendClient.kt`) and delete `EnforcementApi.kt` and `EnforcementRefreshRunner.kt` + `EnforcementRefreshRunnerTest.kt`.
 2. Cache a single `BuzerApiClient` per `(baseUrl, bearerToken)` inside `EnforcementDependencies.apiClient(context)` and reuse it in `AddTaskDependencies` (preserving `private var cachedProjectRepository` field name for existing `androidTest` reflection helpers).
@@ -179,12 +179,12 @@ Expected: FAIL on missing `FailureClassifier`, missing `coordinator.createTask`,
 5. Add `toggleChild(rootId: String, item: ChecklistItem)` to `HomeDoneActionHandler` and call it from `MainActivity.toggleCurrentChild`.
 6. Update `MorningReviewSessionController.handleOverdueResult` (`MorningReviewSessionState.kt`) so non-`Success` results with a snapshot update `snapshot` while preserving `actionError = result.message`.
 
-- [ ] **Step 4: Run shared & Android JVM unit tests**
+- [x] **Step 4: Run shared & Android JVM unit tests**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client add -A client

@@ -1,7 +1,6 @@
 package app.buzer.shared.api
 
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.model.AddChecklistItemRequest
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
@@ -9,7 +8,6 @@ import app.buzer.shared.model.MutationResponse
 import app.buzer.shared.model.ProjectsResponse
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
-import app.buzer.shared.model.UpdateChecklistItemRequest
 import app.buzer.shared.model.UpdateTaskRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -61,8 +59,8 @@ class BuzerApiClient(
     private val httpClient: HttpClient = defaultHttpClient(token),
     private val requestIdProvider: () -> String = { generateUuid() },
     private val isConnectedProvider: (() -> Boolean)? = null
-) {
-    suspend fun getSnapshot(forceRefresh: Boolean = false): TasksSnapshotResponse {
+) : TaskBackendClient {
+    override suspend fun getSnapshot(forceRefresh: Boolean): TasksSnapshotResponse {
         val path = if (forceRefresh) "/tasks/snapshot?forceRefresh=true" else "/tasks/snapshot"
         val timeout = if (forceRefresh) MUTATION_TIMEOUT_MILLIS else null
         return execute(HttpMethod.Get, path, timeoutMillis = timeout)
@@ -71,52 +69,25 @@ class BuzerApiClient(
     suspend fun getProjects(): ProjectsResponse =
         execute(HttpMethod.Get, "/projects")
 
-    suspend fun createTask(request: CreateTaskRequest): MutationResponse =
+    override suspend fun createTask(request: CreateTaskRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse =
+    override suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks/$id/start", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun completeTask(id: String, request: TaskActionRequest): MutationResponse =
+    override suspend fun completeTask(id: String, request: TaskActionRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks/$id/done", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse =
+    override suspend fun postponeStart(id: String, request: TaskActionRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks/$id/postpone-start", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse =
+    override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks/$id/extend", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse =
+    override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse =
         execute(HttpMethod.Post, "/tasks/$id/update", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
 
-    suspend fun addChecklistItem(id: String, request: AddChecklistItemRequest): MutationResponse =
-        execute(HttpMethod.Post, "/tasks/$id/checklist", body = request, timeoutMillis = MUTATION_TIMEOUT_MILLIS)
-
-    suspend fun updateChecklistItem(
-        id: String,
-        childId: String,
-        request: UpdateChecklistItemRequest
-    ): MutationResponse =
-        execute(
-            HttpMethod.Post,
-            "/tasks/$id/checklist/$childId/update",
-            body = request,
-            timeoutMillis = MUTATION_TIMEOUT_MILLIS
-        )
-
-    suspend fun deleteChecklistItem(
-        id: String,
-        childId: String,
-        request: FocusedChecklistMutationRequest
-    ): MutationResponse =
-        execute(
-            HttpMethod.Post,
-            "/tasks/$id/checklist/$childId/delete",
-            body = request,
-            timeoutMillis = MUTATION_TIMEOUT_MILLIS
-        )
-
-    suspend fun checkChecklistItem(
+    override suspend fun checkChecklistItem(
         id: String,
         childId: String,
         request: FocusedChecklistMutationRequest
@@ -128,7 +99,7 @@ class BuzerApiClient(
             timeoutMillis = MUTATION_TIMEOUT_MILLIS
         )
 
-    suspend fun uncheckChecklistItem(
+    override suspend fun uncheckChecklistItem(
         id: String,
         childId: String,
         request: FocusedChecklistMutationRequest
@@ -139,6 +110,10 @@ class BuzerApiClient(
             body = request,
             timeoutMillis = MUTATION_TIMEOUT_MILLIS
         )
+
+    fun close() {
+        httpClient.close()
+    }
 
     private suspend inline fun <reified T> execute(
         httpMethod: HttpMethod,

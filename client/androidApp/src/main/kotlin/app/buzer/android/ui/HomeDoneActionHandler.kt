@@ -1,6 +1,7 @@
 package app.buzer.android.ui
 
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
@@ -11,6 +12,9 @@ import kotlinx.coroutines.sync.withLock
 class HomeDoneActionHandler(
     private val refreshSnapshot: suspend (forceTodoist: Boolean) -> SnapshotViewState,
     private val completeTask: suspend (String, TaskActionRequest) -> CoordinatorActionResult,
+    private val toggleChecklistItem: suspend (String, ChecklistItem) -> CoordinatorActionResult = { _, _ ->
+        CoordinatorActionResult.Success
+    },
     private val latestSnapshot: () -> SnapshotViewState?,
     private val applySnapshot: (SnapshotViewState) -> Unit,
     private val setStatusMessage: (String?) -> Unit = {},
@@ -49,14 +53,26 @@ class HomeDoneActionHandler(
             setInteractionInFlight(true)
             try {
                 val result = completeTask.invoke(taskId, request)
-                handleCompletionResult(result)
+                handleActionResult(result)
             } finally {
                 setInteractionInFlight(false)
             }
         }
     }
 
-    private fun handleCompletionResult(result: CoordinatorActionResult) {
+    suspend fun toggleChild(rootId: String, item: ChecklistItem) {
+        mutex.withLock {
+            setInteractionInFlight(true)
+            try {
+                val result = toggleChecklistItem.invoke(rootId, item)
+                handleActionResult(result)
+            } finally {
+                setInteractionInFlight(false)
+            }
+        }
+    }
+
+    private fun handleActionResult(result: CoordinatorActionResult) {
         when (result) {
             CoordinatorActionResult.Success -> {
                 latestSnapshot()?.let(applySnapshot)

@@ -2,8 +2,10 @@ package app.buzer.android.enforcement
 
 import app.buzer.android.sync.SnapshotStorage
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.api.TaskBackendClient
 import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.CommitmentState
+import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.HealthStatus
@@ -26,6 +28,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class EnforcementCoordinatorTest {
@@ -60,6 +64,154 @@ class EnforcementCoordinatorTest {
         assertEquals(CoordinatorActionResult.Success, result)
         assertEquals(returnedSnapshot, store.saved)
         assertEquals(0, api.snapshotCalls)
+    }
+
+    @Test
+    fun createTaskAppliesAuthoritativeSnapshotAndSchedulesAlarmsOnSuccess() = runBlocking {
+        val createdSnapshot = snapshot(task("created-1"), snapshotGeneration = 4)
+        val store = FakeSnapshotStore()
+        val scheduler = RecordingAlarmScheduler()
+        val notifications = RecordingBlockerNotificationCleaner()
+        val api = FakeBuzerApi(
+            createHandler = { MutationResponse(snapshot = createdSnapshot) }
+        )
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = scheduler,
+            errorReporter = RecordingErrorReporter(),
+            blockerNotificationCleaner = notifications,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.createTask(
+            CreateTaskRequest(
+                title = "New task",
+                projectId = "project-1",
+                dueDatetime = "2026-05-28T12:00:00Z",
+                durationMinutes = 60
+            )
+        )
+
+        assertEquals(CoordinatorActionResult.Success, result)
+        assertEquals(createdSnapshot, store.saved)
+        assertEquals(
+            listOf(
+                scheduled("created-1", AlarmKind.PRE_START_WARNING, "2026-05-28T11:00:00Z"),
+                scheduled("created-1", AlarmKind.START_BLOCKER, "2026-05-28T12:00:00Z"),
+                scheduled("created-1", AlarmKind.DEADLINE_BLOCKER, "2026-05-28T13:00:00Z")
+            ),
+            scheduler.scheduled
+        )
+        assertEquals(0, api.snapshotCalls)
+        assertTrue(notifications.cleaned.isEmpty())
+    }
+
+    @Test
+    fun createTaskReconcilesErrorSnapshotAndReturnsWarningWhenBackendReturnsDeliveryUnknownOrAcceptedStale() = runBlocking {
+        val deliveryUnknownSnapshot = snapshot(task("created-unknown"), snapshotGeneration = 5)
+        val acceptedStaleSnapshot = snapshot(task("created-stale"), snapshotGeneration = 6)
+        val store = FakeSnapshotStore()
+        val scheduler = RecordingAlarmScheduler()
+        val reporter = RecordingErrorReporter()
+        var attempt = 0
+        val api = FakeBuzerApi(
+            createHandler = {
+                attempt += 1
+                if (attempt == 1) {
+                    throw BuzerApiException(
+                        status = 502,
+                        code = "todoist_delivery_unknown",
+                        message = "Delivery to Todoist could not be confirmed",
+                        snapshot = deliveryUnknownSnapshot
+                    )
+                } else {
+                    throw BuzerApiException(
+                        status = 504,
+                        code = "todoist_accepted_snapshot_stale",
+                        message = "Task accepted by Todoist; snapshot refresh timed out",
+                        snapshot = acceptedStaleSnapshot
+                    )
+                }
+            }
+        )
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = scheduler,
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+        val request = CreateTaskRequest(
+            title = "New task",
+            projectId = "project-1",
+            dueDatetime = "2026-05-28T12:00:00Z",
+            durationMinutes = 60
+        )
+
+        val first = coordinator.createTask(request) as CoordinatorActionResult.Warning
+        assertEquals("todoist_delivery_unknown", first.code)
+        assertEquals(deliveryUnknownSnapshot, first.snapshot)
+        assertEquals(deliveryUnknownSnapshot, store.saved)
+        assertTrue(scheduler.scheduled.any { it.taskId == "created-unknown" })
+
+        val second = coordinator.createTask(request) as CoordinatorActionResult.Warning
+        assertEquals("todoist_accepted_snapshot_stale", second.code)
+        assertEquals(acceptedStaleSnapshot, second.snapshot)
+        assertEquals(acceptedStaleSnapshot, store.saved)
+        assertTrue(scheduler.scheduled.any { it.taskId == "created-stale" })
+        assertTrue(reporter.errors.isEmpty())
+    }
+
+    @Test
+    fun createTaskUnexpected500ReportsWithoutSystemNotificationAndReconcilesSnapshotIfPresent() = runBlocking {
+        val errorSnapshot = snapshot(task("server-side"), snapshotGeneration = 7)
+        val store = FakeSnapshotStore()
+        val reporter = RecordingErrorReporter()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(
+                createHandler = {
+                    throw BuzerApiException(
+                        status = 500,
+                        code = "forced_failure",
+                        message = "forced_failure",
+                        snapshot = errorSnapshot
+                    )
+                }
+            ),
+            snapshotStore = store,
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.createTask(
+            CreateTaskRequest(title = "Buy milk", projectId = "project-1")
+        ) as CoordinatorActionResult.Warning
+
+        assertEquals("forced_failure", result.code)
+        assertEquals("forced_failure", result.message)
+        assertEquals(errorSnapshot, result.snapshot)
+        assertEquals(errorSnapshot, store.saved)
+        assertEquals(1, reporter.errors.size)
+        assertEquals(BlockerAction.CREATE_TASK, reporter.errors.single().action)
+        assertFalse(reporter.errors.single().showNotification)
+    }
+
+    @Test
+    fun enforcementDependenciesCachesSingleApiClientPerBaseUrlAndToken() {
+        try {
+            val first = EnforcementDependencies.apiClient(baseUrl = "https://one.invalid/", bearerToken = "tok-a")
+            val second = EnforcementDependencies.apiClient(baseUrl = "https://one.invalid", bearerToken = "tok-a")
+            val differentUrl = EnforcementDependencies.apiClient(baseUrl = "https://two.invalid", bearerToken = "tok-a")
+            val differentToken = EnforcementDependencies.apiClient(baseUrl = "https://two.invalid", bearerToken = "tok-b")
+
+            assertSame(first, second)
+            assertNotSame(first, differentUrl)
+            assertNotSame(differentUrl, differentToken)
+        } finally {
+            EnforcementDependencies.resetApiClientForTests()
+        }
     }
 
     @Test
@@ -608,6 +760,7 @@ class EnforcementCoordinatorTest {
         private val snapshot: TasksSnapshotResponse? = null,
         private val forceSyncSnapshot: TasksSnapshotResponse? = null,
         private val failForceSync: Boolean = false,
+        private val createHandler: ((CreateTaskRequest) -> MutationResponse)? = null,
         private val startHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val postponeHandler: ((TaskActionRequest) -> MutationResponse)? = null,
         private val checkHandler: (suspend (FocusedChecklistMutationRequest) -> MutationResponse)? = null,
@@ -615,7 +768,7 @@ class EnforcementCoordinatorTest {
         private val failPostpone: Boolean = false,
         private val failComplete: Boolean = false,
         private val cancelPostpone: Boolean = false
-    ) : EnforcementApi {
+    ) : TaskBackendClient {
         var snapshotCalls = 0
             private set
         var normalCalls = 0
@@ -645,6 +798,9 @@ class EnforcementCoordinatorTest {
             }
         }
 
+        override suspend fun createTask(request: CreateTaskRequest): MutationResponse =
+            createHandler?.invoke(request) ?: response()
+
         override suspend fun startTask(id: String, request: TaskActionRequest): MutationResponse {
             startRequests += request
             return startHandler?.invoke(request) ?: response()
@@ -664,14 +820,14 @@ class EnforcementCoordinatorTest {
         override suspend fun extendTask(id: String, request: ExtendTaskRequest): MutationResponse = response()
         override suspend fun updateTask(id: String, request: UpdateTaskRequest): MutationResponse = response()
         override suspend fun checkChecklistItem(
-            taskId: String,
+            id: String,
             childId: String,
             request: FocusedChecklistMutationRequest
         ): MutationResponse {
             return checkHandler?.invoke(request) ?: response()
         }
         override suspend fun uncheckChecklistItem(
-            taskId: String,
+            id: String,
             childId: String,
             request: FocusedChecklistMutationRequest
         ): MutationResponse {
@@ -719,6 +875,7 @@ class EnforcementCoordinatorTest {
         val action: BlockerAction,
         val taskId: String?,
         val message: String,
+        val showNotification: Boolean = true,
         val throwableMessage: String? = null
     )
 
@@ -732,7 +889,7 @@ class EnforcementCoordinatorTest {
             showNotification: Boolean,
             throwable: Throwable?
         ) {
-            errors += ErrorRecord(action, taskId, message, throwable?.message)
+            errors += ErrorRecord(action, taskId, message, showNotification, throwable?.message)
         }
     }
 

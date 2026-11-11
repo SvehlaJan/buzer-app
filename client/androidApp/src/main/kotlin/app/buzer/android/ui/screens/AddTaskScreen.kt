@@ -30,15 +30,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.enforcement.FailureClassifier
 import app.buzer.android.tasks.AddTaskDependencies
 import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.android.ui.addtask.AddTaskCreateOutcome
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
+import app.buzer.android.ui.addtask.runAddTaskCreate
 import app.buzer.android.ui.addtask.selectAddTaskProject
-import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.ChecklistEditor
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.status.InlineLoadingStatus
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorField
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
@@ -49,38 +51,19 @@ import app.buzer.android.ui.taskeditor.ValidationExposure
 import app.buzer.android.ui.taskeditor.VisibleTaskEditorValidation
 import app.buzer.android.ui.taskeditor.primaryActionLabel
 import app.buzer.android.ui.taskeditor.validateTaskEditor
-import app.buzer.shared.api.BuzerApiException
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ChecklistDraft
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
-import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
-import java.io.IOException
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-
-/**
- * Mirrors the combined effect of [app.buzer.android.enforcement.EnforcementCoordinator] and
- * [app.buzer.android.enforcement.BlockerErrorReporter]: any structured backend HTTP response
- * ([BuzerApiException], expected code or not) is the backend's own responsibility to own and
- * report -- Android never creates a duplicate Issue for it. Only a genuinely local exception
- * (response parsing, an unexpected invariant in Add Task's own code) is Add Task's owned defect.
- */
-internal fun isAddTaskOperationalFailure(error: Throwable): Boolean {
-    if (error is BuzerApiException) return true
-    if (error is IOException) return true
-    val className = error::class.qualifiedName.orEmpty()
-    return className.contains("Timeout") ||
-        className.contains("Connect") ||
-        className.contains("UnresolvedAddress")
-}
 
 internal fun addTaskEditorFingerprint(
     draft: TaskEditorDraft,
@@ -231,9 +214,9 @@ internal fun retainAddTaskCreateRequest(
 @Composable
 fun AddTaskScreen(
     onBack: () -> Unit,
-    onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
+    onCreateTask: suspend (CreateTaskRequest) -> CoordinatorActionResult =
+        AddTaskDependencies.createTaskAction(LocalContext.current),
     onRefreshWarning: suspend () -> Unit = {},
-    createTask: suspend (CreateTaskRequest) -> app.buzer.shared.model.MutationResponse = AddTaskDependencies.createTaskAction(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     initialSelectedProjectId: String? = null,
@@ -243,9 +226,9 @@ fun AddTaskScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    val projectRepository = remember(loadProjects, refreshProjects) {
+    val projectRepository = remember(context, loadProjects, refreshProjects) {
         if (loadProjects == null || refreshProjects == null) {
-            AddTaskDependencies.projectRepository()
+            AddTaskDependencies.projectRepository(context)
         } else {
             null
         }
@@ -347,11 +330,15 @@ fun AddTaskScreen(
             projectLoadError = null
             try {
                 applyLoadedProjects(refreshProjectList())
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
-                AppLog.error(
-                    "add_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
-                    error
-                )
+                val logMessage = "add_task projects refresh_failed type=${error::class.simpleName} message=${error.message}"
+                if (FailureClassifier.isOperationalFailure(error)) {
+                    AppLog.warn(logMessage, error)
+                } else {
+                    AppLog.error(logMessage, error)
+                }
                 val message = error.message ?: "Project loading failed"
                 projectLoadError = message
             } finally {
@@ -373,18 +360,18 @@ fun AddTaskScreen(
                         "project=${request.projectId} assignee=${request.assigneeId} " +
                         "due=${request.dueDatetime} duration=${request.durationMinutes}"
                 )
-                runSuccessfulAddTaskCreate(
-                    request = request,
-                    createTask = createTask,
-                    onTaskCreated = onTaskCreated,
-                    onBack = onBack
-                )
-                AppLog.info("add_task create_success")
+                when (val outcome = runAddTaskCreate(request, onCreateTask, onBack)) {
+                    AddTaskCreateOutcome.NavigatedBack -> AppLog.info("add_task create_success")
+                    is AddTaskCreateOutcome.ShowWarning -> {
+                        AppLog.warn("add_task create_warning message=${outcome.message}")
+                        submitDialogMessage = outcome.message
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 val message = error.message ?: "Task creation failed"
-                if (isAddTaskOperationalFailure(error)) {
+                if (FailureClassifier.isOperationalFailure(error)) {
                     AppLog.warn(
                         "add_task create_failed type=${error::class.simpleName} message=${error.message}",
                         error
@@ -495,8 +482,15 @@ fun AddTaskScreen(
         projectLoadError = null
         try {
             applyLoadedProjects(loadProjectList())
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
-            AppLog.error("add_task projects load_failed type=${error::class.simpleName} message=${error.message}", error)
+            val logMessage = "add_task projects load_failed type=${error::class.simpleName} message=${error.message}"
+            if (FailureClassifier.isOperationalFailure(error)) {
+                AppLog.warn(logMessage, error)
+            } else {
+                AppLog.error(logMessage, error)
+            }
             val message = error.message ?: "Project loading failed"
             projectLoadError = message
         } finally {
