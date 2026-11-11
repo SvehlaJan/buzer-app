@@ -108,6 +108,55 @@ class EnforcementCoordinatorTest {
     }
 
     @Test
+    fun createTaskReportsSuccessWhenTheCreateLandedButItsSnapshotIsStale() = runBlocking {
+        val cached = snapshot(task("existing-1"), snapshotGeneration = 10)
+        val store = FakeSnapshotStore(initial = cached)
+        val api = FakeBuzerApi(
+            createHandler = { MutationResponse(snapshot = snapshot(task("created-1"), snapshotGeneration = 4)) }
+        )
+        val coordinator = EnforcementCoordinator(
+            api = api,
+            snapshotStore = store,
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = RecordingErrorReporter(),
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.createTask(createRequest())
+
+        // The root create has no idempotency key: anything but Success keeps Add Task open and a
+        // retry would create a duplicate Todoist task.
+        assertEquals(CoordinatorActionResult.Success, result)
+        assertEquals(cached, store.saved)
+    }
+
+    @Test
+    fun createTaskReportsSuccessWhenTheCreateLandedButLocalReconciliationFailed() = runBlocking {
+        val reporter = RecordingErrorReporter()
+        val coordinator = EnforcementCoordinator(
+            api = FakeBuzerApi(
+                createHandler = { MutationResponse(snapshot = snapshot(task("created-1"), snapshotGeneration = 4)) }
+            ),
+            snapshotStore = FakeSnapshotStore(throwOnSave = true),
+            alarmScheduler = RecordingAlarmScheduler(),
+            errorReporter = reporter,
+            nowProvider = { "2026-05-28T09:30:00Z" }
+        )
+
+        val result = coordinator.createTask(createRequest())
+
+        assertEquals(CoordinatorActionResult.Success, result)
+        assertEquals(listOf(BlockerAction.REFRESH_SNAPSHOT), reporter.errors.map { it.action })
+    }
+
+    private fun createRequest() = CreateTaskRequest(
+        title = "New task",
+        projectId = "project-1",
+        dueDatetime = "2026-05-28T12:00:00Z",
+        durationMinutes = 60
+    )
+
+    @Test
     fun createTaskReconcilesErrorSnapshotAndReturnsWarningWhenBackendReturnsDeliveryUnknownOrAcceptedStale() = runBlocking {
         val deliveryUnknownSnapshot = snapshot(task("created-unknown"), snapshotGeneration = 5)
         val acceptedStaleSnapshot = snapshot(task("created-stale"), snapshotGeneration = 6)

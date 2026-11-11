@@ -56,6 +56,7 @@ internal class BlockerHostController(
     private val logTag = if (kind == AlarmKind.DEADLINE_BLOCKER) "deadline_blocker" else "start_blocker"
     private var actionInFlight = false
     private var finished = false
+    private var refreshJob: Job? = null
 
     var taskId: String? by mutableStateOf(null)
         private set
@@ -80,6 +81,9 @@ internal class BlockerHostController(
         private set
 
     fun bindTarget(taskId: String, occurrenceKey: String, initialWarningMessage: String?) {
+        // A refresh for the previous target must not show its task or finish the new blocker.
+        refreshJob?.cancel()
+        refreshJob = null
         this.taskId = taskId
         this.occurrenceKey = occurrenceKey
         warningMessage = initialWarningMessage
@@ -88,14 +92,17 @@ internal class BlockerHostController(
         currentTask = null
     }
 
-    fun refresh(explicitUserRefresh: Boolean): Job = scope.launch {
-        val taskId = taskId ?: return@launch
-        val occurrenceKey = occurrenceKey ?: return@launch
-        if (explicitUserRefresh) {
-            forceRefresh(taskId, occurrenceKey)
-        } else {
-            lifecycleRefresh(taskId, occurrenceKey)
-        }
+    fun refresh(explicitUserRefresh: Boolean): Job {
+        refreshJob?.cancel()
+        return scope.launch {
+            val taskId = taskId ?: return@launch
+            val occurrenceKey = occurrenceKey ?: return@launch
+            if (explicitUserRefresh) {
+                forceRefresh(taskId, occurrenceKey)
+            } else {
+                lifecycleRefresh(taskId, occurrenceKey)
+            }
+        }.also { refreshJob = it }
     }
 
     /** Forces a Todoist sync for the reschedule editor's warning banner. Failures propagate to the editor. */
@@ -166,6 +173,7 @@ internal class BlockerHostController(
 
         try {
             val refreshed = withTimeoutOrNull(refreshTimeoutMillis) { source.refreshAndReconcile() }
+            if (!isBound(taskId, occurrenceKey)) return
             if (refreshed == null) {
                 snapshotConfirmed = false
                 AppLog.warn("$logTag refresh_timeout taskId=$taskId occurrence=$occurrenceKey")
@@ -186,8 +194,9 @@ internal class BlockerHostController(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            snapshotConfirmed = false
             AppLog.error("$logTag refresh failed taskId=$taskId occurrence=$occurrenceKey", error)
+            if (!isBound(taskId, occurrenceKey)) return
+            snapshotConfirmed = false
             showStaleWarning()
             errorReporter.report(
                 action = BlockerAction.REFRESH_SNAPSHOT,
@@ -203,16 +212,21 @@ internal class BlockerHostController(
         checking = true
         try {
             val snapshot = source.forceSyncAndReconcile()
+            if (!isBound(taskId, occurrenceKey)) return
             applySnapshot(snapshot, taskId, occurrenceKey, confirmed = true)
             if (isResolved(snapshot, taskId, occurrenceKey)) {
                 finish()
                 return
             }
             warningMessage = null
+            checking = false
         } catch (error: CancellationException) {
+            // A newer refresh or rebind owns `checking` now.
             throw error
         } catch (error: Exception) {
             AppLog.error("$logTag force refresh failed taskId=$taskId occurrence=$occurrenceKey", error)
+            if (!isBound(taskId, occurrenceKey)) return
+            checking = false
             warningMessage = "Refresh failed"
             // The banner already tells the user; the report only feeds observability.
             errorReporter.report(
@@ -222,8 +236,6 @@ internal class BlockerHostController(
                 showNotification = false,
                 throwable = error
             )
-        } finally {
-            checking = false
         }
     }
 
@@ -243,6 +255,9 @@ internal class BlockerHostController(
         currentTask = BlockerTaskSnapshotGate.currentTask(snapshot, taskId, occurrenceKey)
         confirmed?.let { snapshotConfirmed = it }
     }
+
+    private fun isBound(taskId: String, occurrenceKey: String): Boolean =
+        this.taskId == taskId && this.occurrenceKey == occurrenceKey
 
     private fun isResolved(snapshot: TasksSnapshotResponse, taskId: String, occurrenceKey: String): Boolean =
         BlockerTaskSnapshotGate.shouldHideAfterRefresh(snapshot, taskId, occurrenceKey, kind)

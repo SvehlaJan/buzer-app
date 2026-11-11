@@ -97,12 +97,19 @@ class EnforcementCoordinator(
         }
     }
 
+    /**
+     * A root create has no idempotency key, so once `POST /tasks` returns 2xx the result is always
+     * [CoordinatorActionResult.Success]: reporting a stale snapshot or a local reconciliation failure
+     * would keep Add Task open and a retry would create a duplicate Todoist task. Local failures are
+     * still reported, and the next refresh reconciles alarms.
+     */
     suspend fun createTask(request: CreateTaskRequest): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.CREATE_TASK,
             taskId = null,
             occurrenceKey = null,
-            showErrorNotification = false
+            showErrorNotification = false,
+            landedMutationIsSuccess = true
         ) {
             api.createTask(request)
         }
@@ -402,12 +409,19 @@ class EnforcementCoordinator(
         taskId: String?,
         occurrenceKey: String?,
         showErrorNotification: Boolean = true,
+        landedMutationIsSuccess: Boolean = false,
         call: suspend () -> MutationResponse
     ): CoordinatorActionResult {
         return try {
             logger("action start action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()}")
             val response = call()
-            applyMutationResponse(taskId, occurrenceKey, response, showErrorNotification)
+            val applied = applyMutationResponse(taskId, occurrenceKey, response, showErrorNotification)
+            if (landedMutationIsSuccess && applied != CoordinatorActionResult.Success) {
+                logger("action landed action=$action localResult=${applied::class.simpleName} reported=Success")
+                CoordinatorActionResult.Success
+            } else {
+                applied
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: BuzerApiException) {

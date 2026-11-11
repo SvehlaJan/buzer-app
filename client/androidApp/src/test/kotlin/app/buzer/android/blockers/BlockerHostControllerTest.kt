@@ -98,6 +98,37 @@ class BlockerHostControllerTest {
     }
 
     @Test
+    fun rebindDuringInFlightRefreshIgnoresTheOldTargetsResult() = runBlocking {
+        val oldTargetRefresh = CompletableDeferred<TasksSnapshotResponse>()
+        val refreshes = ArrayDeque<suspend () -> TasksSnapshotResponse>().apply {
+            add { oldTargetRefresh.await() }
+            add { snapshot(task("task-b", occurrenceKey = "occurrence-b")) }
+        }
+        var finishCount = 0
+        val controller = controller(
+            this,
+            FakeSource(onRefresh = { refreshes.removeFirst().invoke() }),
+            onFinish = { finishCount++ }
+        )
+
+        controller.bindTarget("task-a", "occurrence-a", initialWarningMessage = null)
+        val oldJob = controller.refresh(explicitUserRefresh = false)
+        yield()
+        controller.bindTarget("task-b", "occurrence-b", initialWarningMessage = "Overlay warning")
+        controller.refresh(explicitUserRefresh = false).join()
+        // Task A resolves after the rebind; its late result must neither show A nor close B's blocker.
+        oldTargetRefresh.complete(
+            snapshot(task("task-a", state = CommitmentState.completed, isCompleted = true, occurrenceKey = "occurrence-a"))
+        )
+        oldJob.join()
+
+        assertEquals(0, finishCount)
+        assertEquals("task-b", controller.latestTask?.id)
+        assertEquals("Overlay warning", controller.warningMessage)
+        assertFalse(controller.checking)
+    }
+
+    @Test
     fun resolvedSnapshotDuringRefreshCallsOnResolvedAndFinishes() = runBlocking {
         val source = FakeSource(refreshed = snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true)))
         var finishCount = 0
@@ -200,13 +231,15 @@ class BlockerHostControllerTest {
         private val cached: TasksSnapshotResponse? = null,
         private val refreshed: TasksSnapshotResponse? = null,
         private val refreshFailure: Throwable? = null,
-        private val forceSyncFailure: Throwable? = null
+        private val forceSyncFailure: Throwable? = null,
+        private val onRefresh: (suspend () -> TasksSnapshotResponse)? = null
     ) : BlockerSnapshotSource {
         var forceSyncCalls = 0
 
         override fun loadLatestSnapshot(): TasksSnapshotResponse? = cached
 
         override suspend fun refreshAndReconcile(): TasksSnapshotResponse {
+            onRefresh?.let { return it() }
             refreshFailure?.let { throw it }
             return requireNotNull(refreshed)
         }

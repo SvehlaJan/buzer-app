@@ -243,7 +243,10 @@ class OverlayBlockerService : Service() {
                                 throwable = defect
                             )
                         }
-                        launchStartBlocker(request, disposition.warningMessage)
+                        // A newer overlay request replaced this one; its blocker must not be rebound.
+                        if (requestGenerations.isCurrent(generation)) {
+                            launchStartBlocker(request, disposition.warningMessage)
+                        }
                     }
                 }
             } finally {
