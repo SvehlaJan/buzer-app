@@ -422,62 +422,32 @@ describe("happy-path mutation conformance", () => {
     });
   });
 
-  it("adds, updates, checks, unchecks, and deletes a checklist child", async () => {
+  it("checks and unchecks a checklist child through the focused toggle routes", async () => {
     await withServer(async (server) => {
       const before = await snapshotTask(server, "task-one-time-partial");
-      const added = await mutate(
-        server,
-        "/tasks/task-one-time-partial/checklist",
-        action({
-          expectedOccurrenceKey: before.occurrenceKey,
-          clientMutationId: "checklist-add",
-          title: "New checklist child",
-          description: null
-        })
+      const openChild = before.checklistItems.find(
+        (candidate: { id: string }) => candidate.id === "child-one-time-partial-open"
       );
-      const afterAdd = await snapshotTask(server, "task-one-time-partial");
-      const child = afterAdd.checklistItems.find(
-        (candidate: { title: string }) => candidate.title === "New checklist child"
-      );
-      expect(added.snapshot).toBeDefined();
-      expect(child).toMatchObject({ checked: false, description: null });
-      const updated = await mutate(
-        server,
-        `/tasks/task-one-time-partial/checklist/${child.id}/update`,
-        action({
-          expectedOccurrenceKey: afterAdd.occurrenceKey,
-          expectedChildRevision: child.childRevision,
-          title: "Updated checklist child",
-          description: "Updated through the focused route"
-        })
-      );
-      const afterUpdate = await snapshotTask(server, "task-one-time-partial");
-      const updatedChild = afterUpdate.checklistItems.find(
-        (candidate: { id: string }) => candidate.id === child.id
-      );
-      expect(updated.snapshot).toBeDefined();
-      expect(updatedChild).toMatchObject({
-        checked: false,
-        title: "Updated checklist child",
-        description: "Updated through the focused route"
-      });
+      expect(openChild).toMatchObject({ checked: false });
+
       const checked = await mutate(
         server,
-        `/tasks/task-one-time-partial/checklist/${child.id}/check`,
+        `/tasks/task-one-time-partial/checklist/${openChild.id}/check`,
         action({
-          expectedOccurrenceKey: afterUpdate.occurrenceKey,
-          expectedChildRevision: updatedChild.childRevision
+          expectedOccurrenceKey: before.occurrenceKey,
+          expectedChildRevision: openChild.childRevision
         })
       );
       const afterCheck = await snapshotTask(server, "task-one-time-partial");
       const checkedChild = afterCheck.checklistItems.find(
-        (candidate: { id: string }) => candidate.id === child.id
+        (candidate: { id: string }) => candidate.id === openChild.id
       );
       expect(checked.snapshot).toBeDefined();
       expect(checkedChild).toMatchObject({ checked: true });
+
       const unchecked = await mutate(
         server,
-        `/tasks/task-one-time-partial/checklist/${child.id}/uncheck`,
+        `/tasks/task-one-time-partial/checklist/${openChild.id}/uncheck`,
         action({
           expectedOccurrenceKey: afterCheck.occurrenceKey,
           expectedChildRevision: checkedChild.childRevision
@@ -485,37 +455,111 @@ describe("happy-path mutation conformance", () => {
       );
       const afterUncheck = await snapshotTask(server, "task-one-time-partial");
       const uncheckedChild = afterUncheck.checklistItems.find(
-        (candidate: { id: string }) => candidate.id === child.id
+        (candidate: { id: string }) => candidate.id === openChild.id
       );
       expect(unchecked.snapshot).toBeDefined();
       expect(uncheckedChild).toMatchObject({ checked: false });
-      const deleted = await mutate(
-        server,
-        `/tasks/task-one-time-partial/checklist/${child.id}/delete`,
-        action({
-          expectedOccurrenceKey: afterUncheck.occurrenceKey,
-          expectedChildRevision: uncheckedChild.childRevision
-        })
-      );
-      const afterDelete = await snapshotTask(server, "task-one-time-partial");
-
-      expect(deleted.snapshot).toBeDefined();
-      expect(afterDelete.checklistItems.find(
-        (candidate: { id: string }) => candidate.id === child.id
-      )).toBeUndefined();
     });
   });
 
-  it("dismisses morning review", async () => {
+  it("returns 404 for retired standalone checklist CRUD and morning review dismiss routes", async () => {
     await withServer(async (server) => {
-      const before = Date.now();
-      const body = await mutate(server, "/review/dismiss", {});
-      const after = Date.now();
-      const snoozedUntil = Date.parse(body.snoozedUntil);
+      const task = await snapshotTask(server, "task-one-time-partial");
+      const child = task.checklistItems[0];
 
-      expect(typeof body.snoozedUntil).toBe("string");
-      expect(snoozedUntil).toBeGreaterThanOrEqual(before + 5 * 60_000 - 1_000);
-      expect(snoozedUntil).toBeLessThanOrEqual(after + 5 * 60_000 + 1_000);
+      const dismiss = await server.app.inject({ method: "POST", url: "/review/dismiss", headers: auth, payload: {} });
+      const add = await server.app.inject({
+        method: "POST",
+        url: "/tasks/task-one-time-partial/checklist",
+        headers: auth,
+        payload: { expectedOccurrenceKey: task.occurrenceKey, clientMutationId: "add-1", title: "Retired", description: null }
+      });
+      const update = await server.app.inject({
+        method: "POST",
+        url: `/tasks/task-one-time-partial/checklist/${child.id}/update`,
+        headers: auth,
+        payload: { expectedOccurrenceKey: task.occurrenceKey, expectedChildRevision: child.childRevision, title: "Retired", description: null }
+      });
+      const del = await server.app.inject({
+        method: "POST",
+        url: `/tasks/task-one-time-partial/checklist/${child.id}/delete`,
+        headers: auth,
+        payload: { expectedOccurrenceKey: task.occurrenceKey, expectedChildRevision: child.childRevision }
+      });
+
+      expect(dismiss.statusCode).toBe(404);
+      expect(add.statusCode).toBe(404);
+      expect(update.statusCode).toBe(404);
+      expect(del.statusCode).toBe(404);
+    });
+  });
+
+  it("uses synced collaborator timezone for EscalationService floating-task deadlines", async () => {
+    await withServer(async (server) => {
+      const worldState = server.adapter.world.state();
+      server.adapter.world.load({
+        projects: worldState.projects,
+        collaborators: worldState.collaborators.map((collaborator) =>
+          collaborator.todoistUserId === "user-me"
+            ? { ...collaborator, timeZone: "Asia/Tokyo" }
+            : collaborator
+        ),
+        collaboratorStates: worldState.collaboratorStates,
+        tasks: [
+          ...worldState.tasks,
+          {
+            todoistTaskId: "todoist-floating-tokyo",
+            title: "Tokyo floating commitment",
+            description: null,
+            projectId: "project-test",
+            parentId: null,
+            childOrder: null,
+            assigneeId: "user-me",
+            creatorId: "user-me",
+            dueDate: "2026-10-11T09:00:00",
+            dueDatetime: "2026-10-11T09:00:00",
+            dueString: null,
+            dueLang: null,
+            dueTimezone: null,
+            isRecurring: false,
+            durationAmount: 15,
+            durationUnit: "minute",
+            durationMinutes: 15,
+            completedAt: null,
+            deletedAt: null,
+            rawJson: {},
+            updatedAt: "2026-10-11T00:00:00Z"
+          }
+        ]
+      });
+
+      const refresh = await server.app.inject({
+        method: "GET",
+        url: "/tasks/snapshot?forceRefresh=true",
+        headers: auth
+      });
+      expect(refresh.statusCode).toBe(200);
+
+      const floatingTask = refresh.json().tasks.find(
+        (candidate: { title: string }) => candidate.title === "Tokyo floating commitment"
+      );
+      expect(floatingTask).toBeDefined();
+
+      await mutate(server, `/tasks/${floatingTask.id}/postpone-start`, {
+        expectedOccurrenceKey: floatingTask.occurrenceKey
+      });
+      await mutate(server, `/tasks/${floatingTask.id}/postpone-start`, {
+        expectedOccurrenceKey: floatingTask.occurrenceKey
+      });
+
+      const escalation = server.db.prepare(
+        "select status, message from whatsapp_escalations where task_id = ?"
+      ).get(floatingTask.id) as { status: string; message: string } | undefined;
+
+      expect(escalation).toEqual({
+        status: "sent",
+        message: 'I postponed starting "Tokyo floating commitment" 2 times. Deadline: 2026-10-11T00:15:00.000Z.'
+      });
     });
   });
 });
@@ -587,20 +631,45 @@ describe("debug surface parity & failure modes", () => {
     });
   });
 
-  it("drives backend_busy scenario via __block-queue", async () => {
+  it("drives backend_busy scenario via __block-queue for both forced refresh and mutations until released", async () => {
     await withServer(async (server) => {
-      await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: true } });
+      const blockRes = await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: true } });
+      expect(blockRes.statusCode).toBe(200);
+      expect(blockRes.json()).toEqual({ blocked: true });
+
       const task = await snapshotTask(server, "task-one-time-empty");
 
-      const body = await mutate(
-        server,
-        "/tasks/task-one-time-empty/done",
-        action({ expectedOccurrenceKey: task.occurrenceKey }),
-        503
-      );
-      expect(body.code).toBe("backend_busy");
+      const [refreshRes, doneBody] = await Promise.all([
+        server.app.inject({
+          method: "GET",
+          url: "/tasks/snapshot?forceRefresh=true",
+          headers: auth
+        }),
+        mutate(
+          server,
+          "/tasks/task-one-time-empty/done",
+          action({ expectedOccurrenceKey: task.occurrenceKey }),
+          503
+        )
+      ]);
 
-      await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: false } });
+      expect(refreshRes.statusCode).toBe(503);
+      expect(refreshRes.json()).toMatchObject({
+        code: "backend_busy",
+        snapshot: expect.any(Object)
+      });
+      expect(doneBody.code).toBe("backend_busy");
+
+      const unblockRes = await server.app.inject({ method: "POST", url: "/__block-queue", payload: { enabled: false } });
+      expect(unblockRes.statusCode).toBe(200);
+      expect(unblockRes.json()).toEqual({ blocked: false });
+
+      const recoveredRefresh = await server.app.inject({
+        method: "GET",
+        url: "/tasks/snapshot?forceRefresh=true",
+        headers: auth
+      });
+      expect(recoveredRefresh.statusCode).toBe(200);
     });
   }, 40_000);
 

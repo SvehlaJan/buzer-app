@@ -1,14 +1,9 @@
 import Database from "better-sqlite3";
 import { DryRunSender } from "../src/accountability/dryRunSender.js";
 import { migrate } from "../src/db/migrations.js";
-import { CollaboratorRepository } from "../src/repositories/collaboratorRepository.js";
-import { ProjectRepository } from "../src/repositories/projectRepository.js";
-import { TaskRepository } from "../src/repositories/taskRepository.js";
-import { buildServer } from "../src/server.js";
-import { EscalationService } from "../src/services/escalationService.js";
-import { TaskSnapshotService } from "../src/services/taskSnapshotService.js";
-import { TodoistSyncService } from "../src/services/todoistSyncService.js";
-import { TodoistOperationQueue } from "../src/services/todoistOperationQueue.js";
+import { buildServer, createBackendCore } from "../src/server.js";
+import type { TaskSnapshotService } from "../src/services/taskSnapshotService.js";
+import type { TodoistRuntime } from "../src/services/todoistRuntime.js";
 import {
   e2eFixtureSeed,
   e2eMorningReviewScenarioSeed,
@@ -55,26 +50,29 @@ interface SyncHold {
   release: () => void;
 }
 
+interface QueueBlock {
+  release: () => Promise<void>;
+}
+
 export async function buildE2EServer(): Promise<E2EServer> {
   const db = new Database(":memory:");
   migrate(db);
 
   const adapter = new E2ETodoistAdapter(CURRENT_USER_ID);
-  const tasks = new TaskRepository(db);
-  const projects = new ProjectRepository(db);
-  const todoistQueue = new TodoistOperationQueue();
-  const synchronizer = new TodoistSyncService(db, tasks, projects, adapter, CURRENT_USER_ID);
-  const snapshots = new TaskSnapshotService(tasks, projects, CURRENT_USER_ID, true, new CollaboratorRepository(db));
-  const escalationService = new EscalationService(db, tasks, new DryRunSender(), "e2e-recipient");
   const observability = new RecordingBackendObservability();
+  const core = createBackendCore({
+    db,
+    currentUserId: CURRENT_USER_ID,
+    todoist: adapter,
+    whatsapp: { sender: new DryRunSender(), recipientId: "e2e-recipient" },
+    observability
+  });
   const app = buildServer({
     db,
     currentUserId: CURRENT_USER_ID,
     androidApiToken: ANDROID_API_TOKEN,
     todoist: adapter,
-    synchronizer,
-    todoistQueue,
-    escalationService,
+    core,
     rateLimit: { max: 100_000, timeWindowMs: 60_000 },
     observability,
     logger: false
@@ -82,13 +80,23 @@ export async function buildE2EServer(): Promise<E2EServer> {
 
   const calls: RecordedCall[] = [];
   const fullCalls: RecordedFullCall[] = [];
-  let queueBlocker: (() => void) | null = null;
+  let queueBlock: QueueBlock | null = null;
   const controls = {
     failActions: false,
     failSnapshot: false,
     failProjects: false,
     failNextChildAdd: false,
     syncHold: null as SyncHold | null
+  };
+
+  const releaseQueueBlock = async (): Promise<void> => {
+    if (queueBlock === null) {
+      adapter.releaseHeldSync();
+      return;
+    }
+    const active = queueBlock;
+    queueBlock = null;
+    await active.release();
   };
 
   const seed = async (morningReviewScenario?: E2EMorningReviewScenario): Promise<void> => {
@@ -103,14 +111,14 @@ export async function buildE2EServer(): Promise<E2EServer> {
     });
 
     for (const { id, mirror } of fixture.tasks) {
-      tasks.upsertTodoistTask({ ...mirror, id, rawJson: JSON.stringify(mirror.rawJson) });
+      core.tasks.upsertTodoistTask({ ...mirror, id, rawJson: JSON.stringify(mirror.rawJson) });
     }
-    await synchronizer.syncOnce();
+    await core.todoistRuntime.pollOnce();
 
     const nowIso = new Date().toISOString();
     for (const nudge of fixture.nudges) {
       if (nudge.kind === "started") {
-        tasks.updateCommitmentState(nudge.id, {
+        core.tasks.updateCommitmentState(nudge.id, {
           state: "started",
           startedAt: nudge.startedAt ?? nowIso,
           incrementScheduleVersion: true,
@@ -128,10 +136,7 @@ export async function buildE2EServer(): Promise<E2EServer> {
   const reset = async (morningReviewScenario?: E2EMorningReviewScenario): Promise<void> => {
     controls.syncHold?.release();
     controls.syncHold = null;
-    if (queueBlocker !== null) {
-      queueBlocker();
-      queueBlocker = null;
-    }
+    await releaseQueueBlock();
     db.transaction(() => {
       for (const table of [
         "whatsapp_escalations",
@@ -158,16 +163,23 @@ export async function buildE2EServer(): Promise<E2EServer> {
     await seed(morningReviewScenario);
   };
 
+  app.addHook("onClose", async () => {
+    controls.syncHold?.release();
+    controls.syncHold = null;
+    await releaseQueueBlock();
+  });
+
   registerDebugSurface(app, {
     adapter,
     calls,
     fullCalls,
     controls,
-    snapshots,
+    snapshots: core.snapshots,
     observability,
-    todoistQueue,
-    getBlocker: () => queueBlocker,
-    setBlocker: (b) => { queueBlocker = b; },
+    todoistRuntime: core.todoistRuntime,
+    getQueueBlock: () => queueBlock,
+    setQueueBlock: (block) => { queueBlock = block; },
+    releaseQueueBlock,
     reset
   });
   await seed();
@@ -187,9 +199,10 @@ interface DebugSurfaceOptions {
   };
   snapshots: TaskSnapshotService;
   observability: RecordingBackendObservability;
-  todoistQueue: TodoistOperationQueue;
-  getBlocker: () => (() => void) | null;
-  setBlocker: (b: (() => void) | null) => void;
+  todoistRuntime: TodoistRuntime;
+  getQueueBlock: () => QueueBlock | null;
+  setQueueBlock: (block: QueueBlock | null) => void;
+  releaseQueueBlock: () => Promise<void>;
   reset: (morningReviewScenario?: E2EMorningReviewScenario) => Promise<void>;
 }
 
@@ -206,7 +219,19 @@ function isMorningReviewScenario(value: unknown): value is E2EMorningReviewScena
 }
 
 function registerDebugSurface(app: ReturnType<typeof buildServer>, options: DebugSurfaceOptions): void {
-  const { adapter, calls, fullCalls, controls, snapshots, observability, todoistQueue, getBlocker, setBlocker, reset } = options;
+  const {
+    adapter,
+    calls,
+    fullCalls,
+    controls,
+    snapshots,
+    observability,
+    todoistRuntime,
+    getQueueBlock,
+    setQueueBlock,
+    releaseQueueBlock,
+    reset
+  } = options;
   const correlatedCalls = new Map<string, RecordedCall>();
 
   app.addHook("preHandler", async (request, reply) => {
@@ -217,7 +242,7 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
       ? (request.query as Record<string, unknown>)
       : {};
 
-    if (request.method === "POST" && (path.startsWith("/tasks") || path.startsWith("/review"))) {
+    if (request.method === "POST" && path.startsWith("/tasks")) {
       const body = typeof request.body === "object" && request.body !== null
         ? request.body as Record<string, unknown>
         : {};
@@ -358,14 +383,18 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
   });
   app.post("/__block-queue", async (request) => {
     const enabled = (request.body as { enabled?: unknown } | null)?.enabled === true;
-    const currentBlocker = getBlocker();
-    if (enabled && currentBlocker === null) {
-      void todoistQueue.run({ operation: "blocked", deadlineMs: 60_000 }, () => new Promise<void>((resolve) => {
-        setBlocker(resolve);
-      }));
-    } else if (!enabled && currentBlocker !== null) {
-      currentBlocker();
-      setBlocker(null);
+    if (enabled && getQueueBlock() === null) {
+      const hold = adapter.holdNextSync();
+      const pollDone = todoistRuntime.pollOnce({ deadlineMs: 60_000 }).catch(() => undefined);
+      setQueueBlock({
+        release: async () => {
+          hold.release();
+          await pollDone;
+        }
+      });
+      await hold.entered;
+    } else if (!enabled) {
+      await releaseQueueBlock();
     }
     return { blocked: enabled };
   });

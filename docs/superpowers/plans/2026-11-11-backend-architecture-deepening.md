@@ -215,7 +215,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend commit -m "r
     - `{ snapshots: TaskSnapshotService; todoistRuntime: Pick<TodoistRuntime, "forceRefresh">; actions: TaskActionService; projects: ProjectRepository; collaborators: CollaboratorRepository; devices: DeviceRepository }` (no `db`-based per-request repository creation, no `synchronizer`, no `todoistQueue`, no `checklist`).
   - `createBackendCore(options)` in `backend/src/server.ts` shared by `buildServer`, CLI `start()`, and `buildE2EServer` — wiring `ownerTimeZone: () => resolveOwnerTimeZone(collaborators, currentUserId)` into `EscalationService` everywhere.
 
-- [ ] **Step 1: Write failing tests for retired routes, `TaskActionService` checklist `check`/`uncheck`, and `e2eServer` `ownerTimeZone` + `/__block-queue`**
+- [x] **Step 1: Write failing tests for retired routes, `TaskActionService` checklist `check`/`uncheck`, and `e2eServer` `ownerTimeZone` + `/__block-queue`**
 
 1. In `backend/test/http/routes.test.ts`:
    - Assert `POST /review/dismiss`, `POST /tasks/task-1/checklist`, `POST /tasks/task-1/checklist/c-1/update`, and `POST /tasks/task-1/checklist/c-1/delete` return HTTP `404` even with a valid bearer token (removing them from the authenticated-routes table while keeping `/tasks/task-1/checklist/c-1/check` and `.../uncheck`).
@@ -225,12 +225,12 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend commit -m "r
 3. In `backend/test/e2eServer.test.ts`:
    - Remove standalone checklist add/update/delete and `/review/dismiss` tests; add a test verifying `POST /__block-queue` `{ enabled: true }` causes `GET /tasks/snapshot?forceRefresh=true` (or a Todoist mutation) to return `503 { code: "backend_busy" }` until `{ enabled: false }` releases it, and a test verifying `e2eServer`'s `EscalationService` honors synced collaborator timezone during quiet hours.
 
-- [ ] **Step 2: Run targeted tests to verify they fail**
+- [x] **Step 2: Run targeted tests to verify they fail**
 
 Run: `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test -- test/http/routes.test.ts test/e2eServer.test.ts test/services/taskActionService.test.ts`
 Expected: FAIL (retired endpoints still return non-404, `TaskActionService.checkChecklistItem` missing, etc.).
 
-- [ ] **Step 3: Fold checklist child helpers into `TaskActionService`, retire the 4 HTTP routes, and unify `server.ts` + `e2eServer.ts` via `createBackendCore`**
+- [x] **Step 3: Fold checklist child helpers into `TaskActionService`, retire the 4 HTTP routes, and unify `server.ts` + `e2eServer.ts` via `createBackendCore`**
 
 1. Move `ChildMutation` validation, `buildChildCommands`, `checkChecklistItem`, and `uncheckChecklistItem` into `TaskActionService` (deleting `todoistChecklistService.ts` and `todoistChecklistService.test.ts`), replace `TaskActionService`'s union constructor and duplicate method aliases (`create`, `start`, `postponeStart`, `done`, `extend`, `update`) with `TaskActionServiceDependencies` and canonical method names, and update `taskActionService.test.ts`.
 2. Simplify `routes.ts`:
@@ -239,7 +239,7 @@ Expected: FAIL (retired endpoints still return non-404, `TaskActionService.check
    - Delete `POST /review/dismiss`, `POST /tasks/:id/checklist`, `POST /tasks/:id/checklist/:childId/update`, and `POST /tasks/:id/checklist/:childId/delete`. Route `check` and `uncheck` to `services.actions.checkChecklistItem` / `uncheckChecklistItem`.
 3. Extract `createBackendCore` in `server.ts` (wiring `EscalationService` with `ownerTimeZone: () => resolveOwnerTimeZone(collaborators, currentUserId)`) and update `e2eServer.ts` to use `buildServer` + `todoistRuntime.pollOnce({ deadlineMs: 60_000 })` + `adapter.holdNextSync()` for `/__block-queue` and `todoistRuntime.pollOnce()` in `seed()`.
 
-- [ ] **Step 4: Run full backend verification (`npm test`, `npm run typecheck`, `npm run build`)**
+- [x] **Step 4: Run full backend verification (`npm test`, `npm run typecheck`, `npm run build`)**
 
 Run:
 - `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test`
@@ -247,7 +247,7 @@ Run:
 - `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend run build`
 Expected: PASS on all 3 commands with 0 errors.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend add -A backend

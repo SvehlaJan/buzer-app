@@ -6,9 +6,8 @@ import { CollaboratorRepository } from "../../src/repositories/collaboratorRepos
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
 import { EscalationService } from "../../src/services/escalationService.js";
-import { TodoistOperationQueue } from "../../src/services/todoistOperationQueue.js";
-import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
 import { TaskSnapshotService } from "../../src/services/taskSnapshotService.js";
+import { createTodoistRuntime, type TodoistRuntime } from "../../src/services/todoistRuntime.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import { buildServer as createServer } from "../../src/server.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
@@ -125,10 +124,9 @@ describe("HTTP routes", () => {
     const fixedRoutes = [
       ["GET", "/tasks/snapshot"], ["GET", "/projects"], ["POST", "/tasks"], ["POST", "/tasks/task-1/start"],
       ["POST", "/tasks/task-1/done"], ["POST", "/tasks/task-1/postpone-start"], ["POST", "/tasks/task-1/extend"],
-      ["POST", "/tasks/task-1/update"], ["POST", "/tasks/task-1/checklist"],
-      ["POST", "/tasks/task-1/checklist/child-1/update"], ["POST", "/tasks/task-1/checklist/child-1/delete"],
-      ["POST", "/tasks/task-1/checklist/child-1/check"], ["POST", "/tasks/task-1/checklist/child-1/uncheck"],
-      ["POST", "/review/dismiss"], ["POST", "/device/check-in"]
+      ["POST", "/tasks/task-1/update"],
+      ["POST", "/tasks/task-1/checklist/c-1/check"], ["POST", "/tasks/task-1/checklist/c-1/uncheck"],
+      ["POST", "/device/check-in"]
     ] as const;
 
     for (const [method, url] of fixedRoutes) {
@@ -136,6 +134,54 @@ describe("HTTP routes", () => {
       expect(response.statusCode, `${method} ${url}`).toBe(401);
     }
     await app.close();
+  });
+
+  it("returns 404 for retired checklist CRUD and review dismiss routes even with a valid bearer token", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    markMirrorReady(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask({
+      id: "task-1", todoistTaskId: "todoist-1", title: "Root", description: null, projectId: "project-family",
+      assigneeId: "user-self", creatorId: "user-self", dueDatetime: "2026-07-15T18:00:00Z", durationMinutes: 30,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    repo.upsertTodoistTask({
+      id: "c-1", todoistTaskId: "todoist-c-1", title: "Child", description: null, projectId: "project-family",
+      parentId: "todoist-1", childOrder: 1, assigneeId: null, creatorId: "user-self", dueDatetime: null, durationMinutes: null,
+      completedAt: null, deletedAt: null, rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
+    });
+    setOccurrence(db, "task-1", "2026-07-15T18:00:00Z");
+    const adapter = new FakeTodoistAdapter();
+    const app = buildServer({ db, currentUserId: "user-self", androidApiToken: "secret", todoist: adapter });
+    const headers = { authorization: "Bearer secret" };
+
+    const retiredRequests = [
+      { url: "/review/dismiss", payload: {} },
+      {
+        url: "/tasks/task-1/checklist",
+        payload: { expectedOccurrenceKey: "occurrence-1", clientMutationId: "add-1", title: "Retired add", description: null }
+      },
+      {
+        url: "/tasks/task-1/checklist/c-1/update",
+        payload: { expectedOccurrenceKey: "occurrence-1", expectedChildRevision: "r:1", title: "Retired edit", description: null }
+      },
+      {
+        url: "/tasks/task-1/checklist/c-1/delete",
+        payload: { expectedOccurrenceKey: "occurrence-1", expectedChildRevision: "r:1" }
+      }
+    ] as const;
+
+    for (const { url, payload } of retiredRequests) {
+      const response = await app.inject({ method: "POST", url, headers, payload });
+      expect(response.statusCode, `POST ${url}`).toBe(404);
+      expect(response.json(), `POST ${url}`).toEqual({ code: "not_found", message: "Not Found" });
+    }
+    await app.close();
+
+    expect(adapter.itemAdds).toEqual([]);
+    expect(adapter.itemUpdates).toEqual([]);
+    expect(adapter.itemDeletes).toEqual([]);
   });
 
   it("echoes X-Request-ID header in every response", async () => {
@@ -224,26 +270,27 @@ describe("HTTP routes", () => {
     migrate(db);
     markMirrorReady(db);
     const adapter = new FakeTodoistAdapter();
-    const synchronizer = new TodoistSyncService(
+    const tasks = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    const collaborators = new CollaboratorRepository(db);
+    const snapshots = new TaskSnapshotService(tasks, projects, "user-self", true, collaborators);
+    const todoistRuntime = createTodoistRuntime({
       db,
-      new TaskRepository(db),
-      new ProjectRepository(db),
-      adapter,
-      "user-self"
-    );
-    const syncOnce = vi.spyOn(synchronizer, "syncOnce").mockResolvedValue({
-      hasChanges: false,
-      changedTaskCount: 0,
-      changedTaskIds: [],
-      changedProjectCount: 0,
-      changedCollaboratorCount: 0
+      tasks,
+      projects,
+      collaborators,
+      todoist: adapter,
+      snapshots,
+      currentUserId: "user-self"
     });
+    const forceRefreshSpy = vi.spyOn(todoistRuntime, "forceRefresh");
+    const syncSpy = vi.spyOn(adapter, "sync");
     const app = buildServer({
       db,
       currentUserId: "user-self",
       androidApiToken: "secret",
       todoist: adapter,
-      synchronizer
+      todoistRuntime
     });
 
     const response = await app.inject({
@@ -254,7 +301,11 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(syncOnce).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(forceRefreshSpy).toHaveBeenCalledWith({
+      requestId: expect.any(String),
+      signal: expect.any(AbortSignal)
+    });
+    expect(syncSpy).toHaveBeenCalledWith(expect.any(String), { signal: expect.any(AbortSignal) });
   });
 
   it("rejects invalid forceRefresh query parameters with 400", async () => {
@@ -421,16 +472,28 @@ describe("HTTP routes", () => {
     const db = new Database(":memory:");
     migrate(db);
     markMirrorReady(db);
-    const queue = new TodoistOperationQueue();
-    queue.run = vi.fn().mockRejectedValue(
-      new TodoistOperationError("timeout", undefined, { error_code: "backend_busy" })
+    const snapshots = new TaskSnapshotService(
+      new TaskRepository(db),
+      new ProjectRepository(db),
+      "user-self",
+      true,
+      new CollaboratorRepository(db)
     );
+    const todoistRuntime: TodoistRuntime = {
+      executeMutation: vi.fn(),
+      forceRefresh: vi.fn().mockResolvedValue({
+        kind: "busy",
+        message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly.",
+        snapshot: snapshots.getSnapshot("2026-07-15T10:00:00Z")
+      }),
+      pollOnce: vi.fn()
+    };
     const app = buildServer({
       db,
       currentUserId: "user-self",
       androidApiToken: "secret",
       todoist: new FakeTodoistAdapter(),
-      todoistQueue: queue
+      todoistRuntime
     });
 
     const response = await app.inject({
@@ -452,16 +515,29 @@ describe("HTTP routes", () => {
     const db = new Database(":memory:");
     migrate(db);
     markMirrorReady(db);
-    const queue = new TodoistOperationQueue();
-    queue.run = vi.fn().mockRejectedValue(
-      new TodoistOperationError("timeout", undefined, { operation: "force_refresh" })
+    const adapter = new FakeTodoistAdapter();
+    adapter.sync = vi.fn().mockRejectedValue(
+      new TodoistOperationError("timeout", undefined, { operation: "force_refresh", failure_stage: "active" })
     );
+    const tasks = new TaskRepository(db);
+    const projects = new ProjectRepository(db);
+    const collaborators = new CollaboratorRepository(db);
+    const snapshots = new TaskSnapshotService(tasks, projects, "user-self", true, collaborators);
+    const todoistRuntime = createTodoistRuntime({
+      db,
+      tasks,
+      projects,
+      collaborators,
+      todoist: adapter,
+      snapshots,
+      currentUserId: "user-self"
+    });
     const app = buildServer({
       db,
       currentUserId: "user-self",
       androidApiToken: "secret",
-      todoist: new FakeTodoistAdapter(),
-      todoistQueue: queue
+      todoist: adapter,
+      todoistRuntime
     });
 
     const response = await app.inject({
@@ -642,17 +718,18 @@ describe("HTTP routes", () => {
       rawJson: "{}", updatedAt: "2026-07-15T10:00:00Z"
     });
     setOccurrence(db, "task-busy", "2026-07-15T18:00:00Z");
-    const queue = new TodoistOperationQueue();
-    queue.run = vi.fn().mockRejectedValue(
-      new TodoistOperationError("timeout", undefined, { error_code: "backend_busy" })
-    );
     const adapter = new FakeTodoistAdapter();
+    const todoistRuntime: TodoistRuntime = {
+      executeMutation: vi.fn().mockResolvedValue({ kind: "busy" }),
+      forceRefresh: vi.fn(),
+      pollOnce: vi.fn()
+    };
     const app = buildServer({
       db,
       currentUserId: "user-self",
       androidApiToken: "secret",
       todoist: adapter,
-      todoistQueue: queue
+      todoistRuntime
     });
 
     const response = await app.inject({
