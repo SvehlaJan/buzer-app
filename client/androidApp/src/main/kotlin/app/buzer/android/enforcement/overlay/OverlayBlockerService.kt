@@ -9,7 +9,8 @@ import android.os.Build
 import android.os.IBinder
 import app.buzer.android.blockers.StartBlockerActivity
 import app.buzer.android.blockers.BlockerTaskSnapshotGate
-import app.buzer.android.enforcement.AlarmIntentFactory
+import app.buzer.android.enforcement.BlockerAction
+import app.buzer.android.enforcement.BlockerErrorReporter
 import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
@@ -183,43 +184,93 @@ class OverlayBlockerService : Service() {
             return
         }
         actionInFlight = true
+        if (action == OverlayAction.OPEN_FULL_BLOCKER) {
+            launchStartBlocker(request, initialWarningMessage = null)
+            stopOverlay(generation)
+            return
+        }
         scope.launch {
             try {
-                // Bound the action so a hung/slow backend can never trap the full-screen
-                // overlay. The coordinator reports backend failures internally; either way
-                // the overlay dismisses, matching the blocker activities' finish-regardless flow.
-                withTimeout(ACTION_TIMEOUT_MS) {
-                    when (action) {
-                        OverlayAction.START -> coordinator.startTask(
-                            request.taskId,
-                            actionRequest(request.occurrenceKey)
+                // Bound the action so a hung/slow backend can never trap the full-screen overlay.
+                // Anything but a clean success hands off to StartBlockerActivity, whose sticky
+                // warning banner says what happened and offers Refresh, so the overlay never
+                // dismisses silently over an action that did not land.
+                val outcome = try {
+                    Result.success(
+                        withTimeout(ACTION_TIMEOUT_MS) {
+                            when (action) {
+                                OverlayAction.START -> coordinator.startTask(
+                                    request.taskId,
+                                    actionRequest(request.occurrenceKey)
+                                )
+                                else -> coordinator.postponeStart(
+                                    request.taskId,
+                                    actionRequest(request.occurrenceKey)
+                                )
+                            }
+                        }
+                    )
+                } catch (timeout: TimeoutCancellationException) {
+                    AppLog.warn(
+                        "overlay_action timeout action=$action taskId=${request.taskId} " +
+                            "occurrence=${request.occurrenceKey} afterMs=$ACTION_TIMEOUT_MS"
+                    )
+                    Result.failure(timeout)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    AppLog.warn("overlay_action error action=$action occurrence=${request.occurrenceKey} ${error.message}")
+                    Result.failure(error)
+                }
+                when (val disposition = resolveOverlayActionOutcome(outcome)) {
+                    OverlayActionDisposition.Dismiss -> Unit
+                    is OverlayActionDisposition.EscalateToStartBlocker -> {
+                        AppLog.warn(
+                            "overlay_action escalate action=$action taskId=${request.taskId} " +
+                                "occurrence=${request.occurrenceKey}"
                         )
-                        OverlayAction.POSTPONE -> coordinator.postponeStart(
-                            request.taskId,
-                            actionRequest(request.occurrenceKey)
-                        )
-                        OverlayAction.OPEN_FULL_BLOCKER -> {
-                            startActivity(
-                                Intent(this@OverlayBlockerService, StartBlockerActivity::class.java)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    .putExtra(AlarmIntentFactory.EXTRA_TASK_ID, request.taskId)
-                                    .putExtra(AlarmIntentFactory.EXTRA_OCCURRENCE_KEY, request.occurrenceKey)
+                        disposition.reportDefect?.let { defect ->
+                            BlockerErrorReporter(applicationContext).report(
+                                action = if (action == OverlayAction.START) {
+                                    BlockerAction.START_TASK
+                                } else {
+                                    BlockerAction.POSTPONE_START
+                                },
+                                taskId = request.taskId,
+                                message = disposition.warningMessage,
+                                // StartBlockerActivity shows the message; the report only feeds observability.
+                                showNotification = false,
+                                throwable = defect
                             )
                         }
+                        launchStartBlocker(request, disposition.warningMessage)
                     }
                 }
-            } catch (timeout: TimeoutCancellationException) {
-                AppLog.warn(
-                    "overlay_action timeout action=$action taskId=${request.taskId} " +
-                        "occurrence=${request.occurrenceKey} afterMs=$ACTION_TIMEOUT_MS"
-                )
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                AppLog.warn("overlay_action error action=$action occurrence=${request.occurrenceKey} ${error.message}")
             } finally {
                 stopOverlay(generation)
             }
+        }
+    }
+
+    private fun launchStartBlocker(request: OverlayBlockerRequest, initialWarningMessage: String?) {
+        try {
+            startActivity(
+                StartBlockerActivity.createIntent(
+                    this,
+                    request.taskId,
+                    request.occurrenceKey,
+                    initialWarningMessage
+                ).addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            )
+        } catch (error: RuntimeException) {
+            AppLog.warn(
+                "overlay_action start_blocker_launch_failed taskId=${request.taskId} " +
+                    "occurrence=${request.occurrenceKey} ${error.message}"
+            )
         }
     }
 

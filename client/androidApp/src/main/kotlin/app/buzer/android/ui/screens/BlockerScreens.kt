@@ -17,7 +17,6 @@ import androidx.compose.ui.semantics.semantics
 import app.buzer.android.enforcement.CoordinatorActionResult
 import app.buzer.android.ui.components.BlockerSurface
 import app.buzer.android.ui.components.ChecklistProgress
-import app.buzer.android.ui.status.ErrorAlertDialog
 import app.buzer.android.ui.status.LoadingActionButton
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
@@ -37,7 +36,6 @@ import java.time.LocalDateTime
 sealed interface BlockerActionState {
     data object Idle : BlockerActionState
     data class Loading(val label: String) : BlockerActionState
-    data class Failed(val message: String) : BlockerActionState
 
     val actionsDisabled: Boolean
         get() = this is Loading
@@ -57,20 +55,15 @@ fun StartBlockerScreen(
     showBack: Boolean = true,
     checking: Boolean = false,
     warningMessage: String? = null,
-    actionState: BlockerActionState = BlockerActionState.Idle,
-    errorMessage: String? = null,
-    onDismissError: () -> Unit = {},
-    onRetryAction: () -> Unit = {}
+    actionState: BlockerActionState = BlockerActionState.Idle
 ) {
     BackHandler(enabled = !showBack) {
         // Production full-screen blockers must stay open until a blocker action resolves them.
     }
 
-    val effectiveWarning = warningMessage ?: errorMessage
-
     BlockerSurface(
         model = model,
-        warningMessage = effectiveWarning,
+        warningMessage = warningMessage,
         checking = checking,
         onRefresh = onRefreshTask,
         onOpenTodoist = onOpenTodoist
@@ -105,16 +98,6 @@ fun StartBlockerScreen(
             }
         }
     }
-
-    if (errorMessage != null && warningMessage == null) {
-        ErrorAlertDialog(
-            title = "Action failed",
-            message = errorMessage,
-            onDismiss = onDismissError,
-            retryLabel = null,
-            dismissLabel = "Dismiss"
-        )
-    }
 }
 
 @Composable
@@ -138,9 +121,6 @@ fun DeadlineBlockerScreen(
     checking: Boolean = false,
     warningMessage: String? = null,
     actionState: BlockerActionState = BlockerActionState.Idle,
-    errorMessage: String? = null,
-    onDismissError: () -> Unit = {},
-    onRetryAction: () -> Unit = {},
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null
 ) {
@@ -156,8 +136,6 @@ fun DeadlineBlockerScreen(
         snapshotConfirmed = snapshotConfirmed
     )
 
-    val effectiveWarning = warningMessage ?: errorMessage
-
     when (recovery) {
         DeadlineBlockerRecoveryState.Actions -> DeadlineBlockerActions(
             model = model,
@@ -170,7 +148,7 @@ fun DeadlineBlockerScreen(
             onBack = onBack,
             showBack = showBack,
             checking = checking,
-            warningMessage = effectiveWarning,
+            warningMessage = warningMessage,
             actionState = actionState
         )
         is DeadlineBlockerRecoveryState.Editor -> {
@@ -190,19 +168,9 @@ fun DeadlineBlockerScreen(
         DeadlineBlockerRecoveryState.RefreshRequired -> DeadlineBlockerRefreshRequired(
             model = model,
             checking = checking,
-            warningMessage = effectiveWarning,
+            warningMessage = warningMessage,
             onRefresh = onRefreshTask,
             onCancel = { rescheduleRequested = false }
-        )
-    }
-
-    if (errorMessage != null && warningMessage == null) {
-        ErrorAlertDialog(
-            title = "Action failed",
-            message = errorMessage,
-            onDismiss = onDismissError,
-            retryLabel = null,
-            dismissLabel = "Dismiss"
         )
     }
 }

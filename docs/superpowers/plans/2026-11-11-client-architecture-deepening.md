@@ -270,7 +270,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "re
     - Preserves `warningMessage` across `refresh(explicitUserRefresh = false)` while the task remains unresolved; clears `warningMessage` on `refresh(explicitUserRefresh = true)` success or finishes when resolved.
   - Pure `resolveOverlayActionOutcome(result: Result<CoordinatorActionResult>): OverlayActionDisposition` (`Dismiss` vs `EscalateToStartBlocker(warningMessage: String, reportDefect: Throwable?)`) used by `OverlayBlockerService.handleAction`.
 
-- [ ] **Step 1: Write failing unit tests for `BlockerHostController` initial-warning preservation and `OverlayBlockerService` failure handoff**
+- [x] **Step 1: Write failing unit tests for `BlockerHostController` initial-warning preservation and `OverlayBlockerService` failure handoff**
 
 1. Create `BlockerHostControllerTest.kt` testing:
    - `initialWarningFromOverlaySurvivesLifecycleRefreshWhileTaskRemainsUnresolvedAndClearsOnExplicitUserRefresh`
@@ -283,24 +283,24 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "re
    - `TimeoutCancellationException` → `EscalateToStartBlocker(warningMessage = "Action timed out. Refresh or check Todoist before retrying.", reportDefect = null)`
    - Unexpected `IllegalStateException("boom")` → `EscalateToStartBlocker(warningMessage = "boom", reportDefect = error)`.
 
-- [ ] **Step 2: Run `:androidApp:testDebugUnitTest` to verify failure**
+- [x] **Step 2: Run `:androidApp:testDebugUnitTest` to verify failure**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :androidApp:testDebugUnitTest`
 Expected: FAIL on missing `BlockerHostController` and `resolveOverlayActionOutcome`.
 
-- [ ] **Step 3: Implement `BlockerHostController`, clean dead modal error plumbing in `BlockerScreens.kt`, and wire `OverlayBlockerService` failure handoff**
+- [x] **Step 3: Implement `BlockerHostController`, clean dead modal error plumbing in `BlockerScreens.kt`, and wire `OverlayBlockerService` failure handoff**
 
 1. Remove `BlockerActionState.Failed` and dead `errorMessage` / `onDismissError` / `onRetryAction` parameters + dead `ErrorAlertDialog` blocks from `StartBlockerScreen` and `DeadlineBlockerScreen` in `BlockerScreens.kt`.
 2. Implement `BlockerHostController.kt` and refactor `StartBlockerActivity.kt` (adding `EXTRA_INITIAL_WARNING_MESSAGE`, `createIntent(...)`, and `onNewIntent`) and `DeadlineBlockerActivity.kt` (adding `onNewIntent`) to delegate to `BlockerHostController`.
 3. Implement `resolveOverlayActionOutcome` and update `OverlayBlockerService.handleAction` (`OverlayBlockerService.kt`) so any non-`Success` result, `TimeoutCancellationException`, or unexpected `Throwable` launches `StartBlockerActivity.createIntent(..., initialWarningMessage = disposition.warningMessage)` with `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_CLEAR_TOP` before dismissing the native overlay.
 
-- [ ] **Step 4: Run full client JVM unit tests, `assembleDebug`, and `compileDebugAndroidTestKotlin` (with full unfiltered `scripts/e2e-real-backend.sh` executed in whole-branch verification)**
+- [x] **Step 4: Run full client JVM unit tests, `assembleDebug`, and `compileDebugAndroidTestKotlin` (with full unfiltered `scripts/e2e-real-backend.sh` executed in whole-branch verification)**
 
 Run:
 1. `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:compileDebugAndroidTestKotlin`
 Expected: BUILD SUCCESSFUL across shared JVM tests, Android JVM tests, debug APK assembly, and `androidTest` Kotlin compilation (followed by full unfiltered `scripts/e2e-real-backend.sh` in whole-branch verification).
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client add -A client
