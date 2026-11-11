@@ -162,3 +162,41 @@ Owner go-ahead to merge `feature/deepen-client` into `master` (`--no-ff`), then 
 recorded as unused by the client in `docs/decisions/2026-11-11-retire-unused-checklist-and-review-routes.md`.
 Confirm that against the APK currently on the phone before deploying. After that, delete
 `feature/deepen-backend` and both `deepen-*` worktrees.
+
+## Rollout (2026-11-11, owner go-ahead)
+
+- Both leftover e2e backends (pids 35303 and 39660) were stopped at the owner's request, which
+  freed ports 18433 and 18434.
+- Retired routes against the installed app: pre-merge `master` defines
+  `addChecklistItem`/`updateChecklistItem`/`deleteChecklistItem` in `BuzerApiClient`, but nothing
+  calls them, and the client has no `/review/dismiss` call. The APK on the phone therefore never
+  hits the removed routes.
+- Merged into `master` with `--no-ff` as `c2cd9ca` and pushed (`1aa8f1f..c2cd9ca`). The push also
+  published the earlier unpushed master commits: the recruiter presentation merges and the
+  2026-09-23 investigation docs.
+- Backend deployed by Claude with `ssh -A … BUZER_REPO_DIR=/home/skclaw/PROJECTS/buzer-app
+  ~/PROJECTS/buzer-app/scripts/deploy-vps.sh`. The first SSH attempt failed in 1Password signing
+  (`communication with agent failed`); the retry worked. There are no schema migrations in this
+  change.
+- The new APK was **not** installed on the phone.
+
+Verification:
+- Command: `gh run watch 43103493118 --exit-status`
+- Result: PASS
+- Evidence: `ci.yml` on `c2cd9ca`: `backend` success, `client` success.
+
+Verification:
+- Command: VPS pre-check, then `deploy-vps.sh`
+- Result: PASS
+- Evidence: before, the checkout was `447af22`, release `app.buzer@0.1.0+447af224f8d9`, healthy. The deploy printed `Buzer backend is healthy at http://127.0.0.1:18432/health` on attempt 8. Afterwards the checkout is `c2cd9ca`, release `app.buzer@0.1.0+c2cd9ca09350`, container started 21:33:49Z, Docker health `healthy`, 0 error-level log lines.
+
+Verification:
+- Command: authenticated `GET /tasks/snapshot` and `POST /review/dismiss` from inside the container (token read from the container env, not printed)
+- Result: PASS
+- Evidence: snapshot `200`, 240 tasks, 0 `hierarchyStatus: unsupported`, 0 offset-less `dueDatetime`; `/review/dismiss` returns `404`.
+
+Remaining:
+- Install a new APK built from `c2cd9ca` on the Pixel 10. Until then the phone runs the old
+  client against the new backend, which the checks above show is compatible.
+- Delete `feature/deepen-backend` and the two `deepen-*` worktrees.
+- Stop the headless emulator (`adb -s emulator-5584 emu kill`).
