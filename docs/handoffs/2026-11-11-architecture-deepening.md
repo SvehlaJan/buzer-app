@@ -140,6 +140,7 @@ Verification:
   `( cd backend; npm run e2e-server ) &` subshell, not the node process under it. The pre-merge
   run left node (pid 35303, cwd `.worktrees/deepen-client/backend`) listening on 18433. Killing it
   from this session was refused by the permission classifier, so the final run used port 18434.
+  That run left a second one too (pid 39660, port 18434).
   Stop the leftover process by hand. A later run on 18433 would otherwise silently reuse that
   stale backend ("Using existing E2E backend").
 - The headless emulator `Buzer_API_36` is running on port 5584 from this session.
