@@ -7,17 +7,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,15 +28,20 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import app.buzer.android.tasks.AddTaskDependencies
+import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.enforcement.FailureClassifier
 import app.buzer.android.observability.ObservabilityRuntime
+import app.buzer.android.tasks.AddTaskDependencies
+import app.buzer.android.ui.addtask.AddTaskCreateOutcome
 import app.buzer.android.ui.addtask.AddTaskProjectLoadFeedback
+import app.buzer.android.ui.addtask.runAddTaskCreate
 import app.buzer.android.ui.addtask.selectAddTaskProject
-import app.buzer.android.ui.addtask.runSuccessfulAddTaskCreate
 import app.buzer.android.ui.components.ChecklistEditor
+import app.buzer.android.ui.components.SessionWarningBanner
 import app.buzer.android.ui.datetime.DateTimeDraftSelection
 import app.buzer.android.ui.datetime.DateTimeSelection
-import app.buzer.android.ui.status.InlineLoadingStatus
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
+import app.buzer.android.ui.taskeditor.ChecklistDraftFingerprint
 import app.buzer.android.ui.taskeditor.TaskEditorDraft
 import app.buzer.android.ui.taskeditor.TaskEditorField
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
@@ -48,39 +51,23 @@ import app.buzer.android.ui.taskeditor.TaskEditorValidation
 import app.buzer.android.ui.taskeditor.ValidationExposure
 import app.buzer.android.ui.taskeditor.VisibleTaskEditorValidation
 import app.buzer.android.ui.taskeditor.primaryActionLabel
+import app.buzer.android.ui.taskeditor.rememberTaskEditorChoices
+import app.buzer.android.ui.taskeditor.rememberTaskEditorProjectRepository
 import app.buzer.android.ui.taskeditor.validateTaskEditor
-import app.buzer.shared.api.BuzerApiException
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
-import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ChecklistDraft
+import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ProjectCollaborator
 import app.buzer.shared.model.ProjectItem
-import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
-import java.io.IOException
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-
-/**
- * Mirrors the combined effect of [app.buzer.android.enforcement.EnforcementCoordinator] and
- * [app.buzer.android.enforcement.BlockerErrorReporter]: any structured backend HTTP response
- * ([BuzerApiException], expected code or not) is the backend's own responsibility to own and
- * report -- Android never creates a duplicate Issue for it. Only a genuinely local exception
- * (response parsing, an unexpected invariant in Add Task's own code) is Add Task's owned defect.
- */
-internal fun isAddTaskOperationalFailure(error: Throwable): Boolean {
-    if (error is BuzerApiException) return true
-    if (error is IOException) return true
-    val className = error::class.qualifiedName.orEmpty()
-    return className.contains("Timeout") ||
-        className.contains("Connect") ||
-        className.contains("UnresolvedAddress")
-}
 
 internal fun addTaskEditorFingerprint(
     draft: TaskEditorDraft,
@@ -216,7 +203,7 @@ internal fun addTaskCreateRequest(
         durationMinutes = draft.schedule.durationMinutes,
         recurrencePreset = draft.recurrencePreset,
         timeZone = zoneId.id.takeIf {
-            draft.schedule.isComplete() && draft.recurrencePreset != app.buzer.shared.model.RecurrencePreset.never
+            draft.schedule.isComplete() && draft.recurrencePreset != RecurrencePreset.never
         },
         checklistDrafts = checklistDrafts
     )
@@ -231,9 +218,9 @@ internal fun retainAddTaskCreateRequest(
 @Composable
 fun AddTaskScreen(
     onBack: () -> Unit,
-    onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
+    onCreateTask: suspend (CreateTaskRequest) -> CoordinatorActionResult =
+        AddTaskDependencies.createTaskAction(LocalContext.current),
     onRefreshWarning: suspend () -> Unit = {},
-    createTask: suspend (CreateTaskRequest) -> app.buzer.shared.model.MutationResponse = AddTaskDependencies.createTaskAction(),
     loadProjects: (suspend () -> List<ProjectItem>)? = null,
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     initialSelectedProjectId: String? = null,
@@ -243,13 +230,10 @@ fun AddTaskScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
-    val projectRepository = remember(loadProjects, refreshProjects) {
-        if (loadProjects == null || refreshProjects == null) {
-            AddTaskDependencies.projectRepository()
-        } else {
-            null
-        }
-    }
+    val projectRepository = rememberTaskEditorProjectRepository(
+        loadProjects = loadProjects,
+        refreshProjects = refreshProjects
+    )
     val projectSelectionStore = remember(context, initialSelectedProjectId, persistSelectedProjectId) {
         if (initialSelectedProjectId == null || persistSelectedProjectId == null) {
             AddTaskDependencies.projectSelectionStore(context)
@@ -257,8 +241,6 @@ fun AddTaskScreen(
             null
         }
     }
-    val loadProjectList = loadProjects ?: projectRepository!!::loadProjectsOnce
-    val refreshProjectList = refreshProjects ?: projectRepository!!::refreshProjects
     val persistedProjectId = remember(initialSelectedProjectId, projectSelectionStore) {
         initialSelectedProjectId ?: projectSelectionStore?.getSelectedProjectId()
     }
@@ -266,9 +248,6 @@ fun AddTaskScreen(
         projectSelectionStore?.setSelectedProjectId(projectId)
     }
     var draft by remember { mutableStateOf(TaskEditorDraft(title = "")) }
-    var projects by remember { mutableStateOf<List<ProjectItem>>(emptyList()) }
-    var projectsLoading by remember { mutableStateOf(true) }
-    var projectLoadError by remember { mutableStateOf<String?>(null) }
     var touchedFields by remember { mutableStateOf<Set<TaskEditorField>>(emptySet()) }
     var submitAttempted by remember { mutableStateOf(false) }
     var submitDialogMessage by remember { mutableStateOf<String?>(null) }
@@ -280,22 +259,6 @@ fun AddTaskScreen(
     var initialFingerprint by remember { mutableStateOf(AddTaskDraftFingerprint.empty(projectId = null)) }
     var initialProjectBaselineCaptured by remember { mutableStateOf(false) }
     val now = remember(nowProvider) { nowProvider() }
-    val projectLoadStatusMessage = AddTaskProjectLoadFeedback.message(
-        projectsLoading = projectsLoading,
-        projects = projects,
-        projectLoadError = projectLoadError
-    )
-    val editorState = addTaskEditorState(
-        draft = draft,
-        projects = projects,
-        projectsLoading = projectsLoading,
-        projectLoadError = projectLoadError,
-        submitting = submitting,
-        touchedFields = touchedFields,
-        submitAttempted = submitAttempted
-    )
-    val selectedProject = editorState.selectedProject
-    val currentUser = editorState.currentUser
 
     fun updateDraft(next: TaskEditorDraft, userInitiated: Boolean = true) {
         if (draft == next) return
@@ -305,7 +268,6 @@ fun AddTaskScreen(
     }
 
     fun applyLoadedProjects(loaded: List<ProjectItem>) {
-        projects = loaded
         val preferredProjectId = draft.projectId ?: persistedProjectId
         val resolvedProject = loaded.firstOrNull { it.id == preferredProjectId }
         var baselineDraft = draft
@@ -341,24 +303,26 @@ fun AddTaskScreen(
         initialProjectBaselineCaptured = baselineCapture.captured
     }
 
-    fun retryProjects() {
-        scope.launch {
-            projectsLoading = true
-            projectLoadError = null
-            try {
-                applyLoadedProjects(refreshProjectList())
-            } catch (error: Exception) {
-                AppLog.error(
-                    "add_task projects refresh_failed type=${error::class.simpleName} message=${error.message}",
-                    error
-                )
-                val message = error.message ?: "Project loading failed"
-                projectLoadError = message
-            } finally {
-                projectsLoading = false
-            }
-        }
-    }
+    val choicesHandle = rememberTaskEditorChoices(
+        repository = projectRepository,
+        requireNonEmptyProjects = true,
+        onProjectsLoaded = ::applyLoadedProjects
+    )
+    val choices = choicesHandle.choices
+    val projects = choices.projects
+    val projectsLoading = choices.loading
+    val projectLoadError = choices.errorMessage
+    val editorState = addTaskEditorState(
+        draft = draft,
+        projects = projects,
+        projectsLoading = projectsLoading,
+        projectLoadError = projectLoadError,
+        submitting = submitting,
+        touchedFields = touchedFields,
+        submitAttempted = submitAttempted
+    )
+    val selectedProject = editorState.selectedProject
+    val currentUser = editorState.currentUser
 
     fun submitRequest(request: CreateTaskRequest) {
         // Locking is normally enforced by the primary button's own `enabled` state, but guard
@@ -373,18 +337,18 @@ fun AddTaskScreen(
                         "project=${request.projectId} assignee=${request.assigneeId} " +
                         "due=${request.dueDatetime} duration=${request.durationMinutes}"
                 )
-                runSuccessfulAddTaskCreate(
-                    request = request,
-                    createTask = createTask,
-                    onTaskCreated = onTaskCreated,
-                    onBack = onBack
-                )
-                AppLog.info("add_task create_success")
+                when (val outcome = runAddTaskCreate(request, onCreateTask, onBack)) {
+                    AddTaskCreateOutcome.NavigatedBack -> AppLog.info("add_task create_success")
+                    is AddTaskCreateOutcome.ShowWarning -> {
+                        AppLog.warn("add_task create_warning message=${outcome.message}")
+                        submitDialogMessage = outcome.message
+                    }
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 val message = error.message ?: "Task creation failed"
-                if (isAddTaskOperationalFailure(error)) {
+                if (FailureClassifier.isOperationalFailure(error)) {
                     AppLog.warn(
                         "add_task create_failed type=${error::class.simpleName} message=${error.message}",
                         error
@@ -490,20 +454,6 @@ fun AddTaskScreen(
         requestExit()
     }
 
-    LaunchedEffect(Unit) {
-        projectsLoading = true
-        projectLoadError = null
-        try {
-            applyLoadedProjects(loadProjectList())
-        } catch (error: Exception) {
-            AppLog.error("add_task projects load_failed type=${error::class.simpleName} message=${error.message}", error)
-            val message = error.message ?: "Project loading failed"
-            projectLoadError = message
-        } finally {
-            projectsLoading = false
-        }
-    }
-
     val checklistValidation = validateChecklistDrafts(checklistDrafts)
     val checklistError = checklistValidation.bannerMessage
         ?: "Each checklist item needs a title".takeIf { checklistValidation.invalidDraftIds.isNotEmpty() }
@@ -546,7 +496,7 @@ fun AddTaskScreen(
                     enabled = editorState.editingEnabled
                 )
             },
-            onRetryCollaborators = { retryProjects() },
+            onRetryCollaborators = choicesHandle.retry,
             onPrimaryAction = ::validateAndSubmit,
             onCancel = ::requestExit,
             validation = visibleValidation,
@@ -556,11 +506,11 @@ fun AddTaskScreen(
             modifier = Modifier.fillMaxSize(),
             warningBanner = submitDialogMessage?.let { msg ->
                 {
-                    app.buzer.android.ui.components.SessionWarningBanner(
+                    SessionWarningBanner(
                         message = msg,
                         onRefresh = ::refreshWarning,
                         onOpenTodoist = {
-                            app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchToday(context)
+                            ExternalTodoistLauncher.launchToday(context)
                         },
                         refreshing = warningRefreshInFlight
                     )
@@ -569,9 +519,9 @@ fun AddTaskScreen(
         )
 
         TaskEditorProjectLoadStatus(
-            loading = projectsLoading,
-            message = projectLoadStatusMessage,
-            onRetry = ::retryProjects
+            loading = choices.loading,
+            message = choicesHandle.feedbackMessage,
+            onRetry = choicesHandle.retry
         )
     }
     if (discardConfirmationVisible) {

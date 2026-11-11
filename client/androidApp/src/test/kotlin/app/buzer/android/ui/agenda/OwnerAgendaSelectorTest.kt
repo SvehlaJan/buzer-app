@@ -92,7 +92,7 @@ class OwnerAgendaSelectorTest {
 
         val buckets = selectOwnerAgenda(snapshot, now = NOW, zoneId = ZONE)
 
-        assertTrue(buckets.blocking.isEmpty())
+        assertEquals(listOf("unsupported"), buckets.blocking.map { it.id })
         assertTrue(buckets.overdue.isEmpty())
         assertTrue(buckets.current.isEmpty())
         assertTrue(buckets.future.isEmpty())
@@ -152,9 +152,6 @@ class OwnerAgendaSelectorTest {
         scheduleVersion = 1,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = invalidTasks,
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = tasks
     )

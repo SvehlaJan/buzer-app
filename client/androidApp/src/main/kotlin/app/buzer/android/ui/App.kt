@@ -21,7 +21,7 @@ import app.buzer.android.ui.screens.HomeScreen
 import app.buzer.android.ui.screens.HomeScreenState
 import app.buzer.android.ui.screens.buildHomeScreenState
 import app.buzer.shared.diagnostics.AppLog
-import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
@@ -52,7 +52,9 @@ fun BuzerApp(
     onOpenTodoist: () -> Unit = {},
     onDoneTask: (String) -> Unit = {},
     onDoneCurrentTask: (String) -> Unit = onDoneTask,
-    onTaskCreated: (TasksSnapshotResponse) -> Unit = {},
+    onCreateTask: suspend (CreateTaskRequest) -> CoordinatorActionResult = {
+        CoordinatorActionResult.Warning("unavailable", "Task creation is unavailable", null)
+    },
     onToggleCurrentChild: (String, String, Boolean) -> Unit = { _, _, _ -> },
     deviceId: String = "",
     onUpdateTask: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult = { _, _ ->
@@ -128,7 +130,7 @@ fun BuzerApp(
 
                 AppSection.Add -> AddTaskScreen(
                     onBack = { section = AppSection.Home },
-                    onTaskCreated = onTaskCreated,
+                    onCreateTask = onCreateTask,
                     onRefreshWarning = onRefreshWarningSnapshot
                 )
 

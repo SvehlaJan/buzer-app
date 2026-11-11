@@ -31,7 +31,7 @@ class SnapshotDiagnosticsTest {
         val description = SnapshotDiagnostics.describe(snapshot)
 
         assertEquals(
-            "scheduleVersion=7 serverTime=2026-06-02T20:20:00Z tasks=3 visible=2 invalid=2 active=0 startingToday=1 completed=1 deleted=0 unsupported=1 healthWarnings=1",
+            "scheduleVersion=7 serverTime=2026-06-02T20:20:00Z tasks=3 visible=2 invalid=2 completed=1 deleted=0 unsupported=1 healthWarnings=1",
             description
         )
         assertFalse(description.contains("Private"))

@@ -10,7 +10,6 @@ import app.buzer.shared.api.BuzerApiRequestCorrelation
 import app.buzer.shared.diagnostics.DiagnosticCorrelation
 import app.buzer.shared.diagnostics.DiagnosticLogRecord
 import java.io.File
-import java.io.IOException
 import java.time.Instant
 import java.util.Collections
 import java.util.WeakHashMap
@@ -104,19 +103,9 @@ class BlockerErrorReporter(
         throwable: Throwable?
     ): Boolean {
         if (throwable is CancellationException) return false
-        if (throwable is BuzerApiException) return false
-        if (isTransportOrTimeout(throwable)) return false
+        if (throwable != null && FailureClassifier.isOperationalFailure(throwable)) return false
         if (isValidationOrClientError(throwable, message)) return false
         return true
-    }
-
-    private fun isTransportOrTimeout(throwable: Throwable?): Boolean {
-        if (throwable == null) return false
-        if (throwable is IOException) return true
-        val className = throwable::class.qualifiedName.orEmpty()
-        return className.contains("Timeout") ||
-            className.contains("Connect") ||
-            className.contains("UnresolvedAddress")
     }
 
     private fun isValidationOrClientError(throwable: Throwable?, message: String): Boolean {

@@ -4,6 +4,7 @@ import app.buzer.android.enforcement.AlarmKind
 import app.buzer.android.enforcement.AlarmScheduler
 import app.buzer.android.enforcement.ScheduledAlarm
 import app.buzer.android.enforcement.ScheduledAlarmIdentity
+import app.buzer.shared.diagnostics.AppLog
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -14,12 +15,23 @@ class MorningReviewScheduler(
     private val alarmScheduler: AlarmScheduler,
     private val calculator: MorningReviewScheduleCalculator,
     private val snoozeDuration: Duration,
-    private val priorityRetryDuration: Duration
+    private val priorityRetryDuration: Duration,
+    private val canScheduleExactAlarms: () -> Boolean = { true }
 ) {
     fun reconcile(now: Instant, zoneId: ZoneId) {
+        if (!canScheduleExactAlarms()) {
+            AppLog.warn("morning_review reconcile degraded exact_alarm_permission_denied")
+            return
+        }
         val previous = stateStore.read()
         val normalized = calculator.normalize(previous, now, zoneId)
-        replaceAlarm(previous, normalized, calculator.desiredAlarm(normalized, now, zoneId))
+        replaceAlarm(
+            operation = "reconcile",
+            previous = previous,
+            next = normalized,
+            desired = calculator.desiredAlarm(normalized, now, zoneId),
+            degradedFallback = null
+        )
     }
 
     fun acknowledge(now: Instant, zoneId: ZoneId) {
@@ -29,7 +41,12 @@ class MorningReviewScheduler(
             pendingSnoozeDate = null,
             pendingSnoozeAt = null
         )
-        replaceAlarm(previous, acknowledged, calculator.desiredAlarm(acknowledged, now, zoneId))
+        applyStateTransition(
+            operation = "acknowledge",
+            previous = previous,
+            next = acknowledged,
+            desired = calculator.desiredAlarm(acknowledged, now, zoneId)
+        )
     }
 
     fun snooze(now: Instant, zoneId: ZoneId) {
@@ -38,7 +55,12 @@ class MorningReviewScheduler(
             pendingSnoozeDate = now.atZone(zoneId).toLocalDate(),
             pendingSnoozeAt = now.plus(snoozeDuration)
         )
-        replaceAlarm(previous, snoozed, calculator.desiredAlarm(snoozed, now, zoneId))
+        applyStateTransition(
+            operation = "snooze",
+            previous = previous,
+            next = snoozed,
+            desired = calculator.desiredAlarm(snoozed, now, zoneId)
+        )
     }
 
     /** Consumes only the currently persisted occurrence; stale deliveries have no side effects. */
@@ -49,7 +71,12 @@ class MorningReviewScheduler(
         val consumed = calculator.normalize(previous, now, zoneId).copy(
             scheduledAlarm = null
         )
-        replaceAlarm(previous, consumed, calculator.desiredAlarm(consumed, now, zoneId))
+        applyStateTransition(
+            operation = "consume",
+            previous = previous,
+            next = consumed,
+            desired = calculator.desiredAlarm(consumed, now, zoneId)
+        )
     }
 
     /** Defers only the currently persisted occurrence while an active Start blocker has priority. */
@@ -57,23 +84,60 @@ class MorningReviewScheduler(
         val previous = stateStore.read()
         if (previous.scheduledAlarm != fired) return
 
+        val retryAt = now.plus(priorityRetryDuration)
         val retry = MorningReviewScheduledAlarm(
             reviewDate = fired.reviewDate,
             reason = MorningReviewAlarmReason.PriorityRetry,
-            triggerAt = now.plus(priorityRetryDuration),
+            triggerAt = retryAt,
             occurrenceKey = morningReviewOccurrenceKey(
                 reason = MorningReviewAlarmReason.PriorityRetry,
                 reviewDate = fired.reviewDate,
-                triggerAt = now.plus(priorityRetryDuration)
+                triggerAt = retryAt
             )
         )
-        replaceAlarm(previous, calculator.normalize(previous, now, zoneId), retry)
+        val normalized = calculator.normalize(previous, now, zoneId)
+        val degradedFallback = normalized.copy(
+            pendingSnoozeDate = now.atZone(zoneId).toLocalDate(),
+            pendingSnoozeAt = retryAt,
+            scheduledAlarm = null
+        )
+        applyStateTransition(
+            operation = "defer_for_priority",
+            previous = previous,
+            next = normalized,
+            desired = retry,
+            degradedFallback = degradedFallback
+        )
+    }
+
+    private fun applyStateTransition(
+        operation: String,
+        previous: MorningReviewLocalState,
+        next: MorningReviewLocalState,
+        desired: MorningReviewScheduledAlarm,
+        degradedFallback: MorningReviewLocalState = next.copy(scheduledAlarm = null)
+    ) {
+        if (!canScheduleExactAlarms()) {
+            AppLog.warn("morning_review $operation degraded exact_alarm_permission_denied")
+            cancelObsoleteBestEffort(previous.scheduledAlarm)
+            stateStore.replace(degradedFallback)
+            return
+        }
+        replaceAlarm(
+            operation = operation,
+            previous = previous,
+            next = next,
+            desired = desired,
+            degradedFallback = degradedFallback
+        )
     }
 
     private fun replaceAlarm(
+        operation: String,
         previous: MorningReviewLocalState,
         next: MorningReviewLocalState,
-        desired: MorningReviewScheduledAlarm
+        desired: MorningReviewScheduledAlarm,
+        degradedFallback: MorningReviewLocalState?
     ) {
         val previousAlarm = previous.scheduledAlarm
         val desiredScheduledAlarm = desired.asScheduledAlarm()
@@ -88,6 +152,15 @@ class MorningReviewScheduler(
             // AlarmManager is cleared on reboot/package replacement while the persisted
             // identity remains. Re-scheduling the same PendingIntent replaces/re-arms it.
             alarmScheduler.schedule(desiredScheduledAlarm)
+        } catch (securityFailure: SecurityException) {
+            AppLog.warn("morning_review $operation degraded exact_alarm_permission_race", securityFailure)
+            if (degradedFallback != null) {
+                if (!replacementRequired) {
+                    runCatching { alarmScheduler.cancel(previousAlarm.identity()) }
+                }
+                stateStore.replace(degradedFallback)
+            }
+            return
         } catch (scheduleFailure: Throwable) {
             recoverScheduleFailure(
                 primaryFailure = scheduleFailure,
@@ -104,6 +177,11 @@ class MorningReviewScheduler(
             recoverPersistenceFailure(persistenceFailure, desiredScheduledAlarm)
             throw persistenceFailure
         }
+    }
+
+    private fun cancelObsoleteBestEffort(previousAlarm: MorningReviewScheduledAlarm?) {
+        runCatching { alarmScheduler.cancel(legacyIdentity) }
+        previousAlarm?.let { prev -> runCatching { alarmScheduler.cancel(prev.identity()) } }
     }
 
     private fun recoverScheduleFailure(

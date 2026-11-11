@@ -2,9 +2,11 @@ package app.buzer.android.enforcement
 
 import app.buzer.android.sync.SnapshotStorage
 import app.buzer.shared.api.BuzerApiException
+import app.buzer.shared.api.TaskBackendClient
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.enforcement.AlarmPlanCalculator
 import app.buzer.shared.enforcement.DesiredAlarmKind
+import app.buzer.shared.model.CreateTaskRequest
 import app.buzer.shared.model.ExtendTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.model.MutationResponse
@@ -12,7 +14,6 @@ import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.state.SnapshotDiagnostics
-import java.io.IOException
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -29,7 +30,7 @@ sealed interface CoordinatorActionResult {
 }
 
 class EnforcementCoordinator(
-    private val api: EnforcementApi,
+    private val api: TaskBackendClient,
     private val snapshotStore: SnapshotStorage,
     private val alarmScheduler: AlarmScheduler,
     private val scheduledAlarmRegistry: ScheduledAlarmRegistry =
@@ -72,10 +73,6 @@ class EnforcementCoordinator(
         return appliedSnapshot
     }
 
-    /** Applies mutation authority already received from the backend; never refetches it. */
-    fun applyReturnedSnapshot(snapshot: TasksSnapshotResponse): TasksSnapshotResponse =
-        applyFreshSnapshot(snapshot)
-
     fun loadLatestSnapshot(): TasksSnapshotResponse? {
         synchronized(snapshotApplicationLock) {
             return loadLatestSnapshotLocked()
@@ -100,11 +97,28 @@ class EnforcementCoordinator(
         }
     }
 
+    /**
+     * A root create has no idempotency key, so once `POST /tasks` returns 2xx the result is always
+     * [CoordinatorActionResult.Success]: reporting a stale snapshot or a local reconciliation failure
+     * would keep Add Task open and a retry would create a duplicate Todoist task. Local failures are
+     * still reported, and the next refresh reconciles alarms.
+     */
+    suspend fun createTask(request: CreateTaskRequest): CoordinatorActionResult =
+        runBackendAction(
+            action = BlockerAction.CREATE_TASK,
+            taskId = null,
+            occurrenceKey = null,
+            showErrorNotification = false,
+            landedMutationIsSuccess = true
+        ) {
+            api.createTask(request)
+        }
+
     suspend fun startTask(taskId: String, request: TaskActionRequest): CoordinatorActionResult =
         runBackendAction(
             action = BlockerAction.START_TASK,
             taskId = taskId,
-            request = request
+            occurrenceKey = request.expectedOccurrenceKey
         ) {
             api.startTask(taskId, request)
         }
@@ -113,7 +127,7 @@ class EnforcementCoordinator(
         runBackendAction(
             action = BlockerAction.POSTPONE_START,
             taskId = taskId,
-            request = request
+            occurrenceKey = request.expectedOccurrenceKey
         ) {
             api.postponeStart(taskId, request)
         }
@@ -122,7 +136,7 @@ class EnforcementCoordinator(
         runBackendAction(
             action = BlockerAction.COMPLETE_TASK,
             taskId = taskId,
-            request = request
+            occurrenceKey = request.expectedOccurrenceKey
         ) {
             api.completeTask(taskId, request)
         }
@@ -131,10 +145,7 @@ class EnforcementCoordinator(
         runBackendAction(
             action = BlockerAction.EXTEND_TASK,
             taskId = taskId,
-            request = TaskActionRequest(
-                expectedOccurrenceKey = request.expectedOccurrenceKey,
-                expectedTaskRevision = request.expectedTaskRevision
-            )
+            occurrenceKey = request.expectedOccurrenceKey
         ) {
             api.extendTask(taskId, request)
         }
@@ -146,9 +157,7 @@ class EnforcementCoordinator(
         runBackendAction(
             action = BlockerAction.UPDATE_TASK,
             taskId = taskId,
-            request = TaskActionRequest(
-                expectedOccurrenceKey = request.expectedOccurrenceKey.orEmpty()
-            )
+            occurrenceKey = request.expectedOccurrenceKey
         ) {
             api.updateTask(taskId, request)
         }
@@ -215,31 +224,35 @@ class EnforcementCoordinator(
      * of the returned snapshot.
      */
     private fun applyMutationResponse(
-        taskId: String,
-        occurrenceKey: String,
-        response: MutationResponse
+        taskId: String?,
+        occurrenceKey: String?,
+        response: MutationResponse,
+        showErrorNotification: Boolean
     ): CoordinatorActionResult = applyAuthoritativeSnapshot(
         taskId = taskId,
         occurrenceKey = occurrenceKey,
-        snapshot = response.snapshot
+        snapshot = response.snapshot,
+        showErrorNotification = showErrorNotification
     ) {
         logger(
-            "mutation applied taskId=$taskId occurrence=$occurrenceKey " +
+            "mutation applied taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} " +
                 "scheduleVersion=${response.snapshot.scheduleVersion}"
         )
         CoordinatorActionResult.Success
     }
 
     private fun applyConflictSnapshot(
-        taskId: String,
-        occurrenceKey: String,
+        taskId: String?,
+        occurrenceKey: String?,
         snapshot: TasksSnapshotResponse,
         code: String,
-        message: String
+        message: String,
+        showErrorNotification: Boolean
     ): CoordinatorActionResult = applyAuthoritativeSnapshot(
         taskId = taskId,
         occurrenceKey = occurrenceKey,
-        snapshot = snapshot
+        snapshot = snapshot,
+        showErrorNotification = showErrorNotification
     ) { appliedSnapshot ->
         CoordinatorActionResult.Conflict(
             code = code,
@@ -250,9 +263,10 @@ class EnforcementCoordinator(
 
     /** Serializes local application only; API requests happen before entering this boundary. */
     private fun applyAuthoritativeSnapshot(
-        taskId: String,
-        occurrenceKey: String,
+        taskId: String?,
+        occurrenceKey: String?,
         snapshot: TasksSnapshotResponse,
+        showErrorNotification: Boolean = true,
         onStale: (TasksSnapshotResponse) -> CoordinatorActionResult = { cached ->
             CoordinatorActionResult.Conflict(
                 code = "stale_snapshot",
@@ -267,7 +281,7 @@ class EnforcementCoordinator(
             when {
                 application.stale -> {
                     logger(
-                        "authoritative snapshot ignored_stale taskId=$taskId occurrence=$occurrenceKey " +
+                        "authoritative snapshot ignored_stale taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} " +
                             "incomingGeneration=${snapshot.snapshotGeneration} " +
                             "cachedGeneration=${application.snapshot.snapshotGeneration}"
                     )
@@ -277,14 +291,18 @@ class EnforcementCoordinator(
                 application.applied -> {
                     snapshotStore.save(application.snapshot)
                     reconcile(application.snapshot)
-                    blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
+                    if (taskId != null && !occurrenceKey.isNullOrEmpty()) {
+                        blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
+                    }
                     result(application.snapshot)
                 }
 
                 else -> {
                     // Equal generation is an idempotent replay of the same complete authority.
                     // It must not write/reconcile again, but the completed action may clear its notification.
-                    blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
+                    if (taskId != null && !occurrenceKey.isNullOrEmpty()) {
+                        blockerNotificationCleaner.cancelForTask(taskId, occurrenceKey)
+                    }
                     result(application.snapshot)
                 }
             }
@@ -293,17 +311,44 @@ class EnforcementCoordinator(
         } catch (error: Exception) {
             val message = error.message ?: error::class.simpleName ?: "local reconciliation failed"
             logger(
-                "authoritative snapshot local_failure taskId=$taskId occurrence=$occurrenceKey " +
+                "authoritative snapshot local_failure taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} " +
                     "scheduleVersion=${snapshot.scheduleVersion} message=$message"
             )
             errorReporter.report(
                 action = BlockerAction.REFRESH_SNAPSHOT,
                 taskId = taskId,
                 message = message,
-                showNotification = true,
+                showNotification = showErrorNotification,
                 throwable = error
             )
             CoordinatorActionResult.LocalReconciliationFailed(snapshot, message)
+        }
+    }
+
+    private fun reconcileWarningSnapshotOrNull(
+        taskId: String?,
+        occurrenceKey: String?,
+        snapshot: TasksSnapshotResponse?,
+        code: String,
+        message: String,
+        showErrorNotification: Boolean
+    ): CoordinatorActionResult {
+        if (snapshot == null) {
+            return CoordinatorActionResult.Warning(code = code, message = message, snapshot = null)
+        }
+        // Apply this operation's own authoritative snapshot exactly once and use whichever
+        // snapshot local reconciliation actually settled on (this one, an already-cached newer
+        // one, or LocalReconciliationFailed on local store/alarm failure).
+        return applyAuthoritativeSnapshot(
+            taskId = taskId,
+            occurrenceKey = occurrenceKey,
+            snapshot = snapshot,
+            showErrorNotification = showErrorNotification,
+            onStale = { cachedSnapshot ->
+                CoordinatorActionResult.Warning(code = code, message = message, snapshot = cachedSnapshot)
+            }
+        ) { appliedSnapshot ->
+            CoordinatorActionResult.Warning(code = code, message = message, snapshot = appliedSnapshot)
         }
     }
 
@@ -361,15 +406,22 @@ class EnforcementCoordinator(
 
     private suspend fun runBackendAction(
         action: BlockerAction,
-        taskId: String,
-        request: TaskActionRequest,
+        taskId: String?,
+        occurrenceKey: String?,
+        showErrorNotification: Boolean = true,
+        landedMutationIsSuccess: Boolean = false,
         call: suspend () -> MutationResponse
     ): CoordinatorActionResult {
-        val occurrenceKey = request.expectedOccurrenceKey
         return try {
-            logger("action start action=$action taskId=$taskId occurrence=$occurrenceKey")
+            logger("action start action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()}")
             val response = call()
-            applyMutationResponse(taskId, occurrenceKey, response)
+            val applied = applyMutationResponse(taskId, occurrenceKey, response, showErrorNotification)
+            if (landedMutationIsSuccess && applied != CoordinatorActionResult.Success) {
+                logger("action landed action=$action localResult=${applied::class.simpleName} reported=Success")
+                CoordinatorActionResult.Success
+            } else {
+                applied
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: BuzerApiException) {
@@ -381,62 +433,56 @@ class EnforcementCoordinator(
                         occurrenceKey = occurrenceKey,
                         snapshot = snapshot,
                         code = error.code ?: "conflict",
-                        message = error.message ?: "Task changed on another device"
+                        message = error.message ?: "Task changed on another device",
+                        showErrorNotification = showErrorNotification
                     )
                 }
 
-                isOperationalFailure(error) -> {
+                FailureClassifier.isExpectedOperationalApiError(error) -> {
                     val code = error.code ?: "operational_error"
                     val message = error.message ?: "Operational error"
-                    AppLog.warn(
-                        "enforcement_action_warning",
-                        error,
-                        mapOf(
-                            "action" to action.name,
-                            "task_id" to taskId,
-                            "code" to code
-                        )
-                    )
-                    logger("action warning action=$action taskId=$taskId occurrence=$occurrenceKey code=$code message=$message")
-                    if (snapshot != null) {
-                        // Apply this operation's own authoritative snapshot exactly once and use
-                        // whichever snapshot local reconciliation actually settled on (this one,
-                        // an already-cached newer one, or none on local reconciliation failure).
-                        // Never let the raw, possibly-stale response snapshot be returned to a
-                        // caller that would reapply it outside this authority check.
-                        applyAuthoritativeSnapshot(
-                            taskId = taskId,
-                            occurrenceKey = occurrenceKey,
-                            snapshot = snapshot,
-                            onStale = { cachedSnapshot ->
-                                CoordinatorActionResult.Warning(code = code, message = message, snapshot = cachedSnapshot)
-                            }
-                        ) { appliedSnapshot ->
-                            CoordinatorActionResult.Warning(code = code, message = message, snapshot = appliedSnapshot)
-                        }
-                    } else {
-                        CoordinatorActionResult.Warning(code = code, message = message, snapshot = null)
+                    val attributes = buildMap {
+                        put("action", action.name)
+                        taskId?.let { put("task_id", it) }
+                        put("code", code)
                     }
+                    AppLog.warn("enforcement_action_warning", error, attributes)
+                    logger("action warning action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} code=$code message=$message")
+                    reconcileWarningSnapshotOrNull(
+                        taskId = taskId,
+                        occurrenceKey = occurrenceKey,
+                        snapshot = snapshot,
+                        code = code,
+                        message = message,
+                        showErrorNotification = showErrorNotification
+                    )
                 }
 
                 else -> {
                     val code = error.code ?: "backend_error"
                     val message = error.message ?: "Backend error"
-                    errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
-                    logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
-                    CoordinatorActionResult.Warning(code = code, message = message, snapshot = snapshot)
+                    errorReporter.report(action, taskId, message, showNotification = showErrorNotification, throwable = error)
+                    logger("action failed action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} message=$message")
+                    reconcileWarningSnapshotOrNull(
+                        taskId = taskId,
+                        occurrenceKey = occurrenceKey,
+                        snapshot = snapshot,
+                        code = code,
+                        message = message,
+                        showErrorNotification = showErrorNotification
+                    )
                 }
             }
         } catch (error: Exception) {
-            if (isTransportFailure(error)) {
+            if (FailureClassifier.isTransportFailure(error)) {
                 val isConnected = isConnectedProvider?.invoke() ?: false
                 val message = error.message ?: "Network failure"
-                logger("action transport_failure action=$action taskId=$taskId occurrence=$occurrenceKey isConnected=$isConnected message=$message")
+                logger("action transport_failure action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} isConnected=$isConnected message=$message")
                 CoordinatorActionResult.TransportFailure(isConnected = isConnected, message = message)
             } else {
                 val message = error.message ?: error::class.simpleName ?: "unknown error"
-                errorReporter.report(action, taskId, message, showNotification = true, throwable = error)
-                logger("action failed action=$action taskId=$taskId occurrence=$occurrenceKey message=$message")
+                errorReporter.report(action, taskId, message, showNotification = showErrorNotification, throwable = error)
+                logger("action failed action=$action taskId=${taskId.orEmpty()} occurrence=${occurrenceKey.orEmpty()} message=$message")
                 val cachedSnapshot = loadLatestSnapshot()
                 CoordinatorActionResult.Warning(code = "local_failure", message = message, snapshot = cachedSnapshot)
             }
@@ -458,38 +504,12 @@ class EnforcementCoordinator(
             runBackendAction(
                 action = action,
                 taskId = taskId,
-                request = TaskActionRequest(
-                    expectedOccurrenceKey = request.expectedOccurrenceKey
-                ),
+                occurrenceKey = request.expectedOccurrenceKey,
                 call = call
             )
         } finally {
             childActionMutex.withLock { inFlightChildren.remove(childIdentity) }
         }
-    }
-
-    private fun isOperationalFailure(error: BuzerApiException): Boolean {
-        val operationalCodes = setOf(
-            "backend_busy",
-            "todoist_command_rejected",
-            "todoist_delivery_unknown",
-            "todoist_accepted_snapshot_stale",
-            "forced_refresh_failed",
-            "rate_limited",
-            "validation_error",
-            "invalid_request"
-        )
-        if (error.code in operationalCodes) return true
-        if (error.status in 400..499) return true
-        return false
-    }
-
-    private fun isTransportFailure(error: Throwable): Boolean {
-        if (error is IOException) return true
-        val className = error::class.qualifiedName.orEmpty()
-        return className.contains("Timeout") ||
-            className.contains("Connect") ||
-            className.contains("UnresolvedAddress")
     }
 
     companion object {

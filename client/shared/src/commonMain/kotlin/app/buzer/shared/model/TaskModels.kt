@@ -443,34 +443,6 @@ data class ExtendTaskRequest(
 }
 
 @Serializable
-data class AddChecklistItemRequest(
-    val expectedOccurrenceKey: String,
-    val clientMutationId: String,
-    val title: String,
-    val description: String? = null
-) {
-    init {
-        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
-        requireNonBlank("clientMutationId", clientMutationId)
-        requireNonBlank("title", title)
-    }
-}
-
-@Serializable
-data class UpdateChecklistItemRequest(
-    val expectedOccurrenceKey: String,
-    val expectedChildRevision: String,
-    val title: String,
-    val description: String? = null
-) {
-    init {
-        requireNonBlank("expectedOccurrenceKey", expectedOccurrenceKey)
-        requireNonBlank("expectedChildRevision", expectedChildRevision)
-        requireNonBlank("title", title)
-    }
-}
-
-@Serializable
 data class FocusedChecklistMutationRequest(
     val expectedOccurrenceKey: String,
     val expectedChildRevision: String

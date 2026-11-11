@@ -1,8 +1,8 @@
 package app.buzer.android.ui.screens
 
-import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.scheduling.CommitmentEligibility
 import app.buzer.shared.state.SnapshotViewState
 import app.buzer.android.time.parseSnapshotJavaInstantOrNull
 import app.buzer.android.ui.agenda.selectOwnerAgenda
@@ -127,15 +127,12 @@ fun buildHomeScreenState(
     val activeTasks = snapshot.tasks
         .distinctBy { it.id }
         .filterNot {
-            it.isDeleted ||
-                it.isCompleted ||
-                it.state == CommitmentState.completed ||
-                it.state == CommitmentState.deleted ||
+            CommitmentEligibility.isTerminalCommitment(it) ||
                 it.hierarchyStatus == HierarchyStatus.unsupported
         }
 
     val ownerAgenda = selectOwnerAgenda(snapshot, now, zoneId)
-    val reviewTasks = ownerAgenda.blocking.filter { it.hierarchyStatus != HierarchyStatus.unsupported }
+    val reviewTasks = ownerAgenda.blocking
     val reviewIds = reviewTasks.map { it.id }.toSet()
     val blockingCount = ownerBlockingCount ?: reviewTasks.size
     val reviewAttention = if (!morningReviewBannerVisible) {

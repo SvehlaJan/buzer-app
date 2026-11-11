@@ -96,11 +96,30 @@ function setupTestService(options: {
     updatedAt: "2026-07-15T09:00:00Z"
   });
 
+  const collaborators = new CollaboratorRepository(db);
   const adapter = new FakeTodoistAdapter();
   const queue = options.queue ?? new TodoistOperationQueue();
   const executor = new TodoistCommandExecutor(adapter);
-  const syncService = { syncOnce: options.sync ?? (async () => undefined) };
-  const snapshotService = () => ({ tasks: repo.listAll() });
+  const syncService = {
+    syncOnce: async () => {
+      for (const close of adapter.itemCloses) {
+        const target = repo.getByTodoistTaskId(close.todoistTaskId);
+        if (target !== null && target.parentId !== null) {
+          repo.setChecklistChildChecked(target.id, true, "2026-07-15T09:30:00Z");
+        }
+      }
+      for (const uncomplete of adapter.itemUncompletes) {
+        const target = repo.getByTodoistTaskId(uncomplete.todoistTaskId);
+        if (target !== null && target.parentId !== null) {
+          repo.setChecklistChildChecked(target.id, false, "2026-07-15T09:30:00Z");
+        }
+      }
+      if (options.sync) {
+        await options.sync();
+      }
+    }
+  };
+  const snapshotService = () => ({ authoritative: true, tasks: repo.listAll() });
   const runner = new TaskMutationRunner({
     queue,
     executor,
@@ -112,18 +131,20 @@ function setupTestService(options: {
     ? new EscalationService(db, repo, options.escalationSender, "wife-chat")
     : null);
 
-  const service = new TaskActionService(
-    db,
-    repo,
+  const service = new TaskActionService({
+    tasks: repo,
     projects,
-    runner,
-    snapshotService as any,
-    "user-self",
+    collaborators,
+    snapshots: snapshotService as any,
+    runtime: {
+      executeMutation: (mutationOptions) => runner.execute(mutationOptions)
+    },
     escalationService,
-    options.requireMirrorReady ?? false
-  );
+    currentUserId: "user-self",
+    requireMirrorReady: options.requireMirrorReady ?? false
+  });
 
-  return { service, repo, projects, adapter, runner, db, escalationService, queue };
+  return { service, repo, projects, collaborators, adapter, runner, db, escalationService, queue };
 }
 
 describe("TaskActionService", () => {
@@ -752,6 +773,354 @@ describe("TaskActionService", () => {
       expect(adapter.itemUpdates[0]).toMatchObject({
         due: { kind: "preserve" },
         duration: { kind: "replace", amount: 30, unit: "minute" }
+      });
+    });
+  });
+
+  describe("checklist toggle and batched childMutations", () => {
+    function seedChild(
+      repo: TaskRepository,
+      name: string,
+      input: { parentTodoistTaskId?: string; projectId?: string; checked?: boolean } = {}
+    ) {
+      const id = `local-child-${name}`;
+      const todoistTaskId = `child-${name}`;
+      repo.createChecklistChild({
+        id,
+        todoistTaskId,
+        parentTodoistTaskId: input.parentTodoistTaskId ?? "todoist-1",
+        projectId: input.projectId ?? "project-personal",
+        title: `Child ${name}`,
+        description: null,
+        childOrder: 0,
+        updatedAt: "2026-07-15T09:00:00Z"
+      });
+      if (input.checked) {
+        repo.setChecklistChildChecked(id, true, "2026-07-15T09:30:00Z");
+      }
+      return { id, todoistTaskId };
+    }
+
+    it("exposes canonical methods only without legacy aliases", () => {
+      const { service } = setupTestService();
+      const untyped = service as unknown as Record<string, unknown>;
+      expect(typeof service.checkChecklistItem).toBe("function");
+      expect(typeof service.uncheckChecklistItem).toBe("function");
+      expect(untyped.create).toBeUndefined();
+      expect(untyped.start).toBeUndefined();
+      expect(untyped.postponeStart).toBeUndefined();
+      expect(untyped.done).toBeUndefined();
+      expect(untyped.extend).toBeUndefined();
+      expect(untyped.update).toBeUndefined();
+      expect(untyped.mutateChecklist).toBeUndefined();
+    });
+
+    it("checks and unchecks with dedicated Todoist commands without completing the root", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+      seedChild(repo, "one");
+
+      const initial = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+      const checkedResult = await service.checkChecklistItem("task-1", "child-one", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: initial
+      });
+      expect(checkedResult).toMatchObject({ kind: "success", snapshot: { authoritative: true } });
+
+      const afterCheck = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+      const uncheckedResult = await service.uncheckChecklistItem("task-1", "child-one", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: afterCheck
+      });
+      expect(uncheckedResult).toMatchObject({ kind: "success", snapshot: { authoritative: true } });
+
+      expect(adapter.itemCloses).toHaveLength(1);
+      expect(adapter.itemUncompletes).toHaveLength(1);
+      expect(repo.getById("task-1")?.completedAt).toBeNull();
+    });
+
+    it("accepts an already observed requested checked state without a second Todoist command", async () => {
+      const sync = vi.fn(async () => undefined);
+      const { service, adapter, repo } = setupTestService({ sync });
+      insertCommittedTask(repo);
+      seedChild(repo, "one", { checked: true });
+      const revision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+
+      const result = await service.checkChecklistItem("task-1", "child-one", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: revision
+      });
+
+      expect(result).toMatchObject({ kind: "success", snapshot: { authoritative: true } });
+      expect(adapter.itemCloses).toEqual([]);
+      expect(sync).toHaveBeenCalledTimes(1);
+    });
+
+    it("adds, edits, and deletes checklist children through batched editTask childMutations", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+      seedChild(repo, "one");
+      const revision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+
+      const added = await service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [
+          { type: "add", clientMutationId: "draft-1", title: "  First step ", description: " Details " },
+          { type: "edit", clientMutationId: "edit-1", childId: "child-one", expectedChildRevision: revision, title: "Renamed", description: "New details" }
+        ]
+      });
+      expect(added).toMatchObject({ kind: "success", snapshot: { authoritative: true } });
+      expect(adapter.itemAdds).toEqual([
+        expect.objectContaining({
+          kind: "child",
+          parentTodoistTaskId: "todoist-1",
+          projectId: "project-personal",
+          title: "First step",
+          description: "Details"
+        })
+      ]);
+      expect(adapter.itemUpdates).toEqual([
+        expect.objectContaining({
+          todoistTaskId: "child-one",
+          title: "Renamed",
+          description: "New details",
+          due: { kind: "preserve" }
+        })
+      ]);
+
+      await service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [
+          { type: "delete", clientMutationId: "delete-1", childId: "child-one", expectedChildRevision: revision }
+        ]
+      });
+      expect(adapter.itemDeletes).toEqual([expect.objectContaining({ todoistTaskId: "child-one" })]);
+    });
+
+    it("rejects stale expectedOccurrenceKey on checkChecklistItem and batched childMutations", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+      seedChild(repo, "one");
+      const revision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+
+      await expect(service.checkChecklistItem("task-1", "child-one", {
+        expectedOccurrenceKey: "obsolete-occurrence",
+        expectedChildRevision: revision
+      })).rejects.toMatchObject({
+        code: "stale_occurrence",
+        statusCode: 409,
+        details: { snapshot: { authoritative: true } }
+      });
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "mismatched-key",
+        rootPatch: null,
+        childMutations: [{ type: "add", clientMutationId: "draft-1", title: "Valid title", description: null }]
+      })).rejects.toMatchObject({
+        code: "stale_occurrence",
+        statusCode: 409,
+        details: { snapshot: { authoritative: true } }
+      });
+
+      expect(adapter.itemCloses).toHaveLength(0);
+      expect(adapter.itemAdds).toHaveLength(0);
+    });
+
+    it("rejects stale or malformed expectedChildRevision and rechecks inside the FIFO before send", async () => {
+      const queue = new TodoistOperationQueue();
+      const { service, adapter, repo } = setupTestService({ queue });
+      insertCommittedTask(repo);
+      seedChild(repo, "one");
+      seedChild(repo, "two");
+      const currentTwo = `r:${repo.getByTodoistTaskId("child-two")?.mirrorRevision}`;
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [
+          { type: "edit", clientMutationId: "stale", childId: "child-one", expectedChildRevision: "r:0", title: "Ignored", description: null },
+          { type: "check", clientMutationId: "safe", childId: "child-two", expectedChildRevision: currentTwo }
+        ]
+      })).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
+
+      await expect(service.checkChecklistItem("task-1", "child-one", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: "not-a-valid-revision"
+      })).rejects.toMatchObject({
+        code: "stale_child",
+        statusCode: 409,
+        details: { snapshot: { authoritative: true } }
+      });
+
+      const expectedRevision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+      let releaseBlocker!: () => void;
+      const blocker = queue.run(
+        { operation: "blocking_poll", deadlineMs: 30_000 },
+        () => new Promise<void>((resolve) => { releaseBlocker = resolve; })
+      );
+
+      const mutation = service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [{
+          type: "edit",
+          clientMutationId: "edit-queued",
+          childId: "child-one",
+          expectedChildRevision: expectedRevision,
+          title: "Queued edit",
+          description: null
+        }]
+      });
+
+      repo.updateChecklistChild("local-child-one", "Changed elsewhere", null, "2026-07-15T09:45:00Z");
+      releaseBlocker();
+      await blocker;
+
+      await expect(mutation).rejects.toMatchObject({ code: "stale_child", statusCode: 409 });
+      expect(adapter.itemCloses).toHaveLength(0);
+      expect(adapter.itemUpdates).toHaveLength(0);
+    });
+
+    it("rejects duplicate clientMutationId values across batched childMutations before dispatching any command", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [
+          { type: "add", clientMutationId: "dup-id", title: "First", description: null },
+          { type: "add", clientMutationId: "dup-id", title: "Second", description: null }
+        ]
+      })).rejects.toMatchObject({
+        code: "duplicate_client_mutation_id",
+        statusCode: 422
+      });
+
+      expect(adapter.itemAdds).toHaveLength(0);
+    });
+
+    it("rejects forbidden child fields, blank child titles, and children not under the requested root", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+      seedChild(repo, "one");
+      seedChild(repo, "other", { parentTodoistTaskId: "different-root" });
+
+      const otherRevision = `r:${repo.getByTodoistTaskId("child-other")?.mirrorRevision}`;
+      await expect(service.checkChecklistItem("task-1", "child-other", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: otherRevision
+      })).rejects.toMatchObject({ code: "child_not_under_root", statusCode: 404 });
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [{
+          type: "add",
+          clientMutationId: "bad",
+          title: "No due",
+          description: null,
+          dueDatetime: "2026-07-15T12:00:00Z"
+        } as any]
+      })).rejects.toMatchObject({ code: "forbidden_child_field", statusCode: 422 });
+
+      const oneRevision = `r:${repo.getByTodoistTaskId("child-one")?.mirrorRevision}`;
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [{
+          type: "edit",
+          clientMutationId: "blank-title",
+          childId: "child-one",
+          expectedChildRevision: oneRevision,
+          title: "   ",
+          description: null
+        }]
+      })).rejects.toMatchObject({ code: "child_title_required", statusCode: 422 });
+
+      expect(adapter.itemAdds).toEqual([]);
+      expect(adapter.itemUpdates).toEqual([]);
+      expect(adapter.itemCloses).toEqual([]);
+    });
+
+    it("rejects a batch projecting > 30 children before adding any children", async () => {
+      const { service, adapter, repo } = setupTestService();
+      insertCommittedTask(repo);
+      for (let index = 0; index < 28; index += 1) {
+        seedChild(repo, `seed-${index}`);
+      }
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [
+          { type: "add", clientMutationId: "add-1", title: "Twenty-nine", description: null },
+          { type: "add", clientMutationId: "add-2", title: "Thirty", description: null },
+          { type: "add", clientMutationId: "add-3", title: "Too many", description: null }
+        ]
+      })).rejects.toMatchObject({ code: "too_many_children", statusCode: 422 });
+
+      expect(adapter.itemAdds).toHaveLength(0);
+    });
+
+    it.each([
+      ["dueDatetime", "2026-07-15T12:00:00Z"],
+      ["dueDate", "2026-07-15"],
+      ["dueString", "every day"],
+      ["dueLang", "en"],
+      ["dueTimezone", "Europe/Bratislava"],
+      ["isRecurring", true],
+      ["durationMinutes", 30],
+      ["durationAmount", 30],
+      ["durationUnit", "minute"],
+      ["assigneeId", "user-self"],
+      ["projectId", "project-work"]
+    ] as const)("rejects childMutations and checkChecklistItem when root hierarchy is unsupported (%s)", async (field, value) => {
+      const { service, repo } = setupTestService();
+      insertCommittedTask(repo);
+      repo.upsertTodoistTask({
+        id: "invalid-child",
+        todoistTaskId: "invalid-child",
+        title: "Invalid child",
+        description: null,
+        projectId: field === "projectId" ? (value as string) : "project-personal",
+        parentId: "todoist-1",
+        childOrder: 0,
+        assigneeId: field === "assigneeId" ? (value as string) : null,
+        creatorId: null,
+        dueDatetime: field === "dueDatetime" ? (value as string) : null,
+        dueDate: field === "dueDate" ? (value as string) : null,
+        dueString: field === "dueString" ? (value as string) : null,
+        dueLang: field === "dueLang" ? (value as string) : null,
+        dueTimezone: field === "dueTimezone" ? (value as string) : null,
+        isRecurring: field === "isRecurring" ? (value as boolean) : false,
+        durationMinutes: field === "durationMinutes" ? (value as number) : null,
+        durationAmount: field === "durationAmount" ? (value as number) : null,
+        durationUnit: field === "durationUnit" ? (value as string) : null,
+        completedAt: null,
+        deletedAt: null,
+        rawJson: "{}",
+        updatedAt: "2026-07-15T09:00:00Z"
+      });
+
+      await expect(service.editTask("task-1", {
+        expectedOccurrenceKey: "occurrence-1",
+        rootPatch: null,
+        childMutations: [{ type: "add", clientMutationId: "blocked", title: "Blocked", description: null }]
+      })).rejects.toMatchObject({
+        code: "unsupported_hierarchy",
+        statusCode: 422
+      });
+
+      const invalidRevision = `r:${repo.getById("invalid-child")?.mirrorRevision}`;
+      await expect(service.checkChecklistItem("task-1", "invalid-child", {
+        expectedOccurrenceKey: "occurrence-1",
+        expectedChildRevision: invalidRevision
+      })).rejects.toMatchObject({
+        code: "unsupported_hierarchy",
+        statusCode: 422
       });
     });
   });

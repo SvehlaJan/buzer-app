@@ -1,19 +1,14 @@
 import type {
   TodoistAdapter,
   TodoistChildItemAddInput,
-  TodoistCreateTaskInput,
-  TodoistCreateTaskResult,
   TodoistDueMutation,
   TodoistItemAddInput,
   TodoistItemAddResult,
   TodoistItemIdentityInput,
   TodoistItemMoveInput,
   TodoistItemUpdateInput,
-  TodoistLegacyUpdateCommandIdentities,
-  TodoistRecurringCompletionInput,
   TodoistRootItemAddInput,
-  TodoistSyncResult,
-  TodoistUpdateTaskInput
+  TodoistSyncResult
 } from "../../src/todoist/todoistAdapter.js";
 import { TodoistOperationError } from "../../src/todoist/todoistErrors.js";
 import type {
@@ -291,11 +286,77 @@ function normalizeDurationMinutes(
   return null;
 }
 
+export interface E2ESyncHold {
+  entered: Promise<void>;
+  release: () => void;
+}
+
+interface InternalSyncHold {
+  entered: Promise<void>;
+  markEntered: () => void;
+  waitUntilReleased: (signal?: AbortSignal) => Promise<void>;
+  release: () => void;
+}
+
+function createInternalSyncHold(onDisposed: () => void): InternalSyncHold {
+  let released = false;
+  let markEntered!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    markEntered = resolve;
+  });
+  let resolveRelease!: () => void;
+  const releasePromise = new Promise<void>((resolve) => {
+    resolveRelease = resolve;
+  });
+
+  const release = (): void => {
+    if (released) {
+      return;
+    }
+    released = true;
+    onDisposed();
+    markEntered();
+    resolveRelease();
+  };
+
+  const waitUntilReleased = async (signal?: AbortSignal): Promise<void> => {
+    if (released) {
+      return;
+    }
+    if (signal?.aborted) {
+      throw new TodoistOperationError("timeout");
+    }
+    if (!signal) {
+      await releasePromise;
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        reject(new TodoistOperationError("timeout"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      void releasePromise.then(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      });
+    });
+  };
+
+  return {
+    entered,
+    markEntered,
+    waitUntilReleased,
+    release
+  };
+}
+
 export class E2ETodoistAdapter implements TodoistAdapter {
   readonly world: E2ETodoistWorld;
   private scenario: E2EScenario = "none";
   private failNextChildAdd = false;
   private syncCount = 0;
+  private armedSyncHold: InternalSyncHold | null = null;
+  private activeSyncHold: InternalSyncHold | null = null;
   private readonly acceptedCommandOutcomes = new Map<string, unknown>();
   private acceptedCommandGeneration = 0;
 
@@ -316,7 +377,43 @@ export class E2ETodoistAdapter implements TodoistAdapter {
     this.failNextChildAdd = enabled;
   }
 
-  async sync(_syncToken: string): Promise<TodoistSyncResult> {
+  holdNextSync(): E2ESyncHold {
+    this.releaseHeldSync();
+    const hold = createInternalSyncHold(() => {
+      if (this.armedSyncHold === hold) {
+        this.armedSyncHold = null;
+      }
+      if (this.activeSyncHold === hold) {
+        this.activeSyncHold = null;
+      }
+    });
+    this.armedSyncHold = hold;
+    return {
+      entered: hold.entered,
+      release: hold.release
+    };
+  }
+
+  releaseHeldSync(): void {
+    this.armedSyncHold?.release();
+    this.activeSyncHold?.release();
+  }
+
+  async sync(_syncToken: string, options?: { signal?: AbortSignal }): Promise<TodoistSyncResult> {
+    const hold = this.armedSyncHold;
+    if (hold !== null) {
+      this.armedSyncHold = null;
+      this.activeSyncHold = hold;
+      hold.markEntered();
+      try {
+        await hold.waitUntilReleased(options?.signal);
+      } finally {
+        if (this.activeSyncHold === hold) {
+          this.activeSyncHold = null;
+        }
+      }
+    }
+
     this.syncCount += 1;
     const syncToken = `e2e-sync-${this.syncCount}`;
     if (this.scenario === "accepted_stale") {
@@ -379,83 +476,6 @@ export class E2ETodoistAdapter implements TodoistAdapter {
 
   async itemDelete(input: TodoistItemIdentityInput): Promise<void> {
     this.runAcceptedCommand(input.commandUuid, () => this.world.tombstone(input.todoistTaskId));
-  }
-
-  async itemUpdateDateComplete(
-    input: TodoistRecurringCompletionInput
-  ): Promise<void> {
-    this.runAcceptedCommand(input.commandUuid, () =>
-      this.world.advanceRecurringDue(input.task.todoistTaskId)
-    );
-  }
-
-  async createTask(
-    input: TodoistCreateTaskInput
-  ): Promise<TodoistCreateTaskResult> {
-    this.guardCommand();
-    const todoistTaskId = this.world.addRoot({
-      kind: "root",
-      commandUuid: "e2e-legacy-create",
-      tempId: "e2e-legacy-create",
-      title: input.title,
-      description: input.description ?? null,
-      projectId: input.projectId ?? "project-test",
-      assigneeId: input.assigneeId,
-      due:
-        input.dueDatetime === null
-          ? { kind: "clear" }
-          : {
-              kind: "replace",
-              datetime: input.dueDatetime,
-              string: null,
-              lang: null,
-              timezone: null
-            },
-      duration:
-        input.durationMinutes === null
-          ? null
-          : { kind: "replace", amount: input.durationMinutes, unit: "minute" }
-    });
-    return { todoistTaskId, task: this.world.getTask(todoistTaskId) };
-  }
-
-  async completeTask(todoistTaskId: string, _commandUuid: string): Promise<void> {
-    this.runAcceptedCommand(_commandUuid, () => this.world.close(todoistTaskId));
-  }
-
-  async updateTask(
-    input: TodoistUpdateTaskInput,
-    commands: TodoistLegacyUpdateCommandIdentities
-  ): Promise<void> {
-    if (commands.moveCommandUuid !== undefined) {
-      this.runAcceptedCommand(commands.moveCommandUuid, () =>
-        this.world.move(input.todoistTaskId, input.projectId)
-      );
-    }
-    this.runAcceptedCommand(commands.updateCommandUuid, () =>
-      this.world.applyUpdate({
-        commandUuid: "e2e-legacy-update",
-        todoistTaskId: input.todoistTaskId,
-        title: input.title,
-        description: input.description,
-        duration: input.durationMinutes === null
-          ? { kind: "clear" }
-          : { kind: "replace", amount: input.durationMinutes, unit: "minute" },
-        due: input.dueDatetime === null
-          ? { kind: "clear" }
-          : {
-              kind: "replace",
-              datetime: input.dueDatetime,
-              string: null,
-              lang: null,
-              timezone: null
-            },
-        assignment:
-          input.assigneeId === null
-            ? { kind: "unassign" }
-            : { kind: "assign", assigneeId: input.assigneeId }
-      })
-    );
   }
 
   private runAcceptedCommand<T>(commandUuid: string, mutation: () => T): T {

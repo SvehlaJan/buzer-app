@@ -10,35 +10,68 @@ import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.diagnostics.AppLog
 
 object EnforcementDependencies {
+    private data class ApiClientKey(val baseUrl: String, val bearerToken: String)
+
+    private val apiClientLock = Any()
+    private var cachedApiClientKey: ApiClientKey? = null
+    private var cachedApiClient: BuzerApiClient? = null
+
     fun deviceIdentityStore(context: Context): DeviceIdentityStore =
         DeviceIdentityStore.fromContext(context)
 
-    fun configError(): String? {
-        if (BuildConfig.BUZER_BACKEND_BASE_URL.isBlank()) {
+    fun configError(
+        baseUrl: String = BuildConfig.BUZER_BACKEND_BASE_URL,
+        bearerToken: String = BuildConfig.BUZER_BACKEND_TOKEN
+    ): String? {
+        if (baseUrl.isBlank()) {
             return "BUZER_BACKEND_BASE_URL is missing from client/local.properties"
         }
-        if (BuildConfig.BUZER_BACKEND_TOKEN.isBlank()) {
+        if (bearerToken.isBlank()) {
             return "BUZER_BACKEND_TOKEN is missing from client/local.properties"
         }
         return null
     }
 
-    fun buzerApiClient(): BuzerApiClient {
-        val error = configError()
+    fun apiClient(
+        @Suppress("UNUSED_PARAMETER") context: Context? = null,
+        baseUrl: String = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/'),
+        bearerToken: String = BuildConfig.BUZER_BACKEND_TOKEN
+    ): BuzerApiClient {
+        val error = configError(baseUrl, bearerToken)
         require(error == null) { error.orEmpty() }
-        return BuzerApiClient(
-            baseUrl = BuildConfig.BUZER_BACKEND_BASE_URL.trimEnd('/'),
-            token = BuildConfig.BUZER_BACKEND_TOKEN
-        )
+        val key = ApiClientKey(baseUrl.trimEnd('/'), bearerToken)
+        synchronized(apiClientLock) {
+            val existing = cachedApiClient
+            if (existing != null && cachedApiClientKey == key) {
+                return existing
+            }
+            existing?.close()
+            return BuzerApiClient(
+                baseUrl = key.baseUrl,
+                token = key.bearerToken
+            ).also {
+                cachedApiClientKey = key
+                cachedApiClient = it
+            }
+        }
+    }
+
+    fun buzerApiClient(): BuzerApiClient = apiClient()
+
+    internal fun resetApiClientForTests() {
+        synchronized(apiClientLock) {
+            cachedApiClient?.close()
+            cachedApiClient = null
+            cachedApiClientKey = null
+        }
     }
 
     fun coordinator(
         context: Context,
         observability: AndroidObservability = ObservabilityRuntime.instance
     ): EnforcementCoordinator {
-        val client = buzerApiClient()
         return EnforcementCoordinator(
-            api = BuzerEnforcementApi(client),
+            api = apiClient(context),
             snapshotStore = SnapshotStore(context),
             alarmScheduler = AndroidAlarmScheduler(context),
             scheduledAlarmRegistry = ScheduledAlarmRegistry.fromContext(context),

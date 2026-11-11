@@ -1,9 +1,7 @@
 package app.buzer.android.ui.agenda
 
-import app.buzer.android.time.parseSnapshotJavaInstantOrNull
-import app.buzer.shared.model.CommitmentState
-import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.scheduling.CommitmentEligibility
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Instant
 import java.time.ZoneId
@@ -29,12 +27,12 @@ fun selectOwnerAgenda(
     val invalidIds = snapshot.invalidTasks.mapTo(mutableSetOf()) { it.id }
     val activeOwnerTasks = snapshot.tasks
         .distinctBy { it.id }
-        .filterNot(::isTerminal)
+        .filterNot(CommitmentEligibility::isTerminalCommitment)
         .filter { it.isAssignedToUser }
 
     val blocking = activeOwnerTasks
         .filter { task ->
-            task.state == CommitmentState.invalid ||
+            CommitmentEligibility.isOwnerBlockingTask(task) ||
                 task.id in invalidIds
         }
         .sortedBy { it.id }
@@ -42,7 +40,6 @@ fun selectOwnerAgenda(
     val timed = activeOwnerTasks
         .asSequence()
         .filterNot { it.id in blockingIds }
-        .filter { it.hierarchyStatus != HierarchyStatus.unsupported }
         .mapNotNull { task -> task.toAgendaEntry() }
         .toList()
 
@@ -64,15 +61,12 @@ fun selectOwnerAgenda(
     )
 }
 
-private fun isTerminal(task: TaskSnapshotItem): Boolean =
-    task.isDeleted ||
-        task.isCompleted ||
-        task.state == CommitmentState.completed ||
-        task.state == CommitmentState.deleted
-
 private fun TaskSnapshotItem.toAgendaEntry(): OwnerAgendaEntry? {
-    val due = dueDatetime?.let(::parseSnapshotJavaInstantOrNull) ?: return null
-    val duration = durationMinutes?.takeIf { it > 0 } ?: return null
-    val end = runCatching { due.plusSeconds(duration * 60L) }.getOrNull() ?: return null
-    return OwnerAgendaEntry(task = this, start = due, end = end)
+    val window = CommitmentEligibility.timedWindowOrNull(this) ?: return null
+    val start = window.start.toJavaInstantOrNull() ?: return null
+    val end = window.end.toJavaInstantOrNull() ?: return null
+    return OwnerAgendaEntry(task = this, start = start, end = end)
 }
+
+private fun kotlin.time.Instant.toJavaInstantOrNull(): Instant? =
+    runCatching { Instant.ofEpochSecond(epochSeconds, nanosecondsOfSecond.toLong()) }.getOrNull()

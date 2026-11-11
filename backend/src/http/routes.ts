@@ -1,24 +1,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { DeviceRepository } from "../repositories/deviceRepository.js";
-import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
-import { ProjectRepository } from "../repositories/projectRepository.js";
-import type { TaskActionService } from "../services/taskActionService.js";
-import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
-import type { TodoistSyncService } from "../services/todoistSyncService.js";
-import type { TodoistOperationQueue } from "../services/todoistOperationQueue.js";
-import {
-  MUTATION_DEADLINE_MS,
-  MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
-  type MutationRunResult,
-  type TaskSnapshot
-} from "../services/taskMutationRunner.js";
-import { TodoistOperationError } from "../todoist/todoistErrors.js";
-import { isOperationalFailure } from "../services/todoistPoller.js";
+import type { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
+import type { DeviceRepository } from "../repositories/deviceRepository.js";
+import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { BuildServerOptions } from "../server.js";
+import type { TaskActionService } from "../services/taskActionService.js";
+import type { MutationRunResult, TaskSnapshot } from "../services/taskMutationRunner.js";
+import type { TaskSnapshotService } from "../services/taskSnapshotService.js";
+import type { TodoistRuntime } from "../services/todoistRuntime.js";
 import { isBearerTokenValid, requireBearerToken } from "./auth.js";
-import { backendObservability } from "../diagnostics/backendObservability.js";
 
 const MAX_OPAQUE_VALUE_LENGTH = 200;
 const MAX_TEXT_LENGTH = 16_384;
@@ -67,21 +57,9 @@ const createTaskBody = z.strictObject({
   checklistDrafts: z.array(checklistDraft).max(30).optional()
 });
 
-const addChecklistItemBody = z.strictObject({
-  expectedOccurrenceKey: opaqueValue,
-  clientMutationId: opaqueValue,
-  title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
-  description: nullableString
-});
-
 const focusedChecklistItemBody = z.strictObject({
   expectedOccurrenceKey: opaqueValue,
   expectedChildRevision: taskRevision
-});
-
-const editChecklistItemBody = focusedChecklistItemBody.extend({
-  title: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
-  description: nullableString
 });
 
 const rootEditPatch = z.strictObject({
@@ -108,14 +86,13 @@ const deviceCheckInBody = z.strictObject({
   permissions: z.record(z.string().min(1).max(100), z.union([z.string().max(200), z.number(), z.boolean(), z.null()]))
 });
 
-const emptyBody = z.strictObject({});
-
 export interface RouteServices {
-  actions: TaskActionService;
   snapshots: TaskSnapshotService;
+  todoistRuntime: Pick<TodoistRuntime, "forceRefresh">;
+  actions: TaskActionService;
+  projects: ProjectRepository;
   collaborators: CollaboratorRepository;
-  synchronizer: TodoistSyncService;
-  todoistQueue?: TodoistOperationQueue;
+  devices: DeviceRepository;
 }
 
 export function registerRoutes(app: FastifyInstance, options: BuildServerOptions, services: RouteServices): void {
@@ -140,7 +117,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     if (request.routeOptions.url !== "/health") requireBearerToken(request, options.androidApiToken);
   });
 
-  app.setErrorHandler((error: Error & { statusCode?: number; code?: string; details?: Record<string, unknown> }, request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number; code?: string; details?: Record<string, unknown> }, _request, reply) => {
     if (error instanceof z.ZodError) {
       reply.status(400).send({ code: "validation_error", message: "Request validation failed", details: { issues: error.issues } });
       return;
@@ -164,88 +141,26 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.get("/tasks/snapshot", async (request, reply) => {
     const query = getSnapshotQuery.parse(request.query ?? {});
     if (query.forceRefresh === "true") {
-      const queue = services.todoistQueue;
-      const obs = options.observability ?? backendObservability;
-      obs.info?.("todoist_operation_started", {
-        operation: "force_refresh",
-        request_id: request.id
+      const signal = getRequestSignal(request);
+      const outcome = await services.todoistRuntime.forceRefresh({
+        requestId: request.id,
+        ...(signal !== undefined ? { signal } : {})
       });
-
-      try {
-        if (queue) {
-          const signal = getRequestSignal(request);
-          await queue.run(
-            {
-              operation: "force_refresh",
-              requestId: request.id,
-              deadlineMs: MUTATION_DEADLINE_MS,
-              minimumExecutionBudgetMs: MUTATION_MINIMUM_EXECUTION_BUDGET_MS,
-              ...(signal !== undefined ? { signal } : {})
-            },
-            async ({ signal: executionSignal }) => {
-              await services.synchronizer.syncOnce({ signal: executionSignal });
-            }
-          );
-        } else {
-          await services.synchronizer.syncOnce();
-        }
-
-        obs.info?.("todoist_operation_succeeded", {
-          operation: "force_refresh",
-          request_id: request.id
-        });
-
-        return services.snapshots.getSnapshot(new Date().toISOString());
-      } catch (error) {
-        if (
-          error instanceof TodoistOperationError &&
-          error.safeAttributes?.error_code === "backend_busy"
-        ) {
-          obs.warn?.("backend_busy", {
-            operation: "force_refresh",
-            request_id: request.id
-          });
-          reply.status(503).send({
+      switch (outcome.kind) {
+        case "success":
+          return outcome.snapshot;
+        case "busy":
+          return reply.status(503).send({
             code: "backend_busy",
-            message: "Buzer is currently processing another Todoist operation. Nothing was sent. Please try again shortly.",
-            snapshot: services.snapshots.getSnapshot(new Date().toISOString())
+            message: outcome.message,
+            ...(outcome.snapshot !== undefined ? { snapshot: outcome.snapshot } : {})
           });
-          return;
-        }
-
-        obs.warn?.("forced_refresh_failed", {
-          operation: "force_refresh",
-          request_id: request.id
-        });
-
-        const operational = isOperationalFailure(error);
-        if (!operational) {
-          obs.captureException(error, {
-            marker: "forced_refresh_internal_defect",
-            operation: "force_refresh",
-            request_id: request.id
+        case "failed":
+          return reply.status(503).send({
+            code: "forced_refresh_failed",
+            message: outcome.message,
+            ...(outcome.snapshot !== undefined ? { snapshot: outcome.snapshot } : {})
           });
-        }
-
-        let currentSnapshot: TaskSnapshot | undefined;
-        try {
-          currentSnapshot = services.snapshots.getSnapshot(new Date().toISOString());
-        } catch (snapshotError) {
-          obs.captureException(snapshotError, {
-            marker: "forced_refresh_snapshot_internal_defect",
-            operation: "force_refresh",
-            request_id: request.id
-          });
-        }
-
-        reply.status(503).send({
-          code: "forced_refresh_failed",
-          message: operational && error instanceof Error
-            ? error.message
-            : "Failed to refresh snapshot from Todoist.",
-          ...(currentSnapshot !== undefined ? { snapshot: currentSnapshot } : {})
-        });
-        return;
       }
     }
 
@@ -255,7 +170,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.get("/projects", async () => {
     const collaboratorsReady = services.collaborators.isMirrorContractReady();
     return {
-      projects: new ProjectRepository(options.db).listActive().map((project) => ({
+      projects: services.projects.listActive().map((project) => ({
         id: project.todoistProjectId,
         name: project.name,
         canAssignTasks: project.canAssignTasks,
@@ -272,7 +187,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks", async (request, reply) => {
     const body = createTaskBody.parse(request.body);
     const signal = getRequestSignal(request);
-    const result = await services.actions.create({
+    const result = await services.actions.createTask({
       title: body.title,
       projectId: body.projectId,
       assigneeId: body.assigneeId,
@@ -299,7 +214,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks/:id/start", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
-    const result = await services.actions.start(id, new Date().toISOString(), body);
+    const result = await services.actions.startTask(id, new Date().toISOString(), body);
     return sendMutationResult(reply, result);
   });
 
@@ -307,7 +222,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
     const signal = getRequestSignal(request);
-    const result = await services.actions.done(id, new Date().toISOString(), {
+    const result = await services.actions.completeTask(id, new Date().toISOString(), {
       ...body,
       requestId: request.id,
       ...(signal !== undefined ? { signal } : {})
@@ -318,7 +233,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
   app.post("/tasks/:id/postpone-start", async (request, reply) => {
     const { id } = taskIdParams.parse(request.params);
     const body = occurrenceActionMetadata.parse(request.body);
-    const result = await services.actions.postponeStart(id, new Date().toISOString(), body);
+    const result = await services.actions.postponeTask(id, new Date().toISOString(), body);
     return sendMutationResult(reply, result);
   });
 
@@ -326,7 +241,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = revisionActionMetadata.parse(request.body);
     const signal = getRequestSignal(request);
-    const result = await services.actions.extend(id, new Date().toISOString(), {
+    const result = await services.actions.extendTask(id, new Date().toISOString(), {
       ...body,
       requestId: request.id,
       ...(signal !== undefined ? { signal } : {})
@@ -338,7 +253,7 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     const { id } = taskIdParams.parse(request.params);
     const body = updateTaskBody.parse(request.body);
     const signal = getRequestSignal(request);
-    const result = await services.actions.update(id, {
+    const result = await services.actions.editTask(id, {
       expectedOccurrenceKey: body.expectedOccurrenceKey,
       rootPatch: body.rootPatch === null ? null : mapRootEditPatch(body.rootPatch),
       childMutations: body.childMutations.map(mapChildMutation),
@@ -348,55 +263,40 @@ export function registerRoutes(app: FastifyInstance, options: BuildServerOptions
     return sendMutationResult(reply, result);
   });
 
-  app.post("/tasks/:id/checklist", async (request, reply) => {
-    const { id } = taskIdParams.parse(request.params);
-    const body = addChecklistItemBody.parse(request.body);
-    const signal = getRequestSignal(request);
-    const result = await services.actions.mutateChecklist(id, {
-      expectedOccurrenceKey: body.expectedOccurrenceKey,
-      mutations: [{ type: "add", clientMutationId: body.clientMutationId, title: body.title, description: body.description }],
-      requestId: request.id,
-      ...(signal !== undefined ? { signal } : {})
-    });
-    return sendMutationResult(reply, result);
-  });
-
-  app.post("/tasks/:id/checklist/:childId/update", async (request, reply) => {
+  app.post("/tasks/:id/checklist/:childId/check", async (request, reply) => {
     const { id, childId } = checklistChildParams.parse(request.params);
-    const body = editChecklistItemBody.parse(request.body);
+    const body = focusedChecklistItemBody.parse(request.body);
     const signal = getRequestSignal(request);
-    const result = await services.actions.mutateChecklist(id, {
+    const result = await services.actions.checkChecklistItem(id, childId, {
       expectedOccurrenceKey: body.expectedOccurrenceKey,
-      mutations: [{ type: "edit", clientMutationId: randomUUID(), childId, expectedChildRevision: body.expectedChildRevision, title: body.title, description: body.description }],
+      expectedChildRevision: body.expectedChildRevision,
       requestId: request.id,
       ...(signal !== undefined ? { signal } : {})
     });
     return sendMutationResult(reply, result);
   });
 
-  for (const action of ["delete", "check", "uncheck"] as const) {
-    app.post(`/tasks/:id/checklist/:childId/${action}`, async (request, reply) => {
-      const { id, childId } = checklistChildParams.parse(request.params);
-      const body = focusedChecklistItemBody.parse(request.body);
-      const signal = getRequestSignal(request);
-      const result = await services.actions.mutateChecklist(id, {
-        expectedOccurrenceKey: body.expectedOccurrenceKey,
-        mutations: [{ type: action, clientMutationId: randomUUID(), childId, expectedChildRevision: body.expectedChildRevision }],
-        requestId: request.id,
-        ...(signal !== undefined ? { signal } : {})
-      });
-      return sendMutationResult(reply, result);
+  app.post("/tasks/:id/checklist/:childId/uncheck", async (request, reply) => {
+    const { id, childId } = checklistChildParams.parse(request.params);
+    const body = focusedChecklistItemBody.parse(request.body);
+    const signal = getRequestSignal(request);
+    const result = await services.actions.uncheckChecklistItem(id, childId, {
+      expectedOccurrenceKey: body.expectedOccurrenceKey,
+      expectedChildRevision: body.expectedChildRevision,
+      requestId: request.id,
+      ...(signal !== undefined ? { signal } : {})
     });
-  }
-
-  app.post("/review/dismiss", async (request) => {
-    emptyBody.parse(request.body ?? {});
-    return { snoozedUntil: new Date(Date.now() + 5 * 60_000).toISOString() };
+    return sendMutationResult(reply, result);
   });
 
   app.post("/device/check-in", async (request) => {
     const body = deviceCheckInBody.parse(request.body);
-    new DeviceRepository(options.db).upsertCheckIn({ id: body.deviceId, appVersion: body.appVersion, permissions: body.permissions, checkedInAt: new Date().toISOString() });
+    services.devices.upsertCheckIn({
+      id: body.deviceId,
+      appVersion: body.appVersion,
+      permissions: body.permissions,
+      checkedInAt: new Date().toISOString()
+    });
     return { ok: true };
   });
 }

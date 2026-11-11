@@ -1,6 +1,5 @@
 import type {
   TodoistAdapter,
-  TodoistCreateTaskInput,
   TodoistDueMutation,
   TodoistDurationMutation,
   TodoistItemAddInput,
@@ -8,10 +7,7 @@ import type {
   TodoistItemIdentityInput,
   TodoistItemMoveInput,
   TodoistItemUpdateInput,
-  TodoistLegacyUpdateCommandIdentities,
-  TodoistRecurringCompletionInput,
-  TodoistSyncResult,
-  TodoistUpdateTaskInput
+  TodoistSyncResult
 } from "./todoistAdapter.js";
 import { parseRetryAfterHeader, TodoistOperationError } from "./todoistErrors.js";
 import type {
@@ -124,79 +120,6 @@ export class HttpTodoistAdapter implements TodoistAdapter {
     };
   }
 
-  async createTask(
-    input: TodoistCreateTaskInput,
-    options?: { signal?: AbortSignal }
-  ): Promise<{ todoistTaskId: string; task: TodoistTaskMirror }> {
-    const body: Record<string, unknown> = {
-      content: input.title
-    };
-    if (input.projectId !== null) {
-      body.project_id = input.projectId;
-    }
-    if (input.dueDatetime !== null) {
-      body.due_datetime = input.dueDatetime;
-    }
-    if (input.durationMinutes !== null) {
-      body.duration = input.durationMinutes;
-      body.duration_unit = "minute";
-    }
-    if (input.assigneeId !== null) {
-      body.assignee_id = parseTodoistNumericId(input.assigneeId);
-    }
-    if (input.description !== null && input.description !== undefined && input.description.trim().length > 0) {
-      body.description = input.description.trim();
-    }
-
-    const response = await this.request<TodoistApiTask>("/tasks", {
-      method: "POST",
-      body: JSON.stringify(body),
-      headers: { "content-type": "application/json" },
-      ...(options?.signal !== undefined ? { signal: options.signal } : {})
-    });
-    const task = this.mapTask(response);
-    return { todoistTaskId: task.todoistTaskId, task };
-  }
-
-  async completeTask(todoistTaskId: string, commandUuid: string, options?: { signal?: AbortSignal }): Promise<void> {
-    await this.itemClose({ commandUuid, todoistTaskId }, options);
-  }
-
-  async updateTask(
-    input: TodoistUpdateTaskInput,
-    commands: TodoistLegacyUpdateCommandIdentities,
-    options?: { signal?: AbortSignal }
-  ): Promise<void> {
-    if (commands.moveCommandUuid !== undefined) {
-      await this.itemMove({
-        commandUuid: commands.moveCommandUuid,
-        todoistTaskId: input.todoistTaskId,
-        projectId: input.projectId
-      }, options);
-    }
-    await this.itemUpdate({
-      commandUuid: commands.updateCommandUuid,
-      todoistTaskId: input.todoistTaskId,
-      title: input.title.trim(),
-      description: input.description?.trim() ?? null,
-      due: input.dueDatetime === null
-        ? { kind: "clear" }
-        : {
-            kind: "replace",
-            datetime: input.dueDatetime,
-            string: null,
-            lang: null,
-            timezone: null
-          },
-      assignment: input.assigneeId === null
-        ? { kind: "unassign" }
-        : { kind: "assign", assigneeId: input.assigneeId },
-      duration: input.durationMinutes === null
-        ? { kind: "clear" }
-        : { kind: "replace", amount: input.durationMinutes, unit: "minute" }
-    }, options);
-  }
-
   async itemAdd(input: TodoistItemAddInput, options?: { signal?: AbortSignal }): Promise<TodoistItemAddResult> {
     const args: Record<string, unknown> = {
       content: input.title,
@@ -261,29 +184,6 @@ export class HttpTodoistAdapter implements TodoistAdapter {
 
   async itemDelete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void> {
     await this.command(input.commandUuid, "item_delete", { id: input.todoistTaskId }, undefined, options);
-  }
-
-  async itemUpdateDateComplete(input: TodoistRecurringCompletionInput, options?: { signal?: AbortSignal }): Promise<void> {
-    const due: Record<string, unknown> = { is_recurring: true };
-    const dueDate = input.task.dueDate ?? input.task.dueDatetime;
-    if (dueDate !== null) {
-      due.date = dueDate;
-    }
-    if (input.task.dueString !== null) {
-      due.string = input.task.dueString;
-    }
-    if (input.task.dueLang !== null) {
-      due.lang = input.task.dueLang;
-    }
-    if (input.task.dueTimezone !== null) {
-      due.timezone = input.task.dueTimezone;
-    }
-    await this.command(input.commandUuid, "item_update_date_complete", {
-      id: input.task.todoistTaskId,
-      due,
-      is_forward: 1,
-      reset_subtasks: true
-    }, undefined, options);
   }
 
   private async command(
@@ -546,17 +446,6 @@ function normalizeDurationMinutes(amount: number | null, unit: string | null): n
 
 function stringifyNullable(value: string | number | null): string | null {
   return value === null ? null : String(value);
-}
-
-function parseTodoistNumericId(value: string): number {
-  if (!/^\d+$/.test(value)) {
-    throw new Error("todoist_assignee_id_must_be_numeric");
-  }
-  const numericValue = Number(value);
-  if (!Number.isSafeInteger(numericValue)) {
-    throw new Error("todoist_assignee_id_must_be_numeric");
-  }
-  return numericValue;
 }
 
 function normalizeTodoistDueDatetime(value: string | null): string | null {

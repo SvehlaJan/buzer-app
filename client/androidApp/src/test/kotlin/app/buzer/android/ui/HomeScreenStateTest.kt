@@ -306,9 +306,6 @@ class HomeScreenStateTest {
             scheduleVersion = 1,
             serverTime = "2026-08-02T10:00:00Z",
             invalidTasks = listOf(invalidTask),
-            activeBlockers = emptyList(),
-            inProgressTasks = emptyList(),
-            startingToday = listOf(validTask),
             healthWarnings = emptyList(),
             tasks = listOf(invalidTask, validTask)
         )
@@ -347,9 +344,6 @@ class HomeScreenStateTest {
             scheduleVersion = 1,
             serverTime = "2026-08-02T10:00:00Z",
             invalidTasks = listOf(invalidOwner),
-            activeBlockers = emptyList(),
-            inProgressTasks = emptyList(),
-            startingToday = emptyList(),
             healthWarnings = emptyList(),
             tasks = listOf(invalidOwner, unassigned)
         )
@@ -379,9 +373,6 @@ class HomeScreenStateTest {
             scheduleVersion = 1,
             serverTime = "2026-08-02T10:00:00Z",
             invalidTasks = listOf(unsupported),
-            activeBlockers = emptyList(),
-            inProgressTasks = emptyList(),
-            startingToday = emptyList(),
             healthWarnings = emptyList(),
             tasks = listOf(unsupported, unassigned)
         )
@@ -390,6 +381,28 @@ class HomeScreenStateTest {
 
         assertNull(state.reviewAttention)
         assertEquals(listOf("unassigned"), state.unassigned.rows.map { it.taskId })
+    }
+
+    @Test
+    fun test10e_unsupportedOwnerCountsTowardMorningReviewBannerMatchingMainActivity() {
+        val unsupported = createTaskFixture(
+            "unsupported",
+            dueDatetime = "2026-08-02T12:00:00Z",
+            durationMinutes = 30,
+            isAssignedToUser = true,
+            hierarchyStatus = HierarchyStatus.unsupported
+        )
+        val state = buildHomeScreenState(
+            snapshot(listOf(unsupported)),
+            now = FIXED_NOW,
+            zoneId = FIXED_ZONE,
+            morningReviewBannerVisible = true,
+            ownerBlockingCount = null
+        )
+
+        val attention = assertNotNull(state.reviewAttention)
+        assertEquals("1 invalid task needs review", attention.message)
+        assertEquals(HomeAttentionAction.OpenMorningReview, attention.action)
     }
 
     @Test
@@ -531,9 +544,6 @@ class HomeScreenStateTest {
         scheduleVersion = 1,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = tasks
     )

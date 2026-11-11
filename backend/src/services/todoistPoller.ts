@@ -1,13 +1,17 @@
 import { type BackendObservability, backendObservability } from "../diagnostics/backendObservability.js";
 import { TodoistOperationError } from "../todoist/todoistErrors.js";
-import { TodoistOperationQueue } from "./todoistOperationQueue.js";
-import type { TodoistSyncOptions, TodoistSyncSummary } from "./todoistSyncService.js";
+import type { TodoistSyncSummary } from "./todoistSyncService.js";
 
 export const DEFAULT_POLL_INTERVAL_MS = 60_000;
 export const POLL_DEADLINE_MS = 13_000;
 
-export interface SyncOnceService {
-  syncOnce(options?: TodoistSyncOptions): Promise<TodoistSyncSummary | void>;
+export interface PollOnceOptions {
+  deadlineMs?: number | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+export interface PollableTodoistRuntime {
+  pollOnce(options?: PollOnceOptions): Promise<TodoistSyncSummary | void>;
 }
 
 export interface TodoistPollerDiagnostics {
@@ -18,12 +22,11 @@ export interface TodoistPollerDiagnostics {
 }
 
 export interface TodoistPollerOptions {
-  intervalMs?: number;
-  runImmediately?: boolean;
-  queue?: TodoistOperationQueue;
-  onError?: (error: unknown) => void;
-  onSuccess?: (summary?: TodoistSyncSummary | void) => void;
-  observability?: BackendObservability;
+  intervalMs?: number | undefined;
+  runImmediately?: boolean | undefined;
+  onError?: ((error: unknown) => void) | undefined;
+  onSuccess?: ((summary?: TodoistSyncSummary | void) => void) | undefined;
+  observability?: BackendObservability | undefined;
 }
 
 export class TodoistPoller {
@@ -32,15 +35,13 @@ export class TodoistPoller {
   private lastOutcome: "success" | "error" | null = null;
   private lastDurationMs: number | null = null;
   private lastSyncAt: string | null = null;
-  private readonly queue: TodoistOperationQueue;
   private readonly intervalMs: number;
   private readonly observability: BackendObservability;
 
   constructor(
-    private readonly service: SyncOnceService,
+    private readonly runtime: PollableTodoistRuntime,
     private readonly options: TodoistPollerOptions = {}
   ) {
-    this.queue = options.queue ?? new TodoistOperationQueue();
     this.intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.observability = options.observability ?? backendObservability;
   }
@@ -79,15 +80,7 @@ export class TodoistPoller {
   async pollOnce(): Promise<void> {
     const start = Date.now();
     try {
-      const summary = await this.queue.run(
-        {
-          operation: "poll",
-          deadlineMs: POLL_DEADLINE_MS
-        },
-        async ({ signal }) => {
-          return await this.service.syncOnce({ signal });
-        }
-      );
+      const summary = await this.runtime.pollOnce({ deadlineMs: POLL_DEADLINE_MS });
 
       const durationMs = Date.now() - start;
       const hadFailures = this.consecutiveFailures > 0;

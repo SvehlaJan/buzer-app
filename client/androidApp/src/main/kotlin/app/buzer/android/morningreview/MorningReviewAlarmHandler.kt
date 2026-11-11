@@ -1,9 +1,8 @@
 package app.buzer.android.morningreview
 
-import app.buzer.android.time.parseSnapshotJavaInstantOrNull
-import app.buzer.shared.model.CommitmentState
-import app.buzer.shared.model.HierarchyStatus
-import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.android.enforcement.AlarmKind
+import app.buzer.android.enforcement.ScheduledAlarmIdentity
+import app.buzer.shared.scheduling.CommitmentEligibility
 import app.buzer.shared.state.SnapshotViewState
 import java.time.Duration
 import java.time.Instant
@@ -35,75 +34,35 @@ enum class ActiveBlockerPriority { None, Start }
 object BlockerPriorityResolver {
     fun resolve(snapshot: SnapshotViewState, now: Instant): ActiveBlockerPriority {
         val authoritativeInvalidIds = snapshot.invalidTasks.mapTo(mutableSetOf()) { it.id }
-        val hasStartBlocker = snapshot.tasks.any { task ->
-            task.id !in authoritativeInvalidIds &&
-                task.startedAt == null &&
-                task.state != CommitmentState.started &&
-                task.activeIntervalOrNull()?.let { !now.isBefore(it.start) && now.isBefore(it.end) } == true
+        val candidates = snapshot.tasks.filter { task ->
+            task.id !in authoritativeInvalidIds && task.occurrenceKey.isNotBlank()
         }
+        val sharedNow = kotlin.time.Instant.fromEpochSeconds(now.epochSecond, now.nano)
+        val hasStartBlocker = CommitmentEligibility.hasActiveStartPriorityAt(candidates, sharedNow)
         return if (hasStartBlocker) ActiveBlockerPriority.Start else ActiveBlockerPriority.None
     }
-
-    private fun TaskSnapshotItem.activeIntervalOrNull(): ActiveInterval? {
-        if (
-            !isAssignedToUser ||
-            occurrenceKey.isBlank() ||
-            isCompleted ||
-            isDeleted ||
-            state == CommitmentState.completed ||
-            state == CommitmentState.deleted ||
-            state == CommitmentState.invalid ||
-            validationErrors.isNotEmpty() ||
-            hierarchyStatus != HierarchyStatus.valid
-        ) {
-            return null
-        }
-        val start = dueDatetime?.let(::parseSnapshotJavaInstantOrNull) ?: return null
-        val duration = durationMinutes?.takeIf { it > 0 } ?: return null
-        return ActiveInterval(start, start.plusSeconds(duration * 60L))
-    }
-
-    private data class ActiveInterval(val start: Instant, val end: Instant)
-}
-
-internal interface MorningReviewAlarmActions {
-    fun reconcile(now: Instant, zoneId: ZoneId)
-    fun consume(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId)
-    fun deferForPriority(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId)
-}
-
-internal class MorningReviewSchedulerActions(
-    private val scheduler: MorningReviewScheduler
-) : MorningReviewAlarmActions {
-    override fun reconcile(now: Instant, zoneId: ZoneId) = scheduler.reconcile(now, zoneId)
-
-    override fun consume(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) =
-        scheduler.consume(fired, now, zoneId)
-
-    override fun deferForPriority(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) =
-        scheduler.deferForPriority(fired, now, zoneId)
 }
 
 /** Validates an occurrence before the existing notification and overlay delivery path runs. */
 internal class MorningReviewAlarmHandler(
     private val stateStore: MorningReviewLocalStateStore,
-    private val actions: MorningReviewAlarmActions,
+    private val scheduler: MorningReviewScheduler,
     private val cachedSnapshotLoader: () -> SnapshotViewState?,
     private val nowProvider: () -> Instant,
     private val zoneProvider: () -> ZoneId,
     private val errorReporter: (operation: String, context: String, error: Exception) -> Unit,
     private val reviewTime: LocalTime = DEFAULT_MORNING_REVIEW_TIME
 ) {
-    fun handle(delivered: app.buzer.android.enforcement.ScheduledAlarmIdentity): MorningReviewAlarmDecision {
+    fun handle(delivered: ScheduledAlarmIdentity): MorningReviewAlarmDecision {
         val now = nowProvider()
         val zoneId = zoneProvider()
         val state = stateStore.read()
         val fired = state.scheduledAlarm ?: return MorningReviewAlarmDecision.Ignore
 
-        val persistedIdentity = app.buzer.android.enforcement.ScheduledAlarmIdentity(
+        val persistedIdentity = ScheduledAlarmIdentity(
             taskId = MORNING_REVIEW_TASK_ID,
             occurrenceKey = fired.occurrenceKey,
-            kind = app.buzer.android.enforcement.AlarmKind.MORNING_REVIEW
+            kind = AlarmKind.MORNING_REVIEW
         )
         if (delivered != persistedIdentity) return MorningReviewAlarmDecision.Ignore
         if (fired.occurrenceKey != morningReviewOccurrenceKey(fired.reason, fired.reviewDate, fired.triggerAt)) {
@@ -132,7 +91,7 @@ internal class MorningReviewAlarmHandler(
             .plus(MORNING_REVIEW_PRIORITY_CAP)
         if (priority == ActiveBlockerPriority.Start && now.isBefore(priorityCapEnd)) {
             try {
-                actions.deferForPriority(fired, now, zoneId)
+                scheduler.deferForPriority(fired, now, zoneId)
             } catch (error: Exception) {
                 report("defer", fired, error)
             }
@@ -140,7 +99,7 @@ internal class MorningReviewAlarmHandler(
         }
 
         try {
-            actions.consume(fired, now, zoneId)
+            scheduler.consume(fired, now, zoneId)
         } catch (error: Exception) {
             report("consume", fired, error)
         }
@@ -149,7 +108,7 @@ internal class MorningReviewAlarmHandler(
 
     private fun reconcile(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
         try {
-            actions.reconcile(now, zoneId)
+            scheduler.reconcile(now, zoneId)
         } catch (error: Exception) {
             report("reconcile", fired, error)
         }

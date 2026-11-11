@@ -1,9 +1,12 @@
 package app.buzer.android.ui.screens
 
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.ui.taskeditor.ExistingChecklistDraft
 import app.buzer.android.ui.taskeditor.GENERIC_TASK_EDITOR_UPDATE_ERROR
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateCancelRequest
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
+import app.buzer.android.ui.taskeditor.buildUpdateTaskRequest
+import app.buzer.android.ui.taskeditor.editTaskDraftFingerprint
 import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateState
 import app.buzer.android.ui.taskeditor.primaryActionLabel
 import app.buzer.android.ui.taskeditor.reduceTaskEditorUpdateResult
@@ -87,7 +90,7 @@ class DeadlineBlockerUpdateStateTest {
         assertTrue(taskEditorUpdateChecklistAccess(task, changed.editingEnabled).enabled)
         assertEquals("Checklist item", task.checklistItems.single().title)
 
-        val request = updateRequest(
+        val request = buildUpdateTaskRequest(
             task = task,
             title = changed.draft.title,
             description = changed.draft.description,
@@ -226,26 +229,26 @@ class DeadlineBlockerUpdateStateTest {
             task,
             loadedChoices
         ).draft
-        val beforeChoicesLoad = deadlineBlockerDraftFingerprint(
+        val beforeChoicesLoad = editTaskDraftFingerprint(
             draft = draft,
             choices = TaskEditorUpdateChoices(loading = true),
-            existingChildren = emptyList(),
-            deletedChildIds = emptySet(),
-            addedChildren = emptyList()
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList()
         )
-        val baseline = deadlineBlockerDraftFingerprint(
+        val baseline = editTaskDraftFingerprint(
             draft = draft,
             choices = loadedChoices,
-            existingChildren = emptyList(),
-            deletedChildIds = emptySet(),
-            addedChildren = emptyList()
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList()
         )
-        val current = deadlineBlockerDraftFingerprint(
+        val current = editTaskDraftFingerprint(
             draft = draft,
             choices = loadedChoices,
-            existingChildren = emptyList(),
-            deletedChildIds = emptySet(),
-            addedChildren = emptyList()
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList()
         )
         val state = initialTaskEditorUpdateState(
             task,
@@ -266,12 +269,12 @@ class DeadlineBlockerUpdateStateTest {
             "bottom Cancel must return directly to blocker actions"
         )
 
-        val changed = deadlineBlockerDraftFingerprint(
+        val changed = editTaskDraftFingerprint(
             draft = draft.copy(title = "Changed title"),
             choices = loadedChoices,
-            existingChildren = emptyList(),
-            deletedChildIds = emptySet(),
-            addedChildren = emptyList()
+            existingDrafts = emptyList(),
+            deletedChildren = emptySet(),
+            addedDrafts = emptyList()
         )
         assertTrue(changed != baseline)
         assertEquals(

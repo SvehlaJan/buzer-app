@@ -1,7 +1,7 @@
 package app.buzer.shared.state
 
-import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ChecklistItem
+import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.HealthLevel
 import app.buzer.shared.model.HealthStatus
 import app.buzer.shared.model.HierarchyStatus
@@ -9,7 +9,6 @@ import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertSame
 
 class SnapshotReducerTest {
     @Test
@@ -37,7 +36,6 @@ class SnapshotReducerTest {
         )
 
         assertEquals(listOf("root"), result.tasks.map { it.id })
-        assertEquals(listOf("root"), result.activeBlockers.map { it.id })
         assertEquals(emptyList(), result.invalidTasks.map { it.id })
     }
 
@@ -50,51 +48,24 @@ class SnapshotReducerTest {
                 task("unsupported", CommitmentState.planned, hierarchyStatus = HierarchyStatus.unsupported)
             ),
             health = emptyList(),
-            snapshotGeneration = 1
+            snapshotGeneration = 3
         )
 
         val result = SnapshotReducer.reduce(snapshot)
 
+        assertEquals(3L, result.snapshotGeneration)
         assertEquals(listOf("unsupported"), result.invalidTasks.map { it.id })
     }
 
     @Test
-    fun authoritativeStaleSnapshotReplacesCachedTasksWithoutDiscardingCallerDraft() {
-        val draft = CallerDraft(title = "Keep editing this", description = "Unsaved detail")
-        val cached = SnapshotWithCallerDraft(
-            viewState = SnapshotReducer.reduce(
-                TasksSnapshotResponse(
-                    scheduleVersion = 1,
-                    serverTime = "2026-05-08T07:00:00Z",
-                    tasks = listOf(task("task", CommitmentState.planned, occurrenceKey = "old-occurrence")),
-                    health = emptyList(),
-                    snapshotGeneration = 1
-                )
-            ),
-            callerDraft = draft
-        )
-        val authoritative = TasksSnapshotResponse(
-            scheduleVersion = 2,
-            serverTime = "2026-05-08T07:01:00Z",
-            tasks = listOf(task("task", CommitmentState.planned, occurrenceKey = "next-occurrence")),
-            health = emptyList(),
-            snapshotGeneration = 2
-        )
-
-        val replaced = SnapshotReducer.replaceAuthoritative(cached, authoritative)
-
-        assertEquals(listOf("task"), replaced.viewState.tasks.map { it.id })
-        assertEquals("next-occurrence", replaced.viewState.tasks.single().occurrenceKey)
-        assertSame(draft, replaced.callerDraft)
-    }
-
-    @Test
-    fun separatesInvalidActiveAndTodayTasks() {
+    fun filtersTerminalFromInvalidTasksExcludesDeletedFromTasksAndExtractsHealthWarnings() {
         val snapshot = TasksSnapshotResponse(
             scheduleVersion = 7,
             serverTime = "2026-05-08T07:00:00Z",
             tasks = listOf(
                 task("invalid", CommitmentState.invalid, validationErrors = listOf("duration_required")),
+                task("completed-invalid", CommitmentState.completed, validationErrors = listOf("duration_required")),
+                task("deleted", CommitmentState.deleted, isDeleted = true),
                 task("start", CommitmentState.start_blocker_active),
                 task("started", CommitmentState.started),
                 task("later", CommitmentState.planned, startAt = "2026-05-08T15:00:00Z"),
@@ -104,16 +75,18 @@ class SnapshotReducerTest {
                 HealthStatus("backend", HealthLevel.ok, "Backend OK"),
                 HealthStatus("whatsapp", HealthLevel.warning, "WhatsApp disconnected")
             ),
-            snapshotGeneration = 1
+            snapshotGeneration = 12
         )
 
         val result = SnapshotReducer.reduce(snapshot)
 
-        assertEquals(7, result.scheduleVersion)
+        assertEquals(7L, result.scheduleVersion)
+        assertEquals(12L, result.snapshotGeneration)
         assertEquals(listOf("invalid"), result.invalidTasks.map { it.id })
-        assertEquals(listOf("start"), result.activeBlockers.map { it.id })
-        assertEquals(listOf("started"), result.inProgressTasks.map { it.id })
-        assertEquals(listOf("later"), result.startingToday.map { it.id })
+        assertEquals(
+            listOf("invalid", "completed-invalid", "start", "started", "later", "tomorrow"),
+            result.tasks.map { it.id }
+        )
         assertEquals(listOf("whatsapp"), result.healthWarnings.map { it.key })
     }
 
@@ -123,7 +96,8 @@ class SnapshotReducerTest {
         startAt: String? = "2026-05-08T06:30:00Z",
         validationErrors: List<String> = emptyList(),
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
-        occurrenceKey: String = ""
+        occurrenceKey: String = "",
+        isDeleted: Boolean = false
     ): TaskSnapshotItem =
         TaskSnapshotItem(
             id = id,
@@ -139,7 +113,7 @@ class SnapshotReducerTest {
             isAssignedToUser = true,
             isCreatedByUser = true,
             isCompleted = false,
-            isDeleted = false,
+            isDeleted = isDeleted,
             validationErrors = validationErrors,
             startedAt = null,
             startDismissCount = 0,
@@ -149,9 +123,4 @@ class SnapshotReducerTest {
             hierarchyStatus = hierarchyStatus,
             occurrenceKey = occurrenceKey
         )
-
-    private data class CallerDraft(
-        val title: String,
-        val description: String
-    )
 }

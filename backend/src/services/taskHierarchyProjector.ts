@@ -1,50 +1,43 @@
 import {
-  TaskEnforcementPolicy,
-  type EnforceableTask,
+  CommitmentPolicy,
   type HierarchyViolation,
+  type PolicyTaskRecord,
   type TaskEnforcementClassification
-} from "../domain/taskEnforcementPolicy.js";
+} from "../domain/commitmentPolicy.js";
 
-export interface TaskHierarchyProjection<T extends EnforceableTask = EnforceableTask> {
+export interface TaskHierarchyProjection<T extends PolicyTaskRecord = PolicyTaskRecord> {
   root: T;
   children: T[];
   checkedCount: number;
   totalCount: number;
   classification: TaskEnforcementClassification;
   violation: HierarchyViolation | null;
+  isCompanionOwned: boolean;
+  validationErrors?: string[];
 }
 
 export class TaskHierarchyProjector {
-  constructor(private readonly policy: TaskEnforcementPolicy) {}
+  constructor(private readonly policy: CommitmentPolicy) {}
 
-  project<T extends EnforceableTask>(tasks: readonly T[]): TaskHierarchyProjection<T>[] {
+  project<T extends PolicyTaskRecord>(tasks: readonly T[]): TaskHierarchyProjection<T>[] {
     return tasks
       .filter((task) => task.parentId === null)
       .map((root) => this.projectRoot(root, tasks));
   }
 
-  private projectRoot<T extends EnforceableTask>(root: T, tasks: readonly T[]): TaskHierarchyProjection<T> {
-    const children = tasks
-      .filter((task) => task.parentId === root.todoistTaskId && task.deletedAt == null)
-      .sort(compareChildren);
+  private projectRoot<T extends PolicyTaskRecord>(root: T, tasks: readonly T[]): TaskHierarchyProjection<T> {
+    const hierarchy = this.policy.inspectRootHierarchy(root, tasks);
     const result = this.policy.classify(root, tasks);
 
     return {
       root,
-      children,
-      checkedCount: children.filter((child) => child.completedAt !== null).length,
-      totalCount: children.length,
+      children: hierarchy.directChildren,
+      checkedCount: hierarchy.directChildren.filter((child) => child.completedAt != null).length,
+      totalCount: hierarchy.directChildren.length,
       classification: result.classification,
-      violation: result.violation
+      violation: result.violation,
+      isCompanionOwned: result.isCompanionOwned,
+      ...(result.validationErrors !== undefined ? { validationErrors: result.validationErrors } : {})
     };
   }
-}
-
-function compareChildren<T extends EnforceableTask>(left: T, right: T): number {
-  const leftOrder = left.childOrder ?? Number.MAX_SAFE_INTEGER;
-  const rightOrder = right.childOrder ?? Number.MAX_SAFE_INTEGER;
-  if (leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
-  }
-  return left.todoistTaskId.localeCompare(right.todoistTaskId);
 }

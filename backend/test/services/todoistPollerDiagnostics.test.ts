@@ -6,7 +6,7 @@ import { RecordingBackendObservability } from "../fakes/recordingBackendObservab
 describe("TodoistPoller Diagnostics", () => {
   it("tracks diagnostics on successful empty poll cycle without emitting logs or capturing errors", async () => {
     const mockObs = new RecordingBackendObservability();
-    const syncOnce = vi.fn().mockResolvedValue({
+    const pollOnce = vi.fn().mockResolvedValue({
       hasChanges: false,
       changedTaskCount: 0,
       changedTaskIds: [],
@@ -15,7 +15,7 @@ describe("TodoistPoller Diagnostics", () => {
     });
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         observability: mockObs
       }
@@ -23,7 +23,7 @@ describe("TodoistPoller Diagnostics", () => {
 
     await poller.tick();
 
-    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(pollOnce).toHaveBeenCalledTimes(1);
     const diag = poller.getDiagnostics();
     expect(diag.consecutiveFailures).toBe(0);
     expect(diag.lastOutcome).toBe("success");
@@ -38,7 +38,7 @@ describe("TodoistPoller Diagnostics", () => {
 
   it("emits todoist_poll_changed info log on successful poll that discovers changes", async () => {
     const mockObs = new RecordingBackendObservability();
-    const syncOnce = vi.fn().mockResolvedValue({
+    const pollOnce = vi.fn().mockResolvedValue({
       hasChanges: true,
       changedTaskCount: 3,
       changedTaskIds: ["task-1", "task-2", "task-3"],
@@ -47,7 +47,7 @@ describe("TodoistPoller Diagnostics", () => {
     });
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         observability: mockObs
       }
@@ -55,7 +55,7 @@ describe("TodoistPoller Diagnostics", () => {
 
     await poller.tick();
 
-    expect(syncOnce).toHaveBeenCalledTimes(1);
+    expect(pollOnce).toHaveBeenCalledTimes(1);
     expect(mockObs.logs).toHaveLength(1);
     expect(mockObs.logs[0]).toMatchObject({
       level: "info",
@@ -74,14 +74,14 @@ describe("TodoistPoller Diagnostics", () => {
   it("emits todoist_poll_failed warning log on operational failure and does NOT capture Sentry issue", async () => {
     const mockObs = new RecordingBackendObservability();
     const onError = vi.fn();
-    const syncOnce = vi.fn()
+    const pollOnce = vi.fn()
       .mockRejectedValueOnce(new TodoistOperationError("transport"))
       .mockRejectedValueOnce(new Error("Network timeout"))
       .mockRejectedValueOnce(new Error("Todoist 503 Service Unavailable"))
       .mockRejectedValueOnce(new TodoistOperationError("rate_limited"));
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         onError,
         observability: mockObs
@@ -116,7 +116,7 @@ describe("TodoistPoller Diagnostics", () => {
   it("emits todoist_poll_recovered info log on first subsequent successful poll after failure", async () => {
     const mockObs = new RecordingBackendObservability();
     let fail = true;
-    const syncOnce = vi.fn().mockImplementation(async () => {
+    const pollOnce = vi.fn().mockImplementation(async () => {
       if (fail) {
         throw new TodoistOperationError("transport");
       }
@@ -130,7 +130,7 @@ describe("TodoistPoller Diagnostics", () => {
     });
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         observability: mockObs
       }
@@ -165,10 +165,10 @@ describe("TodoistPoller Diagnostics", () => {
 
   it("captures Sentry exception on parse / internal defect", async () => {
     const mockObs = new RecordingBackendObservability();
-    const syncOnce = vi.fn().mockRejectedValue(new TodoistOperationError("parse"));
+    const pollOnce = vi.fn().mockRejectedValue(new TodoistOperationError("parse"));
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         observability: mockObs
       }
@@ -196,13 +196,13 @@ describe("TodoistPoller Diagnostics", () => {
 
   it("safely handles exceptions thrown within onError callback", async () => {
     const mockObs = new RecordingBackendObservability();
-    const syncOnce = vi.fn().mockRejectedValue(new TodoistOperationError("transport"));
+    const pollOnce = vi.fn().mockRejectedValue(new TodoistOperationError("transport"));
     const throwingOnError = vi.fn(() => {
       throw new Error("Callback exploded");
     });
 
     const poller = new TodoistPoller(
-      { syncOnce },
+      { pollOnce },
       {
         onError: throwingOnError,
         observability: mockObs

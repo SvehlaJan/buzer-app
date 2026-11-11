@@ -1,6 +1,7 @@
 package app.buzer.android.ui
 
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.shared.model.ChecklistItem
 import app.buzer.shared.model.TaskActionRequest
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.state.SnapshotViewState
@@ -250,14 +251,86 @@ class HomeDoneActionHandlerTest {
         assertEquals(listOf(true, false), interactionStates)
     }
 
+    @Test
+    fun toggleChildSerializesWithMutexUpdatesSnapshotAndSurfacesWarningMessageOnNonSuccess() = runBlocking {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val refreshCanFinish = CompletableDeferred<Unit>()
+        val appliedSnapshots = mutableListOf<SnapshotViewState>()
+        val interactionStates = mutableListOf<Boolean>()
+        var statusMessage: String? = "Existing status"
+        val item = ChecklistItem(
+            id = "child-1",
+            title = "Pack charger",
+            checked = false,
+            order = 1,
+            childRevision = "r:1"
+        )
+        var nextToggleResult: CoordinatorActionResult = CoordinatorActionResult.Success
+
+        val handler = HomeDoneActionHandler(
+            refreshSnapshot = { _ ->
+                refreshStarted.complete(Unit)
+                refreshCanFinish.await()
+                emptySnapshot(scheduleVersion = 10)
+            },
+            completeTask = { _, _ -> CoordinatorActionResult.Success },
+            toggleChecklistItem = { _, _ -> nextToggleResult },
+            latestSnapshot = { emptySnapshot(scheduleVersion = 20) },
+            applySnapshot = { appliedSnapshots += it },
+            setStatusMessage = { statusMessage = it },
+            setInteractionInFlight = { interactionStates += it }
+        )
+
+        val refreshJob = launch { handler.refresh(forceTodoist = false) }
+        refreshStarted.await()
+
+        val toggleJob = launch { handler.toggleChild("task-1", item) }
+        yield()
+        assertEquals(emptyList(), appliedSnapshots)
+
+        refreshCanFinish.complete(Unit)
+        refreshJob.join()
+        toggleJob.join()
+
+        assertEquals(listOf(10L, 20L), appliedSnapshots.map { it.scheduleVersion })
+        assertNull(statusMessage)
+        assertEquals(listOf(true, false, true, false), interactionStates)
+
+        interactionStates.clear()
+        appliedSnapshots.clear()
+        val warningSnapshot = TasksSnapshotResponse(
+            scheduleVersion = 30,
+            serverTime = "2026-07-10T12:00:00Z",
+            tasks = emptyList(),
+            health = emptyList(),
+            snapshotGeneration = 30
+        )
+        nextToggleResult = CoordinatorActionResult.Warning("backend_busy", "Server busy", warningSnapshot)
+        handler.toggleChild("task-1", item)
+        assertEquals(listOf(true, false), interactionStates)
+        assertEquals(listOf(30L), appliedSnapshots.map { it.scheduleVersion })
+        assertEquals("Server busy", statusMessage)
+
+        val conflictSnapshot = warningSnapshot.copy(scheduleVersion = 31, snapshotGeneration = 31)
+        nextToggleResult = CoordinatorActionResult.Conflict("stale_task", "Checklist item changed remotely", conflictSnapshot)
+        handler.toggleChild("task-1", item)
+        assertEquals(31L, appliedSnapshots.last().scheduleVersion)
+        assertEquals("Checklist item changed remotely", statusMessage)
+
+        nextToggleResult = CoordinatorActionResult.TransportFailure(isConnected = false, message = "Offline")
+        handler.toggleChild("task-1", item)
+        assertEquals("Offline", statusMessage)
+
+        nextToggleResult = CoordinatorActionResult.ChildActionInFlight
+        handler.toggleChild("task-1", item)
+        assertEquals("Checklist update is already in progress", statusMessage)
+    }
+
     private fun emptySnapshot(scheduleVersion: Long = 1): SnapshotViewState =
         SnapshotViewState(
             scheduleVersion = scheduleVersion,
             serverTime = "2026-07-10T12:00:00Z",
             invalidTasks = emptyList(),
-            activeBlockers = emptyList(),
-            inProgressTasks = emptyList(),
-            startingToday = emptyList(),
             healthWarnings = emptyList(),
             tasks = emptyList()
         )

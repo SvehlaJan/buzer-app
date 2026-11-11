@@ -2,6 +2,8 @@ package app.buzer.android.enforcement
 
 import android.content.BroadcastReceiver
 import android.content.Context
+import app.buzer.android.morningreview.MorningReviewDependencies
+import app.buzer.android.morningreview.MorningReviewRuntimeClock
 import app.buzer.shared.diagnostics.AppLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +51,8 @@ object BootReconcileRunner {
     @Suppress("RedundantSuspendModifier")
     private suspend fun runProductionWork(context: Context) {
         val cached = EnforcementDependencies.coordinator(context).reconcileLatestSnapshot()
+        val clock = MorningReviewRuntimeClock.snapshot()
+        MorningReviewDependencies.scheduler(context).reconcile(clock.instant, clock.zoneId)
         AppLog.info("boot_reconcile cached=$cached")
     }
 }

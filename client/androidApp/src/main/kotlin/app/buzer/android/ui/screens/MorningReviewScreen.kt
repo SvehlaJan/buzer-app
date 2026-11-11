@@ -1,18 +1,17 @@
 package app.buzer.android.ui.screens
 
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,42 +20,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
 import app.buzer.android.enforcement.CoordinatorActionResult
-import app.buzer.android.tasks.AddTaskDependencies
-import app.buzer.android.ui.components.ChecklistEditor
-import app.buzer.android.ui.components.TaskDetailsBlock
-import app.buzer.android.ui.datetime.DateTimeDraftSelection
-import app.buzer.android.ui.status.WarningStatus
-import app.buzer.android.ui.taskeditor.TaskEditorDraft
+import app.buzer.android.ui.components.SessionWarningBanner
+import app.buzer.android.ui.taskeditor.TaskEditorChoices
 import app.buzer.android.ui.taskeditor.TaskEditorPresentation
-import app.buzer.android.ui.taskeditor.TaskEditorProjectLoadStatus
-import app.buzer.android.ui.taskeditor.TaskEditorUpdateChoices
-import app.buzer.android.ui.taskeditor.TaskEditorUpdateContentValidation
 import app.buzer.android.ui.taskeditor.TaskEditorUpdateScreen
-import app.buzer.android.ui.taskeditor.initialTaskEditorUpdateDraft
-import app.buzer.android.ui.taskeditor.recurrencePresetForUpdate
-import app.buzer.android.ui.taskeditor.taskEditorUpdateChecklistAccess
+import app.buzer.android.ui.taskeditor.rememberTaskEditorChoices
+import app.buzer.android.ui.taskeditor.rememberTaskEditorProjectRepository
 import app.buzer.android.ui.theme.Spacing
-import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.UpdateTaskRequest
-import app.buzer.shared.model.ChecklistItem
-import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
-import app.buzer.shared.ui.taskeditor.validateChecklistDrafts
 import java.time.LocalDateTime
-import java.util.UUID
-import kotlinx.coroutines.launch
-
 
 internal val morningReviewRepairPresentation = TaskEditorPresentation(
     screenTitle = "Repair task",
@@ -67,7 +50,6 @@ internal val morningReviewOverduePresentation = TaskEditorPresentation(
     screenTitle = "Edit overdue task",
     primaryVerb = "Save"
 )
-
 
 @Composable
 fun MorningReviewScreen(
@@ -89,47 +71,16 @@ fun MorningReviewScreen(
     refreshProjects: (suspend () -> List<ProjectItem>)? = null,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
-    val scope = rememberCoroutineScope()
-    val projectRepository = remember(loadProjects, refreshProjects) {
-        if (loadProjects == null || refreshProjects == null) {
-            AddTaskDependencies.projectRepository()
-        } else {
-            null
-        }
-    }
-    val loadProjectList = loadProjects ?: projectRepository!!::loadProjectsOnce
-    val refreshProjectList = refreshProjects ?: projectRepository!!::refreshProjects
-    var choices by remember { mutableStateOf(TaskEditorUpdateChoices(loading = true)) }
+    val projectRepository = rememberTaskEditorProjectRepository(
+        loadProjects = loadProjects,
+        refreshProjects = refreshProjects
+    )
+    val choicesHandle = rememberTaskEditorChoices(
+        repository = projectRepository,
+        requireNonEmptyProjects = false
+    )
     var repairingTask by remember { mutableStateOf<TaskSnapshotItem?>(null) }
     var editorPresentation by remember { mutableStateOf(morningReviewRepairPresentation) }
-
-    fun retryProjects() {
-        scope.launch {
-            choices = choices.copy(loading = true, errorMessage = null)
-            try {
-                choices = TaskEditorUpdateChoices(
-                    projects = refreshProjectList(),
-                    membershipWasRefreshed = true
-                )
-            } catch (error: Exception) {
-                AppLog.error("morning_review projects refresh_failed type=${error::class.simpleName} message=${error.message}", error)
-                choices = choices.copy(
-                    loading = false,
-                    errorMessage = error.message ?: "Project loading failed"
-                )
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        choices = TaskEditorUpdateChoices(loading = true)
-        try {
-            choices = TaskEditorUpdateChoices(projects = loadProjectList())
-        } catch (error: Exception) {
-            AppLog.error("morning_review projects load_failed type=${error::class.simpleName} message=${error.message}", error)
-            choices = TaskEditorUpdateChoices(errorMessage = error.message ?: "Project loading failed")
-        }
-    }
 
     // A successful repair updates the authoritative invalid-task list in the hosting activity.
     // Do not leave an editor open for a task that no longer requires repair.
@@ -140,17 +91,20 @@ fun MorningReviewScreen(
         }
     }
 
-    repairingTask?.let { task ->
+    repairingTask?.let { openedTask ->
+        val liveTask = currentEditingTask?.takeIf {
+            !shouldCloseMorningReviewEditor(openedTask, it)
+        } ?: openedTask
         MorningReviewRepairEditor(
-            task = task,
-            choices = choices,
-            onRetryChoices = ::retryProjects,
+            task = liveTask,
+            choices = choicesHandle.choices,
+            onRetryChoices = choicesHandle.retry,
             onRepair = onRepair,
             onRefreshWarning = onRefreshRepairWarning,
             presentation = editorPresentation,
             onSuccess = {
                 repairingTask = completeMorningReviewEditorSelection()
-                onRepairSuccess(task.id)
+                onRepairSuccess(openedTask.id)
             },
             onCancel = { repairingTask = null },
             nowProvider = nowProvider
@@ -166,7 +120,7 @@ fun MorningReviewScreen(
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.lg),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = Spacing.lg),
+        contentPadding = PaddingValues(vertical = Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         item("heading") {
@@ -180,7 +134,7 @@ fun MorningReviewScreen(
         if (screenState.refreshing) item("refreshing") { Text("Refreshing…") }
         screenState.warning?.let { warning ->
             item("warning") {
-                app.buzer.android.ui.components.SessionWarningBanner(
+                SessionWarningBanner(
                     message = warning,
                     onRefresh = onRetryRefresh,
                     onOpenTodoist = onOpenTodoist,
@@ -193,10 +147,10 @@ fun MorningReviewScreen(
             Card(modifier = Modifier.fillMaxWidth().testTag("morning-blocking-${card.taskId}")) {
                 Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(card.title, style = MaterialTheme.typography.titleMedium)
+                    Text(card.problemText)
+                    card.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     when (card) {
                         is MorningReviewBlockingCard.Repair -> {
-                            Text(card.problemText)
-                            card.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             TextButton(
                                 onClick = {
                                     repairingTask = taskLookup(card.taskId)
@@ -207,6 +161,15 @@ fun MorningReviewScreen(
                                     .testTag("morning-repair-${card.taskId}")
                                     .semantics { contentDescription = "Repair ${card.title}" }
                             ) { Text("Repair") }
+                        }
+                        is MorningReviewBlockingCard.UnsupportedHierarchy -> {
+                            TextButton(
+                                onClick = onOpenTodoist,
+                                enabled = !screenState.actionInFlight,
+                                modifier = Modifier
+                                    .testTag("morning-open-todoist-${card.taskId}")
+                                    .semantics { contentDescription = "Open Todoist for ${card.title}" }
+                            ) { Text("Open Todoist") }
                         }
                     }
                 }
@@ -285,7 +248,7 @@ internal fun ActivityLogSection(task: TaskSnapshotItem) {
 @Composable
 private fun MorningReviewRepairEditor(
     task: TaskSnapshotItem,
-    choices: TaskEditorUpdateChoices,
+    choices: TaskEditorChoices,
     onRetryChoices: () -> Unit,
     onRepair: suspend (String, UpdateTaskRequest) -> CoordinatorActionResult,
     onRefreshWarning: suspend () -> Unit,
@@ -294,131 +257,19 @@ private fun MorningReviewRepairEditor(
     onCancel: () -> Unit,
     nowProvider: () -> LocalDateTime = { LocalDateTime.now() }
 ) {
-    var existingDrafts by remember(task.id) {
-        mutableStateOf(task.checklistItems.sortedBy { it.order }.map(ChecklistItem::toEditorDraft))
-    }
-    var deletedChildren by remember(task.id) { mutableStateOf<Set<String>>(emptySet()) }
-    var addedDrafts by remember(task.id) { mutableStateOf<List<ChecklistEditorDraft>>(emptyList()) }
-    var capturedUpdate by remember(task.id) { mutableStateOf<EditTaskUpdateCapture?>(null) }
     val now = remember(task.id, nowProvider) { nowProvider() }
-    val initialDraft = remember(task.id) { initialTaskEditorUpdateDraft(task) }
-    val initialFingerprint = remember(task.id, choices) {
-        editTaskDraftFingerprint(
-            title = initialDraft.title,
-            description = initialDraft.description,
-            projectId = initialDraft.projectId,
-            assigneeId = choices.assigneeIdForFingerprint(initialDraft),
-            start = DateTimeDraftSelection(
-                initialDraft.schedule.date,
-                initialDraft.schedule.hour,
-                initialDraft.schedule.minute
-            ),
-            durationMinutes = initialDraft.schedule.durationMinutes,
-            recurrencePreset = initialDraft.recurrencePresetForUpdate(),
-            existingChildren = task.checklistItems.sortedBy { it.order }.map {
-                ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
-            },
-            deletedChildIds = emptySet(),
-            addedChildren = emptyList()
-        )
-    }
-    val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(task, hostEnabled = true).enabled
 
-    fun currentFingerprint(draft: TaskEditorDraft): EditTaskDraftFingerprint {
-        return editTaskDraftFingerprint(
-            title = draft.title,
-            description = draft.description,
-            projectId = draft.projectId,
-            assigneeId = choices.assigneeIdForFingerprint(draft),
-            start = DateTimeDraftSelection(draft.schedule.date, draft.schedule.hour, draft.schedule.minute),
-            durationMinutes = draft.schedule.durationMinutes,
-            recurrencePreset = draft.recurrencePresetForUpdate(),
-            existingChildren = existingDrafts.map {
-                ChecklistDraftFingerprint(it.id, it.title, it.description, it.checked)
-            },
-            deletedChildIds = deletedChildren,
-            addedChildren = addedDrafts.map {
-                ChecklistDraftFingerprint(it.clientMutationId, it.title, it.description, checked = false)
-            }
-        )
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        TaskEditorUpdateScreen(
-            task = task,
-            choices = choices,
-            presentation = presentation,
-            now = now,
-            checklistDoneCount = existingDrafts.count { it.checked && it.id !in deletedChildren },
-            checklistTotalCount = existingDrafts.count { it.id !in deletedChildren } + addedDrafts.size,
-            checklistContent = { checklistEnabled, checklistError ->
-                val checklistAccess = taskEditorUpdateChecklistAccess(task, checklistEnabled)
-                checklistAccess.warningMessage?.let { WarningStatus(it) }
-                checklistError?.let { Text(it) }
-                ExistingChecklistEditor(
-                    drafts = existingDrafts.filterNot { it.id in deletedChildren },
-                    onDraftsChange = { existingDrafts = it },
-                    onDelete = { childId -> deletedChildren = deletedChildren + childId },
-                    enabled = checklistAccess.enabled
-                )
-                ChecklistEditor(
-                    drafts = addedDrafts,
-                    onDraftsChange = { addedDrafts = it },
-                    nextClientMutationId = { UUID.randomUUID().toString() },
-                    enabled = checklistAccess.enabled,
-                    maxItems = (30 - existingDrafts.count { it.id !in deletedChildren }).coerceAtLeast(0)
-                )
-            },
-            footerContent = { ActivityLogSection(task) },
-            onRetryChoices = onRetryChoices,
-            onRefreshWarning = onRefreshWarning,
-            contentValidation = {
-                val checklistValidation = validateChecklistDrafts(
-                    if (checklistMutationsAllowed) addedDrafts else emptyList()
-                )
-                TaskEditorUpdateContentValidation(
-                    canSubmit = checklistValidation.bannerMessage == null &&
-                        checklistValidation.invalidDraftIds.isEmpty(),
-                    message = checklistValidation.bannerMessage ?: "Each checklist item needs a title"
-                        .takeIf { checklistValidation.invalidDraftIds.isNotEmpty() }
-                )
-            },
-            isDirty = { draft -> currentFingerprint(draft) != initialFingerprint },
-            onUpdate = update@{ draft ->
-                val checklistValidation = validateChecklistDrafts(
-                    if (checklistMutationsAllowed) addedDrafts else emptyList()
-                )
-                if (checklistValidation.bannerMessage != null || checklistValidation.invalidDraftIds.isNotEmpty()) {
-                    return@update CoordinatorActionResult.Warning("validation_error", "Checklist items need titles", null)
-                }
-                val project = choices.selectedProject(draft)
-                    ?: return@update CoordinatorActionResult.Warning("unavailable", "Project is unavailable", null)
-                val fingerprint = currentFingerprint(draft)
-                val nextCapture = captureEditTaskUpdate(capturedUpdate, fingerprint) {
-                    updateRequest(
-                        task = task,
-                        title = draft.title,
-                        description = draft.description,
-                        project = project,
-                        selectedAssignee = draft.assignee,
-                        schedule = draft.schedule,
-                        recurrencePreset = draft.recurrencePresetForUpdate(),
-                        existingDrafts = existingDrafts,
-                        deletedChildren = deletedChildren,
-                        addedDrafts = if (checklistMutationsAllowed) addedDrafts else emptyList()
-                    )
-                }
-                capturedUpdate = nextCapture
-                onRepair(task.id, nextCapture.request)
-            },
-            onSuccess = onSuccess,
-            onCancel = onCancel,
-            modifier = Modifier.fillMaxSize()
-        )
-        TaskEditorProjectLoadStatus(
-            loading = choices.loading,
-            message = choices.errorMessage,
-            onRetry = onRetryChoices
-        )
-    }
+    TaskEditorUpdateScreen(
+        task = task,
+        choices = choices,
+        presentation = presentation,
+        now = now,
+        onRetryChoices = onRetryChoices,
+        onRefreshWarning = onRefreshWarning,
+        onUpdate = { request -> onRepair(task.id, request) },
+        onSuccess = onSuccess,
+        onCancel = onCancel,
+        footerContent = { ActivityLogSection(task) },
+        modifier = Modifier.fillMaxSize()
+    )
 }

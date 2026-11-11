@@ -1,13 +1,17 @@
 import Database from "better-sqlite3";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
 import { TaskRepository } from "../../src/repositories/taskRepository.js";
+import { OccurrenceReconciler } from "../../src/services/occurrenceReconciler.js";
 import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("TodoistSyncService", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it("propagates an optional AbortSignal to the raw Todoist read sync", async () => {
     const db = new Database(":memory:");
     migrate(db);
@@ -736,6 +740,124 @@ describe("TodoistSyncService", () => {
       occurrenceDueDatetime: "2026-07-15T09:00:00Z"
     });
     expect(tasks.getByTodoistTaskId("personal-root")?.occurrenceKey).not.toBeNull();
+  });
+
+  it("excludes mismatched-project, dueString, or durationUnit checked children during occurrence reconciliation", async () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    db.prepare(`
+      insert into todoist_sync_state (id, sync_token, mirror_contract_version, updated_at)
+      values (1, 'old-sync-token', 3, '2026-07-15T08:00:00Z')
+    `).run();
+    const projects = new ProjectRepository(db);
+    projects.upsertProject({ ...projectMirror("project-1", true), rawJson: "{}" });
+    projects.upsertProject({ ...projectMirror("project-2", true), rawJson: "{}" });
+    const tasks = new TaskRepository(db);
+    tasks.upsertTodoistTask({
+      id: "recurring-root",
+      todoistTaskId: "todoist-recurring-root",
+      title: "Daily report",
+      description: null,
+      projectId: "project-1",
+      assigneeId: "user-self",
+      creatorId: "user-self",
+      dueDatetime: "2026-07-15T09:00:00Z",
+      dueString: "every day at 09:00",
+      dueLang: "en",
+      dueTimezone: "Europe/Bratislava",
+      isRecurring: true,
+      durationMinutes: 30,
+      completedAt: null,
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T08:00:00Z"
+    });
+    tasks.upsertTodoistTask({
+      id: "child-ok",
+      todoistTaskId: "c-ok",
+      title: "Step 1",
+      description: null,
+      projectId: "project-1",
+      parentId: "todoist-recurring-root",
+      childOrder: 1,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: "2026-07-15T08:30:00Z",
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T08:30:00Z"
+    });
+    tasks.upsertTodoistTask({
+      id: "child-proj",
+      todoistTaskId: "c-proj",
+      title: "Step 2",
+      description: null,
+      projectId: "project-2",
+      parentId: "todoist-recurring-root",
+      childOrder: 2,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      completedAt: "2026-07-15T08:30:00Z",
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T08:30:00Z"
+    });
+    tasks.upsertTodoistTask({
+      id: "child-due",
+      todoistTaskId: "c-due",
+      title: "Step 3",
+      description: null,
+      projectId: "project-1",
+      parentId: "todoist-recurring-root",
+      childOrder: 3,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      dueString: "daily",
+      durationMinutes: null,
+      completedAt: "2026-07-15T08:30:00Z",
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T08:30:00Z"
+    });
+    tasks.upsertTodoistTask({
+      id: "child-dur",
+      todoistTaskId: "c-dur",
+      title: "Step 4",
+      description: null,
+      projectId: "project-1",
+      parentId: "todoist-recurring-root",
+      childOrder: 4,
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationUnit: "minute",
+      durationMinutes: null,
+      completedAt: "2026-07-15T08:30:00Z",
+      deletedAt: null,
+      rawJson: "{}",
+      updatedAt: "2026-07-15T08:30:00Z"
+    });
+    db.prepare(`
+      update commitment_states
+      set occurrence_key = 'old-recurring-key', occurrence_due_datetime = '2026-07-15T09:00:00Z',
+          occurrence_recurrence_fingerprint = '{"isRecurring":true,"dueString":"every day at 09:00","dueLang":"en","dueTimezone":"Europe/Bratislava"}'
+      where task_id = 'recurring-root'
+    `).run();
+
+    const decideSpy = vi.spyOn(OccurrenceReconciler.prototype, "decide");
+    const adapter = new FakeTodoistAdapter();
+    adapter.syncResults.push(syncRecurringRoot("2026-07-16T09:00:00Z", "after-advance-token"));
+
+    await new TodoistSyncService(db, tasks, projects, adapter, "user-self").syncOnce();
+
+    expect(decideSpy).toHaveBeenCalledWith(expect.objectContaining({
+      checkedChildIds: ["c-ok"]
+    }));
   });
 });
 

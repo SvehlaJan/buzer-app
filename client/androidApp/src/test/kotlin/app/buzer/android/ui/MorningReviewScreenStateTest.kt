@@ -96,6 +96,49 @@ class MorningReviewScreenStateTest {
     }
 
     @Test
+    fun scheduledUnsupportedOwnerWithoutRootValidationErrorsUsesUnsupportedHierarchyCard() {
+        val unsupported = task(
+            "unsupported-scheduled",
+            due = "2026-08-02T12:00:00Z",
+            duration = 30,
+            hierarchyStatus = HierarchyStatus.unsupported,
+            hierarchyViolation = "child_has_schedule",
+            validationErrors = emptyList(),
+            description = "  Fix subtask schedule in Todoist.  "
+        )
+        val state = buildMorningReviewScreenState(snapshot(unsupported), now = NOW, zoneId = ZONE)
+
+        assertEquals(MorningReviewPhase.Blocking, state.phase)
+        val card = assertIs<MorningReviewBlockingCard.UnsupportedHierarchy>(state.blockingCards.single())
+        assertEquals("unsupported-scheduled", card.taskId)
+        assertEquals("Unsupported hierarchy: a subtask has its own date or time", card.problemText)
+        assertEquals("Fix subtask schedule in Todoist.", card.description)
+        assertFalse(state.startDayEnabled)
+
+        val expectedMessages = mapOf(
+            "nested_child" to "Unsupported hierarchy: subtasks cannot have nested subtasks",
+            "too_many_children" to "Unsupported hierarchy: more than 30 subtasks",
+            "child_has_schedule" to "Unsupported hierarchy: a subtask has its own date or time",
+            "child_has_duration" to "Unsupported hierarchy: a subtask has its own duration",
+            "child_has_recurrence" to "Unsupported hierarchy: a subtask is recurring",
+            "child_has_assignment" to "Unsupported hierarchy: a subtask has its own assignee",
+            "child_project_mismatch" to "Unsupported hierarchy: a subtask is in a different project",
+            null to "Unsupported subtask hierarchy — fix in Todoist"
+        )
+        for ((violation, expectedText) in expectedMessages) {
+            val mapped = buildMorningReviewScreenState(
+                snapshot(
+                    unsupported.copy(hierarchyViolation = violation)
+                ),
+                now = NOW,
+                zoneId = ZONE
+            )
+            val mappedCard = assertIs<MorningReviewBlockingCard.UnsupportedHierarchy>(mapped.blockingCards.single())
+            assertEquals(expectedText, mappedCard.problemText)
+        }
+    }
+
+    @Test
     fun authoritativeUnsupportedInvalidOwnerUsesRepairAndDisablesStartDay() {
         val unsupported = task(
             "unsupported",
@@ -317,9 +360,6 @@ class MorningReviewScreenStateTest {
         scheduleVersion = 1,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = items.toList()
     )
@@ -328,9 +368,6 @@ class MorningReviewScreenStateTest {
         scheduleVersion = 1,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = items.toList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = items.toList()
     )
@@ -344,6 +381,7 @@ class MorningReviewScreenStateTest {
         state: CommitmentState = CommitmentState.planned,
         isCompleted: Boolean = false,
         hierarchyStatus: HierarchyStatus = HierarchyStatus.valid,
+        hierarchyViolation: String? = null,
         validationErrors: List<String> = emptyList(),
         description: String? = null
     ) = TaskSnapshotItem(
@@ -371,7 +409,8 @@ class MorningReviewScreenStateTest {
         checklistItems = listOf(ChecklistItem("child", "Child", checked = false, order = 0, childRevision = "r1")),
         checkedCount = 0,
         totalCount = 1,
-        hierarchyStatus = hierarchyStatus
+        hierarchyStatus = hierarchyStatus,
+        hierarchyViolation = hierarchyViolation
     )
 
     private companion object {

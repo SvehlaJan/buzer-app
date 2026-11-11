@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import * as crypto from "node:crypto";
 import "dotenv/config";
+import type { AccountabilitySender } from "./accountability/accountabilitySender.js";
 import { DryRunSender } from "./accountability/dryRunSender.js";
 import { WhatsAppWebSender } from "./accountability/whatsappWebSender.js";
 import Fastify from "fastify";
@@ -10,16 +11,14 @@ import { openDatabase } from "./db/connection.js";
 import { resolveOwnerTimeZone } from "./domain/ownerTimeZone.js";
 import { registerRoutes } from "./http/routes.js";
 import { CollaboratorRepository } from "./repositories/collaboratorRepository.js";
+import { DeviceRepository } from "./repositories/deviceRepository.js";
 import { ProjectRepository } from "./repositories/projectRepository.js";
 import { TaskRepository } from "./repositories/taskRepository.js";
 import { EscalationService } from "./services/escalationService.js";
 import { TaskActionService } from "./services/taskActionService.js";
 import { TaskSnapshotService } from "./services/taskSnapshotService.js";
-import { TodoistOperationQueue } from "./services/todoistOperationQueue.js";
-import { TodoistCommandExecutor } from "./services/todoistCommandExecutor.js";
-import { TaskMutationRunner } from "./services/taskMutationRunner.js";
 import { TodoistPoller } from "./services/todoistPoller.js";
-import { TodoistSyncService } from "./services/todoistSyncService.js";
+import { createTodoistRuntime, type TodoistRuntime } from "./services/todoistRuntime.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
 import type { TodoistAdapter } from "./todoist/todoistAdapter.js";
 import { CONFIG } from "./config.js";
@@ -29,16 +28,88 @@ import {
 } from "./diagnostics/backendObservability.js";
 import { redactString, redactUrl } from "./diagnostics/redaction.js";
 
-export interface BuildServerOptions {
+export interface CreateBackendCoreOptions {
   db: Database.Database;
   currentUserId: string;
-  androidApiToken: string;
   todoist: TodoistAdapter;
-  synchronizer?: TodoistSyncService | undefined;
-  todoistQueue?: TodoistOperationQueue | undefined;
+  todoistRuntime?: TodoistRuntime | undefined;
+  whatsapp?: { sender: AccountabilitySender; recipientId: string } | undefined;
   escalationService?: EscalationService | null | undefined;
-  rateLimit?: { max: number; timeWindowMs: number } | undefined;
   observability?: BackendObservability | undefined;
+}
+
+export interface BackendCore {
+  tasks: TaskRepository;
+  projects: ProjectRepository;
+  collaborators: CollaboratorRepository;
+  devices: DeviceRepository;
+  snapshots: TaskSnapshotService;
+  escalationService: EscalationService | null;
+  todoistRuntime: TodoistRuntime;
+  actions: TaskActionService;
+}
+
+export function createBackendCore(options: CreateBackendCoreOptions): BackendCore {
+  const observability = options.observability ?? backendObservability;
+  const tasks = new TaskRepository(options.db);
+  const projects = new ProjectRepository(options.db);
+  const collaborators = new CollaboratorRepository(options.db);
+  const devices = new DeviceRepository(options.db);
+  const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true, collaborators);
+  const escalationService =
+    options.escalationService !== undefined
+      ? options.escalationService
+      : options.whatsapp !== undefined
+        ? new EscalationService(
+            options.db,
+            tasks,
+            options.whatsapp.sender,
+            options.whatsapp.recipientId,
+            {
+              observability,
+              ownerTimeZone: () => resolveOwnerTimeZone(collaborators, options.currentUserId)
+            }
+          )
+        : null;
+  const todoistRuntime =
+    options.todoistRuntime ??
+    createTodoistRuntime({
+      db: options.db,
+      tasks,
+      projects,
+      collaborators,
+      todoist: options.todoist,
+      snapshots,
+      currentUserId: options.currentUserId,
+      observability
+    });
+  const actions = new TaskActionService({
+    tasks,
+    projects,
+    collaborators,
+    snapshots,
+    runtime: todoistRuntime,
+    escalationService,
+    currentUserId: options.currentUserId,
+    requireMirrorReady: true
+  });
+
+  return {
+    tasks,
+    projects,
+    collaborators,
+    devices,
+    snapshots,
+    escalationService,
+    todoistRuntime,
+    actions
+  };
+}
+
+export interface BuildServerOptions extends CreateBackendCoreOptions {
+  androidApiToken: string;
+  core?: BackendCore | undefined;
+  rateLimit?: { max: number; timeWindowMs: number } | undefined;
   logger?: boolean | undefined;
 }
 
@@ -126,35 +197,22 @@ export function buildServer(options: BuildServerOptions) {
     max: options.rateLimit?.max ?? 60,
     timeWindow: options.rateLimit?.timeWindowMs ?? 60_000
   });
-  const tasks = new TaskRepository(options.db);
-  const projects = new ProjectRepository(options.db);
-  const collaborators = new CollaboratorRepository(options.db);
-  const snapshots = new TaskSnapshotService(tasks, projects, options.currentUserId, true, collaborators);
-  const synchronizer = options.synchronizer ?? new TodoistSyncService(
-    options.db, tasks, projects, options.todoist, options.currentUserId, collaborators
-  );
-  const queue = options.todoistQueue ?? new TodoistOperationQueue();
-  const executor = new TodoistCommandExecutor(options.todoist);
-  const runner = new TaskMutationRunner({
-    queue,
-    executor,
-    syncService: synchronizer,
-    snapshotService: snapshots,
-    observability
-  });
-  const actions = new TaskActionService(
-    options.db,
-    tasks,
-    projects,
-    runner,
-    snapshots,
-    options.currentUserId,
-    options.escalationService ?? null,
-    true,
-    observability
-  );
+
+  const core = options.core ?? createBackendCore(options);
+  const routeOptions: BuildServerOptions = {
+    ...options,
+    escalationService: core.escalationService
+  };
+
   app.register(async (scope) => {
-    registerRoutes(scope, options, { actions, snapshots, collaborators, synchronizer, todoistQueue: queue });
+    registerRoutes(scope, routeOptions, {
+      snapshots: core.snapshots,
+      todoistRuntime: core.todoistRuntime,
+      actions: core.actions,
+      projects: core.projects,
+      collaborators: core.collaborators,
+      devices: core.devices
+    });
   });
   app.after(() => {
     app.setNotFoundHandler({ preHandler: app.rateLimit() }, (_request, reply) => {
@@ -181,11 +239,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     throw new Error("TODOIST_USER_ID, ANDROID_API_TOKEN, TODOIST_API_TOKEN, and WHATSAPP_RECIPIENT_ID are required");
   }
 
-
   const db = openDatabase(dbPath);
-  const tasks = new TaskRepository(db);
-  const projects = new ProjectRepository(db);
-  const collaborators = new CollaboratorRepository(db);
   const todoist = new HttpTodoistAdapter(todoistApiToken);
   const whatsappSender = CONFIG.WHATSAPP_DRY_RUN
     ? new DryRunSender()
@@ -197,39 +251,28 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (whatsappSender instanceof WhatsAppWebSender) {
     await whatsappSender.initialize();
   }
-  const escalationService = new EscalationService(
+  const core = createBackendCore({
     db,
-    tasks,
-    whatsappSender,
-    whatsappRecipientId,
-    {
-      observability: backendObservability,
-      ownerTimeZone: () => resolveOwnerTimeZone(collaborators, currentUserId)
-    }
-  );
-  const todoistQueue = new TodoistOperationQueue();
-  const synchronizer = new TodoistSyncService(db, tasks, projects, todoist, currentUserId, collaborators);
+    currentUserId,
+    todoist,
+    whatsapp: { sender: whatsappSender, recipientId: whatsappRecipientId },
+    observability: backendObservability
+  });
   const app = buildServer({
     db,
     currentUserId,
     androidApiToken,
     todoist,
-    todoistQueue,
-    escalationService,
-    synchronizer,
+    core,
     observability: backendObservability
   });
-  const poller = new TodoistPoller(
-    synchronizer,
-    {
-      queue: todoistQueue,
-      runImmediately: true,
-      observability: backendObservability,
-      onError: (error) => {
-        app.log.error({ err: error }, "Todoist sync failed");
-      }
+  const poller = new TodoistPoller(core.todoistRuntime, {
+    runImmediately: true,
+    observability: backendObservability,
+    onError: (error) => {
+      app.log.error({ err: error }, "Todoist sync failed");
     }
-  );
+  });
   app.addHook("onClose", async () => {
     poller.stop();
     try {

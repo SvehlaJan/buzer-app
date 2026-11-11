@@ -1,19 +1,28 @@
 package app.buzer.android.morningreview
 
 import app.buzer.android.enforcement.AlarmKind
+import app.buzer.android.enforcement.AlarmScheduler
+import app.buzer.android.enforcement.ScheduledAlarm
 import app.buzer.android.enforcement.ScheduledAlarmIdentity
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class MorningReviewAlarmHandlerTest {
     private val zone = ZoneId.of("UTC")
     private val now = Instant.parse("2026-08-03T08:00:00Z")
+    private val tomorrowDaily = alarm(
+        reason = MorningReviewAlarmReason.Daily,
+        triggerAt = Instant.parse("2026-08-04T08:00:00Z"),
+        reviewDate = LocalDate.of(2026, 8, 4)
+    )
 
     @Test
     fun matchingValidDailyConsumesAndLaunches() {
@@ -21,7 +30,7 @@ class MorningReviewAlarmHandlerTest {
         val fixture = fixture(MorningReviewLocalState(scheduledAlarm = daily))
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -30,7 +39,7 @@ class MorningReviewAlarmHandlerTest {
         val fixture = fixture(MorningReviewLocalState(scheduledAlarm = snooze))
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(snooze)))
-        assertEquals(listOf<Call>(Consume(snooze)), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -50,7 +59,9 @@ class MorningReviewAlarmHandlerTest {
             MorningReviewAlarmDecision.Ignore,
             fixture.handler.handle(identity(daily).copy(kind = AlarmKind.START_BLOCKER))
         )
-        assertEquals(emptyList<Call>(), fixture.actions.calls)
+        assertTrue(fixture.alarms.scheduled.isEmpty())
+        assertTrue(fixture.alarms.cancelled.isEmpty())
+        assertEquals(daily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -64,14 +75,14 @@ class MorningReviewAlarmHandlerTest {
         val dateFixture = fixture(MorningReviewLocalState(scheduledAlarm = dateMismatch))
 
         assertEquals(MorningReviewAlarmDecision.Ignore, dateFixture.handler.handle(identity(dateMismatch)))
-        assertEquals(listOf<Call>(Reconcile), dateFixture.actions.calls)
+        assertEquals(tomorrowDaily, dateFixture.store.read().scheduledAlarm)
 
         val snoozeKey = alarm(MorningReviewAlarmReason.Snooze, now)
         val reasonMismatch = snoozeKey.copy(reason = MorningReviewAlarmReason.Daily)
         val reasonFixture = fixture(MorningReviewLocalState(scheduledAlarm = reasonMismatch))
 
         assertEquals(MorningReviewAlarmDecision.Ignore, reasonFixture.handler.handle(identity(reasonMismatch)))
-        assertEquals(listOf<Call>(Reconcile), reasonFixture.actions.calls)
+        assertEquals(tomorrowDaily, reasonFixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -85,7 +96,7 @@ class MorningReviewAlarmHandlerTest {
         )
 
         assertEquals(MorningReviewAlarmDecision.Ignore, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Reconcile), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -97,7 +108,14 @@ class MorningReviewAlarmHandlerTest {
         )
 
         assertEquals(MorningReviewAlarmDecision.Ignore, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Reconcile), fixture.actions.calls)
+        assertEquals(
+            alarm(
+                reason = MorningReviewAlarmReason.Daily,
+                triggerAt = Instant.parse("2026-08-03T18:00:00Z"),
+                reviewDate = LocalDate.of(2026, 8, 3)
+            ),
+            fixture.store.read().scheduledAlarm
+        )
     }
 
     @Test
@@ -109,7 +127,10 @@ class MorningReviewAlarmHandlerTest {
         )
 
         assertEquals(MorningReviewAlarmDecision.Deferred, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Defer(daily)), fixture.actions.calls)
+        assertEquals(
+            alarm(MorningReviewAlarmReason.PriorityRetry, Instant.parse("2026-08-03T08:01:00Z")),
+            fixture.store.read().scheduledAlarm
+        )
     }
 
     @Test
@@ -121,7 +142,7 @@ class MorningReviewAlarmHandlerTest {
         )
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -136,7 +157,7 @@ class MorningReviewAlarmHandlerTest {
 
         assertEquals(MorningReviewAlarmDecision.Deferred, early.handler.handle(identity(earlyRetry)))
         assertEquals(MorningReviewAlarmDecision.Launch, late.handler.handle(identity(lateRetry)))
-        assertEquals(listOf<Call>(Consume(lateRetry)), late.actions.calls)
+        assertEquals(tomorrowDaily, late.store.read().scheduledAlarm)
     }
 
     @Test
@@ -145,7 +166,7 @@ class MorningReviewAlarmHandlerTest {
         val fixture = fixture(MorningReviewLocalState(scheduledAlarm = daily), snapshot = null)
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
     }
 
     @Test
@@ -157,7 +178,7 @@ class MorningReviewAlarmHandlerTest {
         )
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
+        assertEquals(tomorrowDaily, fixture.store.read().scheduledAlarm)
         assertEquals(listOf(Error("priority", "cache decode failed")), fixture.errors)
     }
 
@@ -169,11 +190,10 @@ class MorningReviewAlarmHandlerTest {
                 lastAcknowledgedDate = LocalDate.of(2026, 8, 3),
                 scheduledAlarm = daily
             ),
-            failingAction = Action.Reconcile
+            failFirstScheduleMessage = "reconcile failed"
         )
 
         assertEquals(MorningReviewAlarmDecision.Ignore, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Reconcile), fixture.actions.calls)
         assertEquals(listOf(Error("reconcile", "reconcile failed")), fixture.errors)
     }
 
@@ -183,11 +203,10 @@ class MorningReviewAlarmHandlerTest {
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = daily),
             snapshot = snapshot(task(start = "2026-08-03T07:00:00Z", durationMinutes = 120)),
-            failingAction = Action.Defer
+            failFirstScheduleMessage = "defer failed"
         )
 
         assertEquals(MorningReviewAlarmDecision.Deferred, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Defer(daily)), fixture.actions.calls)
         assertEquals(listOf(Error("defer", "defer failed")), fixture.errors)
     }
 
@@ -196,11 +215,10 @@ class MorningReviewAlarmHandlerTest {
         val daily = alarm(MorningReviewAlarmReason.Daily, now)
         val fixture = fixture(
             initialState = MorningReviewLocalState(scheduledAlarm = daily),
-            failingAction = Action.Consume
+            failFirstScheduleMessage = "consume failed"
         )
 
         assertEquals(MorningReviewAlarmDecision.Launch, fixture.handler.handle(identity(daily)))
-        assertEquals(listOf<Call>(Consume(daily)), fixture.actions.calls)
         assertEquals(listOf(Error("consume", "consume failed")), fixture.errors)
     }
 
@@ -210,18 +228,26 @@ class MorningReviewAlarmHandlerTest {
         snapshot: SnapshotViewState? = snapshot(),
         zone: ZoneId = this.zone,
         loader: (() -> SnapshotViewState?)? = null,
-        failingAction: Action? = null
+        failFirstScheduleMessage: String? = null
     ): Fixture {
         val store = MorningReviewLocalStateStore(InMemoryMorningReviewStateStorage())
         store.replace(initialState)
-        val actions = RecordingActions(failingAction)
+        val alarms = RecordingAlarmScheduler(failFirstScheduleMessage)
+        val scheduler = MorningReviewScheduler(
+            stateStore = store,
+            alarmScheduler = alarms,
+            calculator = MorningReviewScheduleCalculator(reviewTime = DEFAULT_MORNING_REVIEW_TIME),
+            snoozeDuration = Duration.ofMinutes(5),
+            priorityRetryDuration = Duration.ofMinutes(1)
+        )
         val errors = mutableListOf<Error>()
         return Fixture(
-            actions = actions,
+            store = store,
+            alarms = alarms,
             errors = errors,
             handler = MorningReviewAlarmHandler(
                 stateStore = store,
-                actions = actions,
+                scheduler = scheduler,
                 cachedSnapshotLoader = loader ?: { snapshot },
                 nowProvider = { now },
                 zoneProvider = { zone },
@@ -251,9 +277,6 @@ class MorningReviewAlarmHandlerTest {
         scheduleVersion = 1,
         serverTime = now.toString(),
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = tasks.toList()
     )
@@ -287,36 +310,30 @@ class MorningReviewAlarmHandlerTest {
     )
 
     private data class Fixture(
-        val actions: RecordingActions,
+        val store: MorningReviewLocalStateStore,
+        val alarms: RecordingAlarmScheduler,
         val errors: List<Error>,
         val handler: MorningReviewAlarmHandler
     )
 
-    private enum class Action { Reconcile, Consume, Defer }
-    private sealed interface Call
-    private data object Reconcile : Call
-    private data class Consume(val alarm: MorningReviewScheduledAlarm) : Call
-    private data class Defer(val alarm: MorningReviewScheduledAlarm) : Call
     private data class Error(val operation: String, val message: String)
 
-    private class RecordingActions(
-        private val failingAction: Action?
-    ) : MorningReviewAlarmActions {
-        val calls = mutableListOf<Call>()
+    private class RecordingAlarmScheduler(
+        private var failFirstScheduleMessage: String?
+    ) : AlarmScheduler {
+        val scheduled = mutableListOf<ScheduledAlarm>()
+        val cancelled = mutableListOf<ScheduledAlarmIdentity>()
 
-        override fun reconcile(now: Instant, zoneId: ZoneId) {
-            calls += Reconcile
-            if (failingAction == Action.Reconcile) error("reconcile failed")
+        override fun schedule(alarm: ScheduledAlarm) {
+            failFirstScheduleMessage?.let { message ->
+                failFirstScheduleMessage = null
+                error(message)
+            }
+            scheduled += alarm
         }
 
-        override fun consume(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
-            calls += Consume(fired)
-            if (failingAction == Action.Consume) error("consume failed")
-        }
-
-        override fun deferForPriority(fired: MorningReviewScheduledAlarm, now: Instant, zoneId: ZoneId) {
-            calls += Defer(fired)
-            if (failingAction == Action.Defer) error("defer failed")
+        override fun cancel(identity: ScheduledAlarmIdentity) {
+            cancelled += identity
         }
     }
 }

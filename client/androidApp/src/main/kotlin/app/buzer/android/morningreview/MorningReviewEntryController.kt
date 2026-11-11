@@ -5,17 +5,6 @@ data class MorningReviewEntryDecision(
     val launchAutomated: Boolean
 )
 
-/** Keeps Home visibility independent from the one-shot automated entry guard. */
-object MorningReviewEntryDecider {
-    fun decide(
-        availability: MorningReviewAvailability,
-        launchInFlight: Boolean
-    ): MorningReviewEntryDecision = MorningReviewEntryDecision(
-        showHomeBanner = availability.bannerVisible,
-        launchAutomated = availability.catchUpRequired && !launchInFlight
-    )
-}
-
 sealed interface MorningReviewBoundaryTiming {
     data class Delay(val milliseconds: Long) : MorningReviewBoundaryTiming
     data object ReevaluateImmediately : MorningReviewBoundaryTiming
@@ -26,7 +15,7 @@ sealed interface MorningReviewBoundaryTiming {
     }
 }
 
-/** Lifecycle gate for MainActivity's single launch authority and reevaluation job. */
+/** Lifecycle gate for MainActivity's single launch authority and foreground reevaluation job. */
 class MorningReviewEntryController {
     var isForeground: Boolean = false
         private set
@@ -47,10 +36,12 @@ class MorningReviewEntryController {
     }
 
     fun evaluate(availability: MorningReviewAvailability): MorningReviewEntryDecision {
-        val decision = MorningReviewEntryDecider.decide(availability, launchInFlight)
-        val launchAutomated = isForeground && decision.launchAutomated
+        val launchAutomated = isForeground && availability.catchUpRequired && !launchInFlight
         if (launchAutomated) launchInFlight = true
-        return decision.copy(launchAutomated = launchAutomated)
+        return MorningReviewEntryDecision(
+            showHomeBanner = availability.bannerVisible,
+            launchAutomated = launchAutomated
+        )
     }
 
     fun openHome(): Boolean {

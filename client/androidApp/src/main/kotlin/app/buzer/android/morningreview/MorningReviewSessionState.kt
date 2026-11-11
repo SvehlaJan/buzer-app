@@ -104,14 +104,20 @@ class MorningReviewSessionController(
             CoordinatorActionResult.Success -> {
                 reloadCached()
                 retry = null
-                finishAction()
+                update(state.copy(actionInFlight = false, actionError = null))
             }
-            is CoordinatorActionResult.Warning -> {
-                result.snapshot?.let { applyAuthority(SnapshotReducer.reduce(it)) }
-                    ?: run { update(state.actionFailed(result.message)) }
-            }
-            is CoordinatorActionResult.Conflict -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
-            is CoordinatorActionResult.LocalReconciliationFailed -> applyAuthority(SnapshotReducer.reduce(result.snapshot))
+            is CoordinatorActionResult.Warning -> applyFailedAuthority(
+                snapshot = result.snapshot?.let(SnapshotReducer::reduce),
+                message = result.message
+            )
+            is CoordinatorActionResult.Conflict -> applyFailedAuthority(
+                snapshot = SnapshotReducer.reduce(result.snapshot),
+                message = result.message
+            )
+            is CoordinatorActionResult.LocalReconciliationFailed -> applyFailedAuthority(
+                snapshot = SnapshotReducer.reduce(result.snapshot),
+                message = result.message
+            )
             is CoordinatorActionResult.TransportFailure -> retryOverdue(result.message, reloadCached, execute)
             CoordinatorActionResult.ChildActionInFlight -> retryOverdue("Another action is in progress", reloadCached, execute)
         }
@@ -142,10 +148,10 @@ class MorningReviewSessionController(
         }
     }
 
-    private fun applyAuthority(snapshot: SnapshotViewState) {
-        cache(snapshot)
+    private fun applyFailedAuthority(snapshot: SnapshotViewState?, message: String) {
         retry = null
-        finishAction()
+        val next = snapshot?.let(state::cache) ?: state
+        update(next.actionFailed(message))
     }
 
     private fun update(next: MorningReviewSessionState) {

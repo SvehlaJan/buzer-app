@@ -83,6 +83,57 @@ class MorningReviewSessionStateTest {
     }
 
     @Test
+    fun overdueActionWarningWithSnapshotUpdatesSnapshotWhileKeepingActionErrorVisible() = runBlocking {
+        val cached = snapshot(scheduleVersion = 1)
+        val controller = MorningReviewSessionController(
+            publish = {},
+            initial = MorningReviewSessionState().cache(cached)
+        )
+        val reconciled = app.buzer.shared.model.TasksSnapshotResponse(
+            scheduleVersion = 11,
+            serverTime = "2026-08-02T10:01:00Z",
+            tasks = emptyList(),
+            health = emptyList(),
+            snapshotGeneration = 11
+        )
+
+        assertTrue(controller.beginAction())
+        controller.handleOverdueResult(
+            result = CoordinatorActionResult.Warning(
+                code = "todoist_delivery_unknown",
+                message = "Delivery to Todoist could not be confirmed",
+                snapshot = reconciled
+            ),
+            reloadCached = {}
+        )
+
+        assertEquals(11L, controller.state.snapshot?.scheduleVersion)
+        assertEquals("Delivery to Todoist could not be confirmed", controller.state.actionError)
+        assertFalse(controller.state.actionInFlight)
+
+        assertTrue(controller.beginAction())
+        controller.handleOverdueResult(
+            result = CoordinatorActionResult.Conflict(
+                code = "stale_task",
+                message = "Task changed on another device",
+                snapshot = reconciled.copy(scheduleVersion = 12, snapshotGeneration = 12)
+            ),
+            reloadCached = {}
+        )
+        assertEquals(12L, controller.state.snapshot?.scheduleVersion)
+        assertEquals("Task changed on another device", controller.state.actionError)
+        assertFalse(controller.state.actionInFlight)
+
+        controller.handleOverdueResult(
+            result = CoordinatorActionResult.Success,
+            reloadCached = { controller.cache(snapshot(scheduleVersion = 13)) }
+        )
+        assertEquals(13L, controller.state.snapshot?.scheduleVersion)
+        assertNull(controller.state.actionError)
+        assertFalse(controller.state.actionInFlight)
+    }
+
+    @Test
     fun terminalActionsFinishDistinctResultsAndRetryFailureWithoutFinishing() = runBlocking {
         val controller = MorningReviewSessionController(publish = { })
         val finished = mutableListOf<MorningReviewResult>()
@@ -153,9 +204,6 @@ class MorningReviewSessionStateTest {
         scheduleVersion = scheduleVersion,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList()
     )
 
