@@ -59,7 +59,7 @@ Used by Gradle (`sentry-android-gradle-plugin`) during Android release APK build
 | Variable | Location | Description |
 | :--- | :--- | :--- |
 | `SENTRY_ANDROID_DSN` | Gradle property, `client/local.properties`, or environment (in that order) | Client DSN for Android app |
-| `SENTRY_BACKEND_DSN` | VPS `/home/skclaw/buzer-app/.env` | Client DSN for backend Node service |
+| `SENTRY_BACKEND_DSN` | VPS `/home/skclaw/PROJECTS/buzer-app/.env` | Client DSN for backend Node service |
 | `SENTRY_ENVIRONMENT` | Android Gradle property / `local.properties` / environment, or VPS `.env` | `development-device`, `production-device`, `development-vps`, `production-vps` |
 | `SENTRY_RELEASE` | Derived; do not configure as a static value | Android: `app.buzer@<versionName>+<git-sha-12>` from `GITHUB_SHA` or local Git. VPS: `app.buzer@0.1.0+<git-sha-12>` from `scripts/deploy-vps.sh` after checkout. |
 | `SENTRY_AUTH_TOKEN` | Android Gradle property / `local.properties` / environment; deploy shell / CI environment for source maps | Only needed when uploading ProGuard mappings or source maps; never commit it. |
