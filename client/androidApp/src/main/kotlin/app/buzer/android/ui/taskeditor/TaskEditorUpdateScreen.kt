@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -323,6 +324,9 @@ internal fun TaskEditorUpdateScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val currentTask by rememberUpdatedState(task)
+    val currentChoices by rememberUpdatedState(choices)
+    val currentInitialAddedDrafts by rememberUpdatedState(initialAddedDrafts)
     var session by remember(task.id) {
         mutableStateOf(initialTaskEditorUpdateSession(task, choices, initialAddedDrafts))
     }
@@ -360,43 +364,12 @@ internal fun TaskEditorUpdateScreen(
     }
 
     fun submit() {
-        val currentSession = session
-        val currentState = currentSession.state
-        val mutationsAllowed = taskEditorUpdateChecklistAccess(
-            task = currentSession.latestTask,
-            hostEnabled = true
-        ).enabled
-        val checklistCheck = checklistUpdateContentValidation(
-            checklistMutationsAllowed = mutationsAllowed,
-            activeExistingDrafts = currentSession.activeExistingDrafts,
-            addedDrafts = currentSession.addedDrafts
-        )
-        if (!currentState.canSubmit || !checklistCheck.canSubmit) return
-        val project = choices.selectedProject(currentState.draft) ?: return
-        val nextCapture = captureEditTaskUpdate(
-            captured = currentSession.capturedUpdate,
-            fingerprint = currentSession.currentFingerprint(choices)
-        ) {
-            buildUpdateTaskRequest(
-                task = currentSession.latestTask,
-                title = currentState.draft.title,
-                description = currentState.draft.description,
-                project = project,
-                selectedAssignee = currentState.draft.assignee,
-                schedule = currentState.draft.schedule,
-                recurrencePreset = currentState.draft.recurrencePresetForUpdate(),
-                existingDrafts = currentSession.existingDrafts,
-                deletedChildren = currentSession.deletedChildren,
-                addedDrafts = if (mutationsAllowed) currentSession.addedDrafts else emptyList()
-            )
-        }
-        session = currentSession.copy(
-            state = currentState.beginSubmission(),
-            capturedUpdate = nextCapture
-        )
+        val nextSession = session.prepareSubmission(choices = choices) ?: return
+        val request = requireNotNull(nextSession.capturedUpdate).request
+        session = nextSession
         scope.launch {
             try {
-                val result = onUpdate(nextCapture.request)
+                val result = onUpdate(request)
                 val transition = reduceTaskEditorUpdateResult(session.state, result)
                 session = session.copy(state = transition.state)
                 if (transition.shouldInvokeSuccess) onSuccess()
@@ -416,18 +389,30 @@ internal fun TaskEditorUpdateScreen(
         if (session.state.warningRefreshInFlight) return
         session = session.copy(state = session.state.beginWarningRefresh())
         scope.launch {
-            val nextState = try {
+            val refreshSucceeded = try {
                 onRefreshWarning()
-                session.state.completeWarningRefresh(succeeded = true)
+                true
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 AppLog.warn(
                     "task_editor_update warning_refresh_failed type=${error::class.simpleName} message=${error.message}"
                 )
-                session.state.completeWarningRefresh(succeeded = false)
+                false
             }
-            session = session.copy(state = nextState)
+            val completed = session.copy(
+                state = session.state.completeWarningRefresh(succeeded = refreshSucceeded)
+            )
+            session = if (refreshSucceeded) {
+                reconcileTaskEditorUpdateSession(
+                    session = completed,
+                    task = currentTask,
+                    choices = currentChoices,
+                    initialAddedDrafts = currentInitialAddedDrafts
+                )
+            } else {
+                completed
+            }
         }
     }
 

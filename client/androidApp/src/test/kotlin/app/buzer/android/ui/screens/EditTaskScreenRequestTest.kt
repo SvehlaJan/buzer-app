@@ -32,6 +32,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -361,21 +362,104 @@ class EditTaskScreenRequestTest {
             title = "Refreshed root",
             taskRevision = "root-r2",
             checklistItems = listOf(
-                ChecklistItem("child-1", "Refreshed child", null, true, 1, "child-r2")
+                ChecklistItem("child-1", "Refreshed child", null, true, 1, "child-r2"),
+                ChecklistItem("child-2", "Second", null, true, 2, "child-2-r2")
             )
         )
         val reseeded = reconcileTaskEditorUpdateSession(cleanSession, refreshedTask, choices)
         assertEquals("Refreshed root", reseeded.state.draft.title)
-        assertEquals(listOf(ExistingChecklistDraft("child-1", "child-r2", "Refreshed child", null, true)), reseeded.existingDrafts)
+        assertEquals(
+            listOf(
+                ExistingChecklistDraft("child-1", "child-r2", "Refreshed child", null, true),
+                ExistingChecklistDraft("child-2", "child-2-r2", "Second", null, true)
+            ),
+            reseeded.existingDrafts
+        )
         assertFalse(reseeded.isDirty())
 
-        val dirtyChecklistSession = reseeded.withAddedDrafts(listOf(ChecklistEditorDraft("add-1", "Draft item")))
+        val dirtyChecklistSession = reseeded
+            .withDeletedChild("child-2")
+            .withAddedDrafts(listOf(ChecklistEditorDraft("add-1", "Draft item")))
         assertTrue(dirtyChecklistSession.isDirty())
-        val nextTask = refreshedTask.copy(title = "Another remote edit", taskRevision = "root-r3")
+        val nextTask = refreshedTask.copy(
+            title = "Another remote edit",
+            taskRevision = "root-r3",
+            checklistItems = listOf(
+                ChecklistItem("child-1", "Remotely edited child", "Remote detail", false, 1, "child-r3"),
+                ChecklistItem("child-2", "Remotely edited second", null, false, 2, "child-2-r3")
+            )
+        )
         val preserved = reconcileTaskEditorUpdateSession(dirtyChecklistSession, nextTask, choices)
         assertEquals("Refreshed root", preserved.state.draft.title)
         assertEquals(listOf(ChecklistEditorDraft("add-1", "Draft item")), preserved.addedDrafts)
         assertTrue(preserved.isDirty())
+
+        val submitted = assertNotNull(preserved.prepareSubmission(choices))
+        val request = assertNotNull(submitted.capturedUpdate).request
+        assertEquals("root-r2", request.rootPatch?.expectedTaskRevision)
+        assertEquals("Refreshed root", request.rootPatch?.title)
+        assertEquals(2, request.childMutations.size)
+        val deleteMutation = assertIs<ChecklistMutation.Delete>(request.childMutations[0])
+        assertEquals("child-2", deleteMutation.childId)
+        assertEquals("child-2-r2", deleteMutation.expectedChildRevision)
+        val addMutation = assertIs<ChecklistMutation.Add>(request.childMutations[1])
+        assertEquals("Draft item", addMutation.title)
+    }
+
+    @Test
+    fun uncertainSavePreservesCapturedReplayAcrossRevisionAdvanceAndReanchorsOnMatchingWarningRefresh() {
+        val choices = TaskEditorChoices(projects = listOf(sharedProject))
+        val initialTask = task().copy(projectId = sharedProject.id, assigneeId = me.id)
+        val edited = initialTaskEditorUpdateSession(initialTask, choices)
+            .let { session -> session.withDraft(session.state.draft.copy(title = "Landed root")) }
+            .let { session ->
+                session.withExistingDrafts(
+                    session.existingDrafts.map { draft ->
+                        if (draft.id == "child-1") draft.copy(title = "Landed child", checked = true) else draft
+                    }
+                )
+            }
+
+        val firstSubmit = assertNotNull(edited.prepareSubmission(choices))
+        val firstCapture = assertNotNull(firstSubmit.capturedUpdate)
+        val firstIds = firstCapture.request.childMutations.map { it.clientMutationId }
+        assertEquals("root-r1", firstCapture.request.rootPatch?.expectedTaskRevision)
+        assertEquals(2, firstIds.size)
+
+        val warningState = reduceTaskEditorUpdateResult(
+            firstSubmit.state,
+            CoordinatorActionResult.Warning("todoist_delivery_unknown", "Delivery unknown", null)
+        ).state
+        val afterWarning = firstSubmit.copy(state = warningState)
+
+        val landedTask = initialTask.copy(
+            title = "Landed root",
+            taskRevision = "root-r2",
+            checklistItems = listOf(
+                ChecklistItem("child-1", "Landed child", null, true, 1, "child-r2"),
+                ChecklistItem("child-2", "Second", null, true, 2, "child-r2")
+            )
+        )
+        val whileWarningVisible = reconcileTaskEditorUpdateSession(afterWarning, landedTask, choices)
+        assertSame(firstCapture, whileWarningVisible.capturedUpdate)
+        assertEquals("Delivery unknown", whileWarningVisible.state.resultMessage)
+
+        val retriedSubmit = assertNotNull(whileWarningVisible.prepareSubmission(choices))
+        val retriedCapture = assertNotNull(retriedSubmit.capturedUpdate)
+        assertSame(firstCapture.request, retriedCapture.request)
+        assertEquals("root-r1", retriedCapture.request.rootPatch?.expectedTaskRevision)
+        assertEquals(firstIds, retriedCapture.request.childMutations.map { it.clientMutationId })
+
+        val afterExplicitWarningRefresh = whileWarningVisible.copy(
+            state = whileWarningVisible.state.beginWarningRefresh().completeWarningRefresh(succeeded = true)
+        )
+        assertNull(afterExplicitWarningRefresh.state.resultMessage)
+
+        val reanchored = reconcileTaskEditorUpdateSession(afterExplicitWarningRefresh, landedTask, choices)
+        assertFalse(reanchored.isDirty(choices))
+        assertEquals("root-r2", reanchored.baselineTask.taskRevision)
+        assertEquals("child-r2", reanchored.existingDrafts.first { it.id == "child-1" }.childRevision)
+        assertNull(reanchored.capturedUpdate)
     }
 
     private fun requestFor(recurrencePreset: app.buzer.shared.model.RecurrencePreset?) = buildUpdateTaskRequest(

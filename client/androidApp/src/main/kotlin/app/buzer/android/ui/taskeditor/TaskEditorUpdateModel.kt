@@ -265,6 +265,48 @@ internal data class TaskEditorUpdateSession(
             capturedUpdate = capturedUpdate.takeUnless { selectionChanged }
         )
     }
+
+    fun prepareSubmission(
+        choices: TaskEditorChoices = state.choices,
+        zoneId: ZoneId = ZoneId.systemDefault(),
+        nextMutationId: () -> String = { UUID.randomUUID().toString() }
+    ): TaskEditorUpdateSession? {
+        val current = if (state.choices == choices) this else withChoices(choices)
+        val mutationsAllowed = taskEditorUpdateChecklistAccess(
+            task = current.latestTask,
+            hostEnabled = true
+        ).enabled
+        val checklistCheck = checklistUpdateContentValidation(
+            checklistMutationsAllowed = mutationsAllowed,
+            activeExistingDrafts = current.activeExistingDrafts,
+            addedDrafts = current.addedDrafts
+        )
+        if (!current.state.canSubmit || !checklistCheck.canSubmit) return null
+        val project = choices.selectedProject(current.state.draft) ?: return null
+        val nextCapture = captureEditTaskUpdate(
+            captured = current.capturedUpdate,
+            fingerprint = current.currentFingerprint(choices)
+        ) {
+            buildUpdateTaskRequest(
+                task = current.baselineTask,
+                title = current.state.draft.title,
+                description = current.state.draft.description,
+                project = project,
+                selectedAssignee = current.state.draft.assignee,
+                schedule = current.state.draft.schedule,
+                recurrencePreset = current.state.draft.recurrencePresetForUpdate(),
+                existingDrafts = if (mutationsAllowed) current.existingDrafts else emptyList(),
+                deletedChildren = if (mutationsAllowed) current.deletedChildren else emptySet(),
+                addedDrafts = if (mutationsAllowed) current.addedDrafts else emptyList(),
+                zoneId = zoneId,
+                nextMutationId = nextMutationId
+            )
+        }
+        return current.copy(
+            state = current.state.beginSubmission(),
+            capturedUpdate = nextCapture
+        )
+    }
 }
 
 internal fun initialTaskEditorUpdateSession(
@@ -288,22 +330,23 @@ internal fun reconcileTaskEditorUpdateSession(
     choices: TaskEditorChoices,
     initialAddedDrafts: List<ChecklistEditorDraft> = session.baselineAddedDrafts
 ): TaskEditorUpdateSession {
-    val pristine = !session.isDirty() &&
-        !session.state.submitting &&
+    val idleWithoutOverlay = !session.state.submitting &&
         session.state.resultMessage == null &&
         !session.state.discardConfirmationVisible
-    if (pristine) {
-        return initialTaskEditorUpdateSession(
-            task = task,
-            choices = choices,
-            initialAddedDrafts = initialAddedDrafts
-        )
+    val candidateSession = initialTaskEditorUpdateSession(
+        task = task,
+        choices = choices,
+        initialAddedDrafts = initialAddedDrafts
+    )
+    val canReseed = idleWithoutOverlay && (
+        !session.isDirty() ||
+            session.currentFingerprint(choices) == candidateSession.baselineFingerprint(choices)
+    )
+    if (canReseed) {
+        return candidateSession
     }
-    val revisionChanged = task.occurrenceKey != session.latestTask.occurrenceKey ||
-        task.taskRevision != session.latestTask.taskRevision
     return session.withChoices(choices).copy(
-        latestTask = task,
-        capturedUpdate = session.capturedUpdate.takeUnless { revisionChanged }
+        latestTask = task
     )
 }
 
