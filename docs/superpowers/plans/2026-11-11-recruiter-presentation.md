@@ -45,8 +45,8 @@ Files: root `README.md`, `docs/case-studies/simplifying-mutations.md`,
   render the README and inspect screenshots and diagram.
 - [x] Obtain independent read-only review and resolve actionable findings.
 - [x] Apply approved GitHub description/topics and verify remote values.
-- [ ] Write delivery handoff, record skipped app suites, and commit only scoped changes.
-- [ ] Integrate the reviewed documentation and record publication/CI status.
+- [x] Write delivery handoff, record skipped app suites, and commit only scoped changes.
+- [x] Integrate the reviewed documentation and record publication/CI status.
 
 No existing application behavior or test expectations change. There are no unit/UI
 tests to migrate; screenshot capture builds do not constitute a full suite run.
