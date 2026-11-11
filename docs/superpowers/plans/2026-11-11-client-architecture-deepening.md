@@ -42,7 +42,9 @@
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/state/SnapshotReducerTest.kt`
 - Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/state/SnapshotDiagnosticsTest.kt`
 - Delete: `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewReconcileGuard.kt`
+- Delete: `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewReconcileGuardTest.kt`
 - Delete: `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewEntryDecider.kt`
+- Modify: `client/androidApp/src/test/kotlin/app/buzer/android/morningreview/MorningReviewEntryDeciderTest.kt` (update to test `MorningReviewEntryController` directly)
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/morningreview/MorningReviewCoordinator.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/agenda/OwnerAgendaSelector.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreenState.kt`
@@ -124,11 +126,12 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "re
 - Delete: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementApi.kt`
 - Delete: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunner.kt`
 - Delete: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/EnforcementRefreshRunnerTest.kt`
-- Delete: `client/androidApp/src/test/kotlin/app/buzer/android/tasks/AddTaskOperationalFailureTest.kt`
+- Delete: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/AddTaskOperationalFailureTest.kt`
 - Create: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/FailureClassifier.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/enforcement/FailureClassifierTest.kt`
 - Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/model/TaskModels.kt`
 - Modify: `client/shared/src/commonMain/kotlin/app/buzer/shared/api/BuzerApiClient.kt`
+- Modify: `client/shared/src/commonTest/kotlin/app/buzer/shared/api/BuzerApiClientContractTest.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementCoordinator.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/EnforcementDependencies.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/enforcement/BlockerErrorReporter.kt`
@@ -169,9 +172,9 @@ Expected: FAIL on missing `FailureClassifier`, missing `coordinator.createTask`,
 
 - [ ] **Step 3: Remove dead APIs/wrappers, cache shared `BuzerApiClient`, implement `FailureClassifier`, and fix all 3 bugs**
 
-1. Remove `addChecklistItem`, `updateChecklistItem`, `deleteChecklistItem` from `BuzerApiClient.kt` and `AddChecklistItemRequest`, `UpdateChecklistItemRequest` from `TaskModels.kt`; have `BuzerApiClient` implement `TaskBackendClient` (`client/shared/src/commonMain/kotlin/app/buzer/shared/api/TaskBackendClient.kt`) and delete `EnforcementApi.kt` and `EnforcementRefreshRunner.kt` + `EnforcementRefreshRunnerTest.kt`.
+1. Remove `addChecklistItem`, `updateChecklistItem`, `deleteChecklistItem` from `BuzerApiClient.kt` and `AddChecklistItemRequest`, `UpdateChecklistItemRequest` from `TaskModels.kt` (updating `BuzerApiClientContractTest.kt` accordingly); have `BuzerApiClient` implement `TaskBackendClient` (`client/shared/src/commonMain/kotlin/app/buzer/shared/api/TaskBackendClient.kt`) and delete `EnforcementApi.kt` and `EnforcementRefreshRunner.kt` + `EnforcementRefreshRunnerTest.kt`.
 2. Cache a single `BuzerApiClient` per `(baseUrl, bearerToken)` inside `EnforcementDependencies.apiClient(context)` and reuse it in `AddTaskDependencies` (preserving `private var cachedProjectRepository` field name for existing `androidTest` reflection helpers).
-3. Implement `FailureClassifier.kt` and wire `EnforcementCoordinator`, `BlockerErrorReporter`, and `AddTaskDependencies` to it (deleting `AddTaskOperationalFailureTest.kt`).
+3. Implement `FailureClassifier.kt` and wire `EnforcementCoordinator`, `BlockerErrorReporter`, `AddTaskDependencies`, and `AddTaskScreen` to it (deleting `isAddTaskOperationalFailure` in `AddTaskScreen.kt` and deleting `AddTaskOperationalFailureTest.kt`).
 4. Add `EnforcementCoordinator.createTask(request: CreateTaskRequest): CoordinatorActionResult` and wire `MainActivity` → `BuzerApp` → `AddTaskScreen` (`onCreateTask: suspend (CreateTaskRequest) -> CoordinatorActionResult`) so `AddTaskScreen` handles `Success` vs `Warning`/`Conflict`/`TransportFailure`/`LocalReconciliationFailed` identically to `TaskEditorUpdateScreen`.
 5. Add `toggleChild(rootId: String, item: ChecklistItem)` to `HomeDoneActionHandler` and call it from `MainActivity.toggleCurrentChild`.
 6. Update `MorningReviewSessionController.handleOverdueResult` (`MorningReviewSessionState.kt`) so non-`Success` results with a snapshot update `snapshot` while preserving `actionError = result.message`.
@@ -199,17 +202,19 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "fi
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/EditTaskScreen.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/BlockerScreens.kt` (`DeadlineBlockerUpdateEditor`)
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/MorningReviewScreen.kt` (`MorningReviewRepairEditor`)
+- Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/DraftExitPolicy.kt`
 - Modify: `client/androidApp/src/main/kotlin/app/buzer/android/ui/screens/AddTaskScreen.kt`
 - Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/blockers/BlockerActionStateTest.kt`
-- Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/edit/EditTaskScreenLogicTest.kt` (or existing tests importing `editTaskDraftFingerprint` / `captureEditTaskUpdate` / `updateRequest`)
+- Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/EditTaskScreenRequestTest.kt`
+- Modify: `client/androidApp/src/test/kotlin/app/buzer/android/ui/screens/DraftExitPolicyTest.kt`
 - Create: `client/androidApp/src/test/kotlin/app/buzer/android/ui/taskeditor/ProjectChoicesStateTest.kt`
 
 **Interfaces:**
-- Consumes: `TaskEditorProjectLoadStatus`, `AddTaskProjectLoadFeedback`, `CoordinatorActionResult`.
+- Consumes: `TaskEditorProjectLoadStatus`, `AddTaskProjectLoadFeedback`, `CoordinatorActionResult`, `ChecklistDraft` (`TaskModels.kt`), `ChecklistEditorDraft` & `validateChecklistDrafts` (`TaskEditorModels.kt` — kept in `client/shared`).
 - Produces:
   - `data class TaskEditorChoicesHandle(val choices: TaskEditorChoices, val feedbackMessage: String?, val retry: () -> Unit)` and `@Composable internal fun rememberTaskEditorChoices(repository: TaskEditorProjectRepository, requireNonEmptyProjects: Boolean = false): TaskEditorChoicesHandle` (backed by pure `reduceProjectChoicesLoad(...)` helper in `ProjectChoicesState.kt`).
-  - `TaskEditorUpdateModel.kt` owning `ExistingChecklistDraft`, `ChecklistDraft`, `validateChecklistDrafts`, `editTaskDraftFingerprint`, `CapturedEditTaskUpdate`, `captureEditTaskUpdate`, and `buildUpdateTaskRequest(...)`.
-  - Deepened `TaskEditorUpdateScreen(task, choices, presentation, now, initialAddedDrafts, onRetryChoices, onRefreshWarning, onUpdate, onSuccess, onCancel, footerContent, modifier)` owning all checklist draft state, dirty detection, replay-UUID capture, `ExistingChecklistEditor`, `ChecklistEditor`, and `TaskEditorProjectLoadStatus`.
+  - `TaskEditorUpdateModel.kt` owning `ExistingChecklistDraft`, `toEditorDraft`, `CapturedEditTaskUpdate`, `captureEditTaskUpdate`, and `buildUpdateTaskRequest(...)` (with `ChecklistDraftFingerprint` and `editTaskDraftFingerprint` shared cleanly with `DraftExitPolicy.kt`).
+  - Deepened `TaskEditorUpdateScreen(task, choices, presentation, now, initialAddedDrafts: List<ChecklistEditorDraft> = emptyList(), onRetryChoices, onRefreshWarning, onUpdate, onSuccess, onCancel, footerContent, modifier)` owning all checklist draft state, dirty detection, replay-UUID capture, `ExistingChecklistEditor`, `ChecklistEditor`, and `TaskEditorProjectLoadStatus`.
 
 - [ ] **Step 1: Write failing unit tests for `ProjectChoicesState` and `TaskEditorUpdateModel` replay/fingerprint invariants**
 
@@ -217,7 +222,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "fi
    - `updateEditorKeepsCachedProjectsSelectableAndExposesErrorMessageOnRefreshFailure` (`requireNonEmptyProjects = false`)
    - `updateEditorDoesNotShowWarningWhenProjectsListIsEmptyWithoutError` (`requireNonEmptyProjects = false`)
    - `addTaskEditorShowsNoProjectsAvailableMessageWhenLoadedEmpty` (`requireNonEmptyProjects = true`)
-2. Add/expand tests in `TaskEditorUpdateModel` / `EditTaskScreenLogicTest.kt` verifying:
+2. Add/expand tests in `EditTaskScreenRequestTest.kt` (and `DraftExitPolicyTest.kt` if needed) verifying:
    - `captureEditTaskUpdate` reuses identical `clientMutationId` values on `childMutations` when `fingerprint` is unchanged and mints fresh `clientMutationId`s as soon as an added/existing/deleted checklist item or root field changes.
 
 - [ ] **Step 2: Run `:androidApp:testDebugUnitTest` to verify failure**
@@ -228,7 +233,7 @@ Expected: FAIL on missing `ProjectChoicesState` / `reduceProjectChoicesLoad`.
 - [ ] **Step 3: Implement `ProjectChoicesState`, `TaskEditorUpdateModel`, and deepened `TaskEditorUpdateScreen`, and slim all 4 editor hosts**
 
 1. Create `ProjectChoicesState.kt` and wire `EditTaskScreen`, `DeadlineBlockerUpdateEditor`, `MorningReviewRepairEditor`, and `AddTaskScreen` to `rememberTaskEditorChoices` + `TaskEditorProjectLoadStatus` — deleting the two modal `ErrorAlertDialog` blocks (`"Projects unavailable"` and `"Projects did not load"`) in `EditTaskScreen.kt` and deleting the duplicate `InlineLoadingStatus` + `"Projects did not load"` `WarningStatus` in `BlockerScreens.kt`.
-2. Move checklist draft models, validation, fingerprinting, replay capture, and `buildUpdateTaskRequest` into `TaskEditorUpdateModel.kt` (updating `BlockerActionStateTest.kt` to import and call `buildUpdateTaskRequest`), internalize checklist state + `ExistingChecklistEditor` + `ChecklistEditor` inside `TaskEditorUpdateScreen.kt`, and delete the ~330 lines of triplicated state/request plumbing across `EditTaskScreen.kt`, `BlockerScreens.kt`, and `MorningReviewScreen.kt`.
+2. Move `androidApp` checklist update models (`ExistingChecklistDraft`, `toEditorDraft`), replay capture (`CapturedEditTaskUpdate`, `captureEditTaskUpdate`), and `buildUpdateTaskRequest` (keeping `ChecklistDraft` and `ChecklistEditorDraft`/`validateChecklistDrafts` in `client/shared`) into `TaskEditorUpdateModel.kt` (updating `BlockerActionStateTest.kt` and `EditTaskScreenRequestTest.kt` to import `buildUpdateTaskRequest`), internalize checklist state + `ExistingChecklistEditor` + `ChecklistEditor` inside `TaskEditorUpdateScreen.kt`, and delete the ~330 lines of triplicated state/request plumbing across `EditTaskScreen.kt`, `BlockerScreens.kt`, and `MorningReviewScreen.kt`.
 
 - [ ] **Step 4: Run `:androidApp:testDebugUnitTest` and `:androidApp:assembleDebug`**
 
@@ -289,12 +294,11 @@ Expected: FAIL on missing `BlockerHostController` and `resolveOverlayActionOutco
 2. Implement `BlockerHostController.kt` and refactor `StartBlockerActivity.kt` (adding `EXTRA_INITIAL_WARNING_MESSAGE`, `createIntent(...)`, and `onNewIntent`) and `DeadlineBlockerActivity.kt` (adding `onNewIntent`) to delegate to `BlockerHostController`.
 3. Implement `resolveOverlayActionOutcome` and update `OverlayBlockerService.handleAction` (`OverlayBlockerService.kt`) so any non-`Success` result, `TimeoutCancellationException`, or unexpected `Throwable` launches `StartBlockerActivity.createIntent(..., initialWarningMessage = disposition.warningMessage)` with `FLAG_ACTIVITY_NEW_TASK or FLAG_ACTIVITY_CLEAR_TOP` before dismissing the native overlay.
 
-- [ ] **Step 4: Run full client JVM unit tests, `assembleDebug`, and connected instrumentation authority (`scripts/e2e-real-backend.sh`)**
+- [ ] **Step 4: Run full client JVM unit tests, `assembleDebug`, and `compileDebugAndroidTestKotlin` (with full unfiltered `scripts/e2e-real-backend.sh` executed in whole-branch verification)**
 
 Run:
-1. `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug`
-2. Full connected instrumentation suite (per `AGENTS.md`): `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/scripts/e2e-real-backend.sh`
-Expected: BUILD SUCCESSFUL on JVM + `assembleDebug`, and 100% green across all connected `androidTest` classes in `scripts/e2e-real-backend.sh`.
+1. `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest :androidApp:assembleDebug :androidApp:compileDebugAndroidTestKotlin`
+Expected: BUILD SUCCESSFUL across shared JVM tests, Android JVM tests, debug APK assembly, and `androidTest` Kotlin compilation (followed by full unfiltered `scripts/e2e-real-backend.sh` in whole-branch verification).
 
 - [ ] **Step 5: Commit Task 4**
 
