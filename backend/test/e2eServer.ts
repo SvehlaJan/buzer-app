@@ -392,7 +392,16 @@ function registerDebugSurface(app: ReturnType<typeof buildServer>, options: Debu
           await pollDone;
         }
       });
-      await hold.entered;
+      // If the poll settles without ever entering sync (for example it timed out waiting in the
+      // queue), the hold would stay armed and capture the next unrelated sync: release it instead.
+      const blocked = await Promise.race([
+        hold.entered.then(() => true),
+        pollDone.then(() => false)
+      ]);
+      if (!blocked) {
+        await releaseQueueBlock();
+        return { blocked: false };
+      }
     } else if (!enabled) {
       await releaseQueueBlock();
     }
