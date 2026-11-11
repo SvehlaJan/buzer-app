@@ -12,9 +12,10 @@ User approved the interview-derived README direction, including ownership of AI
 implementation, KISS tradeoffs, Linear workflow, and future voice input. They also
 requested Matt Pocock's skills/framework and earlier Superpowers use be mentioned.
 
-Plan Tasks 1-3 are complete. Task 4 review, rendering, link checks, and GitHub metadata
-are complete; commit/integration/publication and push-triggered CI verification are
-the remaining delivery steps at this checkpoint. Application behavior is unchanged.
+Plan Tasks 1-4 are complete. The reviewed presentation is published on GitHub and
+integrated locally; application behavior is unchanged. The push-triggered CI run was
+queued when this closeout was written; its latest state must be checked before the
+final user response.
 
 ## Files changed
 
@@ -70,7 +71,7 @@ action, so `gh repo edit` was used after `gh repo view` confirmed ADMIN permissi
 
 - Command: one-off Node filesystem check of local Markdown and HTML targets/headings
 - Result: PASS
-- Evidence: initial 47 targets resolved; independent reviewer confirmed. A direct
+- Evidence: final 46 targets resolved; independent reviewer confirmed the initial 47. A direct
   operational investigation link was subsequently removed from the public case-study
   reading path; it contained unnecessary personal incident detail in an existing document.
 
@@ -110,6 +111,34 @@ Morning Review investigation commit is unrelated and unpublished. Publish only t
 task's commit(s) based on `73586eb`, then integrate into local `master` while preserving
 that earlier commit. Do not publish the unrelated commit as a side effect.
 
-Next step at this checkpoint: final staged-link/whitespace verification, scoped commit,
-safe publication/integration, CI check, and cleanup of the temporary emulator/server
-and dependency symlink. Record final publication state below.
+## Publication and cleanup
+
+- Presentation commit: `fbca40f` (`docs: present Buzer ownership and engineering decisions`).
+- Rebased only this task's commit from `2df6cbb` onto published `73586eb`, then
+  `git push origin HEAD:master` succeeded as a normal fast-forward.
+- Integrated into local `master` with a reviewed merge, preserving the unrelated
+  local `2df6cbb`. That investigation commit and local integration merge were not
+  pushed. Local `master` remains ahead of the remote by those local-only commits.
+- Push-triggered CI run: [43096594581](https://github.com/SvehlaJan/buzer-app/actions/runs/43096594581),
+  queued when first checked. This closeout changes only delivery records; check the
+  workflow again for the final published head after committing it.
+- Temporary emulator stopped with `adb -s emulator-5584 emu kill`; the observed local
+  E2E server PID `27058` was stopped. The temporary dependency symlink was removed
+  after verifying its exact target. No physical device or production service changed.
+- The original untracked analysis/interview note in the primary checkout was preserved.
+
+Verification:
+- Command: staged link checker; `git diff --cached --check`; `git diff --check 73586eb HEAD`
+- Result: PASS
+- Evidence: 46 local targets/headings resolved; no whitespace errors; the publication
+  range contained only the ten scoped documentation/image files.
+- Command: `git push origin HEAD:master`; `git merge --no-ff feature/recruiter-presentation`
+- Result: PASS
+- Evidence: public fast-forward `73586eb..fbca40f`; local merge completed without conflict.
+- Command: `gh run list --repo SvehlaJan/buzer-app --workflow=ci.yml --limit 3 --json databaseId,headSha,status,conclusion,url`
+- Result: PASS (lookup)
+- Evidence: run `43096594581` targets `fbca40f`, queued at lookup; preceding published
+  run passed. This is not a claim that the new run had finished.
+
+Next step: check the final published head's CI result and report it in the final
+response, then remove the clean temporary worktree after integrating this closeout.
