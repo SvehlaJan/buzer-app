@@ -1,25 +1,34 @@
 # Local Development Notes
 
-Date: 2026-05-08
+Updated: 2026-11-11
 
 ## Backend
 
 The backend lives in `backend/`. It uses SQLite for MVP. Runtime databases and session folders are ignored by Git.
 
-Expected local commands after backend setup:
+Use Node.js 22 (the version used in CI). To verify the backend without live credentials:
 
 ```bash
 cd backend
-npm install
+npm ci
 npm test
-npm run dev
+npm run typecheck
+npm run build
 ```
+
+To run against your own Todoist account, copy `backend/.env.example` to `backend/.env`
+and configure `TODOIST_API_TOKEN`, `TODOIST_USER_ID`, and `ANDROID_API_TOKEN`. Keep
+`WHATSAPP_DRY_RUN=true` while developing, then run `npm run dev` from `backend/`.
+Sentry can remain unconfigured. For a credential-free fixture server, see below.
 
 ## Android Client
 
 The client lives in `client/`. It is a Kotlin Multiplatform / Compose Multiplatform project with Android-native enforcement code.
 
-Toolchain (since the 2026-06-08 latest-stable migration): Gradle 9.5.1, Android Gradle Plugin 9.2.1, Kotlin 2.4.0, Compose Multiplatform 1.11.1, `compileSdk = 36`. The shared module uses the `com.android.kotlin.multiplatform.library` plugin (not the legacy `com.android.library`).
+Use JDK 17, the checked-in Gradle wrapper, and the Android SDK platform required by
+[`androidApp/build.gradle.kts`](../../client/androidApp/build.gradle.kts). Dependency
+versions are in [`libs.versions.toml`](../../client/gradle/libs.versions.toml). The shared
+module uses `com.android.kotlin.multiplatform.library`.
 
 Expected local commands after client setup:
 
@@ -29,9 +38,9 @@ cd client
 ./gradlew :androidApp:assembleDebug
 
 # Or, for a concise low-token pass/fail summary of the JVM unit tests:
-scripts/test.sh                 # androidApp debug unit tests
-scripts/test.sh Coordinator     # filter to matching test classes
-scripts/test.sh --shared        # also run shared host tests
+../scripts/test.sh                 # androidApp debug unit tests
+../scripts/test.sh Coordinator     # filter to matching test classes
+../scripts/test.sh --shared        # also run shared host tests
 ```
 
 Note: the shared JVM unit-test task is `:shared:testAndroidHostTest`. The pre-AGP-9 name `:shared:testDebugUnitTest` no longer exists; older plan/handoff docs that reference it are historical.
@@ -47,17 +56,30 @@ export ANDROID_SDK_ROOT=$HOME/Library/Android/sdk
 
 ### Instrumentation harnesses
 
-- Managed device (API 34): `./gradlew pixel8Api34DebugAndroidTest` (defined in `client/androidApp/build.gradle.kts`).
-- Android 16 / API 36 emulator: see `docs/notes/2026-06-08-android-16-emulator-setup.md` for the `Buzer_API_36` AVD and the reliable headless start command.
+- Managed device (API 34): `scripts/e2e-real-backend.sh` from the repository root configures and runs `pixel8Api34DebugAndroidTest`.
+- Existing emulator: set `ANDROID_SERIAL` and `CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433` when using the same script; see the example below. The [API 36 setup note](2026-06-08-android-16-emulator-setup.md) records AVD creation and startup commands; use this page for the current test harness.
 
 When more than one device/emulator is attached, scope a connected run with `ANDROID_SERIAL=<serial>` (for example `ANDROID_SERIAL=emulator-5584`); otherwise `connectedDebugAndroidTest` runs on every attached device.
 
-### Fake-backend Android E2E
+### Android E2E against the real backend
 
 Use this as the default deterministic Android E2E lane:
 
 ```bash
-scripts/e2e-fake-backend.sh
+scripts/e2e-real-backend.sh
+```
+
+It starts `backend/test/e2eServer.ts` on port `18433`, uses the production server and
+SQLite with a simulated Todoist adapter and dry-run sender, and builds the app with
+test configuration. It does not require real Todoist, WhatsApp, or Sentry credentials.
+The old `tools/fake-backend` server and `e2e-fake-backend.sh` were removed.
+
+For an already-running Android emulator:
+
+```bash
+ANDROID_SERIAL=emulator-5584 \
+CONNECTED_DEVICE_BACKEND_URL=http://10.0.2.2:18433 \
+scripts/e2e-real-backend.sh
 ```
 
 For a physical device, use the single-command wrapper. It performs the scoped
@@ -82,10 +104,34 @@ method. The wrapper also accepts a focused filter without another shell command:
 scripts/e2e-connected-device.sh --class app.buzer.android.addtask.AddTaskFakeBackendTest
 ```
 
-The wrapper is intentionally the only command that needs persistent device-test
-approval in Codex.
+The connected-device wrapper establishes an ADB reverse mapping and delegates to
+the same real-backend harness.
 
-The script starts `tools/fake-backend` on port `18433` when needed, runs `pixel8Api34DebugAndroidTest`, and passes the emulator URL `http://10.0.2.2:18433` into both the app and instrumentation helper.
+### Explore the fixture app without live credentials
+
+Start the fixture backend in one terminal:
+
+```bash
+cd backend
+npm run e2e-server
+```
+
+With an Android emulator running, build and install the app from a second terminal:
+
+```bash
+cd client
+./gradlew :androidApp:installDebug \
+  -PBUZER_BACKEND_BASE_URL=http://10.0.2.2:18433 \
+  -PBUZER_BACKEND_TOKEN=test-token \
+  -PBUZER_ASSIGNEE_ME_ID=user-me \
+  -PBUZER_ASSIGNEE_WIFE_ID=user-wife \
+  -PSENTRY_ANDROID_DSN= \
+  -PSENTRY_AUTH_TOKEN=
+```
+
+Open Buzer, complete the permission setup, and use the seeded tasks. The fixture
+server keeps SQLite in memory; restarting it resets the backend data. If multiple
+devices are attached, scope installation with `ANDROID_SERIAL`.
 
 ### Local Real-Backend Smoke
 
