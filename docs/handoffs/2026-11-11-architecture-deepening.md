@@ -195,8 +195,28 @@ Verification:
 - Result: PASS
 - Evidence: snapshot `200`, 240 tasks, 0 `hierarchyStatus: unsupported`, 0 offset-less `dueDatetime`; `/review/dismiss` returns `404`.
 
-Remaining:
-- Install a new APK built from `c2cd9ca` on the Pixel 10. Until then the phone runs the old
-  client against the new backend, which the checks above show is compatible.
-- Delete `feature/deepen-backend` and the two `deepen-*` worktrees.
-- Stop the headless emulator (`adb -s emulator-5584 emu kill`).
+### Pixel 10 install and cleanup (2026-11-11 22:38 CET)
+
+- APK built from `master` at `25fbc07`, which has the same code as `c2cd9ca` (only docs changed
+  after it). It was installed with
+  `ANDROID_SERIAL=56061FDCR005J0 ./gradlew :androidApp:installDebug` from the primary checkout,
+  whose `client/local.properties` holds the production config. The install went over the
+  existing app, so data was kept (`firstInstallTime` unchanged at 2026-07-21).
+- Removed the worktrees `.worktrees/deepen-backend` and `.worktrees/deepen-client` (both clean)
+  and deleted `feature/deepen-backend` and `feature/deepen-client` with `git branch -d`, since
+  both were merged. Stopped the headless emulator `emulator-5584`.
+
+Verification:
+- Command: `ANDROID_SERIAL=56061FDCR005J0 ./gradlew :androidApp:installDebug`
+- Result: PASS
+- Evidence: `Installed on 1 device.`; `lastUpdateTime=2026-11-11 22:38:16`, `firstInstallTime=2026-07-21 23:43:45`.
+
+Verification:
+- Command: `scripts/adb-verify.sh logcat-clear`, app launch, then logcat for `Buzer`; `scripts/adb-verify.sh perms` / `alarms` (`BUZER_DEVICE_SERIAL=56061FDCR005J0`)
+- Result: PASS
+- Evidence: `refresh fetched scheduleVersion=113950 … tasks=240 … invalid=0 … unsupported=0`, `reconcile complete scheduled=33 preStart=11 start=11 deadline=11 invalidTime=0`, `healthWarnings=0`, empty crash buffer. `MORNING_REVIEW` alarm `origWhen 1794466800000` (2026-11-12 08:00 CET). `SYSTEM_ALERT_WINDOW: allow`, and the app is on the deviceidle whitelist.
+
+Remaining live checks (not done):
+- Tomorrow's 08:00 Morning Review is delivered on the phone. In Sentry Logs, look for `overlay_start skipped … kind=MORNING_REVIEW` with release `+25fbc07…`.
+- No new Sentry issues from the new release. The new overlay escalation path would show up as
+  `overlay_action escalate` warnings.
