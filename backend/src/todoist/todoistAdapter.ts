@@ -76,19 +76,13 @@ export interface TodoistItemIdentityInput {
   resetSubtasks?: boolean;
 }
 
-export interface TodoistRecurringCompletionInput {
-  commandUuid: string;
-  task: TodoistTaskMirror;
-}
-
 export type TodoistCommand =
   | { type: "item_add"; input: Omit<TodoistRootItemAddInput, "commandUuid"> | Omit<TodoistChildItemAddInput, "commandUuid"> | TodoistItemAddInput }
   | { type: "item_update"; input: Omit<TodoistItemUpdateInput, "commandUuid"> | TodoistItemUpdateInput }
   | { type: "item_move"; input: Omit<TodoistItemMoveInput, "commandUuid"> | TodoistItemMoveInput }
   | { type: "item_close"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
   | { type: "item_uncomplete"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
-  | { type: "item_delete"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput }
-  | { type: "item_update_date_complete"; input: Omit<TodoistRecurringCompletionInput, "commandUuid"> | TodoistRecurringCompletionInput };
+  | { type: "item_delete"; input: Omit<TodoistItemIdentityInput, "commandUuid"> | TodoistItemIdentityInput };
 
 export interface TodoistSyncResult {
   syncToken: string;
@@ -98,45 +92,12 @@ export interface TodoistSyncResult {
   collaboratorStates: TodoistCollaboratorStateMirror[];
 }
 
-export interface TodoistCreateTaskInput {
-  title: string;
-  description?: string | null;
-  projectId: string | null;
-  assigneeId: string | null;
-  dueDatetime: string | null;
-  durationMinutes: number | null;
-}
-
-export interface TodoistCreateTaskResult {
-  todoistTaskId: string;
-  task: TodoistTaskMirror;
-}
-
-export interface TodoistUpdateTaskInput {
-  todoistTaskId: string;
-  title: string;
-  description: string | null;
-  projectId: string;
-  assigneeId: string | null;
-  dueDatetime: string | null;
-  durationMinutes: number | null;
-}
-
-export interface TodoistLegacyUpdateCommandIdentities {
-  updateCommandUuid: string;
-  moveCommandUuid?: string;
-}
-
 export interface TodoistAdapter {
   sync(syncToken: string, options?: { signal?: AbortSignal }): Promise<TodoistSyncResult>;
-  createTask(input: TodoistCreateTaskInput, options?: { signal?: AbortSignal }): Promise<TodoistCreateTaskResult>;
-  completeTask(todoistTaskId: string, commandUuid: string, options?: { signal?: AbortSignal }): Promise<void>;
-  updateTask(input: TodoistUpdateTaskInput, commands: TodoistLegacyUpdateCommandIdentities, options?: { signal?: AbortSignal }): Promise<void>;
   itemAdd(input: TodoistItemAddInput, options?: { signal?: AbortSignal }): Promise<TodoistItemAddResult>;
   itemUpdate(input: TodoistItemUpdateInput, options?: { signal?: AbortSignal }): Promise<void>;
   itemMove(input: TodoistItemMoveInput, options?: { signal?: AbortSignal }): Promise<void>;
   itemClose(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
   itemUncomplete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
   itemDelete(input: TodoistItemIdentityInput, options?: { signal?: AbortSignal }): Promise<void>;
-  itemUpdateDateComplete(input: TodoistRecurringCompletionInput, options?: { signal?: AbortSignal }): Promise<void>;
 }

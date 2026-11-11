@@ -21,9 +21,6 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
 
   const adapter: TodoistAdapter = {
     sync: vi.fn(),
-    createTask: vi.fn(),
-    completeTask: vi.fn(),
-    updateTask: vi.fn(),
     itemAdd: vi.fn(async (input, opts) => {
       calls.push({ method: "itemAdd", input, signal: opts?.signal });
       if (handlers?.itemAdd) return handlers.itemAdd(input, opts);
@@ -48,10 +45,6 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
     itemDelete: vi.fn(async (input, opts) => {
       calls.push({ method: "itemDelete", input, signal: opts?.signal });
       if (handlers?.itemDelete) return handlers.itemDelete(input, opts);
-    }),
-    itemUpdateDateComplete: vi.fn(async (input, opts) => {
-      calls.push({ method: "itemUpdateDateComplete", input, signal: opts?.signal });
-      if (handlers?.itemUpdateDateComplete) return handlers.itemUpdateDateComplete(input, opts);
     })
   };
 
@@ -461,31 +454,10 @@ describe("TodoistCommandExecutor", () => {
     const executor = new TodoistCommandExecutor(adapter);
 
     const command: TodoistCommand = {
-      type: "item_update_date_complete",
+      type: "item_close",
       input: {
-        task: {
-          todoistTaskId: "task-1",
-          title: "Recurring task",
-          description: null,
-          projectId: "proj-1",
-          parentId: null,
-          childOrder: 1,
-          assigneeId: null,
-          creatorId: null,
-          dueDate: "2026-08-31",
-          dueDatetime: null,
-          dueString: "every day",
-          dueLang: "en",
-          dueTimezone: null,
-          isRecurring: true,
-          durationAmount: null,
-          durationUnit: null,
-          durationMinutes: null,
-          completedAt: null,
-          deletedAt: null,
-          rawJson: {},
-          updatedAt: "2026-08-31T10:00:00Z"
-        }
+        todoistTaskId: "task-1",
+        resetSubtasks: true
       }
     };
 

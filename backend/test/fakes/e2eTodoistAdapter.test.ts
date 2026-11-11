@@ -161,7 +161,7 @@ describe("E2ETodoistWorld semantics", () => {
     expect(cleared.durationMinutes).toBeNull();
   });
 
-  it("normalizes minute and hour durations for root, item, and legacy updates", async () => {
+  it("normalizes minute and hour durations for root and item updates", async () => {
     const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
     const root = await adapter.itemAdd({
       kind: "root",
@@ -192,17 +192,6 @@ describe("E2ETodoistWorld semantics", () => {
       assignment: { kind: "preserve" }
     });
     expect((await syncedTask(adapter, "t-1")).durationMinutes).toBe(120);
-
-    await adapter.updateTask({
-      todoistTaskId: "t-1",
-      title: "Legacy",
-      description: null,
-      projectId: "project-test",
-      assigneeId: "user-me",
-      dueDatetime: "2026-07-20T09:00:00.000Z",
-      durationMinutes: 75
-    }, { updateCommandUuid: "c-legacy" });
-    expect((await syncedTask(adapter, "t-1")).durationMinutes).toBe(75);
   });
 
   it("itemAdd creates a root and a child under it", async () => {
@@ -294,49 +283,6 @@ describe("E2ETodoistWorld semantics", () => {
     await adapter.itemDelete({ commandUuid: "c-2", todoistTaskId: "t-1" });
     expect((await syncedTask(adapter, "t-1")).deletedAt).not.toBeNull();
   });
-
-  it("legacy update preserves the project without a move identity and moves with one", async () => {
-    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
-    const update = {
-      todoistTaskId: "t-1",
-      title: "Renamed",
-      description: null,
-      projectId: "project-personal",
-      assigneeId: "user-me",
-      dueDatetime: "2026-07-19T08:00:00.000Z",
-      durationMinutes: 45
-    };
-
-    await adapter.updateTask(update, { updateCommandUuid: "c-update" });
-    expect((await syncedTask(adapter, "t-1")).projectId).toBe("project-test");
-
-    await adapter.updateTask(update, {
-      updateCommandUuid: "c-update-2",
-      moveCommandUuid: "c-move"
-    });
-    expect((await syncedTask(adapter, "t-1")).projectId).toBe("project-personal");
-  });
-
-  it("itemUpdateDateComplete advances a daily recurring due by one day", async () => {
-    const task = mirror({
-      todoistTaskId: "t-1",
-      title: "Daily",
-      dueDate: "2026-07-18T10:00:00.000Z",
-      isRecurring: true,
-      dueString: "every day at 10:00",
-      dueLang: "en",
-      dueTimezone: "Europe/Bratislava"
-    });
-    const adapter = adapterWith(task);
-    await adapter.itemUpdateDateComplete({ commandUuid: "c-1", task });
-
-    expect((await syncedTask(adapter, "t-1")).dueDatetime).toBe(
-      "2026-07-19T10:00:00.000Z"
-    );
-    expect((await syncedTask(adapter, "t-1")).dueDate).toBe(
-      "2026-07-19T10:00:00.000Z"
-    );
-  });
 });
 
 describe("scenario presets", () => {
@@ -362,5 +308,38 @@ describe("scenario presets", () => {
     expect((await adapter.sync("*")).tasks).toHaveLength(0);
     adapter.setScenario("none");
     expect((await syncedTask(adapter, "t-1")).completedAt).not.toBeNull();
+  });
+
+  it("holdNextSync resolves entered when sync starts and suspends sync until release is called", async () => {
+    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
+    const hold = adapter.holdNextSync();
+
+    let syncSettled = false;
+    const syncPromise = adapter.sync("*").then((result) => {
+      syncSettled = true;
+      return result;
+    });
+
+    await hold.entered;
+    expect(syncSettled).toBe(false);
+
+    hold.release();
+    const result = await syncPromise;
+    expect(syncSettled).toBe(true);
+    expect(result.tasks).toHaveLength(1);
+
+    // Subsequent sync calls are not held
+    const nextResult = await adapter.sync(result.syncToken);
+    expect(nextResult.tasks).toHaveLength(1);
+  });
+
+  it("holdNextSync release before sync starts disarms cleanly without blocking later syncs", async () => {
+    const adapter = adapterWith(mirror({ todoistTaskId: "t-1", title: "One" }));
+    const hold = adapter.holdNextSync();
+    hold.release();
+    await expect(hold.entered).resolves.toBeUndefined();
+
+    const result = await adapter.sync("*");
+    expect(result.tasks).toHaveLength(1);
   });
 });

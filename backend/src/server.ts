@@ -18,7 +18,7 @@ import { TaskSnapshotService } from "./services/taskSnapshotService.js";
 import { TodoistOperationQueue } from "./services/todoistOperationQueue.js";
 import { TodoistCommandExecutor } from "./services/todoistCommandExecutor.js";
 import { TaskMutationRunner } from "./services/taskMutationRunner.js";
-import { TodoistPoller } from "./services/todoistPoller.js";
+import { POLL_DEADLINE_MS, TodoistPoller } from "./services/todoistPoller.js";
 import { TodoistSyncService } from "./services/todoistSyncService.js";
 import { HttpTodoistAdapter } from "./todoist/httpTodoistAdapter.js";
 import type { TodoistAdapter } from "./todoist/todoistAdapter.js";
@@ -220,9 +220,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     observability: backendObservability
   });
   const poller = new TodoistPoller(
-    synchronizer,
     {
-      queue: todoistQueue,
+      pollOnce: (opts) =>
+        todoistQueue.run(
+          {
+            operation: "poll",
+            deadlineMs: opts?.deadlineMs ?? POLL_DEADLINE_MS,
+            ...(opts?.signal !== undefined ? { signal: opts.signal } : {})
+          },
+          ({ signal }) => synchronizer.syncOnce({ signal })
+        )
+    },
+    {
       runImmediately: true,
       observability: backendObservability,
       onError: (error) => {

@@ -31,9 +31,6 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
   const calls: Array<{ method: string; input: any }> = [];
   const adapter: TodoistAdapter = {
     sync: vi.fn(),
-    createTask: vi.fn(),
-    completeTask: vi.fn(),
-    updateTask: vi.fn(),
     itemAdd: vi.fn(async (input) => {
       calls.push({ method: "itemAdd", input });
       if (handlers?.itemAdd) return handlers.itemAdd(input);
@@ -58,10 +55,6 @@ function createMockAdapter(handlers?: Partial<Record<keyof TodoistAdapter, (...a
     itemDelete: vi.fn(async (input) => {
       calls.push({ method: "itemDelete", input });
       if (handlers?.itemDelete) return handlers.itemDelete(input);
-    }),
-    itemUpdateDateComplete: vi.fn(async (input) => {
-      calls.push({ method: "itemUpdateDateComplete", input });
-      if (handlers?.itemUpdateDateComplete) return handlers.itemUpdateDateComplete(input);
     })
   };
   return { adapter, calls };

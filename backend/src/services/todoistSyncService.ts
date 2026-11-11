@@ -47,8 +47,6 @@ export class TodoistSyncService {
   private lastDurationMs: number | null = null;
   private lastErrorMessage: string | null = null;
 
-  private manualSyncInFlight: Promise<TodoistSyncSummary> | null = null;
-
   constructor(
     private readonly db: Database.Database,
     private readonly tasks: TaskRepository,
@@ -65,15 +63,6 @@ export class TodoistSyncService {
       durationMs: this.lastDurationMs,
       ...(this.lastErrorMessage ? { errorMessage: this.lastErrorMessage } : {})
     };
-  }
-
-  syncNow(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {
-    if (this.manualSyncInFlight !== null) return this.manualSyncInFlight;
-    const run = this.syncOnce(options).finally(() => {
-      if (this.manualSyncInFlight === run) this.manualSyncInFlight = null;
-    });
-    this.manualSyncInFlight = run;
-    return run;
   }
 
   async syncOnce(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {

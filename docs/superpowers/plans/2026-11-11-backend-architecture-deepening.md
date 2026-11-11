@@ -156,7 +156,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend commit -m "r
   - Updated `TodoistPoller` constructor accepting `PollableTodoistRuntime` (`{ pollOnce(options?: PollOnceOptions): Promise<TodoistSyncSummary | void> }`) while keeping optional legacy compatibility only if needed until Task 3, or migrating `todoistPoller*.test.ts` directly to `{ pollOnce }`.
   - `E2ETodoistAdapter.holdNextSync(): { entered: Promise<void>; release: () => void }` (resolving `entered` as soon as `adapter.sync` is called and suspending `adapter.sync` until `release()` is invoked).
 
-- [ ] **Step 1: Write failing `todoistRuntime.test.ts` and `e2eTodoistAdapter` hold tests**
+- [x] **Step 1: Write failing `todoistRuntime.test.ts` and `e2eTodoistAdapter` hold tests**
 
 Create `backend/test/services/todoistRuntime.test.ts` covering:
 1. `executeMutation`, `forceRefresh`, and `pollOnce` serialize strictly in FIFO order through one shared internal queue (`pollOnce` held inside `adapter.sync` causes a concurrent `forceRefresh` with short `deadlineMs` to return `{ kind: "busy", message, snapshot }` and emit `warn("backend_busy", { operation: "force_refresh", request_id })`).
@@ -165,12 +165,12 @@ Create `backend/test/services/todoistRuntime.test.ts` covering:
 4. `forceRefresh` non-operational defect (`new TodoistOperationError("parse", "Bad payload")`) when `snapshots.getSnapshot` also throws captures **both** `forced_refresh_internal_defect` and `forced_refresh_snapshot_internal_defect` and returns `{ kind: "failed", message: "Failed to refresh snapshot from Todoist." }` (`snapshot` omitted, never rethrowing).
 5. `pollOnce({ deadlineMs: 60_000 })` forwards `AbortSignal` to `adapter.sync` and returns `TodoistSyncSummary`.
 
-- [ ] **Step 2: Run `todoistRuntime.test.ts` to verify failure**
+- [x] **Step 2: Run `todoistRuntime.test.ts` to verify failure**
 
 Run: `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test -- test/services/todoistRuntime.test.ts`
 Expected: FAIL (`Cannot find module '../../src/services/todoistRuntime.js'`).
 
-- [ ] **Step 3: Slim `TodoistAdapter`, implement `createTodoistRuntime`, update `TodoistPoller`, and add `holdNextSync` on `E2ETodoistAdapter`**
+- [x] **Step 3: Slim `TodoistAdapter`, implement `createTodoistRuntime`, update `TodoistPoller`, and add `holdNextSync` on `E2ETodoistAdapter`**
 
 1. Delete `createTask`, `completeTask`, `updateTask`, `itemUpdateDateComplete` and unused types (`TodoistCreateTaskInput`, `TodoistCreateTaskResult`, `TodoistUpdateTaskInput`, `TodoistLegacyUpdateCommandIdentities`, `TodoistRecurringCompletionInput`, `{ type: "item_update_date_complete" }`) from `todoistAdapter.ts`, `httpTodoistAdapter.ts`, `todoistCommandExecutor.ts`, `fakeTodoistAdapter.ts`, `e2eTodoistAdapter.ts`, and remove their obsolete mock properties/tests in `httpTodoistAdapter.test.ts`, `e2eTodoistAdapter.test.ts`, `todoistCommandExecutor.test.ts`, and `taskMutationRunner.test.ts`.
 2. Delete unused `TodoistSyncService.syncNow()`.
@@ -178,12 +178,12 @@ Expected: FAIL (`Cannot find module '../../src/services/todoistRuntime.js'`).
 4. Update `TodoistPoller` (`backend/src/services/todoistPoller.ts`) to take `{ pollOnce(options?: PollOnceOptions): Promise<TodoistSyncSummary | void> }` (removing its own `TodoistOperationQueue` field) and update `todoistPoller.test.ts` + `todoistPollerDiagnostics.test.ts` + `server.ts` poller call site.
 5. Add `holdNextSync()` on `E2ETodoistAdapter` and test it in `e2eTodoistAdapter.test.ts`.
 
-- [ ] **Step 4: Run full backend test suite and typecheck**
+- [x] **Step 4: Run full backend test suite and typecheck**
 
 Run: `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test` and `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend run typecheck`
 Expected: PASS across all test files and `tsc --noEmit`.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend add backend/src backend/test

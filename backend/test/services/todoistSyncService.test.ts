@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { migrate } from "../../src/db/migrations.js";
 import { CollaboratorRepository } from "../../src/repositories/collaboratorRepository.js";
 import { ProjectRepository } from "../../src/repositories/projectRepository.js";
@@ -9,6 +9,9 @@ import { TodoistSyncService } from "../../src/services/todoistSyncService.js";
 import { FakeTodoistAdapter } from "../fakes/fakeTodoistAdapter.js";
 
 describe("TodoistSyncService", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it("propagates an optional AbortSignal to the raw Todoist read sync", async () => {
     const db = new Database(":memory:");
     migrate(db);

@@ -181,8 +181,6 @@ export class TodoistCommandExecutor {
         return await this.adapter.itemUncomplete({ ...command.input, commandUuid }, { signal });
       case "item_delete":
         return await this.adapter.itemDelete({ ...command.input, commandUuid }, { signal });
-      case "item_update_date_complete":
-        return await this.adapter.itemUpdateDateComplete({ ...command.input, commandUuid }, { signal });
     }
   }
 }

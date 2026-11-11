@@ -1045,7 +1045,7 @@ describe("HTTP routes", () => {
       code: "task_validation_failed",
       details: { errors: ["due_datetime_required", "duration_required"] }
     });
-    expect(adapter.createdTasks).toEqual([]);
+    expect(adapter.itemAdds).toEqual([]);
   });
 
   it("accepts omitted assignee for non-assignable project creation", async () => {
@@ -1184,7 +1184,7 @@ describe("HTTP routes", () => {
     await app.close();
 
     expect(response.statusCode).toBe(400);
-    expect(adapter.createdTasks).toEqual([]);
+    expect(adapter.itemAdds).toEqual([]);
   });
 
   it("rejects unknown child scheduling fields and invalid IANA time zones", async () => {
