@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CommitmentPolicy,
+  MAX_CHECKLIST_CHILDREN,
+  type PolicyTaskRecord
+} from "../../src/domain/commitmentPolicy.js";
+import {
   TaskEnforcementPolicy,
   type EnforceableTask
 } from "../../src/domain/taskEnforcementPolicy.js";
@@ -28,9 +33,57 @@ function policy() {
     currentUserId,
     projectsById: new Map([
       ["project-personal", { canAssignTasks: false }],
+      ["project-shared", { canAssignTasks: true }],
+      ["proj-1", { canAssignTasks: false }],
+      ["proj-2", { canAssignTasks: true }]
+    ])
+  });
+}
+
+function createPolicy() {
+  return new CommitmentPolicy({
+    currentUserId,
+    projectsById: new Map([
+      ["proj-1", { canAssignTasks: false }],
+      ["proj-2", { canAssignTasks: true }],
+      ["project-personal", { canAssignTasks: false }],
       ["project-shared", { canAssignTasks: true }]
     ])
   });
+}
+
+function makeRoot(overrides: Partial<PolicyTaskRecord> = {}): PolicyTaskRecord {
+  return {
+    id: "root",
+    todoistTaskId: "todoist-root",
+    title: "Prepare lunch",
+    projectId: "proj-1",
+    parentId: null,
+    assigneeId: null,
+    creatorId: currentUserId,
+    dueDatetime: "2026-08-02T12:00:00Z",
+    durationMinutes: 30,
+    isRecurring: false,
+    commitmentOwnerId: null,
+    ...overrides
+  };
+}
+
+function makeChild(overrides: Partial<PolicyTaskRecord> = {}): PolicyTaskRecord {
+  return {
+    id: "child",
+    todoistTaskId: "todoist-child",
+    title: "Checklist item",
+    projectId: "proj-1",
+    parentId: "todoist-root",
+    assigneeId: null,
+    creatorId: currentUserId,
+    dueDatetime: null,
+    durationMinutes: null,
+    isRecurring: false,
+    commitmentOwnerId: null,
+    ...overrides
+  };
 }
 
 describe("TaskEnforcementPolicy", () => {
@@ -380,5 +433,60 @@ describe("TaskEnforcementPolicy", () => {
       violation: null,
       isCompanionOwned: false
     });
+  });
+
+  it("flags child dueString, dueLang, dueTimezone, and durationUnit as unsupported hierarchy", () => {
+    const p = createPolicy();
+    const root = makeRoot();
+    expect(p.classify(root, [root, makeChild({ dueString: "tomorrow" })])).toMatchObject({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_schedule"
+    });
+    expect(p.classify(root, [root, makeChild({ dueLang: "en" })])).toMatchObject({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_schedule"
+    });
+    expect(p.classify(root, [root, makeChild({ dueTimezone: "Europe/Prague" })])).toMatchObject({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_schedule"
+    });
+    expect(p.classify(root, [root, makeChild({ durationUnit: "minute" })])).toMatchObject({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_duration"
+    });
+  });
+
+  it("includes root validationErrors on companion-owned UNSUPPORTED_HIERARCHY roots missing schedule", () => {
+    const p = createPolicy();
+    const root = makeRoot({ dueDatetime: null, durationMinutes: null });
+    const child = makeChild({ dueDate: "2026-08-03" });
+    expect(p.classify(root, [root, child])).toEqual({
+      classification: "UNSUPPORTED_HIERARCHY",
+      violation: "child_has_schedule",
+      isCompanionOwned: true,
+      validationErrors: ["due_datetime_required", "duration_required"]
+    });
+  });
+
+  it("excludes mismatched-project or dueString children from eligibleCheckedChildTodoistIds", () => {
+    const p = createPolicy();
+    const root = makeRoot({ projectId: "proj-1" });
+    const okChecked = makeChild({ todoistTaskId: "c-ok", projectId: "proj-1", completedAt: "2026-08-02T09:00:00Z" });
+    const wrongProj = makeChild({ todoistTaskId: "c-proj", projectId: "proj-2", completedAt: "2026-08-02T09:00:00Z" });
+    const dueStr = makeChild({ todoistTaskId: "c-due", projectId: "proj-1", dueString: "daily", completedAt: "2026-08-02T09:00:00Z" });
+    expect(p.eligibleCheckedChildTodoistIds(root, [root, okChecked, wrongProj, dueStr])).toEqual(["c-ok"]);
+  });
+
+  it("inspects root hierarchy in deterministic childOrder then todoistTaskId order", () => {
+    const p = createPolicy();
+    const root = makeRoot();
+    const laterDuration = makeChild({ id: "c-2", todoistTaskId: "c-2", childOrder: 2, durationUnit: "minute" });
+    const earlierSchedule = makeChild({ id: "c-1", todoistTaskId: "c-1", childOrder: 1, dueString: "tomorrow" });
+    const inspection = p.inspectRootHierarchy(root, [root, laterDuration, earlierSchedule]);
+
+    expect(MAX_CHECKLIST_CHILDREN).toBe(30);
+    expect(inspection.status).toBe("unsupported");
+    expect(inspection.violation).toBe("child_has_schedule");
+    expect(inspection.directChildren.map((child) => child.todoistTaskId)).toEqual(["c-1", "c-2"]);
   });
 });

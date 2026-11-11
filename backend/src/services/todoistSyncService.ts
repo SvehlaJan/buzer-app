@@ -4,7 +4,7 @@ import { CollaboratorRepository } from "../repositories/collaboratorRepository.j
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistAdapter } from "../todoist/todoistAdapter.js";
-import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
+import { CommitmentPolicy } from "../domain/commitmentPolicy.js";
 import {
   OccurrenceReconciler,
   recurrenceFingerprint,
@@ -96,7 +96,7 @@ export class TodoistSyncService {
 
   private async performSync(options?: TodoistSyncOptions): Promise<TodoistSyncSummary> {
     const preSyncTasks = this.tasks.listAll();
-    const preSyncPolicy = new TaskEnforcementPolicy({
+    const preSyncPolicy = new CommitmentPolicy({
       currentUserId: this.currentUserId,
       projectsById: new Map(
         this.projects.listActive().map((project) => [project.todoistProjectId, project])
@@ -183,7 +183,7 @@ export class TodoistSyncService {
       }
 
       const allTasks = this.tasks.listAll();
-      const policy = new TaskEnforcementPolicy({
+      const policy = new CommitmentPolicy({
         currentUserId: this.currentUserId,
         projectsById: new Map(
           this.projects.listActive().map((project) => [project.todoistProjectId, project])
@@ -194,15 +194,16 @@ export class TodoistSyncService {
           continue;
         }
         const previous = previousByTodoistId.get(currentTask.todoistTaskId) ?? null;
+        const isOwnedNow = isOwnedForReconciliation(currentTask, allTasks, this.currentUserId, policy);
         const decision = this.occurrenceReconciler.decide({
           current: currentTask,
           incoming: currentTask,
-          isOwned: isOwnedForReconciliation(currentTask, this.currentUserId, policy),
+          isOwned: isOwnedNow,
           wasOwned: previous === null
-            ? isOwnedForReconciliation(currentTask, this.currentUserId, policy)
-            : isOwnedForReconciliation(previous, this.currentUserId, preSyncPolicy),
+            ? isOwnedNow
+            : isOwnedForReconciliation(previous, preSyncTasks, this.currentUserId, preSyncPolicy),
           source: "sync",
-          checkedChildIds: eligibleCheckedChildIds(currentTask, allTasks)
+          checkedChildIds: policy.eligibleCheckedChildTodoistIds(currentTask, allTasks)
         });
         this.applyOccurrenceDecision(currentTask, decision, now);
       }
@@ -265,24 +266,14 @@ function isTerminal(task: TaskWithCommitment): boolean {
 
 function isOwnedForReconciliation(
   task: TaskWithCommitment,
+  allTasks: readonly TaskWithCommitment[],
   currentUserId: string,
-  policy: TaskEnforcementPolicy
+  policy: CommitmentPolicy
 ): boolean {
-  return task.assigneeId === currentUserId || policy.isCompanionOwned(task);
-}
-
-function eligibleCheckedChildIds(root: TaskWithCommitment, allTasks: TaskWithCommitment[]): string[] {
-  return allTasks
-    .filter((task) =>
-      task.parentId === root.todoistTaskId &&
-      task.completedAt !== null &&
-      task.deletedAt === null &&
-      task.dueDatetime === null &&
-      task.dueDate === null &&
-      task.durationMinutes === null &&
-      task.durationAmount === null &&
-      !task.isRecurring &&
-      task.assigneeId === null
-    )
-    .map((task) => task.todoistTaskId);
+  const result = policy.classify(task, allTasks);
+  return (
+    result.classification !== "NOT_OWNED" &&
+    result.classification !== "ROOT_UNASSIGNED" &&
+    (task.assigneeId === currentUserId || result.isCompanionOwned)
+  );
 }

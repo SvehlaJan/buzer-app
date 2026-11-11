@@ -522,6 +522,95 @@ describe("TaskSnapshotService", () => {
       expect.objectContaining({ id: "unsupported", state: "invalid", hierarchyStatus: "unsupported", hierarchyViolation: "child_has_schedule" })
     ]));
   });
+
+  it("projects validationErrors alongside unsupported hierarchyStatus on an owner root missing schedule", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    const projectRepo = new ProjectRepository(db);
+    projectRepo.upsertProject({
+      todoistProjectId: "project-personal",
+      name: "Personal",
+      shared: false,
+      canAssignTasks: false,
+      isInboxProject: false,
+      isDeleted: false,
+      isArchived: false,
+      rawJson: "{}",
+      updatedAt: "2026-08-02T08:00:00Z"
+    });
+    repo.upsertTodoistTask(rootTask({
+      id: "unsupported-missing-schedule",
+      todoistTaskId: "todoist-unsupported-missing",
+      projectId: "project-personal",
+      assigneeId: null,
+      creatorId: "user-self",
+      dueDatetime: null,
+      durationMinutes: null,
+      commitmentOwnerId: "user-self"
+    }));
+    repo.upsertTodoistTask(childTask({
+      id: "scheduled-child",
+      todoistTaskId: "todoist-scheduled-child",
+      projectId: "project-personal",
+      parentId: "todoist-unsupported-missing",
+      dueDate: "2026-08-03",
+      dueDatetime: null,
+      durationMinutes: null
+    }));
+
+    const snapshot = new TaskSnapshotService(repo, projectRepo, "user-self").getSnapshot("2026-08-02T10:00:00Z");
+
+    expect(snapshot.tasks).toHaveLength(1);
+    expect(snapshot.tasks[0]).toMatchObject({
+      id: "unsupported-missing-schedule",
+      state: "invalid",
+      hierarchyStatus: "unsupported",
+      hierarchyViolation: "child_has_schedule",
+      validationErrors: ["due_datetime_required", "duration_required"]
+    });
+  });
+
+  it("marks roots with child dueString or durationUnit as unsupported hierarchy in snapshot", () => {
+    const db = new Database(":memory:");
+    migrate(db);
+    const repo = new TaskRepository(db);
+    repo.upsertTodoistTask(rootTask({ id: "root-due-str", todoistTaskId: "todoist-root-due-str", title: "A root" }));
+    repo.upsertTodoistTask(childTask({
+      id: "child-due-str",
+      todoistTaskId: "todoist-child-due-str",
+      parentId: "todoist-root-due-str",
+      dueString: "tomorrow",
+      dueDatetime: null,
+      durationMinutes: null
+    }));
+    repo.upsertTodoistTask(rootTask({ id: "root-dur-unit", todoistTaskId: "todoist-root-dur-unit", title: "B root" }));
+    repo.upsertTodoistTask(childTask({
+      id: "child-dur-unit",
+      todoistTaskId: "todoist-child-dur-unit",
+      parentId: "todoist-root-dur-unit",
+      durationUnit: "minute",
+      dueDatetime: null,
+      durationMinutes: null
+    }));
+
+    const snapshot = new TaskSnapshotService(repo, new ProjectRepository(db), "user-self").getSnapshot("2026-08-02T10:00:00Z");
+
+    expect(snapshot.tasks).toEqual([
+      expect.objectContaining({
+        id: "root-due-str",
+        state: "invalid",
+        hierarchyStatus: "unsupported",
+        hierarchyViolation: "child_has_schedule"
+      }),
+      expect.objectContaining({
+        id: "root-dur-unit",
+        state: "invalid",
+        hierarchyStatus: "unsupported",
+        hierarchyViolation: "child_has_duration"
+      })
+    ]);
+  });
 });
 
 function rootTask(overrides: Partial<Parameters<TaskRepository["upsertTodoistTask"]>[0]> = {}) {

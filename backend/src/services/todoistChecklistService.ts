@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { CommitmentPolicy, MAX_CHECKLIST_CHILDREN } from "../domain/commitmentPolicy.js";
 import { DomainError } from "../domain/errors.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import type { TodoistCommand } from "../todoist/todoistAdapter.js";
@@ -124,7 +125,7 @@ export class TodoistChecklistService {
     let projectedChildCount = this.childrenOf(root).length;
     for (const mutation of mutations) {
       if (mutation.type === "add") {
-        if (projectedChildCount >= 30) {
+        if (projectedChildCount >= MAX_CHECKLIST_CHILDREN) {
           throw domainError("too_many_children", "A commitment can have at most 30 checklist items");
         }
         requiredTitle(mutation.title);
@@ -215,15 +216,11 @@ export class TodoistChecklistService {
   private assertProjectedTree(rootTaskId: string): void {
     const root = this.requireRoot(rootTaskId);
     const all = this.tasks.listAll();
-    const children = all.filter((task) => task.parentId === root.todoistTaskId && task.deletedAt === null);
-    if (children.length > 30 || all.some((task) => children.some((child) => child.todoistTaskId === task.parentId && task.deletedAt === null))) {
-      throw DomainError.unsupportedHierarchy(this.snapshotProvider());
-    }
-    if (children.some((child) =>
-      child.projectId !== root.projectId || child.dueDatetime !== null || child.dueDate !== null ||
-      child.dueString !== null || child.dueLang !== null || child.dueTimezone !== null || child.isRecurring ||
-      child.durationMinutes !== null || child.durationAmount !== null || child.durationUnit !== null || child.assigneeId !== null
-    )) {
+    const hierarchy = new CommitmentPolicy({
+      currentUserId: "",
+      projectsById: new Map()
+    }).inspectRootHierarchy(root, all);
+    if (hierarchy.status === "unsupported") {
       throw DomainError.unsupportedHierarchy(this.snapshotProvider());
     }
   }

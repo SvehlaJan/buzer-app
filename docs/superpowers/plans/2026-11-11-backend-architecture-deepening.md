@@ -21,7 +21,7 @@
 ## Review Focus
 
 1. **Child task carrying `dueString`, `dueLang`, `dueTimezone`, or `durationUnit` with null `dueDatetime`/`dueDate`/`durationMinutes`**: `GET /tasks/snapshot`, `TodoistSyncService`, and `TaskActionService` must all classify the root as `UNSUPPORTED_HIERARCHY` (`"child_has_schedule"` or `"child_has_duration"`) instead of showing `hierarchyStatus: "valid"` in snapshot and failing on `Done`/`Edit` (pinned in Task 1).
-2. **Unsupported-hierarchy root that is *also* missing root `dueDatetime` or `durationMinutes`**: `CommitmentPolicy.classify` and `GET /tasks/snapshot` must populate `validationErrors` (`["missing_due_datetime", "missing_duration"]`) alongside `hierarchyStatus: "unsupported"` so Morning Review knows root schedule fields need repair (pinned in Task 1).
+2. **Unsupported-hierarchy root that is *also* missing root `dueDatetime` or `durationMinutes`**: `CommitmentPolicy.classify` and `GET /tasks/snapshot` must populate `validationErrors` (`["due_datetime_required", "duration_required"]`) alongside `hierarchyStatus: "unsupported"` so Morning Review knows root schedule fields need repair (pinned in Task 1).
 3. **`forceRefresh` non-operational parse defect when fallback `snapshots.getSnapshot` also throws (`sync_initializing` or SQLite error)**: `TodoistRuntime.forceRefresh` must capture both `forced_refresh_internal_defect` and `forced_refresh_snapshot_internal_defect` and return `{ kind: "failed", message: "Failed to refresh snapshot from Todoist." }` without throwing an unhandled 500 (pinned in Task 2).
 4. **`e2eServer` `/__block-queue` hold duration across slow Android emulator launches**: Holding the FIFO via `todoistRuntime.pollOnce({ deadlineMs: 60_000 })` + `adapter.holdNextSync()` must wait until `adapter.sync` is actually entered before `/__block-queue` returns `{ blocked: true }` and must release cleanly on `{ enabled: false }` or `/__reset` without leaking dangling promises (pinned in Task 3).
 5. **Escalation quiet-hours evaluation in `e2eServer`**: `createBackendCore` must wire `ownerTimeZone: () => resolveOwnerTimeZone(collaborators, currentUserId)` into `EscalationService` in both `server.ts` and `e2eServer.ts` so owner timezone from synced collaborator state governs quiet hours everywhere (pinned in Task 3).
@@ -58,7 +58,7 @@
     - `eligibleCheckedChildTodoistIds(root: PolicyTaskRecord, allTasks: readonly PolicyTaskRecord[]): string[]`
     - `classify(task: PolicyTaskRecord, allTasks: readonly PolicyTaskRecord[]): TaskEnforcementResult` (populates `validationErrors` on both `ROOT_CANDIDATE_INVALID` and non-unassigned `UNSUPPORTED_HIERARCHY` roots).
 
-- [ ] **Step 1: Write failing unit & snapshot/sync tests for the 4-way drift cases and combined `UNSUPPORTED_HIERARCHY` + `validationErrors`**
+- [x] **Step 1: Write failing unit & snapshot/sync tests for the 4-way drift cases and combined `UNSUPPORTED_HIERARCHY` + `validationErrors`**
 
 Add tests in `backend/test/domain/taskEnforcementPolicy.test.ts`, `backend/test/services/taskSnapshotService.test.ts`, and `backend/test/services/todoistSyncService.test.ts`:
 ```ts
@@ -88,7 +88,7 @@ it("includes root validationErrors on companion-owned UNSUPPORTED_HIERARCHY root
     classification: "UNSUPPORTED_HIERARCHY",
     violation: "child_has_schedule",
     isCompanionOwned: true,
-    validationErrors: ["missing_due_datetime", "missing_duration"]
+    validationErrors: ["due_datetime_required", "duration_required"]
   });
 });
 
@@ -101,23 +101,23 @@ it("excludes mismatched-project or dueString children from eligibleCheckedChildT
   expect(policy.eligibleCheckedChildTodoistIds(root, [root, okChecked, wrongProj, dueStr])).toEqual(["c-ok"]);
 });
 ```
-Also add a snapshot test in `taskSnapshotService.test.ts` verifying an unsupported-hierarchy owner root with `dueDatetime: null, durationMinutes: null` projects `hierarchyStatus: "unsupported"`, `hierarchyViolation: "child_has_schedule"`, and `validationErrors: ["missing_due_datetime", "missing_duration"]`.
+Also add a snapshot test in `taskSnapshotService.test.ts` verifying an unsupported-hierarchy owner root with `dueDatetime: null, durationMinutes: null` projects `hierarchyStatus: "unsupported"`, `hierarchyViolation: "child_has_schedule"`, and `validationErrors: ["due_datetime_required", "duration_required"]`.
 
-- [ ] **Step 2: Run Vitest on the modified domain/snapshot/sync test files to verify they fail**
+- [x] **Step 2: Run Vitest on the modified domain/snapshot/sync test files to verify they fail**
 
 Run: `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test -- test/domain/taskEnforcementPolicy.test.ts test/services/taskSnapshotService.test.ts test/services/todoistSyncService.test.ts`
 Expected: FAIL on `dueString`/`dueTimezone`/`durationUnit` classification, missing `eligibleCheckedChildTodoistIds`, and `validationErrors` being `[]` on `UNSUPPORTED_HIERARCHY`.
 
-- [ ] **Step 3: Implement `CommitmentPolicy` and wire `TaskHierarchyProjector`, `TaskSnapshotService`, `TodoistSyncService`, `TaskActionService`, and `TodoistChecklistService` to it**
+- [x] **Step 3: Implement `CommitmentPolicy` and wire `TaskHierarchyProjector`, `TaskSnapshotService`, `TodoistSyncService`, `TaskActionService`, and `TodoistChecklistService` to it**
 
 Create `backend/src/domain/commitmentPolicy.ts` (re-exporting `CommitmentPolicy` as `TaskEnforcementPolicy` in `taskEnforcementPolicy.ts` for clean incremental imports, or updating imports directly), remove the duplicate `validateTaskStrictness` call in `TaskSnapshotService.ts` (reading `hierarchy.validationErrors ?? []`), replace `eligibleCheckedChildIds` in `todoistSyncService.ts` with `policy.eligibleCheckedChildTodoistIds(...)`, and replace custom child-violation checks in `TaskActionService.directChildTree` and `TodoistChecklistService.assertProjectedTree` with `CommitmentPolicy`'s `findChildViolation` / `inspectRootHierarchy`.
 
-- [ ] **Step 4: Run full backend unit tests and typecheck to verify Task 1 passes**
+- [x] **Step 4: Run full backend unit tests and typecheck to verify Task 1 passes**
 
 Run: `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend test` and `npm --prefix /Users/svehla/playground/buzer-app/.worktrees/deepen-backend/backend run typecheck`
 Expected: PASS (all test files green, zero TypeScript errors).
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-backend add backend/src/domain backend/src/services backend/test

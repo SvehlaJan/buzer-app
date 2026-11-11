@@ -4,6 +4,7 @@ import { addMinutes, sameDueInstant } from "../domain/time.js";
 import { appendExtension, decodeTaskDescription, reconstructTaskDescription } from "../domain/taskDescriptionCodec.js";
 import { describeRecurrence, translateRecurrencePreset, type RecurrencePreset } from "../domain/taskRecurrence.js";
 import { resolveOwnerTimeZone } from "../domain/ownerTimeZone.js";
+import { CommitmentPolicy, MAX_CHECKLIST_CHILDREN } from "../domain/commitmentPolicy.js";
 import { DomainError } from "../domain/errors.js";
 import type { ProjectRepository, TodoistProject } from "../repositories/projectRepository.js";
 import { CollaboratorRepository } from "../repositories/collaboratorRepository.js";
@@ -185,7 +186,7 @@ export class TaskActionService {
     if (!isIanaTimeZone(timeZone)) {
       errors.push("time_zone_invalid");
     }
-    if (checklist.length > 30) {
+    if (checklist.length > MAX_CHECKLIST_CHILDREN) {
       errors.push("too_many_children");
     }
     for (const child of checklist) {
@@ -706,23 +707,21 @@ export class TaskActionService {
 
   private directChildTree(root: TaskWithCommitment): { children: TaskWithCommitment[]; valid: boolean } {
     const all = this.tasks.listAll();
-    const children = all.filter((candidate) => candidate.parentId === root.todoistTaskId && candidate.deletedAt === null);
-    const childIds = new Set(children.map((child) => child.todoistTaskId));
-    const hasGrandchild = all.some((candidate) => candidate.deletedAt === null && candidate.parentId !== null && childIds.has(candidate.parentId));
-    const invalidChild = children.some((child) =>
-      child.projectId !== root.projectId
-      || child.dueDate !== null
-      || child.dueDatetime !== null
-      || child.dueString !== null
-      || child.dueLang !== null
-      || child.dueTimezone !== null
-      || child.isRecurring
-      || child.durationAmount !== null
-      || child.durationUnit !== null
-      || child.durationMinutes !== null
-      || child.assigneeId !== null
+    const hierarchy = this.commitmentPolicy().inspectRootHierarchy(root, all);
+    return {
+      children: hierarchy.directChildren,
+      valid: hierarchy.status === "valid"
+    };
+  }
+
+  private commitmentPolicy(): CommitmentPolicy {
+    const projectsById = new Map(
+      this.projects.listActive().map((project) => [project.todoistProjectId, project])
     );
-    return { children, valid: children.length <= 30 && !hasGrandchild && !invalidChild };
+    return new CommitmentPolicy({
+      currentUserId: this.currentUserId,
+      projectsById
+    });
   }
 
   private parseRevision(value: string): number {

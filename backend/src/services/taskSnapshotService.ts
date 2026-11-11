@@ -1,9 +1,8 @@
 import { decodeTaskDescription } from "../domain/taskDescriptionCodec.js";
-import { TaskEnforcementPolicy } from "../domain/taskEnforcementPolicy.js";
+import { CommitmentPolicy } from "../domain/commitmentPolicy.js";
 import { describeRecurrence } from "../domain/taskRecurrence.js";
 import { type CollaboratorTimeZoneSource, resolveOwnerTimeZone } from "../domain/ownerTimeZone.js";
 import { computeStartAt, normalizeDueDatetime } from "../domain/time.js";
-import { validateTaskStrictness } from "../domain/taskValidation.js";
 import type { ProjectRepository } from "../repositories/projectRepository.js";
 import type { TaskRepository, TaskWithCommitment } from "../repositories/taskRepository.js";
 import { TaskHierarchyProjector } from "./taskHierarchyProjector.js";
@@ -24,7 +23,7 @@ export class TaskSnapshotService {
       const projectsById = new Map(
         this.projects.listActive().map((project) => [project.todoistProjectId, project])
       );
-      const policy = new TaskEnforcementPolicy({
+      const policy = new CommitmentPolicy({
         currentUserId: this.currentUserId,
         projectsById
       });
@@ -39,7 +38,8 @@ export class TaskSnapshotService {
           violation: projection.violation,
           checkedCount: projection.checkedCount,
           totalCount: projection.totalCount,
-          isCompanionOwned: policy.isCompanionOwned(projection.root)
+          isCompanionOwned: projection.isCompanionOwned,
+          ...(projection.validationErrors !== undefined ? { validationErrors: projection.validationErrors } : {})
         }, ownerTimeZone)];
       });
 
@@ -62,6 +62,7 @@ export class TaskSnapshotService {
       checkedCount: number;
       totalCount: number;
       isCompanionOwned: boolean;
+      validationErrors?: string[];
     },
     ownerTimeZone: string
   ) {
@@ -98,17 +99,7 @@ export class TaskSnapshotService {
       isCreatedByUser: task.creatorId === this.currentUserId,
       isCompleted: task.completedAt !== null,
       isDeleted: task.deletedAt !== null,
-      validationErrors: hierarchy.classification === "ROOT_CANDIDATE_INVALID"
-        ? validateTaskStrictness({
-          title: task.title,
-          creatorId: task.creatorId,
-          assigneeId: task.assigneeId,
-          dueDatetime: task.dueDatetime,
-          durationMinutes: task.durationMinutes,
-          currentUserId: this.currentUserId,
-          isCompanionOwned: isCompanionOwnedByUser
-        }).errors
-        : [],
+      validationErrors: hierarchy.validationErrors ?? [],
       startedAt: task.startedAt,
       startDismissCount: task.startDismissCount,
       deadlineExtensionCount: task.deadlineExtensionCount,
