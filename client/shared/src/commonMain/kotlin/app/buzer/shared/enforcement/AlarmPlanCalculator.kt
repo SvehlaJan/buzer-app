@@ -1,9 +1,9 @@
 package app.buzer.shared.enforcement
 
 import app.buzer.shared.model.CommitmentState
-import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
+import app.buzer.shared.scheduling.CommitmentEligibility
 import app.buzer.shared.time.parseSnapshotInstantOrNull
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -36,7 +36,6 @@ data class DesiredAlarm(
 
 data class AlarmPlan(
     val alarms: List<DesiredAlarm>,
-    val cancelTaskIds: Set<String>,
     /** Tasks skipped because a snapshot time could not be parsed (a backend contract violation). */
     val invalidTimeTaskIds: Set<String> = emptySet()
 )
@@ -45,18 +44,11 @@ object AlarmPlanCalculator {
     fun calculate(snapshot: TasksSnapshotResponse, nowIso: String): AlarmPlan {
         val now = Instant.parse(nowIso)
         val alarms = mutableListOf<DesiredAlarm>()
-        val cancelTaskIds = mutableSetOf<String>()
         val invalidTimeTaskIds = mutableSetOf<String>()
 
         for (task in snapshot.tasks) {
-            if (task.shouldCancelAlarms()) {
-                cancelTaskIds += task.id
-                continue
-            }
-            if (!task.isAssignedToUser ||
-                task.validationErrors.isNotEmpty() ||
-                task.state == CommitmentState.invalid ||
-                task.hierarchyStatus == HierarchyStatus.unsupported ||
+            if (CommitmentEligibility.isTerminalCommitment(task) ||
+                !CommitmentEligibility.isEnforceableOwnerCommitment(task) ||
                 task.occurrenceKey.isBlank()
             ) {
                 continue
@@ -76,16 +68,9 @@ object AlarmPlanCalculator {
                     .thenBy { it.taskId }
                     .thenBy { it.kind.name }
             ),
-            cancelTaskIds = cancelTaskIds,
             invalidTimeTaskIds = invalidTimeTaskIds
         )
     }
-
-    private fun TaskSnapshotItem.shouldCancelAlarms(): Boolean =
-        isCompleted ||
-            isDeleted ||
-            state == CommitmentState.completed ||
-            state == CommitmentState.deleted
 
     /** Returns null when the task carries a time the strict snapshot parser rejects. */
     private fun desiredAlarmsFor(task: TaskSnapshotItem, now: Instant): List<DesiredAlarm>? {

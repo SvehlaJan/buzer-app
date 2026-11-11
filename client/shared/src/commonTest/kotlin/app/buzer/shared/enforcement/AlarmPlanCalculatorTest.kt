@@ -137,7 +137,6 @@ class AlarmPlanCalculatorTest {
             ),
             plan.alarms
         )
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -160,20 +159,20 @@ class AlarmPlanCalculatorTest {
             ),
             plan.alarms
         )
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
-    fun cancelsCompletedAndDeletedTasks() {
+    fun skipsCompletedAndDeletedTasks() {
         val snapshot = snapshot(
             task(id = "done", state = CommitmentState.completed, isCompleted = true),
-            task(id = "deleted", state = CommitmentState.deleted, isDeleted = true)
+            task(id = "deleted", state = CommitmentState.deleted, isDeleted = true),
+            task(id = "done-state-only", state = CommitmentState.completed, isCompleted = false),
+            task(id = "deleted-state-only", state = CommitmentState.deleted, isDeleted = false)
         )
 
         val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T09:30:00Z")
 
         assertTrue(plan.alarms.isEmpty())
-        assertEquals(setOf("done", "deleted"), plan.cancelTaskIds)
     }
 
     @Test
@@ -192,7 +191,6 @@ class AlarmPlanCalculatorTest {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T09:30:00Z")
 
         assertTrue(plan.alarms.isEmpty())
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -224,7 +222,6 @@ class AlarmPlanCalculatorTest {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T09:30:00Z")
 
         assertTrue(plan.alarms.isEmpty())
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -247,7 +244,6 @@ class AlarmPlanCalculatorTest {
             ),
             plan.alarms
         )
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -270,7 +266,6 @@ class AlarmPlanCalculatorTest {
             ),
             plan.alarms
         )
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -295,7 +290,6 @@ class AlarmPlanCalculatorTest {
             ),
             plan.alarms
         )
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     @Test
@@ -312,7 +306,6 @@ class AlarmPlanCalculatorTest {
         val plan = AlarmPlanCalculator.calculate(snapshot, nowIso = "2026-05-28T14:00:00Z")
 
         assertTrue(plan.alarms.isEmpty())
-        assertTrue(plan.cancelTaskIds.isEmpty())
     }
 
     private fun snapshot(vararg tasks: TaskSnapshotItem): TasksSnapshotResponse =

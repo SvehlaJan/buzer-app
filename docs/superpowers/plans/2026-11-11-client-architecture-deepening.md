@@ -83,7 +83,7 @@
   - Self-guarded `MorningReviewScheduler(..., canScheduleExactAlarms: () -> Boolean = { true })` (no `MorningReviewAlarmActions` wrapper, no `MorningReviewReconcileGuard`).
   - `class MorningReviewCoordinator` (`app.buzer.android.morningreview`) encapsulating `availability`, `onResume()`, `onPause()`, `onActivityResult()`, `openFromHome()`, and `refreshAvailability(snapshot, scope, isReady, onLaunchAutomated)`.
 
-- [ ] **Step 1: Write failing shared & Android unit tests for `CommitmentEligibility`, `UnsupportedHierarchy` vs `Repair`, aligned Home count, and exact-alarm-denied `MorningReviewScheduler`**
+- [x] **Step 1: Write failing shared & Android unit tests for `CommitmentEligibility`, `UnsupportedHierarchy` vs `Repair`, aligned Home count, and exact-alarm-denied `MorningReviewScheduler`**
 
 1. Create `CommitmentEligibilityTest.kt` testing `isTerminalCommitment`, `isOwnerBlockingTask` (excluding malformed `planned` tasks without `validationErrors`), `timedWindowOrNull`, and `hasActiveStartPriorityAt` (returning `true` for unstarted `planned`/`pre_start_warning`/`start_blocker_active` inside `[start, end)`, and `false` for `started` or overdue `now >= end`).
 2. In `MorningReviewScreenStateTest.kt`, add tests verifying:
@@ -95,23 +95,23 @@
    - `acknowledge` persists `lastAcknowledgedDate = today` and `scheduledAlarm = null` without throwing, and a subsequent `reconcile` once `canScheduleExactAlarms = { true }` arms tomorrow's daily alarm;
    - `snooze` and `deferForPriority` persist `pendingSnoozeAt` with `scheduledAlarm = null` without throwing.
 
-- [ ] **Step 2: Run `:shared:testAndroidHostTest` and `:androidApp:testDebugUnitTest` to verify failure**
+- [x] **Step 2: Run `:shared:testAndroidHostTest` and `:androidApp:testDebugUnitTest` to verify failure**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest`
 Expected: FAIL on missing `CommitmentEligibility`, missing `MorningReviewBlockingCard.UnsupportedHierarchy`, and missing `canScheduleExactAlarms` parameter.
 
-- [ ] **Step 3: Implement `CommitmentEligibility`, slim `SnapshotViewState`/`AlarmPlan`, add `UnsupportedHierarchy` UI, self-guard `MorningReviewScheduler`, and extract `MorningReviewCoordinator`**
+- [x] **Step 3: Implement `CommitmentEligibility`, slim `SnapshotViewState`/`AlarmPlan`, add `UnsupportedHierarchy` UI, self-guard `MorningReviewScheduler`, and extract `MorningReviewCoordinator`**
 
 1. Implement `CommitmentEligibility.kt`, update `AlarmPlanCalculator.kt`, `SnapshotReducer.kt`, `SnapshotDiagnostics.kt`, `OwnerAgendaSelector.kt`, `BlockerPriorityResolver` (`MorningReviewAlarmHandler.kt`), and update all `SnapshotViewState(...)` / `cancelTaskIds` test helpers listed in **Files**.
 2. Implement `MorningReviewBlockingCard.UnsupportedHierarchy` in `MorningReviewScreenState.kt`, render `"Open Todoist"` (`Modifier.testTag("morning-open-todoist-${card.taskId}")`) in `MorningReviewScreen.kt`, and remove `.filter { it.hierarchyStatus != HierarchyStatus.unsupported }` in `HomeScreenState.kt:138`.
 3. Fold `MorningReviewReconcileGuard` into `MorningReviewScheduler` (`canScheduleExactAlarms` + `SecurityException` handling), delete `MorningReviewReconcileGuard.kt` and `MorningReviewAlarmActions`, fold `MorningReviewEntryDecider.kt` into `MorningReviewEntryController.kt`, extract `MorningReviewCoordinator.kt`, and simplify `MainActivity.kt`, `MorningReviewReconcileReceiver.kt`, and `BootReconcileRunner.kt`.
 
-- [ ] **Step 4: Run shared & Android JVM unit tests**
+- [x] **Step 4: Run shared & Android JVM unit tests**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :shared:testAndroidHostTest :androidApp:testDebugUnitTest`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client add -A client

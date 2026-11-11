@@ -153,9 +153,6 @@ class MorningReviewSessionStateTest {
         scheduleVersion = scheduleVersion,
         serverTime = "2026-08-02T10:00:00Z",
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList()
     )
 

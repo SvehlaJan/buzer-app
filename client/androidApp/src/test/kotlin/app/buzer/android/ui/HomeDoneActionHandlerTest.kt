@@ -255,9 +255,6 @@ class HomeDoneActionHandlerTest {
             scheduleVersion = scheduleVersion,
             serverTime = "2026-07-10T12:00:00Z",
             invalidTasks = emptyList(),
-            activeBlockers = emptyList(),
-            inProgressTasks = emptyList(),
-            startingToday = emptyList(),
             healthWarnings = emptyList(),
             tasks = emptyList()
         )

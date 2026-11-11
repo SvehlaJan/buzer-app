@@ -43,9 +43,6 @@ class SessionWarningBannerTest {
         scheduleVersion = 1,
         serverTime = "2026-07-10T10:00:00Z",
         invalidTasks = emptyList(),
-        activeBlockers = emptyList(),
-        inProgressTasks = tasks.toList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = tasks.toList()
     )

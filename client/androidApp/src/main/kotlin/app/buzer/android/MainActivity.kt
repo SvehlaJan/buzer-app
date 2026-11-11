@@ -20,15 +20,8 @@ import app.buzer.android.enforcement.EnforcementCoordinator
 import app.buzer.android.enforcement.EnforcementDependencies
 import app.buzer.android.enforcement.NotificationChannels
 import app.buzer.android.blockers.MorningReviewActivity
-import app.buzer.android.morningreview.MorningReviewAvailability
-import app.buzer.android.morningreview.MorningReviewBoundaryTiming
 import app.buzer.android.morningreview.MorningReviewContract
 import app.buzer.android.morningreview.MorningReviewDependencies
-import app.buzer.android.morningreview.MorningReviewRuntimeClock
-import app.buzer.android.morningreview.MorningReviewReconcileGuard
-import app.buzer.android.morningreview.MorningReviewEntryController
-import app.buzer.android.morningreview.MorningReviewLocalStateStore
-import app.buzer.android.morningreview.MorningReviewScheduleCalculator
 import app.buzer.android.readiness.AndroidEnforcementReadinessChecker
 import app.buzer.android.readiness.ForegroundReadinessAction
 import app.buzer.android.readiness.ForegroundReadinessController
@@ -37,7 +30,6 @@ import app.buzer.android.readiness.ReadinessSettingsIntentFactory
 import app.buzer.android.readiness.SharedPreferencesNotificationPermissionRequestHistory
 import app.buzer.android.ui.BuzerApp
 import app.buzer.android.ui.HomeDoneActionHandler
-import app.buzer.android.ui.agenda.selectOwnerAgenda
 import app.buzer.android.ui.navigation.ExternalTodoistLauncher
 import app.buzer.android.ui.screens.ForegroundReadinessGate
 import app.buzer.android.ui.status.setBuzerContent
@@ -49,14 +41,10 @@ import app.buzer.shared.model.UpdateTaskRequest
 import app.buzer.shared.model.FocusedChecklistMutationRequest
 import app.buzer.shared.state.SnapshotReducer
 import app.buzer.shared.state.SnapshotViewState
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.util.UUID
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 
 class MainActivity : ComponentActivity() {
     private var coordinator: EnforcementCoordinator? = null
@@ -65,12 +53,7 @@ class MainActivity : ComponentActivity() {
     private var homeInteractionInFlight by mutableStateOf(false)
     private var homeRefreshError by mutableStateOf<String?>(null)
     private var homeActionStatusMessage by mutableStateOf<String?>(null)
-    private var morningReviewAvailability by mutableStateOf<MorningReviewAvailability?>(null)
-    private val morningReviewEntryController = MorningReviewEntryController()
-    private var morningReviewReevaluationJob: Job? = null
-    private val morningReviewStateStore by lazy { MorningReviewLocalStateStore.fromContext(applicationContext) }
-    private val morningReviewCalculator = MorningReviewScheduleCalculator()
-    private val morningReviewScheduler by lazy { MorningReviewDependencies.scheduler(applicationContext) }
+    private val morningReviewCoordinator by lazy { MorningReviewDependencies.coordinator(applicationContext) }
     private var foregroundReadinessState by mutableStateOf<ForegroundReadinessGateState>(
         ForegroundReadinessGateState.Error("Device readiness has not been checked")
     )
@@ -88,7 +71,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         applyReadinessState(readinessController.refresh())
-        if (morningReviewEntryController.onResult()) refreshMorningReviewAvailability()
+        if (morningReviewCoordinator.onActivityResult()) refreshMorningReviewAvailability()
     }
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -172,8 +155,8 @@ class MainActivity : ComponentActivity() {
                     deviceId = EnforcementDependencies.deviceIdentityStore(applicationContext).deviceId(),
                     onUpdateTask = ::updateTask,
                     onRefreshWarningSnapshot = ::refreshWarningSnapshot,
-                    morningReviewBannerVisible = morningReviewAvailability?.bannerVisible ?: false,
-                    morningReviewBlockingCount = morningReviewBlockingCount(),
+                    morningReviewBannerVisible = morningReviewCoordinator.availability?.bannerVisible ?: false,
+                    morningReviewBlockingCount = morningReviewCoordinator.blockingCount(snapshotViewState),
                     onOpenMorningReview = ::openHomeMorningReview,
                     onReportBug = { ObservabilityRuntime.instance.showFeedback() }
                 )
@@ -188,15 +171,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        morningReviewEntryController.onResume()
+        morningReviewCoordinator.onResume()
         applyReadinessState(readinessController.refresh())
         refreshEnforcement(forceTodoist = false)
     }
 
     override fun onPause() {
-        morningReviewEntryController.onPause()
-        morningReviewReevaluationJob?.cancel()
-        morningReviewReevaluationJob = null
+        morningReviewCoordinator.onPause()
         super.onPause()
     }
 
@@ -205,8 +186,7 @@ class MainActivity : ComponentActivity() {
         if (state == ForegroundReadinessGateState.Ready) {
             refreshMorningReviewAvailability()
         } else {
-            morningReviewReevaluationJob?.cancel()
-            morningReviewReevaluationJob = null
+            morningReviewCoordinator.cancelReevaluation()
         }
     }
 
@@ -237,8 +217,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             homeActionHandler.refresh(forceTodoist = forceTodoist)
             AppLog.debug(
-                "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0} " +
-                    "startingToday=${snapshotViewState?.startingToday?.size ?: 0}"
+                "main snapshot state updated invalid=${snapshotViewState?.invalidTasks?.size ?: 0}"
             )
         }
     }
@@ -248,59 +227,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openHomeMorningReview() {
-        if (foregroundReadinessState != ForegroundReadinessGateState.Ready) {
-            morningReviewReevaluationJob?.cancel()
-            morningReviewReevaluationJob = null
+        if (!morningReviewCoordinator.openFromHome(isReady = foregroundReadinessState == ForegroundReadinessGateState.Ready)) {
             return
         }
-        if (!morningReviewEntryController.openHome()) return
         morningReviewLauncher.launch(
             MorningReviewContract.homeIntent(Intent(this, MorningReviewActivity::class.java))
         )
     }
 
     private fun refreshMorningReviewAvailability() {
-        if (foregroundReadinessState != ForegroundReadinessGateState.Ready) {
-            morningReviewReevaluationJob?.cancel()
-            morningReviewReevaluationJob = null
-            return
-        }
-        val clock = MorningReviewRuntimeClock.snapshot()
-        val now = clock.instant
-        val zoneId = clock.zoneId
-        MorningReviewReconcileGuard.reconcile(applicationContext) { morningReviewScheduler.reconcile(now, zoneId) }
-        val availability = morningReviewCalculator.availability(
-            state = morningReviewStateStore.read(),
-            ownerBlockingCount = morningReviewBlockingCount(),
-            now = now,
-            zoneId = zoneId
-        )
-        morningReviewAvailability = availability
-        val decision = morningReviewEntryController.evaluate(availability)
-        armMorningReviewReevaluation(availability)
-        if (decision.launchAutomated) {
-            morningReviewLauncher.launch(
-                MorningReviewContract.automatedIntent(Intent(this, MorningReviewActivity::class.java))
-            )
-        }
-    }
-
-    private fun armMorningReviewReevaluation(availability: MorningReviewAvailability) {
-        morningReviewReevaluationJob?.cancel()
-        if (!morningReviewEntryController.isForeground) return
-        val delayMillis = Duration.between(MorningReviewRuntimeClock.now(), availability.nextReevaluationAt).toMillis()
-        morningReviewReevaluationJob = lifecycleScope.launch {
-            when (val timing = MorningReviewBoundaryTiming.from(delayMillis)) {
-                is MorningReviewBoundaryTiming.Delay -> delay(timing.milliseconds)
-                MorningReviewBoundaryTiming.ReevaluateImmediately -> yield()
+        morningReviewCoordinator.refreshAvailability(
+            snapshot = snapshotViewState,
+            scope = lifecycleScope,
+            isReady = foregroundReadinessState == ForegroundReadinessGateState.Ready,
+            onLaunchAutomated = {
+                morningReviewLauncher.launch(
+                    MorningReviewContract.automatedIntent(Intent(this, MorningReviewActivity::class.java))
+                )
             }
-            refreshMorningReviewAvailability()
-        }
+        )
     }
-
-    private fun morningReviewBlockingCount(): Int = snapshotViewState
-        ?.let { selectOwnerAgenda(it, MorningReviewRuntimeClock.now(), MorningReviewRuntimeClock.zoneId()).blocking.size }
-        ?: 0
 
     private fun reportRefreshFailure(error: Throwable) {
         AppLog.error("main refresh failed", error)

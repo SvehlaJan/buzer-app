@@ -101,9 +101,6 @@ class BlockerPriorityResolverTest {
                 it.validationErrors.isNotEmpty() ||
                 it.hierarchyStatus != HierarchyStatus.valid
         },
-        activeBlockers = emptyList(),
-        inProgressTasks = emptyList(),
-        startingToday = emptyList(),
         healthWarnings = emptyList(),
         tasks = tasks
     )

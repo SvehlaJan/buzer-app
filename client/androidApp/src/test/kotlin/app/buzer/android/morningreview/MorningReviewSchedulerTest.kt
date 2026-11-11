@@ -343,11 +343,111 @@ class MorningReviewSchedulerTest {
         assertEquals(setOf(desired.identity()), fixture.alarmScheduler.activeIdentities)
     }
 
+    @Test
+    fun reconcileIsANoOpWhenExactAlarmPermissionIsDeniedOrRevokedMidCall() {
+        val old = scheduledDaily("2026-08-02", "2026-08-02T08:00:00Z")
+        val denied = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = old),
+            canScheduleExactAlarms = { false }
+        )
+
+        denied.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(emptyList(), denied.alarmScheduler.events)
+        assertEquals(MorningReviewLocalState(scheduledAlarm = old), denied.store.read())
+
+        val revoked = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = old),
+            securityFailuresRemaining = 1
+        )
+
+        revoked.scheduler.reconcile(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(MorningReviewLocalState(scheduledAlarm = old), revoked.store.read())
+    }
+
+    @Test
+    fun acknowledgePersistsWithoutScheduledAlarmWhenExactAlarmsDeniedAndRearmsOnLaterReconcile() {
+        var exactAlarmsPermitted = false
+        val daily = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        val fixture = fixture(
+            initialState = MorningReviewLocalState(
+                pendingSnoozeDate = LocalDate.of(2026, 8, 3),
+                pendingSnoozeAt = instant("2026-08-03T07:10:00Z"),
+                scheduledAlarm = daily
+            ),
+            canScheduleExactAlarms = { exactAlarmsPermitted }
+        )
+
+        fixture.scheduler.acknowledge(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(
+            MorningReviewLocalState(
+                lastAcknowledgedDate = LocalDate.of(2026, 8, 3),
+                scheduledAlarm = null
+            ),
+            fixture.store.read()
+        )
+        assertEquals(emptySet(), fixture.alarmScheduler.activeIdentities)
+
+        exactAlarmsPermitted = true
+        fixture.alarmScheduler.events.clear()
+        fixture.scheduler.reconcile(instant("2026-08-03T07:05:00Z"), utc)
+
+        val tomorrow = scheduledDaily("2026-08-04", "2026-08-04T08:00:00Z")
+        assertEquals(
+            MorningReviewLocalState(
+                lastAcknowledgedDate = LocalDate.of(2026, 8, 3),
+                scheduledAlarm = tomorrow
+            ),
+            fixture.store.read()
+        )
+        assertEquals(setOf(tomorrow.identity()), fixture.alarmScheduler.activeIdentities)
+    }
+
+    @Test
+    fun snoozeAndDeferForPriorityPersistPendingSnoozeAtWithNullScheduledAlarmWhenExactAlarmsDeniedOrRevoked() {
+        val daily = scheduledDaily("2026-08-03", "2026-08-03T08:00:00Z")
+        val deniedSnooze = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = daily),
+            canScheduleExactAlarms = { false }
+        )
+
+        deniedSnooze.scheduler.snooze(instant("2026-08-03T07:00:00Z"), utc)
+
+        assertEquals(
+            MorningReviewLocalState(
+                pendingSnoozeDate = LocalDate.of(2026, 8, 3),
+                pendingSnoozeAt = instant("2026-08-03T07:05:00Z"),
+                scheduledAlarm = null
+            ),
+            deniedSnooze.store.read()
+        )
+
+        val revokedDefer = fixture(
+            initialState = MorningReviewLocalState(scheduledAlarm = daily),
+            securityFailuresRemaining = 1
+        )
+
+        revokedDefer.scheduler.deferForPriority(daily, instant("2026-08-03T08:00:00Z"), utc)
+
+        assertEquals(
+            MorningReviewLocalState(
+                pendingSnoozeDate = LocalDate.of(2026, 8, 3),
+                pendingSnoozeAt = instant("2026-08-03T08:01:00Z"),
+                scheduledAlarm = null
+            ),
+            revokedDefer.store.read()
+        )
+    }
+
     private fun fixture(
         initialState: MorningReviewLocalState = MorningReviewLocalState(),
         scheduleFailuresAfterArmRemaining: Int = 0,
+        securityFailuresRemaining: Int = 0,
         storageFailuresBeforeWriteRemaining: Int = 0,
-        storageFailuresAfterWriteRemaining: Int = 0
+        storageFailuresAfterWriteRemaining: Int = 0,
+        canScheduleExactAlarms: () -> Boolean = { true }
     ): Fixture {
         val storage = TestStorage(
             initialState = initialState,
@@ -357,7 +457,8 @@ class MorningReviewSchedulerTest {
         val store = MorningReviewLocalStateStore(storage)
         val alarmScheduler = RecordingAlarmScheduler(
             initiallyActive = initialState.scheduledAlarm?.let { setOf(it.identity()) }.orEmpty(),
-            scheduleFailuresAfterArmRemaining = scheduleFailuresAfterArmRemaining
+            scheduleFailuresAfterArmRemaining = scheduleFailuresAfterArmRemaining,
+            securityFailuresRemaining = securityFailuresRemaining
         )
         return Fixture(
             store = store,
@@ -367,7 +468,8 @@ class MorningReviewSchedulerTest {
                 alarmScheduler = alarmScheduler,
                 calculator = calculator,
                 snoozeDuration = Duration.ofMinutes(5),
-                priorityRetryDuration = Duration.ofMinutes(1)
+                priorityRetryDuration = Duration.ofMinutes(1),
+                canScheduleExactAlarms = canScheduleExactAlarms
             )
         )
     }
@@ -384,7 +486,8 @@ class MorningReviewSchedulerTest {
 
     private class RecordingAlarmScheduler(
         initiallyActive: Set<ScheduledAlarmIdentity>,
-        private var scheduleFailuresAfterArmRemaining: Int
+        private var scheduleFailuresAfterArmRemaining: Int,
+        private var securityFailuresRemaining: Int = 0
     ) : AlarmScheduler {
         val events = mutableListOf<AlarmEvent>()
         val activeIdentities = initiallyActive.toMutableSet()
@@ -392,6 +495,10 @@ class MorningReviewSchedulerTest {
         var cancellationFailuresRemaining: Int = 0
 
         override fun schedule(alarm: ScheduledAlarm) {
+            if (securityFailuresRemaining > 0) {
+                securityFailuresRemaining -= 1
+                throw SecurityException("exact alarm permission revoked")
+            }
             events += Schedule(alarm)
             activeIdentities += alarm.identity
             if (scheduleFailuresAfterArmRemaining > 0) {

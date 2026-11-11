@@ -193,10 +193,10 @@ fun MorningReviewScreen(
             Card(modifier = Modifier.fillMaxWidth().testTag("morning-blocking-${card.taskId}")) {
                 Column(Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(card.title, style = MaterialTheme.typography.titleMedium)
+                    Text(card.problemText)
+                    card.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     when (card) {
                         is MorningReviewBlockingCard.Repair -> {
-                            Text(card.problemText)
-                            card.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             TextButton(
                                 onClick = {
                                     repairingTask = taskLookup(card.taskId)
@@ -207,6 +207,15 @@ fun MorningReviewScreen(
                                     .testTag("morning-repair-${card.taskId}")
                                     .semantics { contentDescription = "Repair ${card.title}" }
                             ) { Text("Repair") }
+                        }
+                        is MorningReviewBlockingCard.UnsupportedHierarchy -> {
+                            TextButton(
+                                onClick = onOpenTodoist,
+                                enabled = !screenState.actionInFlight,
+                                modifier = Modifier
+                                    .testTag("morning-open-todoist-${card.taskId}")
+                                    .semantics { contentDescription = "Open Todoist for ${card.title}" }
+                            ) { Text("Open Todoist") }
                         }
                     }
                 }

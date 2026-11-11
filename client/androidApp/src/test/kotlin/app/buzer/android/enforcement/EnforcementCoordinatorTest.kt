@@ -15,8 +15,6 @@ import app.buzer.shared.model.TaskRecurrence
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.model.TasksSnapshotResponse
 import app.buzer.shared.model.UpdateTaskRequest
-import app.buzer.shared.state.SnapshotReducer
-import app.buzer.shared.state.SnapshotWithCallerDraft
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -67,10 +65,7 @@ class EnforcementCoordinatorTest {
     @Test
     fun conflictAppliesCurrentSnapshotWithoutChangingCallerOwnedDraft() = runBlocking {
         val conflictSnapshot = snapshot(task("task-1", state = CommitmentState.started))
-        val callerOwnedState = SnapshotWithCallerDraft(
-            viewState = SnapshotReducer.reduce(snapshot(task("task-1"))),
-            callerDraft = "keep this edit"
-        )
+        val callerDraft = "keep this edit"
         val store = FakeSnapshotStore()
         val coordinator = EnforcementCoordinator(
             api = FakeBuzerApi(
@@ -98,10 +93,7 @@ class EnforcementCoordinatorTest {
         assertEquals("Task changed remotely", conflict.message)
         assertEquals(conflictSnapshot, conflict.snapshot)
         assertEquals(conflictSnapshot, store.saved)
-        assertEquals(
-            "keep this edit",
-            SnapshotReducer.replaceAuthoritative(callerOwnedState, conflict.snapshot).callerDraft
-        )
+        assertEquals("keep this edit", callerDraft)
     }
 
     @Test

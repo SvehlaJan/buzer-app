@@ -2,13 +2,15 @@ package app.buzer.android.ui.screens
 
 import app.buzer.android.ui.agenda.OwnerAgendaEntry
 import app.buzer.android.ui.agenda.selectOwnerAgenda
+import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.TaskSnapshotItem
 import app.buzer.shared.state.SnapshotViewState
+import app.buzer.shared.time.parseSnapshotInstantOrNull
 import app.buzer.shared.ui.home.homeTaskProgress
 import java.time.Instant
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 sealed interface MorningReviewPhase {
@@ -21,12 +23,21 @@ sealed interface MorningReviewPhase {
 sealed interface MorningReviewBlockingCard {
     val taskId: String
     val title: String
+    val problemText: String
+    val description: String?
 
     data class Repair(
         override val taskId: String,
         override val title: String,
-        val problemText: String,
-        val description: String?
+        override val problemText: String,
+        override val description: String?
+    ) : MorningReviewBlockingCard
+
+    data class UnsupportedHierarchy(
+        override val taskId: String,
+        override val title: String,
+        override val problemText: String,
+        override val description: String?
     ) : MorningReviewBlockingCard
 }
 
@@ -178,13 +189,41 @@ private fun screenState(
     actionInFlight = actionInFlight
 )
 
-private fun blockingCard(task: TaskSnapshotItem): MorningReviewBlockingCard =
-    MorningReviewBlockingCard.Repair(
-        taskId = task.id,
-        title = task.title,
-        problemText = reviewProblemText(task.validationErrors),
-        description = task.description?.trim()?.takeIf { it.isNotEmpty() }
-    )
+private fun blockingCard(task: TaskSnapshotItem): MorningReviewBlockingCard {
+    val description = task.description?.trim()?.takeIf { it.isNotEmpty() }
+    val hasValidRootSchedule = task.dueDatetime?.let(::parseSnapshotInstantOrNull) != null &&
+        (task.durationMinutes ?: 0) > 0
+    return if (
+        task.hierarchyStatus == HierarchyStatus.unsupported &&
+        task.validationErrors.isEmpty() &&
+        hasValidRootSchedule
+    ) {
+        MorningReviewBlockingCard.UnsupportedHierarchy(
+            taskId = task.id,
+            title = task.title,
+            problemText = hierarchyProblemText(task.hierarchyViolation),
+            description = description
+        )
+    } else {
+        MorningReviewBlockingCard.Repair(
+            taskId = task.id,
+            title = task.title,
+            problemText = reviewProblemText(task.validationErrors),
+            description = description
+        )
+    }
+}
+
+private fun hierarchyProblemText(violation: String?): String = when (violation) {
+    "nested_child" -> "Unsupported hierarchy: subtasks cannot have nested subtasks"
+    "too_many_children" -> "Unsupported hierarchy: more than 30 subtasks"
+    "child_has_schedule" -> "Unsupported hierarchy: a subtask has its own date or time"
+    "child_has_duration" -> "Unsupported hierarchy: a subtask has its own duration"
+    "child_has_recurrence" -> "Unsupported hierarchy: a subtask is recurring"
+    "child_has_assignment" -> "Unsupported hierarchy: a subtask has its own assignee"
+    "child_project_mismatch" -> "Unsupported hierarchy: a subtask is in a different project"
+    else -> "Unsupported subtask hierarchy — fix in Todoist"
+}
 
 private fun reviewProblemText(validationErrors: List<String>): String {
     val errors = validationErrors.toSet()
