@@ -1,6 +1,11 @@
 package app.buzer.android.ui.taskeditor
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -12,8 +17,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import app.buzer.android.enforcement.CoordinatorActionResult
+import app.buzer.android.ui.components.ChecklistEditor
+import app.buzer.android.ui.components.SessionWarningBanner
+import app.buzer.android.ui.navigation.ExternalTodoistLauncher
+import app.buzer.android.ui.status.WarningStatus
+import app.buzer.android.ui.theme.Spacing
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.HierarchyStatus
 import app.buzer.shared.model.ProjectCollaborator
@@ -21,53 +33,22 @@ import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.RecurrenceKind
 import app.buzer.shared.model.RecurrencePreset
 import app.buzer.shared.model.TaskSnapshotItem
+import app.buzer.shared.model.UpdateTaskRequest
+import app.buzer.shared.ui.taskeditor.ChecklistEditorDraft
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal const val GENERIC_TASK_EDITOR_UPDATE_ERROR = "Task update failed. Your draft is still here; retry."
 
-/**
- * Choice data remains host-owned because each caller has its own loader and retry boundary.
- * The update editor uses it only to validate and render the current draft.
- */
-internal data class TaskEditorUpdateChoices(
-    val projects: List<ProjectItem> = emptyList(),
-    val loading: Boolean = false,
-    val errorMessage: String? = null,
-    val membershipWasRefreshed: Boolean = false
-) {
-    fun selectedProject(draft: TaskEditorDraft): ProjectItem? =
-        projects.firstOrNull { it.id == draft.projectId }
-
-    fun currentUser(draft: TaskEditorDraft): ProjectCollaborator =
-        selectedProject(draft)?.collaborators?.firstOrNull { it.isCurrentUser }
-            ?: projects.asSequence().flatMap { it.collaborators.asSequence() }.firstOrNull { it.isCurrentUser }
-            ?: draft.assignee?.takeIf { it.isCurrentUser }
-            ?: ProjectCollaborator(id = "", displayName = "Me", isCurrentUser = true)
-
-    /** Loaded choices keep Project repairable even when this snapshot's selection is missing. */
-    fun projectChoicesAvailable(): Boolean = projects.isNotEmpty()
-
-    fun collaboratorsAvailable(draft: TaskEditorDraft): Boolean = selectedProject(draft)?.let { project ->
-        !project.canAssignTasks || project.collaboratorsReady
-    } == true
-
-    /** Mirrors the assignee projection sent by an update request for dirty-draft comparisons. */
-    fun assigneeIdForFingerprint(draft: TaskEditorDraft): String? {
-        val selectedProject = selectedProject(draft)
-        return draft.assignee?.id?.takeIf {
-            selectedProject?.canAssignTasks == true && it.isNotBlank()
-        } ?: draft.assignee?.id?.takeIf { selectedProject == null && it.isNotBlank() }
-    }
-}
-
 /** State and transitions shared by Edit, Repair, and blocker-update callers. */
 internal data class TaskEditorUpdateState(
     val draft: TaskEditorDraft,
-    val choices: TaskEditorUpdateChoices,
+    val choices: TaskEditorChoices,
     val submitting: Boolean = false,
     val resultMessage: String? = null,
     val successDelivered: Boolean = false,
@@ -110,7 +91,7 @@ internal data class TaskEditorUpdateState(
         )
     }
 
-    fun withChoices(next: TaskEditorUpdateChoices): TaskEditorUpdateState {
+    fun withChoices(next: TaskEditorChoices): TaskEditorUpdateState {
         val reconciledDraft = reconcileTaskEditorUpdateMembership(
             draft = draft,
             choices = next
@@ -153,7 +134,7 @@ internal data class TaskEditorUpdateState(
     }
 }
 
-/** Validation contributed by an editable host slot such as the direct-checklist editor. */
+/** Validation contributed by the update editor's direct-checklist state. */
 internal data class TaskEditorUpdateContentValidation(
     val canSubmit: Boolean = true,
     val message: String? = null
@@ -204,7 +185,7 @@ internal data class TaskEditorUpdateTransition(
 
 internal fun initialTaskEditorUpdateState(
     task: TaskSnapshotItem,
-    choices: TaskEditorUpdateChoices
+    choices: TaskEditorChoices
 ): TaskEditorUpdateState = TaskEditorUpdateState(
     draft = initialTaskEditorUpdateDraft(task),
     choices = choices
@@ -248,7 +229,7 @@ internal fun TaskEditorDraft.recurrencePresetForUpdate(): RecurrencePreset? =
 
 internal fun reconcileTaskEditorUpdateMembership(
     draft: TaskEditorDraft,
-    choices: TaskEditorUpdateChoices
+    choices: TaskEditorChoices
 ): TaskEditorDraft {
     val project = choices.selectedProject(draft) ?: return draft
     val currentUser = choices.currentUser(draft)
@@ -270,7 +251,7 @@ internal fun normalizeTaskEditorUpdateDraft(
     previous: TaskEditorDraft,
     next: TaskEditorDraft
 ): TaskEditorDraft = if (
-    previous.recurrenceKind == app.buzer.shared.model.RecurrenceKind.custom &&
+    previous.recurrenceKind == RecurrenceKind.custom &&
         previous.schedule != next.schedule &&
         next.schedule.isEmpty() &&
         next.assignee?.isCurrentUser == false
@@ -320,66 +301,104 @@ internal fun failTaskEditorUpdateSubmission(state: TaskEditorUpdateState): TaskE
 )
 
 /**
- * Stateful Update host. It owns form state, eager validation, result transitions, and discard
- * confirmation; screen wrappers retain only their choice loading and full-request construction.
+ * Deepened stateful Update host. Owns root + direct-checklist draft state, eager validation,
+ * dirty-draft fingerprinting, replay-safe [UpdateTaskRequest] construction, discard confirmation,
+ * and inline project-choice loading status across Edit, Repair, and Deadline Blocker Reschedule.
  */
 @Composable
 internal fun TaskEditorUpdateScreen(
     task: TaskSnapshotItem,
-    choices: TaskEditorUpdateChoices,
+    choices: TaskEditorChoices,
     presentation: TaskEditorPresentation,
-    now: LocalDateTime,
-    checklistDoneCount: Int,
-    checklistTotalCount: Int,
-    checklistContent: @Composable (enabled: Boolean, errorMessage: String?) -> Unit,
-    footerContent: @Composable () -> Unit,
+    now: LocalDateTime = LocalDateTime.now(),
+    initialAddedDrafts: List<ChecklistEditorDraft> = emptyList(),
     onRetryChoices: () -> Unit,
     onRefreshWarning: suspend () -> Unit = {},
-    contentValidation: () -> TaskEditorUpdateContentValidation = { TaskEditorUpdateContentValidation() },
-    isDirty: (TaskEditorDraft) -> Boolean,
-    onUpdate: suspend (TaskEditorDraft) -> CoordinatorActionResult,
+    onUpdate: suspend (UpdateTaskRequest) -> CoordinatorActionResult,
     onSuccess: () -> Unit,
     onCancel: () -> Unit,
+    footerContent: @Composable () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var state by remember(task.id) { mutableStateOf(initialTaskEditorUpdateState(task, choices)) }
-    val currentContentValidation = contentValidation()
-    val validation = effectiveTaskEditorUpdateValidation(state, currentContentValidation)
-
-    LaunchedEffect(task.id, choices) {
-        val pristine = state.draft == initialTaskEditorUpdateDraft(task) &&
-            !state.submitting &&
-            state.resultMessage == null &&
-            !state.discardConfirmationVisible
-        state = if (pristine) {
-            initialTaskEditorUpdateState(task, choices)
-        } else {
-            state.withChoices(choices)
-        }
+    var session by remember(task.id) {
+        mutableStateOf(initialTaskEditorUpdateSession(task, choices, initialAddedDrafts))
     }
 
+    LaunchedEffect(task, choices, initialAddedDrafts) {
+        session = reconcileTaskEditorUpdateSession(
+            session = session,
+            task = task,
+            choices = choices,
+            initialAddedDrafts = initialAddedDrafts
+        )
+    }
+
+    val state = session.state
+    val checklistMutationsAllowed = taskEditorUpdateChecklistAccess(
+        task = session.latestTask,
+        hostEnabled = true
+    ).enabled
+    val currentContentValidation = checklistUpdateContentValidation(
+        checklistMutationsAllowed = checklistMutationsAllowed,
+        activeExistingDrafts = session.activeExistingDrafts,
+        addedDrafts = session.addedDrafts
+    )
+    val validation = effectiveTaskEditorUpdateValidation(state, currentContentValidation)
+
     fun requestCancel() {
-        when (taskEditorUpdateCancelRequest(state, isDirty(state.draft))) {
+        when (taskEditorUpdateCancelRequest(state, session.isDirty(choices))) {
             TaskEditorUpdateCancelRequest.Ignore -> Unit
             TaskEditorUpdateCancelRequest.ConfirmDiscard -> {
                 focusManager.clearFocus(force = true)
-                state = state.copy(discardConfirmationVisible = true)
+                session = session.copy(state = state.copy(discardConfirmationVisible = true))
             }
             TaskEditorUpdateCancelRequest.Cancel -> onCancel()
         }
     }
 
     fun submit() {
-        if (!state.canSubmit || !contentValidation().canSubmit) return
-        state = state.beginSubmission()
-        val submittingDraft = state.draft
+        val currentSession = session
+        val currentState = currentSession.state
+        val mutationsAllowed = taskEditorUpdateChecklistAccess(
+            task = currentSession.latestTask,
+            hostEnabled = true
+        ).enabled
+        val checklistCheck = checklistUpdateContentValidation(
+            checklistMutationsAllowed = mutationsAllowed,
+            activeExistingDrafts = currentSession.activeExistingDrafts,
+            addedDrafts = currentSession.addedDrafts
+        )
+        if (!currentState.canSubmit || !checklistCheck.canSubmit) return
+        val project = choices.selectedProject(currentState.draft) ?: return
+        val nextCapture = captureEditTaskUpdate(
+            captured = currentSession.capturedUpdate,
+            fingerprint = currentSession.currentFingerprint(choices)
+        ) {
+            buildUpdateTaskRequest(
+                task = currentSession.latestTask,
+                title = currentState.draft.title,
+                description = currentState.draft.description,
+                project = project,
+                selectedAssignee = currentState.draft.assignee,
+                schedule = currentState.draft.schedule,
+                recurrencePreset = currentState.draft.recurrencePresetForUpdate(),
+                existingDrafts = currentSession.existingDrafts,
+                deletedChildren = currentSession.deletedChildren,
+                addedDrafts = if (mutationsAllowed) currentSession.addedDrafts else emptyList()
+            )
+        }
+        session = currentSession.copy(
+            state = currentState.beginSubmission(),
+            capturedUpdate = nextCapture
+        )
         scope.launch {
             try {
-                val transition = reduceTaskEditorUpdateResult(state, onUpdate(submittingDraft))
-                state = transition.state
+                val result = onUpdate(nextCapture.request)
+                val transition = reduceTaskEditorUpdateResult(session.state, result)
+                session = session.copy(state = transition.state)
                 if (transition.shouldInvokeSuccess) onSuccess()
             } catch (error: CancellationException) {
                 throw error
@@ -388,78 +407,130 @@ internal fun TaskEditorUpdateScreen(
                     "task_editor_update failed type=${error::class.simpleName} message=${error.message}",
                     error
                 )
-                state = failTaskEditorUpdateSubmission(state)
+                session = session.copy(state = failTaskEditorUpdateSubmission(session.state))
             }
         }
     }
 
     fun refreshWarning() {
-        if (state.warningRefreshInFlight) return
-        state = state.beginWarningRefresh()
+        if (session.state.warningRefreshInFlight) return
+        session = session.copy(state = session.state.beginWarningRefresh())
         scope.launch {
-            state = try {
+            val nextState = try {
                 onRefreshWarning()
-                state.completeWarningRefresh(succeeded = true)
+                session.state.completeWarningRefresh(succeeded = true)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 AppLog.warn(
                     "task_editor_update warning_refresh_failed type=${error::class.simpleName} message=${error.message}"
                 )
-                state.completeWarningRefresh(succeeded = false)
+                session.state.completeWarningRefresh(succeeded = false)
             }
+            session = session.copy(state = nextState)
         }
     }
 
     BackHandler(enabled = state.discardConfirmationVisible) {
-        state = state.copy(discardConfirmationVisible = false)
+        session = session.copy(state = session.state.copy(discardConfirmationVisible = false))
     }
     BackHandler(enabled = !state.discardConfirmationVisible) {
         requestCancel()
     }
 
-    TaskEditorScaffold(
-        presentation = presentation,
-        draft = state.draft,
-        onDraftChange = { next -> state = state.withDraft(next) },
-        now = now,
-        projects = choices.projects,
-        currentUser = choices.currentUser(state.draft),
-        checklistDoneCount = checklistDoneCount,
-        checklistTotalCount = checklistTotalCount,
-        checklistContent = { checklistContent(state.editingEnabled, currentContentValidation.message) },
-        footerContent = footerContent,
-        onRetryCollaborators = onRetryChoices,
-        onPrimaryAction = ::submit,
-        onCancel = ::requestCancel,
-        validation = validation,
-        modifier = modifier,
-        enabled = state.editingEnabled,
-        primaryActionInProgress = state.submitting,
-        warningBanner = state.resultMessage?.let { msg ->
-            {
-                app.buzer.android.ui.components.SessionWarningBanner(
-                    message = msg,
-                    onRefresh = ::refreshWarning,
-                    onOpenTodoist = {
-                        app.buzer.android.ui.navigation.ExternalTodoistLauncher.launchTask(context, task.todoistTaskId)
-                    },
-                    refreshing = state.warningRefreshInFlight
+    Box(modifier = modifier.fillMaxSize()) {
+        TaskEditorScaffold(
+            presentation = presentation,
+            draft = state.draft,
+            onDraftChange = { next -> session = session.withDraft(next) },
+            now = now,
+            projects = choices.projects,
+            currentUser = choices.currentUser(state.draft),
+            checklistDoneCount = session.checklistDoneCount,
+            checklistTotalCount = session.checklistTotalCount,
+            checklistContent = {
+                val checklistAccess = taskEditorUpdateChecklistAccess(
+                    task = session.latestTask,
+                    hostEnabled = state.editingEnabled
                 )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("taskEditorUpdateChecklistSection"),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    checklistAccess.warningMessage?.let { warning ->
+                        WarningStatus(
+                            message = warning,
+                            modifier = Modifier.testTag("taskEditorUpdateChecklistAccess")
+                        )
+                    }
+                    currentContentValidation.message?.let { Text(it) }
+                    ExistingChecklistEditor(
+                        drafts = session.activeExistingDrafts,
+                        onDraftsChange = { updatedVisible ->
+                            val byId = updatedVisible.associateBy { it.id }
+                            session = session.withExistingDrafts(
+                                session.existingDrafts.map { byId[it.id] ?: it }
+                            )
+                        },
+                        onDelete = { childId -> session = session.withDeletedChild(childId) },
+                        enabled = checklistAccess.enabled
+                    )
+                    ChecklistEditor(
+                        drafts = session.addedDrafts,
+                        onDraftsChange = { next -> session = session.withAddedDrafts(next) },
+                        nextClientMutationId = { UUID.randomUUID().toString() },
+                        enabled = checklistAccess.enabled,
+                        maxItems = (MAX_CHECKLIST_ITEMS - session.activeExistingDrafts.size).coerceAtLeast(0)
+                    )
+                }
+            },
+            footerContent = footerContent,
+            onRetryCollaborators = onRetryChoices,
+            onPrimaryAction = ::submit,
+            onCancel = ::requestCancel,
+            validation = validation,
+            modifier = Modifier.fillMaxSize(),
+            enabled = state.editingEnabled,
+            primaryActionInProgress = state.submitting,
+            titleModifier = Modifier.testTag("editTaskTitleInput"),
+            warningBanner = state.resultMessage?.let { msg ->
+                {
+                    SessionWarningBanner(
+                        message = msg,
+                        onRefresh = ::refreshWarning,
+                        onOpenTodoist = {
+                            ExternalTodoistLauncher.launchTask(context, session.latestTask.todoistTaskId)
+                        },
+                        refreshing = state.warningRefreshInFlight
+                    )
+                }
             }
-        }
-    )
+        )
+        TaskEditorProjectLoadStatus(
+            loading = choices.loading,
+            message = choices.errorMessage,
+            onRetry = onRetryChoices
+        )
+    }
 
     if (state.discardConfirmationVisible) {
         AlertDialog(
-            onDismissRequest = { state = state.copy(discardConfirmationVisible = false) },
+            onDismissRequest = {
+                session = session.copy(state = session.state.copy(discardConfirmationVisible = false))
+            },
             title = { Text("Discard changes?") },
             text = { Text("Your task edits have not been saved.") },
             confirmButton = {
                 TextButton(onClick = onCancel) { Text("Discard") }
             },
             dismissButton = {
-                TextButton(onClick = { state = state.copy(discardConfirmationVisible = false) }) {
+                TextButton(
+                    onClick = {
+                        session = session.copy(state = session.state.copy(discardConfirmationVisible = false))
+                    }
+                ) {
                     Text("Keep editing")
                 }
             }
@@ -476,7 +547,7 @@ private fun String.toTaskEditorUpdateSchedule(): TaskEditorSchedule? {
 }
 
 private fun String.toTaskEditorUpdateDateSchedule(): TaskEditorSchedule? =
-    runCatching { java.time.LocalDate.parse(this) }
+    runCatching { LocalDate.parse(this) }
         .getOrNull()
         ?.let { TaskEditorSchedule(date = it) }
 

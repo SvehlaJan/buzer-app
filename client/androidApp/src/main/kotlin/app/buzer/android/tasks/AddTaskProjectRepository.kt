@@ -1,6 +1,7 @@
 package app.buzer.android.tasks
 
 import app.buzer.android.enforcement.FailureClassifier
+import app.buzer.android.ui.taskeditor.TaskEditorProjectRepository
 import app.buzer.shared.api.BuzerApiClient
 import app.buzer.shared.diagnostics.AppLog
 import app.buzer.shared.model.ProjectItem
@@ -8,12 +9,12 @@ import kotlinx.coroutines.CancellationException
 
 class AddTaskProjectRepository(
     private val apiClient: BuzerApiClient
-) {
+) : TaskEditorProjectRepository {
     // ProjectItem is the complete server projection: names, assignment capability,
     // collaborator choices, and collaborator-readiness must survive a failed refresh.
     private var cachedProjects: List<ProjectItem>? = null
 
-    suspend fun loadProjectsOnce(): List<ProjectItem> {
+    override suspend fun loadProjectsOnce(): List<ProjectItem> {
         cachedProjects?.let { return it }
         AppLog.info("add_task projects load_start")
         val projects = fetchProjects("load")
@@ -22,7 +23,7 @@ class AddTaskProjectRepository(
         return projects
     }
 
-    suspend fun refreshProjects(): List<ProjectItem> {
+    override suspend fun refreshProjects(): List<ProjectItem> {
         AppLog.info("add_task projects refresh_start")
         val projects = fetchProjects("refresh")
         cachedProjects = projects.toList()

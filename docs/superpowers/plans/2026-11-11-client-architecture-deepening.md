@@ -216,7 +216,7 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "fi
   - `TaskEditorUpdateModel.kt` owning `ExistingChecklistDraft`, `toEditorDraft`, `CapturedEditTaskUpdate`, `captureEditTaskUpdate`, and `buildUpdateTaskRequest(...)` (with `ChecklistDraftFingerprint` and `editTaskDraftFingerprint` shared cleanly with `DraftExitPolicy.kt`).
   - Deepened `TaskEditorUpdateScreen(task, choices, presentation, now, initialAddedDrafts: List<ChecklistEditorDraft> = emptyList(), onRetryChoices, onRefreshWarning, onUpdate, onSuccess, onCancel, footerContent, modifier)` owning all checklist draft state, dirty detection, replay-UUID capture, `ExistingChecklistEditor`, `ChecklistEditor`, and `TaskEditorProjectLoadStatus`.
 
-- [ ] **Step 1: Write failing unit tests for `ProjectChoicesState` and `TaskEditorUpdateModel` replay/fingerprint invariants**
+- [x] **Step 1: Write failing unit tests for `ProjectChoicesState` and `TaskEditorUpdateModel` replay/fingerprint invariants**
 
 1. Create `ProjectChoicesStateTest.kt`:
    - `updateEditorKeepsCachedProjectsSelectableAndExposesErrorMessageOnRefreshFailure` (`requireNonEmptyProjects = false`)
@@ -225,22 +225,22 @@ git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client commit -m "fi
 2. Add/expand tests in `EditTaskScreenRequestTest.kt` (and `DraftExitPolicyTest.kt` if needed) verifying:
    - `captureEditTaskUpdate` reuses identical `clientMutationId` values on `childMutations` when `fingerprint` is unchanged and mints fresh `clientMutationId`s as soon as an added/existing/deleted checklist item or root field changes.
 
-- [ ] **Step 2: Run `:androidApp:testDebugUnitTest` to verify failure**
+- [x] **Step 2: Run `:androidApp:testDebugUnitTest` to verify failure**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :androidApp:testDebugUnitTest`
 Expected: FAIL on missing `ProjectChoicesState` / `reduceProjectChoicesLoad`.
 
-- [ ] **Step 3: Implement `ProjectChoicesState`, `TaskEditorUpdateModel`, and deepened `TaskEditorUpdateScreen`, and slim all 4 editor hosts**
+- [x] **Step 3: Implement `ProjectChoicesState`, `TaskEditorUpdateModel`, and deepened `TaskEditorUpdateScreen`, and slim all 4 editor hosts**
 
 1. Create `ProjectChoicesState.kt` and wire `EditTaskScreen`, `DeadlineBlockerUpdateEditor`, `MorningReviewRepairEditor`, and `AddTaskScreen` to `rememberTaskEditorChoices` + `TaskEditorProjectLoadStatus` — deleting the two modal `ErrorAlertDialog` blocks (`"Projects unavailable"` and `"Projects did not load"`) in `EditTaskScreen.kt` and deleting the duplicate `InlineLoadingStatus` + `"Projects did not load"` `WarningStatus` in `BlockerScreens.kt`.
 2. Move `androidApp` checklist update models (`ExistingChecklistDraft`, `toEditorDraft`), replay capture (`CapturedEditTaskUpdate`, `captureEditTaskUpdate`), and `buildUpdateTaskRequest` (keeping `ChecklistDraft` and `ChecklistEditorDraft`/`validateChecklistDrafts` in `client/shared`) into `TaskEditorUpdateModel.kt` (updating `BlockerActionStateTest.kt` and `EditTaskScreenRequestTest.kt` to import `buildUpdateTaskRequest`), internalize checklist state + `ExistingChecklistEditor` + `ChecklistEditor` inside `TaskEditorUpdateScreen.kt`, and delete the ~330 lines of triplicated state/request plumbing across `EditTaskScreen.kt`, `BlockerScreens.kt`, and `MorningReviewScreen.kt`.
 
-- [ ] **Step 4: Run `:androidApp:testDebugUnitTest` and `:androidApp:assembleDebug`**
+- [x] **Step 4: Run `:androidApp:testDebugUnitTest` and `:androidApp:assembleDebug`**
 
 Run: `ANDROID_HOME=/Users/svehla/Library/Android/sdk ANDROID_SDK_ROOT=/Users/svehla/Library/Android/sdk /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client/gradlew -p /Users/svehla/playground/buzer-app/.worktrees/deepen-client/client :androidApp:testDebugUnitTest :androidApp:assembleDebug`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
 git -C /Users/svehla/playground/buzer-app/.worktrees/deepen-client add -A client

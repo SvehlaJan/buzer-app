@@ -1,8 +1,8 @@
 package app.buzer.android.ui.blockers
 
 import app.buzer.android.ui.screens.BlockerActionState
-import app.buzer.android.ui.screens.updateRequest
 import app.buzer.android.ui.taskeditor.TaskEditorSchedule
+import app.buzer.android.ui.taskeditor.buildUpdateTaskRequest
 import app.buzer.shared.model.CommitmentState
 import app.buzer.shared.model.ProjectItem
 import app.buzer.shared.model.ProjectCollaborator
@@ -59,7 +59,7 @@ class BlockerActionStateTest {
             occurrenceKey = "occurrence-test",
             taskRevision = "opaque-root-revision"
         )
-        val request = updateRequest(
+        val request = buildUpdateTaskRequest(
             task = task,
             title = " Edited title ",
             description = " Updated details ",
