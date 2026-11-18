@@ -57,6 +57,7 @@ internal class BlockerHostController(
     private var actionInFlight = false
     private var finished = false
     private var refreshJob: Job? = null
+    private var hasBeenForegrounded = false
 
     var taskId: String? by mutableStateOf(null)
         private set
@@ -105,6 +106,27 @@ internal class BlockerHostController(
         }.also { refreshJob = it }
     }
 
+    /**
+     * Re-validates the blocker when its activity returns to the foreground (`onResume`).
+     *
+     * Another blocker, the main app, or Todoist itself may have resolved this occurrence while the
+     * blocker sat in the background — for example a start blocker left under a deadline blocker
+     * for the same occurrence (BUZER-ANDROID-R). The cached snapshot is checked first so an
+     * occurrence resolved on this device closes immediately; otherwise a lifecycle refresh runs.
+     * The first resume is skipped because `onCreate` already refreshed.
+     */
+    fun onForeground(): Job? {
+        if (!hasBeenForegrounded) {
+            hasBeenForegrounded = true
+            return null
+        }
+        if (finished || actionInFlight || refreshJob?.isActive == true) return null
+        val taskId = taskId ?: return null
+        val occurrenceKey = occurrenceKey ?: return null
+        if (finishIfCachedResolved(taskId, occurrenceKey, reason = "foreground")) return null
+        return refresh(explicitUserRefresh = false)
+    }
+
     /** Forces a Todoist sync for the reschedule editor's warning banner. Failures propagate to the editor. */
     suspend fun forceSyncForEditor() {
         val taskId = taskId ?: return
@@ -128,18 +150,9 @@ internal class BlockerHostController(
                 when (val result = block()) {
                     CoordinatorActionResult.Success ->
                         if (closeOnSuccess) finish() else reloadCachedSnapshot()
-                    is CoordinatorActionResult.Warning -> {
-                        reloadCachedSnapshot()
-                        warningMessage = result.message
-                    }
-                    is CoordinatorActionResult.Conflict -> {
-                        reloadCachedSnapshot()
-                        warningMessage = result.message
-                    }
-                    is CoordinatorActionResult.LocalReconciliationFailed -> {
-                        reloadCachedSnapshot()
-                        warningMessage = result.message
-                    }
+                    is CoordinatorActionResult.Warning -> showWarningUnlessResolved(result.message)
+                    is CoordinatorActionResult.Conflict -> showWarningUnlessResolved(result.message)
+                    is CoordinatorActionResult.LocalReconciliationFailed -> showWarningUnlessResolved(result.message)
                     is CoordinatorActionResult.TransportFailure -> warningMessage = result.message
                     CoordinatorActionResult.ChildActionInFlight -> warningMessage = childActionInFlightMessage()
                 }
@@ -237,6 +250,31 @@ internal class BlockerHostController(
                 throwable = error
             )
         }
+    }
+
+    /**
+     * After a non-success action, the coordinator may have applied a newer snapshot (for example
+     * a `stale_occurrence` conflict). If that snapshot resolves this occurrence, a warning would
+     * only strand the user on a blocker they can no longer act on, so close instead.
+     */
+    private fun showWarningUnlessResolved(message: String) {
+        val taskId = taskId
+        val occurrenceKey = occurrenceKey
+        if (taskId != null && occurrenceKey != null &&
+            finishIfCachedResolved(taskId, occurrenceKey, reason = "action_result")
+        ) {
+            return
+        }
+        reloadCachedSnapshot()
+        warningMessage = message
+    }
+
+    private fun finishIfCachedResolved(taskId: String, occurrenceKey: String, reason: String): Boolean {
+        val cached = source.loadLatestSnapshot() ?: return false
+        if (!isResolved(cached, taskId, occurrenceKey)) return false
+        AppLog.debug("$logTag hidden reason=cached_resolved trigger=$reason taskId=$taskId occurrence=$occurrenceKey")
+        finish()
+        return true
     }
 
     private fun reloadCachedSnapshot() {

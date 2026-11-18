@@ -148,6 +148,25 @@ class BlockerActivityFakeBackendTest {
         fakeBackend.assertRecorded("/tasks/task-deadline/done", "\"expectedOccurrenceKey\":")
     }
 
+    /**
+     * BUZER-ANDROID-R: a start blocker left under a deadline blocker for the same occurrence must
+     * close when completing from the deadline blocker reveals it, not linger with a stale task.
+     */
+    @Test
+    fun startBlockerUnderDeadlineBlocker_closesWhenDeadlineBlockerCompletesTheTask() {
+        resetTestState()
+        val startScenario = launchStartBlocker("task-start")
+        waitForText("I'm starting")
+
+        val deadlineScenario = launchDeadlineBlocker("task-start")
+        waitForText("Done")
+        composeRule.onNodeWithText("Done").performClick()
+
+        waitForRecordedCall("/tasks/task-start/done")
+        waitForActivityDestroyed(deadlineScenario)
+        waitForActivityDestroyed(startScenario)
+    }
+
     @Test
     fun deadlineBlocker_systemBackDoesNotCloseProductionBlocker() {
         resetTestState()

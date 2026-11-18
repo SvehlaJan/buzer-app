@@ -202,6 +202,91 @@ class BlockerHostControllerTest {
     }
 
     @Test
+    fun returningToForegroundFinishesWhenCachedSnapshotResolvedTheOccurrence() = runBlocking {
+        // BUZER-ANDROID-R: a start blocker sat under a deadline blocker for the same occurrence;
+        // completing from the deadline blocker revealed the stale start blocker.
+        var cached = snapshot(task("task-1"))
+        val source = FakeSource(cachedProvider = { cached }, refreshed = snapshot(task("task-1")))
+        var finishCount = 0
+        val controller = controller(this, source, onFinish = { finishCount++ })
+        controller.bindTarget("task-1", "occurrence-current", null)
+        controller.refresh(explicitUserRefresh = false).join()
+        controller.onForeground()?.join() // first resume follows onCreate's refresh
+        assertEquals(1, source.refreshCalls)
+
+        cached = snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true))
+        controller.onForeground()?.join()
+
+        assertEquals(1, finishCount)
+        assertEquals(1, source.refreshCalls)
+    }
+
+    @Test
+    fun returningToForegroundRefreshesWhenCacheStillShowsTheOccurrenceOpen() = runBlocking {
+        val source = FakeSource(
+            cached = snapshot(task("task-1")),
+            refreshed = snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true))
+        )
+        var finishCount = 0
+        val controller = controller(this, source, onFinish = { finishCount++ })
+        controller.bindTarget("task-1", "occurrence-current", null)
+        controller.onForeground()?.join() // first resume: no extra work
+
+        controller.onForeground()?.join()
+
+        assertEquals(1, source.refreshCalls)
+        assertEquals(1, finishCount)
+    }
+
+    @Test
+    fun returningToForegroundDuringMutationDoesNothing() = runBlocking {
+        val source = FakeSource(cached = snapshot(task("task-1")), refreshed = snapshot(task("task-1")))
+        val controller = controller(this, source)
+        controller.bindTarget("task-1", "occurrence-current", null)
+        controller.onForeground()
+        val gate = CompletableDeferred<CoordinatorActionResult>()
+        val job = controller.runMutation("Starting...") { gate.await() }
+        yield()
+
+        assertNull(controller.onForeground())
+
+        gate.complete(CoordinatorActionResult.Success)
+        job?.join()
+        assertEquals(0, source.refreshCalls)
+    }
+
+    @Test
+    fun conflictWhoseReloadedSnapshotResolvesTheOccurrenceFinishes() = runBlocking {
+        val applied = snapshot(task("task-1", state = CommitmentState.completed, isCompleted = true, occurrenceKey = "occurrence-next"))
+        val source = FakeSource(cached = applied)
+        var finishCount = 0
+        val controller = controller(this, source, onFinish = { finishCount++ })
+        controller.bindTarget("task-1", "occurrence-current", null)
+
+        controller.runMutation("Starting...") {
+            CoordinatorActionResult.Conflict("stale_occurrence", "Task occurrence is no longer current", applied)
+        }?.join()
+
+        assertEquals(1, finishCount)
+    }
+
+    @Test
+    fun conflictForAStillOpenOccurrenceKeepsTheBlockerWithWarning() = runBlocking {
+        val open = snapshot(task("task-1"))
+        val source = FakeSource(cached = open)
+        var finishCount = 0
+        val controller = controller(this, source, onFinish = { finishCount++ })
+        controller.bindTarget("task-1", "occurrence-current", null)
+
+        controller.runMutation("Starting...") {
+            CoordinatorActionResult.Conflict("revision_conflict", "Task changed", open)
+        }?.join()
+
+        assertEquals(0, finishCount)
+        assertEquals("Task changed", controller.warningMessage)
+    }
+
+    @Test
     fun childActionInFlightUsesKindSpecificMessage() = runBlocking {
         val start = controller(this, FakeSource())
         val deadline = controller(this, FakeSource(), kind = AlarmKind.DEADLINE_BLOCKER)
@@ -232,13 +317,16 @@ class BlockerHostControllerTest {
         private val refreshed: TasksSnapshotResponse? = null,
         private val refreshFailure: Throwable? = null,
         private val forceSyncFailure: Throwable? = null,
-        private val onRefresh: (suspend () -> TasksSnapshotResponse)? = null
+        private val onRefresh: (suspend () -> TasksSnapshotResponse)? = null,
+        private val cachedProvider: (() -> TasksSnapshotResponse?)? = null
     ) : BlockerSnapshotSource {
         var forceSyncCalls = 0
+        var refreshCalls = 0
 
-        override fun loadLatestSnapshot(): TasksSnapshotResponse? = cached
+        override fun loadLatestSnapshot(): TasksSnapshotResponse? = cachedProvider?.invoke() ?: cached
 
         override suspend fun refreshAndReconcile(): TasksSnapshotResponse {
+            refreshCalls++
             onRefresh?.let { return it() }
             refreshFailure?.let { throw it }
             return requireNotNull(refreshed)
