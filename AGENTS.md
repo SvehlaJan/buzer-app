@@ -155,6 +155,7 @@ In scope:
 - SQLite on the VPS.
 - Todoist polling every minute.
 - `whatsapp-web.js` escalation.
+- Voice Quick Add widget with backend Gemini drafting (`docs/decisions/2026-11-18-voice-quick-add.md`).
 
 Out of scope until a later decision:
 
